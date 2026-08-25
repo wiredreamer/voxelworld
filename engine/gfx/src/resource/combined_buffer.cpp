@@ -10,6 +10,37 @@ import :vk;
 
 namespace vw::gfx {
 
+namespace {
+
+// Отсев по направлению грани в cull.comp меряет наблюдателя мировой коробкой
+// инстанса, а это верно ровно до тех пор, пока оси меша совпадают с мировыми.
+// Повёрнутая модель смотрит своим +X куда угодно, и целое направление её граней
+// пропадало, стоило камере зайти не с той стороны коробки. Поворот виден только
+// здесь, поэтому ответ едет на устройство вместе с границами.
+//
+// Отражение и разворот на пол-оборота уходят вместе с поворотами: оси они
+// сохраняют, но меняют местами стороны, а шейдер читает их таблицей.
+auto is_axis_aligned(
+    const mat4f& transform_matrix
+) -> bool {
+    constexpr float32 epsilon = 1e-4f;
+
+    for (int32 row = 0; row < 3; ++row) {
+        for (int32 col = 0; col < 3; ++col) {
+            const float32 value = transform_matrix[row, col];
+            const bool aligned  =
+                row == col ? value > 0.0f : std::abs(value) <= epsilon;
+            if (!aligned) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
+}  // namespace
+
 // Результат освобождения отбрасывается везде в деструкторах: пул всё равно
 // уходит следом, а поднимать отсюда ошибку некуда.
 combined_buffer::~combined_buffer() {
@@ -155,17 +186,7 @@ auto combined_buffer::allocate(
         sizeof(mat4f)
     );
 
-    const std::array<vec4f, 2> aabb_data{
-        vec4f{bounds.min.x, bounds.min.y, bounds.min.z, 0.0f},
-        vec4f{bounds.max.x, bounds.max.y, bounds.max.z, 0.0f},
-    };
-    const auto aabb_staged = staging_->stage_struct(aabb_data);
-    staging_->copy_to(
-        aabb_buffer_->get_buffer(),
-        instance_index * 2 * sizeof(vec4f),
-        aabb_staged,
-        2 * sizeof(vec4f)
-    );
+    write_bounds_(instance_index, transform_matrix, bounds);
 
     const entity_allocation ent_alloc{
         .instance_index = instance_index,
@@ -176,6 +197,27 @@ auto combined_buffer::allocate(
     instance_indexes_[instance_index] = e;
 
     mesh_alloc.ref_count++;
+}
+
+auto combined_buffer::write_bounds_(
+    uint32 instance_index, const mat4f& transform_matrix, const vw::spatial::aabb& bounds
+) -> void {
+    // Четвёртая компонента минимума говорит шейдеру отсева, стоит ли модель по
+    // мировым осям; у максимума она свободна.
+    const std::array<vec4f, 2> aabb_data{
+        vec4f{
+            bounds.min.x, bounds.min.y, bounds.min.z,
+            is_axis_aligned(transform_matrix) ? 1.0f : 0.0f
+        },
+        vec4f{bounds.max.x, bounds.max.y, bounds.max.z, 0.0f},
+    };
+    const auto aabb_staged = staging_->stage_struct(aabb_data);
+    staging_->copy_to(
+        aabb_buffer_->get_buffer(),
+        instance_index * 2 * sizeof(vec4f),
+        aabb_staged,
+        2 * sizeof(vec4f)
+    );
 }
 
 // Команда рисует меш, а не класс размера, в который он попал. Всё за quad_count —
@@ -299,17 +341,7 @@ auto combined_buffer::write_transform(
         sizeof(mat4f)
     );
 
-    const std::array<vec4f, 2> aabb_data{
-        vec4f{bounds.min.x, bounds.min.y, bounds.min.z, 0.0f},
-        vec4f{bounds.max.x, bounds.max.y, bounds.max.z, 0.0f},
-    };
-    const auto aabb_staged = staging_->stage_struct(aabb_data);
-    staging_->copy_to(
-        aabb_buffer_->get_buffer(),
-        instance_index * 2 * sizeof(vec4f),
-        aabb_staged,
-        2 * sizeof(vec4f)
-    );
+    write_bounds_(instance_index, transform_matrix, bounds);
 }
 
 auto combined_buffer::write_visibility(

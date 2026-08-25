@@ -11,6 +11,8 @@ struct DrawCommand {
 };
 
 struct AABB {
+    // min_point.w is the flag gfx::combined_buffer sets while the instance sits
+    // square on the world axes; faces_away is only sound while it is set.
     vec4 min_point;
     vec4 max_point;
 };
@@ -57,9 +59,16 @@ bool frustum_test(uint pass, vec3 bmin, vec3 bmax) {
     return true;
 }
 
-// Every face of a mesh is axis aligned, so a whole direction is back-facing
-// when the viewer is on the wrong side of the whole box. Conservative on
-// purpose: a chunk the eye is inside keeps both sides of that axis.
+// Every face of a mesh is axis aligned in model space, so a whole direction is
+// back-facing when the viewer is on the wrong side of the whole box.
+// Conservative on purpose: a chunk the eye is inside keeps both sides of that
+// axis.
+//
+// It reads the box in world axes, so it says nothing about an instance turned
+// off them: a rotated model points its +X wherever its rotation does, and the
+// eye standing past the box on world X told the test to drop a direction that
+// was looking straight back at it -- a whole side of the model gone. Those
+// instances arrive with the flag clear and keep all six.
 //
 // Only the camera pass uses it. A shadow cascade would have to test against the
 // light instead, and a caster the camera cannot see still casts.
@@ -83,6 +92,7 @@ void main() {
 
     vec3 bmin = input_aabbs.aabbs[idx].min_point.xyz;
     vec3 bmax = input_aabbs.aabbs[idx].max_point.xyz;
+    bool on_world_axes = input_aabbs.aabbs[idx].min_point.w != 0.0;
 
     const uint faces = 6u;
     uint stride = instance_count * faces;
@@ -97,7 +107,7 @@ void main() {
             if (cmd.index_count == 0 || cmd.instance_count == 0) {
                 continue;
             }
-            if (pass == 0u && faces_away(dir, bmin, bmax)) {
+            if (pass == 0u && on_world_axes && faces_away(dir, bmin, bmax)) {
                 continue;
             }
 

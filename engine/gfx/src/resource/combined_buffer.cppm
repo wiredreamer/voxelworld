@@ -153,6 +153,9 @@ public:
 
 private:
     auto write_draw_command_(uint32 instance_index, const mesh_allocation& mesh_alloc) -> void;
+    auto write_bounds_(
+        uint32 instance_index, const mat4f& transform_matrix, const vw::spatial::aabb& bounds
+    ) -> void;
     auto expand_mesh_buffers_() -> void;
     auto expand_instance_buffers_() -> void;
     auto update_descriptor_set_() -> void;
