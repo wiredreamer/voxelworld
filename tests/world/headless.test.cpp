@@ -164,6 +164,39 @@ TEST_CASE("a collider without a model still gets spatial bounds", "[world]") {
     REQUIRE(std::ranges::find(found, ent) != found.end());
 }
 
+// Масштаб вокселя доезжает до границ ровно один раз — мировой матрицей, куда
+// его кладёт chunk::create_entity_. Пока границы умножали на него второй раз
+// сами, чанк арены получал коробку в шестнадцать раз больше себя.
+TEST_CASE("voxel scale reaches the bounds once", "[world]") {
+    world w;
+    auto& models = w.resource<asset::model_registry>();
+
+    constexpr int32 voxel_scale = 16;
+    constexpr int32 side        = 4;
+
+    auto model = std::make_shared<asset::model>(
+        models.get_identity_pool(), models.get_page_pool(), side, side, side, voxel_scale
+    );
+    model->fill(voxel{blocks::green_2});
+
+    const auto ent = w.create().with<transform_component>().with<model_component>().get_entity();
+    w.system<model_system>().modify(ent).set_model(std::move(model));
+    w.modify(ent).with<spatial_component>();
+    w.system<transform_system>().modify(ent).set_scale(
+        vec3f{
+            static_cast<float32>(voxel_scale),
+            static_cast<float32>(voxel_scale),
+            static_cast<float32>(voxel_scale)
+        }
+    );
+    w.update(0.016F);
+
+    const auto bounds = w.get<spatial_component>(ent).get_bounds();
+    REQUIRE(bounds.size().x == static_cast<float32>(side * voxel_scale));
+    REQUIRE(bounds.size().y == static_cast<float32>(side * voxel_scale));
+    REQUIRE(bounds.size().z == static_cast<float32>(side * voxel_scale));
+}
+
 // А у несущего и то, и другое границы остаются модельными: по ним такую
 // сущность видели до сих пор, и подмена сдвинула бы и отсев, и попадания луча.
 TEST_CASE("a model outranks a collider when an entity has both", "[world]") {

@@ -144,14 +144,19 @@ auto spatial_system::calculate_aabb_from_model(
         return spatial::aabb{.min={0.0f, 0.0f, 0.0f}, .max={0.0f, 0.0f, 0.0f}};
     }
 
-    const auto scale = model_comp.get_model()->voxel_scale();
-    const int width  = model_comp.width() * scale;
-    const int height = model_comp.height() * scale;
-    const int depth  = model_comp.depth() * scale;
+    // Размер в вокселях, без voxel_scale: масштаб уже несёт мировая матрица —
+    // chunk::create_entity_ кладёт его туда, и вершинный шейдер растит ей же
+    // воксельные координаты квада. Домножение здесь применяло его дважды, и
+    // чанк арены получал коробку в шестнадцать раз больше себя: отсев фрустумом
+    // брал в кадр всё подряд, а направления -X, -Y и -Z не срезались никогда,
+    // потому что дальняя стенка коробки стояла далеко за чанком.
+    const vec3i model_size = model_comp.size();
 
     constexpr vec3f local_min{0.0f, 0.0f, 0.0f};
     const vec3f local_max{
-        static_cast<float>(width), static_cast<float>(height), static_cast<float>(depth)
+        static_cast<float32>(model_size.x),
+        static_cast<float32>(model_size.y),
+        static_cast<float32>(model_size.z)
     };
 
     const mat4f world_matrix = transform_comp.get_world_matrix();
