@@ -28,7 +28,7 @@ auto world_grid_system::set_loader(
 ) -> void {
     clear_loader_transient_state_();
     loader_ = std::move(loader);
-    baker_  = loader_ != nullptr ? std::make_unique<light_baker>() : nullptr;
+    baker_  = loader_ != nullptr ? std::make_unique<light_baker>(world_->blocks()) : nullptr;
 }
 
 auto world_grid_system::grid() -> world_grid* {

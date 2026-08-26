@@ -49,27 +49,32 @@ palette_buffer::palette_buffer(
     : context_(&context)
     , descriptor_pool_(descriptor_pool)
     , descriptor_set_layout_(descriptor_set_layout) {
-    // Все 256, а не 255: границей был numeric_limits<uint8>::max(), отчего
-    // последняя запись оставалась чёрной, и попавший в неё блок вывелся бы
-    // неосвещённым, а не просто не того цвета.
+    // Ровно по числу блоков в реестре, а не по всему, что влезает в слот: записи
+    // разложены по слотам, слот квада приходит оттуда же, и за конец списка
+    // обратиться неоткуда. Нулевая запись — заглушка для блока вне каталога, и
+    // она кричаще-розовая намеренно.
     //
     // Альфа несёт то, насколько ярко блок рисует сам себя. Раньше там стояла
     // константная единица, которую никто не читал, поэтому слагаемое собственного
     // свечения не стоит ни второго буфера, ни второго обращения, ни лишнего байта:
     // вершинный шейдер и так выбирает этот vec4 и выбрасывал четвёртую составляющую.
-    std::array<vec4f, 256> palette_data{};
-    for (std::size_t i = 0; i < palette_data.size(); ++i) {
-        const block_type& block = registry.get(block_id{static_cast<uint8>(i)});
-        const color clr         = block.clr;
+    const std::span<const block_type> blocks = registry.all();
 
-        palette_data[i] = vec4f{
+    std::vector<vec4f> palette_data;
+    palette_data.reserve(blocks.size());
+    for (const block_type& block : blocks) {
+        const color clr = block.material.clr;
+
+        palette_data.push_back(vec4f{
             decode(clr.r()), decode(clr.g()), decode(clr.b()),
-            static_cast<float32>(block.glow) / 255.0f
-        };
+            static_cast<float32>(block.material.glow) / 255.0f
+        });
     }
 
-    buffer_ = std::make_unique<storage_buffer>(*context_, sizeof(palette_data));
-    buffer_->copy_from(palette_data.data(), sizeof(palette_data));
+    const std::size_t palette_bytes = palette_data.size() * sizeof(vec4f);
+
+    buffer_ = std::make_unique<storage_buffer>(*context_, palette_bytes);
+    buffer_->copy_from(palette_data.data(), palette_bytes);
 
     descriptor_set_ = vk_must(
         context_->get_device().allocateDescriptorSets({

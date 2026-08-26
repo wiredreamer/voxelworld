@@ -56,7 +56,7 @@ private:
 // сами страницы лежат в блоках, которые никогда не переезжают.
 class page_pool final {
 public:
-    using page_type                    = std::array<voxel, 512>;
+    using page_type                    = std::array<block_index, 512>;
     static constexpr uint32 block_size = 4096;
     static constexpr uint32 max_blocks = 256;
 
@@ -95,6 +95,10 @@ enum class page_mode : uint8 { empty = 0, uniform = 1, sparse = 2 };
 // чанк, не имеющий собственных граней.
 enum class model_fill : uint8 { mixed = 0, air = 1, solid = 2 };
 
+// Два бита режима и тридцать полезных, общие на однородную и разреженную запись.
+// Делить их незачем: запись бывает либо однородной, либо разреженной, и второе
+// поле в каждом из случаев мертво. Однородной хватает восьми бит номера в
+// наборе, разреженной — двадцати под индекс страницы в пуле.
 struct page_entry {
     uint32 data = 0;
 
@@ -102,24 +106,24 @@ struct page_entry {
         return static_cast<page_mode>(data & 0x3U);
     }
 
-    [[nodiscard]] auto fill_id() const -> block_id {
-        return block_id{static_cast<uint8>((data >> 2) & 0xFFU)};
+    [[nodiscard]] auto fill_index() const -> block_index {
+        return block_index{static_cast<uint8>((data >> 2) & 0xFFU)};
     }
 
     [[nodiscard]] auto pool_index() const -> uint32 {
-        return (data >> 10) & 0xFFFFFU;
+        return data >> 2;
     }
 
     [[nodiscard]] static auto make_empty() -> page_entry {
         return {0U};
     }
 
-    [[nodiscard]] static auto make_uniform(block_id id) -> page_entry {
-        return {1U | (static_cast<uint32>(id.value) << 2)};
+    [[nodiscard]] static auto make_uniform(block_index index) -> page_entry {
+        return {1U | (static_cast<uint32>(index.value) << 2)};
     }
 
     [[nodiscard]] static auto make_sparse(uint32 index) -> page_entry {
-        return {2U | (index << 10)};
+        return {2U | (index << 2)};
     }
 };
 

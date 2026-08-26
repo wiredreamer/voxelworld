@@ -32,8 +32,8 @@ TEST_CASE("the vox parser reads a prefab out of a stream", "[serial]") {
         "entity body\n"
         "\tt 1 2 3\t0 0 0\t1 1 1\t0 0 0\n"
         "\tm 2 2 2\n"
-        "\t\tv 0 0 0 0x13\n"
-        "\t\tv 1 1 1 0x2E\n"
+        "\t\tv 0 0 0 1:1\n"
+        "\t\tv 1 1 1 1:13\n"
     );
 
     REQUIRE(prefab.has_value());
@@ -48,6 +48,52 @@ TEST_CASE("the vox parser reads a prefab out of a stream", "[serial]") {
     REQUIRE(entity.model.has_value());
     REQUIRE(entity.model->size == vec3i{2, 2, 2});
     REQUIRE(entity.model->voxels.size() == 2);
+    REQUIRE(entity.model->voxels[0].second.id == blocks::terrain::grass[0]);
+    REQUIRE(entity.model->voxels[1].second.id == blocks::terrain::dirt[0]);
+    REQUIRE(entity.model->category == blocks::terrain::category);
+}
+
+// В 1.0 на месте блока стояло число, которое было то цветом, то индексом. Читать
+// его как «категория:номер» нельзя ни при каком отображении, поэтому ответ —
+// ошибка разбора, а не догадка.
+TEST_CASE("a vox 1.0 voxel is a parse error", "[serial]") {
+    const auto prefab = parse_vox(
+        "root body\n"
+        "entity body\n"
+        "\tm 2 2 2\n"
+        "\t\tv 0 0 0 0x13\n"
+    );
+
+    REQUIRE_FALSE(prefab.has_value());
+}
+
+// Модель несёт ровно один набор: страница хранит номер в наборе, а сам набор —
+// у модели. Файл из двух наборов не представим, и молча взять первый значило бы
+// перекрасить половину модели.
+TEST_CASE("a vox model may not mix block sets", "[serial]") {
+    const auto prefab = parse_vox(
+        "root body\n"
+        "entity body\n"
+        "\tm 2 2 2\n"
+        "\t\tv 0 0 0 1:1\n"
+        "\t\tv 1 1 1 2:1\n"
+    );
+
+    REQUIRE_FALSE(prefab.has_value());
+}
+
+// Блок вне каталога рвать разбор не должен: он нарисуется заглушкой, и это
+// видно сразу, а половина модели из-за одного вокселя пропасть не может.
+TEST_CASE("a vox block outside the catalog still parses", "[serial]") {
+    const auto prefab = parse_vox(
+        "root body\n"
+        "entity body\n"
+        "\tm 2 2 2\n"
+        "\t\tv 0 0 0 200:7\n"
+    );
+
+    REQUIRE(prefab.has_value());
+    REQUIRE(prefab->entities.front().model->voxels.size() == 1);
 }
 
 // Разбор идёт построчно, и незнакомая команда — не повод бросать файл: так

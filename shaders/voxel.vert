@@ -50,6 +50,10 @@ layout(set = 1, binding = 2, std430) readonly buffer Quads {
 // Albedo, already decoded: gfx::palette_buffer runs the palette through its
 // gamma once on the way in rather than making every vertex do it. How much
 // decoding is a setting, not a constant -- see the note there.
+//
+// Indexed by the block's palette slot, not by its id: an id is a category and
+// an index within it, sixteen bits, and the quad has ten. The registry hands
+// every live block a dense slot and the quad carries that.
 layout(set = 4, binding = 0, std430) readonly buffer PaletteBuffer {
     vec4 palette[];
 };
@@ -111,8 +115,8 @@ void main() {
 
     uint normal_id      = (q.data0 >> 21) & 0x7u;
     uint corners_ao     = (q.data0 >> 24) & 0xFFu;
-    uint palette_idx    = (q.data1 >> 14) & 0xFFu;
-    uint corners_convex = (q.data1 >> 22) & 0xFFu;
+    uint palette_idx    = (q.data1 >> 14) & 0x3FFu;
+    uint corners_convex = (q.data1 >> 24) & 0xFFu;
 
     uvec3 mx = unpackMax(q.data1, mn, normal_id);
 

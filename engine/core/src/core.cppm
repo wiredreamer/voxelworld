@@ -10,3 +10,4 @@ export import :color;
 export import :math;
 export import :spatial;
 export import :blocks;
+export import :blocks.catalog;

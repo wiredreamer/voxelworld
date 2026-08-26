@@ -40,14 +40,14 @@ struct block_choice {
 // первыми, потому что ради них всё и затевалось; остального хватает, чтобы
 // построить что-нибудь, на что этот свет упадёт.
 constexpr std::array<block_choice, 8> block_menu{{
-    {"lamp (emits 14)", blocks::lamp},
-    {"lava (emits 15)", blocks::lava},
-    {"stone", blocks::gray_5},
-    {"dark stone", blocks::gray_2},
-    {"grass", blocks::green_5},
-    {"dirt", blocks::brown_2},
-    {"sand", blocks::orange_5},
-    {"white", blocks::white},
+    {"glowstone (emits 14)", blocks::terrain::glowstone},
+    {"lava (emits 15)", blocks::terrain::lava},
+    {"stone", blocks::terrain::stone[1]},
+    {"dark stone", blocks::terrain::stone_deep[1]},
+    {"grass", blocks::terrain::grass_dry[2]},
+    {"dirt", blocks::terrain::dirt[2]},
+    {"sand", blocks::terrain::sand[1]},
+    {"white", blocks::terrain::snow[2]},
 }};
 
 // Воксель под прицелом и пустой перед ним, в воксельных координатах, а не в

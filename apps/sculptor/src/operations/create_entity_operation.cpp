@@ -31,8 +31,11 @@ auto create_entity_operation::execute() -> void {
     if (params_.with_model) {
         modifier.with<ecs::model_component>();
 
-        model = model_reg.create(params_.name, params_.size);
-        model->fill(voxel{state_->tool.selected_block});
+        const block_id fill = state_->tool.brush_for(
+            params_.category, engine_->get_block_registry()
+        );
+        model = model_reg.create(params_.name, params_.category, params_.size);
+        model->fill(voxel{fill});
     }
 
     if (params_.with_socket) {

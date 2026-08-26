@@ -291,9 +291,9 @@ auto light_column::seed_block_(
 
                                 const bool uniform = mode == page_mode::uniform;
                                 const uint8 fill =
-                                    uniform
-                                        ? emission[mdl->get_page_fill_id(px, py, pz).value]
-                                        : uint8{0};
+                                    uniform ? emission.row(mdl->category())
+                                                  [mdl->get_page_fill_index(px, py, pz).value]
+                                            : uint8{0};
 
                                 if (uniform && fill == 0) {
                                     continue;
@@ -318,6 +318,10 @@ auto light_column::seed_block_(
                   int32 z0, bool uniform, uint8 fill) {
         const model::page_type* page = uniform ? nullptr : mdl.get_page(px, py, pz);
 
+        // Набор у модели один, поэтому строка излучения берётся один раз на
+        // страницу, а не собирается идентификатор на каждый воксель.
+        const auto& emits = emission.row(mdl.category());
+
         for (int32 lz = 0; lz < ps; ++lz) {
             const int32 z = z0 + lz;
             if (z < 0 || z >= span) {
@@ -335,10 +339,10 @@ auto light_column::seed_block_(
 
                     const uint8 level =
                         uniform ? fill
-                                : emission[(*page)[static_cast<std::size_t>(
-                                                lx + (ly * ps) + (lz * ps * ps)
-                                            )]
-                                               .id.value];
+                                : emits[(*page)[static_cast<std::size_t>(
+                                                    lx + (ly * ps) + (lz * ps * ps)
+                                                )]
+                                            .value];
                     if (level == 0) {
                         continue;
                     }
@@ -702,9 +706,9 @@ static_assert(skirt_pages * light_page >= asset::light_column::apron);
 }  // namespace
 
 light_baker::light_baker(
-    uint32 workers
+    const block_registry& blocks, uint32 workers
 )
-    : emission_{asset::build_emission_table(block_registry{})} {
+    : emission_{asset::build_emission_table(blocks)} {
     auto count = workers != 0 ? workers : std::min(std::thread::hardware_concurrency(), 4U);
     if (count == 0) {
         count = 1;

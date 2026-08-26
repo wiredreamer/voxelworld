@@ -7,38 +7,140 @@ import :color;
 
 export namespace vw {
 
-namespace block_flags {
-constexpr uint8 none        = 0;
-constexpr uint8 transparent = 1 << 0;
-// Бит 1 был emissive, а block_type::glow говорит то же самое числом, а не «да».
-// Два способа спросить, светится ли блок, — на один больше нужного; бит оставлен
-// дырой, чтобы не перенумеровывать то, что стоит выше.
-constexpr uint8 liquid      = 1 << 2;
-}  // namespace block_flags
-
-struct block_id {
+// Старший байт block_id. Категории независимы по построению: блок, добавленный
+// в ландшафт, не сдвигает ни одного персонажного — и только поэтому в файлах
+// моделей можно держать голые идентификаторы.
+struct block_category {
     uint8 value = 0;
 
-    constexpr block_id() = default;
-    constexpr explicit block_id(
+    constexpr block_category() = default;
+
+    constexpr explicit block_category(
         uint8 value_
     )
         : value(value_) {}
 
+    constexpr auto operator==(const block_category&) const -> bool = default;
+};
+
+// Личность блока: категория и номер внутри неё. Стабильна — её пишут в файлы и
+// по ней блок находит игровой код. Номер в палитре устройства — другое число,
+// его раздаёт реестр при сборке, и сборку оно не переживает.
+struct block_id {
+    uint16 value = 0;
+
+    constexpr block_id() = default;
+
+    constexpr block_id(
+        block_category category, uint8 index
+    )
+        : value(static_cast<uint16>((static_cast<uint16>(category.value) << 8U) | index)) {}
+
+    [[nodiscard]] static constexpr auto from_raw(
+        uint16 raw
+    ) -> block_id {
+        block_id id;
+        id.value = raw;
+        return id;
+    }
+
+    [[nodiscard]] constexpr auto category() const -> block_category {
+        return block_category{static_cast<uint8>(value >> 8U)};
+    }
+
+    [[nodiscard]] constexpr auto index() const -> uint8 {
+        return static_cast<uint8>(value & 0xFFU);
+    }
+
     constexpr auto operator==(const block_id&) const -> bool = default;
 };
 
-struct block_type {
-    block_id id = block_id{0};
+namespace blocks {
+// Ноль во всех разрядах, и на это опираются: пустоту проверяют сравнением с
+// нулём и таблица страниц, и битовые проходы по вокселям.
+inline constexpr auto air = block_id{};
+}  // namespace blocks
+
+// Номер блока внутри набора — то, что лежит в странице модели. Полный
+// идентификатор собирается из него и набора самой модели, поэтому воксель стоит
+// байт, а не два.
+//
+// Ноль означает пустоту в любом наборе, и нумерация каталога начинается с
+// единицы именно поэтому: нулевой байт обязан читаться как воздух, иначе он
+// декодировался бы в первый блок набора модели, а битовый проход по вокселям,
+// складывающий «байт ненулевой», сломался бы молча.
+struct block_index {
+    uint8 value = 0;
+
+    constexpr block_index() = default;
+
+    constexpr explicit block_index(
+        uint8 value_
+    )
+        : value(value_) {}
+
+    [[nodiscard]] constexpr auto is_empty() const -> bool {
+        return value == 0;
+    }
+
+    constexpr auto operator==(const block_index&) const -> bool = default;
+};
+
+// Варианты одного материала. Идут подряд по индексу, поэтому группа — это база
+// и число, а не список: принадлежность проверяется двумя сравнениями, и вопрос
+// «это вообще трава?» достаётся игровой логике бесплатно.
+struct block_span {
+    block_id first;
+    uint8 count = 1;
+
+    constexpr block_span() = default;
+
+    constexpr block_span(
+        block_category category, uint8 index, uint8 count_
+    )
+        : first(category, index), count(count_) {}
+
+    [[nodiscard]] constexpr auto operator[](
+        uint32 variant
+    ) const -> block_id {
+        return block_id{first.category(), static_cast<uint8>(first.index() + (variant % count))};
+    }
+
+    // Вариант по значению шума. Шум обязан быть пространственно связным —
+    // пятнами в несколько вокселей, а не хешем позиции: жадный мешер сливает
+    // соседей только при совпадении блока, и белый шум по вокселю разносит
+    // плоскость луга с десятка квадов до пары тысяч.
+    [[nodiscard]] constexpr auto pick(
+        uint32 patch_noise
+    ) const -> block_id {
+        return (*this)[patch_noise];
+    }
+
+    [[nodiscard]] constexpr auto contains(
+        block_id id
+    ) const -> bool {
+        return id.category() == first.category() && id.index() >= first.index() &&
+               id.index() < first.index() + count;
+    }
+};
+
+// Как блок ведёт себя в мешере. Прозрачных разрядов здесь ещё нет: за ними стоит
+// отдельный проход с сортировкой и смешиванием, а признак, заведённый раньше
+// прохода, — это ветка в горячем пути, которая никуда не ведёт.
+enum class block_surface : uint8 {
+    invisible,
+    opaque,
+};
+
+struct block_material {
     color clr = colors::empty;
-    uint8 flags = block_flags::none;
 
     // От нуля до пятнадцати, и это сразу два числа: насколько источник ярок и
     // насколько далеко достаёт. Шаг заливки стоит ровно единицу, поэтому яркому,
     // но близко бьющему блоку понадобилось бы второе значение в каждом углу
     // квада, а полубайт там один, не два. Шкала Minecraft по той же причине:
     // факел 14, светокамень 15.
-    uint8 light = 0;
+    uint8 emission = 0;
 
     // Насколько ярко блок рисует сам себя; к тому, что он даёт соседям, отношения
     // не имеет. 255 означает, что он выводится ровно тем цветом, каким нарисован,
@@ -51,102 +153,196 @@ struct block_type {
     uint8 glow = 0;
 };
 
-namespace blocks {
-constexpr auto air = block_id{0};
+// Запись каталога. Одинакова для встроенной таблицы и для всего, что добавит
+// игровая логика или файл, когда они появятся.
+struct block_desc {
+    block_id id;
+    std::string_view name;
+    block_material material;
+    block_surface surface = block_surface::opaque;
+};
 
-// clang-format off
-constexpr auto blue_0   = block_id{1};
-constexpr auto blue_1   = block_id{2};
-constexpr auto blue_2   = block_id{3};
-constexpr auto blue_3   = block_id{4};
-constexpr auto blue_4   = block_id{5};
-constexpr auto blue_5   = block_id{6};
+// Раздел набора: соседние номера одного смысла — кожа, ткань, металл. Хранится
+// диапазоном, а не полем в каждом блоке: каталог и так разложен по смыслу, и
+// группа стоит трёх чисел на всю группу вместо байта на блок.
+struct block_group {
+    std::string_view name;
+    block_id first;
+    uint8 count = 1;
 
-constexpr auto green_0  = block_id{7};
-constexpr auto green_1  = block_id{8};
-constexpr auto green_2  = block_id{9};
-constexpr auto green_3  = block_id{10};
-constexpr auto green_4  = block_id{11};
-constexpr auto green_5  = block_id{12};
+    [[nodiscard]] constexpr auto at(
+        uint8 offset
+    ) const -> block_id {
+        return block_id{first.category(), static_cast<uint8>(first.index() + offset)};
+    }
+};
 
-constexpr auto brown_0  = block_id{13};
-constexpr auto brown_1  = block_id{14};
-constexpr auto brown_2  = block_id{15};
-constexpr auto brown_3  = block_id{16};
-constexpr auto brown_4  = block_id{17};
-constexpr auto brown_5  = block_id{18};
+// Набор целиком: имя, под которым его выбирают, и разделы, на которые он бьётся.
+// Без этого набор — голый байт, и интерфейсу нечего о нём сказать.
+struct block_set {
+    block_category category;
+    std::string_view name;
+    std::span<const block_group> groups;
+};
 
-constexpr auto orange_0 = block_id{19};
-constexpr auto orange_1 = block_id{20};
-constexpr auto orange_2 = block_id{21};
-constexpr auto orange_3 = block_id{22};
-constexpr auto orange_4 = block_id{23};
-constexpr auto orange_5 = block_id{24};
+// Плотный номер блока в палитре устройства. В кваде под него десять бит, а
+// личность блока разрежена и туда не влезает — отсюда два числа вместо одного.
+struct block_slot {
+    uint16 value = 0;
 
-constexpr auto red_0    = block_id{25};
-constexpr auto red_1    = block_id{26};
-constexpr auto red_2    = block_id{27};
-constexpr auto red_3    = block_id{28};
-constexpr auto red_4    = block_id{29};
-constexpr auto red_5    = block_id{30};
+    constexpr auto operator==(const block_slot&) const -> bool = default;
+};
 
-constexpr auto purple_0 = block_id{31};
-constexpr auto purple_1 = block_id{32};
-constexpr auto purple_2 = block_id{33};
-constexpr auto purple_3 = block_id{34};
-constexpr auto purple_4 = block_id{35};
-constexpr auto purple_5 = block_id{36};
+// Потолок ставит квад: десять свободных бит в data1 и ни одним больше, пока его
+// запись остаётся двенадцатибайтовой.
+inline constexpr uint32 block_slot_capacity = 1024;
 
-constexpr auto gray_0   = block_id{37};
-constexpr auto gray_1   = block_id{38};
-constexpr auto gray_2   = block_id{39};
-constexpr auto gray_3   = block_id{40};
-constexpr auto gray_4   = block_id{41};
-constexpr auto gray_5   = block_id{42};
-constexpr auto gray_6   = block_id{43};
-constexpr auto gray_7   = block_id{44};
-constexpr auto gray_8   = block_id{45};
-constexpr auto gray_9   = block_id{46};
+// Блок, которого в реестре нет, читается как слот ноль и выводится кричащим
+// цветом: невидимость на его месте прятала бы опечатку в каталоге до первого
+// недоумения от картинки.
+inline constexpr auto missing_block_slot = block_slot{0};
 
-constexpr auto white    = block_id{47};
-constexpr auto black    = block_id{48};
+struct block_type {
+    block_id id;
+    block_slot slot;
+    std::string_view name;
+    block_material material;
+    block_surface surface = block_surface::invisible;
+};
 
-// Два излучающих. Их цвета намеренно не из палитры Apollo: find_by_color
-// возвращает первый блок этого цвета, и именно через эту функцию импорт .vox
-// отображает палитру, так что дубликат молча переназначил бы блок.
-constexpr auto lamp     = block_id{49};
-constexpr auto lava     = block_id{50};
-// clang-format on
+// Значение на блок, разложенное по категориям: строка на живую категорию плюс
+// строка умолчаний. Плоские 65 536 записей стоили бы 64 КБ ради сотни-другой, а
+// проход по вокселям читает одну-две категории — то есть заголовок и одну
+// строку, ровно как читал плоские 256 байт до того, как идентификаторы стали
+// разрежёнными.
+template <typename T>
+class block_table {
+public:
+    block_table() = default;
 
-}  // namespace blocks
+    explicit block_table(
+        T fallback
+    ) {
+        rows_[0].fill(fallback);
+    }
+
+    [[nodiscard]] auto get(
+        block_id id
+    ) const -> const T& {
+        return rows_[row_of_[id.category().value]][id.index()];
+    }
+
+    // Целая строка набора. Проход по вокселям одной модели читает ровно её,
+    // поэтому заголовок стоит взять один раз, а не на каждый воксель.
+    [[nodiscard]] auto row(
+        block_category category
+    ) const -> const std::array<T, 256>& {
+        return rows_[row_of_[category.value]];
+    }
+
+    auto set(
+        block_id id, T value
+    ) -> void {
+        uint16& row = row_of_[id.category().value];
+        if (row == 0) {
+            const row_type defaults = rows_.front();
+            row                     = static_cast<uint16>(rows_.size());
+            rows_.push_back(defaults);
+        }
+        rows_[row][id.index()] = std::move(value);
+    }
+
+private:
+    using row_type = std::array<T, 256>;
+
+    std::vector<row_type> rows_{1};
+    std::array<uint16, 256> row_of_{};
+};
 
 class block_registry {
 public:
     block_registry();
 
-    [[nodiscard]] auto get(block_id id) const -> const block_type&;
-    [[nodiscard]] auto get_color(block_id id) const -> color;
-    [[nodiscard]] auto find_by_color(color c) const -> block_id;
-    [[nodiscard]] auto blocks() const -> const std::array<block_type, 256>&;
+    // Каталог по умолчанию плюс то, что добавят игровая логика, мод или файл,
+    // когда появятся. Точка расширения заведена сразу, чтобы её не пришлось
+    // потом прорубать сквозь готовый реестр.
+    explicit block_registry(std::span<const block_desc> extra);
+
+    [[nodiscard]] auto get(
+        block_id id
+    ) const -> const block_type& {
+        return by_slot_[slot_of(id).value];
+    }
+
+    [[nodiscard]] auto get(
+        block_slot slot
+    ) const -> const block_type& {
+        return by_slot_[slot.value];
+    }
+
+    [[nodiscard]] auto slot_of(
+        block_id id
+    ) const -> block_slot {
+        return block_slot{slots_.get(id)};
+    }
+
+    // Слоты целого набора. Мешер идёт по одной модели, набор у неё один, и
+    // заголовок таблицы стоит взять один раз на меш, а не на каждый квад.
+    [[nodiscard]] auto slot_row(
+        block_category category
+    ) const -> const std::array<uint16, 256>& {
+        return slots_.row(category);
+    }
+
+    [[nodiscard]] auto find(std::string_view name) const -> std::optional<block_id>;
+
+    [[nodiscard]] auto sets() const -> std::span<const block_set> {
+        return sets_;
+    }
+
+    // Нулевой указатель значит набор, о котором каталог не знает: расширение
+    // вправе завести блоки и не заводить разделов. Показать их всё равно есть
+    // чем — списком, — а выдумывать за него имя реестр не станет.
+    [[nodiscard]] auto set_of(block_category category) const -> const block_set*;
+
+    // Разложены по слотам, поэтому позиция записи здесь и есть её слот. Так их
+    // читают и буфер палитры, и панель блоков.
+    [[nodiscard]] auto all() const -> std::span<const block_type> {
+        return by_slot_;
+    }
 
 private:
-    auto reg(block_id id, color c, uint8 flags = block_flags::none, uint8 light = 0,
-             uint8 glow = 0) -> void;
+    auto add_(const block_desc& desc) -> void;
 
-    std::array<block_type, 256> blocks_{};
+    std::vector<block_type> by_slot_;
+    std::vector<block_set> sets_;
+    block_table<uint16> slots_;
+    std::unordered_map<std::string_view, block_id> by_name_;
 };
+
+// Реестр встроенного каталога, один на процесс. Нужен там, где реестр брать
+// неоткуда, а каталог всё равно один: заголовочные тесты и мир, поднятый без
+// движка. Владелец настоящего реестра — engine, и он раздаёт свой: расширение
+// каталога иначе пришлось бы настраивать после конструирования.
+[[nodiscard]] auto default_block_registry() -> const block_registry&;
 
 struct voxel {
     block_id id = blocks::air;
 
     constexpr voxel() = default;
-    constexpr explicit voxel(block_id block_id) : id(block_id) {}
 
-    [[nodiscard]] constexpr auto is_empty() const -> bool { return id == blocks::air; }
+    constexpr explicit voxel(
+        block_id block_id
+    )
+        : id(block_id) {}
+
+    [[nodiscard]] constexpr auto is_empty() const -> bool {
+        return id == blocks::air;
+    }
 
     constexpr auto operator==(const voxel&) const -> bool = default;
 };
 
-constexpr auto empty_voxel = voxel{};
+inline constexpr auto empty_voxel = voxel{};
 
 }  // namespace vw

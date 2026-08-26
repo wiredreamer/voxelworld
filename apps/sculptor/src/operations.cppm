@@ -94,6 +94,7 @@ export namespace vw::sculptor {
 struct add_model_component_params {
     std::string name;
     vec3i size{8, 8, 8};
+    block_category category;
 };
 
 class add_model_component_operation final : public base_operation {
@@ -282,6 +283,10 @@ struct create_entity_params {
     bool with_model  = false;
     bool with_socket = false;
     vec3i size       = vec3i{6, 6, 6};
+
+    // Набор блоков модели. Задаётся здесь и больше не меняется: модель несёт
+    // ровно один набор, и в этом весь смысл спрашивать его при создании.
+    block_category category;
 };
 
 class create_entity_operation final : public base_operation {

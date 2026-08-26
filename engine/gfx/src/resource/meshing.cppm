@@ -15,8 +15,8 @@ export namespace vw::gfx {
 //
 // data0: min.x[6:0] | min.y[13:7] | min.z[20:14] | normal_id[23:21]
 //      | corners_ao[31:24]
-// data1: span_u[6:0] | span_v[13:7] | palette_index[21:14]
-//      | corners_convex[29:22]
+// data1: span_u[6:0] | span_v[13:7] | block_slot[23:14]
+//      | corners_convex[31:24]
 // data2: corners_sky[15:0]
 //
 // Третье слово — цена небесного света. Четыре бита на угол не влезают в три
@@ -29,6 +29,11 @@ export namespace vw::gfx {
 // в 128, семь бит кончаются на 127, и старая упаковка заворачивала его в ноль на
 // внешней грани модели. Протяжённость в 128 ячеек хранится как 127 и влезает
 // ровно. Освободившиеся восемь бит заняла выпуклость.
+//
+// Слот блока занимает десять бит, а не восемь: личность блока — это категория и
+// номер в ней, шестнадцать бит, и в запись она не влезает. Реестр раздаёт живым
+// блокам плотные номера, и сюда едет номер. Десять — это всё, что было свободно,
+// и потолок каталога стоит там же.
 //
 // corners_ao: два бита на угол в порядке обхода, от 0 (открыт) до 3 (закрыт).
 // corners_convex: два бита на угол в том же порядке, от 0 (вровень с соседями)
@@ -55,7 +60,7 @@ struct quad {
     quad() = default;
 
     [[nodiscard]] static auto pack(
-        vec3i min_pos, vec3i max_pos, uint8 normal_id, block_id block_id, uint8 corners_ao,
+        vec3i min_pos, vec3i max_pos, uint8 normal_id, block_slot slot, uint8 corners_ao,
         uint8 corners_convex, uint16 corners_sky, uint16 corners_block
     ) -> quad;
 
@@ -168,7 +173,9 @@ struct corner_light {
 };
 
 struct face_mask_cell {
-    block_id voxel_id;
+    // Номер в наборе, а не идентификатор: набор у модели один, и собирать его на
+    // каждый воксель маски незачем — это делается один раз при выпуске квада.
+    block_index index;
     uint8 corner_ao;
 
     // Часть ключа слияния: две ячейки сливаются, только если свет совпал по всему
@@ -187,7 +194,7 @@ struct face_mask_cell {
 
     [[nodiscard]]
     auto is_empty() const -> bool {
-        return voxel_id == blocks::air;
+        return index.is_empty();
     }
 };
 
@@ -253,7 +260,7 @@ auto add_quad(
     int32 face_direction,
     vec3i min_pos,
     vec3i max_pos,
-    uint8 palette_index,
+    block_slot slot,
     uint8 corner_ao,
     uint8 corner_convex,
     corner_light light
@@ -298,7 +305,8 @@ auto emit_rect(
     int32 v_start,
     int32 w,
     int32 h,
-    const face_mask_cell& cell
+    const face_mask_cell& cell,
+    const std::array<uint16, 256>& slots
 ) -> void;
 }  // namespace detail
 
@@ -351,7 +359,8 @@ private:
         const detail::face_axis_mapping& axes,
         int32 face_direction,
         int32 layer,
-        detail::layer_rows& rows
+        detail::layer_rows& rows,
+        const std::array<uint16, 256>& slots
     ) -> void;
 
     static auto merge_and_emit_rects(

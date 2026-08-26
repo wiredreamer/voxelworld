@@ -34,6 +34,7 @@ auto vox_parser_plain::parse(std::istream& input)
     prefab_ = {};
     current_entity_ = nullptr;
     error_ = std::nullopt;
+    unknown_blocks_.clear();
 
     std::string line;
     while (std::getline(input, line)) {
@@ -205,7 +206,7 @@ auto vox_parser_plain::process_model_(std::istringstream& iss) -> void {
         return;
     }
 
-    current_entity_->model = vox_model_data{size, {}};
+    current_entity_->model = vox_model_data{.size = size, .category = {}, .voxels = {}};
 }
 
 auto vox_parser_plain::process_voxel_(std::istringstream& iss) -> void {
@@ -220,34 +221,86 @@ auto vox_parser_plain::process_voxel_(std::istringstream& iss) -> void {
         return;
     }
 
-    std::string color_str;
-    iss >> color_str;
+    std::string token;
+    iss >> token;
     if (iss.fail()) {
         error_ = error_type::parse_error;
         return;
     }
 
-    std::string_view sv = color_str;
-    if (sv.starts_with("0x") || sv.starts_with("0X")) {
-        sv.remove_prefix(2);
-    }
-
-    uint32 color_value = 0;
-    auto [ptr, ec] = std::from_chars(sv.data(), sv.data() + sv.size(), color_value, 16);
-    if (ec != std::errc{}) {
-        log::warn(detail::vox_parser_plain_lc, "invalid color value: {}", color_str);
+    const std::optional<block_id> id = parse_block_id_(token);
+    if (!id.has_value()) {
         error_ = error_type::parse_error;
         return;
     }
 
-    block_id bid = blocks::air;
-    if (color_value > 0xFF) {
-        bid = block_registry_->find_by_color(color{color_value});
-    } else {
-        bid = block_id{static_cast<uint8>(color_value)};
+    // Набор модели задаёт первый непустой воксель, остальные обязаны совпасть:
+    // страница хранит номер в наборе, и модель из двух наборов не представима.
+    // То, что состоит из разных наборов, — это разные модели.
+    vox_model_data& mdl = *current_entity_->model;
+    if (*id != blocks::air) {
+        if (mdl.category == block_category{}) {
+            mdl.category = id->category();
+        } else if (id->category() != mdl.category) {
+            log::warn(
+                detail::vox_parser_plain_lc,
+                "model '{}' mixes block sets {} and {}; a model carries exactly one",
+                current_entity_->name,
+                mdl.category.value,
+                id->category().value
+            );
+            error_ = error_type::parse_error;
+            return;
+        }
     }
 
-    current_entity_->model->voxels.emplace_back(position, voxel{bid});
+    mdl.voxels.emplace_back(position, voxel{*id});
+}
+
+auto vox_parser_plain::parse_block_id_(
+    std::string_view token
+) -> std::optional<block_id> {
+    const std::size_t sep = token.find(':');
+    if (sep == std::string_view::npos) {
+        log::warn(
+            detail::vox_parser_plain_lc,
+            "voxel wants a block id as category:index, got '{}'; .vox 1.0 kept a colour there "
+            "and is no longer read",
+            token
+        );
+        return std::nullopt;
+    }
+
+    const char* first = token.data();
+    const char* mid   = first + sep;
+    const char* last  = first + token.size();
+
+    uint32 category = 0;
+    uint32 index    = 0;
+    const auto head = std::from_chars(first, mid, category);
+    const auto tail = std::from_chars(mid + 1, last, index);
+
+    if (head.ec != std::errc{} || head.ptr != mid || tail.ec != std::errc{} ||
+        tail.ptr != last || category > 0xFF || index > 0xFF) {
+        log::warn(detail::vox_parser_plain_lc, "malformed block id: {}", token);
+        return std::nullopt;
+    }
+
+    const auto id = block_id{
+        block_category{static_cast<uint8>(category)}, static_cast<uint8>(index)
+    };
+
+    if (id != blocks::air && block_registry_->slot_of(id) == missing_block_slot &&
+        unknown_blocks_.insert(id.value).second) {
+        log::warn(
+            detail::vox_parser_plain_lc,
+            "block {}:{} is not in the catalog and will draw as the missing block",
+            category,
+            index
+        );
+    }
+
+    return id;
 }
 
 }  // namespace vw::asset
@@ -595,7 +648,7 @@ auto asset_storage::load_prefab(
         }
 
         std::string model_key = name_str + "/" + ent.name;
-        auto m = model_registry_->create(model_key, ent.model->size);
+        auto m = model_registry_->create(model_key, ent.model->category, ent.model->size);
 
         for (const auto& [pos, v] : ent.model->voxels) {
             m->set_voxel(pos, v);
@@ -745,7 +798,9 @@ auto vox_writer_plain::write_model_(
     file << std::format("\tm {} {} {}\n", mdl.size.x, mdl.size.y, mdl.size.z);
 
     for (const auto& [pos, v] : mdl.voxels) {
-        file << std::format("\t\tv {} {} {} 0x{:02X}\n", pos.x, pos.y, pos.z, v.id.value);
+        file << std::format(
+            "\t\tv {} {} {} {}:{}\n", pos.x, pos.y, pos.z, v.id.category().value, v.id.index()
+        );
     }
 }
 

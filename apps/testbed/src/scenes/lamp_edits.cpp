@@ -73,7 +73,7 @@ auto lamp_edits_scene::tick(float32 /*delta_time*/) -> void {
         // оказался.
         stand().grid().set_voxel(
             {vx * scale, (*surface + 1) * scale, vz * scale},
-            voxel{inert_ ? blocks::gray_5 : blocks::lamp}
+            voxel{inert_ ? blocks::terrain::stone[1] : blocks::terrain::glowstone}
         );
 
         ++placed_;

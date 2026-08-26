@@ -13,8 +13,8 @@ using namespace vw::ecs;
 namespace {
 
 auto make_cube(world& w, asset::model_registry& models, const char* name) -> entity {
-    auto model = models.create(name, 4, 4, 4);
-    model->fill(voxel{blocks::green_2});
+    auto model = models.create(name, blocks::terrain::category, 4, 4, 4);
+    model->fill(voxel{blocks::terrain::grass[0]});
 
     const auto ent = w.create().with<transform_component>().with<model_component>().get_entity();
     w.system<model_system>().modify(ent).set_model(std::move(model));
@@ -68,10 +68,10 @@ TEST_CASE("a moved viewer is reported to the world grid", "[world]") {
 TEST_CASE("voxels survive a round trip through the model registry", "[world]") {
     asset::model_registry models;
 
-    auto model = models.create("scratch", 16, 16, 16);
-    model->set_voxel(1, 2, 3, voxel{blocks::brown_0});
+    auto model = models.create("scratch", blocks::terrain::category, 16, 16, 16);
+    model->set_voxel(1, 2, 3, voxel{blocks::terrain::dirt[0]});
 
-    REQUIRE(models.get("scratch")->get_voxel(1, 2, 3).id == blocks::brown_0);
+    REQUIRE(models.get("scratch")->get_voxel(1, 2, 3).id == blocks::terrain::dirt[0]);
     REQUIRE(models.get("scratch")->is_empty(4, 5, 6));
 }
 
@@ -80,7 +80,7 @@ TEST_CASE("chunk occupancy matches the voxel volume bit for bit", "[world][occup
     asset::page_pool pages;
 
     constexpr int32 side = asset::chunk_occupancy::side;
-    asset::model model{identity_pool, pages, side, side, side};
+    asset::model model{identity_pool, pages, blocks::terrain::category, side, side, side};
 
     asset::model_writer writer{model};
 
@@ -89,7 +89,7 @@ TEST_CASE("chunk occupancy matches the voxel volume bit for bit", "[world][occup
     for (int32 x = 0; x < 8; ++x) {
         for (int32 y = 0; y < 8; ++y) {
             for (int32 z = 0; z < 8; ++z) {
-                writer.set(x, y, z, voxel{blocks::gray_3});
+                writer.set(x, y, z, voxel{blocks::terrain::stone_deep[2]});
             }
         }
     }
@@ -100,7 +100,7 @@ TEST_CASE("chunk occupancy matches the voxel volume bit for bit", "[world][occup
         const int32 x = static_cast<int32>((state >> 8) % side);
         const int32 y = static_cast<int32>((state >> 14) % side);
         const int32 z = static_cast<int32>((state >> 20) % side);
-        writer.set(x, y, z, voxel{blocks::red_2});
+        writer.set(x, y, z, voxel{blocks::terrain::clay[0]});
     }
 
     asset::chunk_occupancy occupancy;
@@ -122,7 +122,7 @@ TEST_CASE("chunk occupancy matches the voxel volume bit for bit", "[world][occup
 TEST_CASE("chunk occupancy declines models that are not 64 cubes", "[world][occupancy]") {
     asset::model_identity_pool identity_pool;
     asset::page_pool pages;
-    asset::model model{identity_pool, pages, 32, 32, 32};
+    asset::model model{identity_pool, pages, blocks::terrain::category, 32, 32, 32};
 
     asset::chunk_occupancy occupancy;
     REQUIRE_FALSE(model.build_occupancy(occupancy));
@@ -175,9 +175,10 @@ TEST_CASE("voxel scale reaches the bounds once", "[world]") {
     constexpr int32 side        = 4;
 
     auto model = std::make_shared<asset::model>(
-        models.get_identity_pool(), models.get_page_pool(), side, side, side, voxel_scale
+        models.get_identity_pool(), models.get_page_pool(), blocks::terrain::category, side,
+        side, side, voxel_scale
     );
-    model->fill(voxel{blocks::green_2});
+    model->fill(voxel{blocks::terrain::grass[0]});
 
     const auto ent = w.create().with<transform_component>().with<model_component>().get_entity();
     w.system<model_system>().modify(ent).set_model(std::move(model));

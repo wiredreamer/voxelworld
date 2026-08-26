@@ -179,7 +179,19 @@ auto entity_properties_panel::render_components_section() -> void {
     if (has_model) {
         const auto& model_comp = world.get<ecs::model_component>(ent);
         const auto model_size  = model_comp.size();
-        ImGui::TextDisabled("(%dx%dx%d)", model_size.x, model_size.y, model_size.z);
+
+        // Набор — только на чтение: он задан конструктором модели и не меняется,
+        // а видеть его надо, иначе о том, чем модель красится, сказать нечего.
+        const auto model      = model_comp.get_model();
+        const block_set* set  = model
+             ? engine_->get_block_registry().set_of(model->category())
+             : nullptr;
+        const std::string_view set_name = set != nullptr ? set->name : "unknown";
+
+        ImGui::TextDisabled(
+            "(%dx%dx%d) %.*s", model_size.x, model_size.y, model_size.z,
+            static_cast<int>(set_name.size()), set_name.data()
+        );
         ImGui::SameLine();
         if (ImGui::Button("Remove##model")) {
             op_manager_->execute(std::make_unique<remove_model_component_operation>(

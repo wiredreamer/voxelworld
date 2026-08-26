@@ -101,7 +101,7 @@ auto standing_lights_scene::place_emitters_() -> void {
             const vec2i at = site(at_site);
             if (const auto surface = stand().grid().get_surface_y(at.x, at.y)) {
                 stand().grid().set_voxel(
-                    {at.x * scale, (*surface + 1) * scale, at.y * scale}, voxel{blocks::lamp}
+                    {at.x * scale, (*surface + 1) * scale, at.y * scale}, voxel{blocks::terrain::glowstone}
                 );
 
                 ++placed_;

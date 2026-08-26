@@ -230,7 +230,7 @@ auto vox_deserializer::apply_entity_(
 
     if (data.model.has_value()) {
         auto& model_reg = world_->resource<asset::model_registry>();
-        auto model_ptr = model_reg.create(data.name, data.model->size);
+        auto model_ptr = model_reg.create(data.name, data.model->category, data.model->size);
 
         world_->modify(ent).with<model_component>();
 

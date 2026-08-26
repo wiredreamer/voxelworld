@@ -674,30 +674,33 @@ auto perlin_terrain_generator::rock_block_at(
     int32 wy
 ) const -> block_id {
     if (wy < (params_.world_bottom_y + params_.bedrock_thickness)) {
-        return blocks::gray_0;
+        return blocks::terrain::bedrock;
     }
     if (wy < params_.rock_bottom_y) {
-        return blocks::gray_1;
+        return blocks::terrain::stone_deep[0];
     }
     if (wy < params_.rock_deep_y) {
-        return blocks::gray_2;
+        return blocks::terrain::stone_deep[1];
     }
-    return blocks::gray_3;
+    return blocks::terrain::stone_deep[2];
 }
 
 auto perlin_terrain_generator::block_at(
     int32 wy, int32 stone_top, int32 surface_top
 ) const -> block_id {
+    // По одному варианту на материал, хотя у травы и почвы их по три: разбивать
+    // поверхность вариантами имеет смысл вместе с биомами, и только связными
+    // пятнами — белый шум по вокселю разнёс бы жадное слияние верхних граней.
     if (wy > stone_top) {
-        return wy == surface_top ? blocks::green_2 : blocks::brown_0;
+        return wy == surface_top ? blocks::terrain::grass[0] : blocks::terrain::dirt[0];
     }
 
     // Открытая порода выветривается, а достаточно высоко на ней лежит снег.
     if (wy == stone_top && surface_top == stone_top) {
-        return wy > params_.snow_line ? blocks::gray_9 : blocks::gray_5;
+        return wy > params_.snow_line ? blocks::terrain::snow[1] : blocks::terrain::stone[1];
     }
     if ((stone_top - wy) < params_.rock_skin) {
-        return blocks::gray_4;
+        return blocks::terrain::stone[0];
     }
 
     return rock_block_at(wy);
@@ -789,7 +792,10 @@ auto perlin_terrain_generator::generate_chunk(
 ) -> void {
     constexpr int32 s = 64;
 
-    auto mdl = std::make_shared<vw::asset::model>(*identity_pool_, *page_pool_, s, s, s, params_.voxel_scale);
+    auto mdl = std::make_shared<vw::asset::model>(
+        *identity_pool_, *page_pool_, vw::blocks::terrain::category, s, s, s,
+        params_.voxel_scale
+    );
 
     constexpr int32 p  = column_profile::page;
     constexpr int32 pn = column_profile::pages;

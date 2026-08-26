@@ -53,7 +53,7 @@ target_sources(${PROJECT_NAME}
         src/tools/select_entity_tool.cpp
         src/ui/add_model_component_modal.cpp
         src/ui/clip_manager_panel.cpp
-        src/ui/color_palette_panel.cpp
+        src/ui/block_palette_panel.cpp
         src/ui/create_clip_modal.cpp
         src/ui/create_entity_modal.cpp
         src/ui/create_keyframe_modal.cpp

@@ -60,7 +60,17 @@ struct scene_state {
 
 struct tool_state {
     tools selected_tool     = tools::add_voxel;
-    block_id selected_block = blocks::white;
+    block_id selected_block = blocks::character::cloth_white[2];
+
+    // Кисть помнится на набор: модель несёт ровно один набор, и переход к
+    // модели другого не должен стоить заново выбранного цвета. Плоский массив
+    // по значению категории — полкилобайта и ни одной аллокации.
+    std::array<block_id, 256> brush_of_set{};
+
+    // Чем красить в этом наборе: запомненным блоком, а если такого ещё не было —
+    // первым блоком набора.
+    [[nodiscard]] auto brush_for(block_category category, const block_registry& registry) const
+        -> block_id;
 };
 
 struct clip_settings {

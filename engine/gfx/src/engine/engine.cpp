@@ -46,7 +46,7 @@ engine::engine(
         *vulkan_context_, *window_, block_registry_, bench_.mesh_workers);
     camera_ =
         std::make_unique<camera>(45.0f, static_cast<float>(width) / static_cast<float>(height));
-    world_      = std::make_unique<world_type>();
+    world_      = std::make_unique<world_type>(block_registry_);
     debug_tool_ = std::make_unique<debug_window_type>(*this);
 
     // Пустое приложение по умолчанию — чтобы не проверять на null

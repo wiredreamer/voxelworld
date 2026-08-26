@@ -17,6 +17,7 @@ target_sources(vw_core
             src/math/math.cppm
             src/spatial/spatial.cppm
             src/blocks/blocks.cppm
+            src/blocks/catalog.cppm
             src/log/log.cppm
     PRIVATE
         src/math/math.cpp

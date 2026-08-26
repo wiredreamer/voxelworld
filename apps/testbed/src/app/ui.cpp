@@ -120,11 +120,11 @@ auto testbed_app::render_ui() -> void {
         // окно World.
         if (world_grid_ != nullptr) {
             if (ImGui::Button("Drop lamp")) {
-                drop_emitter(blocks::lamp, 1);
+                drop_emitter(blocks::terrain::glowstone, 1);
             }
             ImGui::SameLine();
             if (ImGui::Button("Pour lava")) {
-                drop_emitter(blocks::lava, 3);
+                drop_emitter(blocks::terrain::lava, 3);
             }
 
             // Кнопка, которая ничего не делает и ничего не говорит, — худшее из

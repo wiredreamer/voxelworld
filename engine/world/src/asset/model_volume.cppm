@@ -16,14 +16,20 @@ export namespace vw::asset {
 // Знает только про свои воксели. Всё, что добавляет им мир, — плоскости соседей
 // по швам и запечённый свет — живёт в chunk_volume, потому что бывает только у
 // чанков: над моделью в редакторе ни соседей, ни неба нет.
+//
+// Набор блоков у модели ровно один и задаётся при создании. Поэтому страница
+// хранит только номер в наборе — байт, а не два, — а полный идентификатор
+// собирается при чтении. Смешение наборов в одном объёме этим и запрещено: то,
+// что состоит из разных наборов, — это разные модели в одной мировой сетке, и у
+// них разный масштаб вокселя чаще, чем одинаковый.
 class model {
 public:
     static constexpr int32 page_size   = 8;
     static constexpr int32 page_volume = page_size * page_size * page_size;
-    using page_type                    = std::array<voxel, page_volume>;
+    using page_type                    = std::array<block_index, page_volume>;
 
-    model(model_identity_pool& identity_pool, page_pool& pool, int32 width, int32 height,
-          int32 depth, int32 voxel_scale = 1);
+    model(model_identity_pool& identity_pool, page_pool& pool, block_category category,
+          int32 width, int32 height, int32 depth, int32 voxel_scale = 1);
     ~model();
 
     model(const model&)                    = delete;
@@ -39,22 +45,40 @@ public:
     }
 
     [[nodiscard]] auto get_voxel(int32 x, int32 y, int32 z) const -> voxel {
+        return voxel{to_id(get_index(x, y, z))};
+    }
+
+    // Номер в наборе, без сборки идентификатора. Тем, кто идёт по вокселям одной
+    // модели, набор известен и так, и собирать его на каждый воксель незачем.
+    [[nodiscard]] auto get_index(int32 x, int32 y, int32 z) const -> block_index {
         const auto& entry = pages_[page_index(x / page_size, y / page_size, z / page_size)];
 
         switch (entry.mode()) {
             case page_mode::empty:
-                return voxel{};
+                return block_index{};
             case page_mode::uniform:
-                return voxel{entry.fill_id()};
+                return entry.fill_index();
             case page_mode::sparse:
                 return pool_ptr_->get(entry.pool_index())
                     [local_index(x % page_size, y % page_size, z % page_size)];
         }
-        return voxel{};
+        return block_index{};
+    }
+
+    [[nodiscard]] auto to_id(block_index index) const -> block_id {
+        return index.is_empty() ? blocks::air : block_id{category_, index.value};
     }
 
     [[nodiscard]] auto get_voxel(vec3i pos) const -> voxel {
         return get_voxel(pos.x, pos.y, pos.z);
+    }
+
+    [[nodiscard]] auto get_index(vec3i pos) const -> block_index {
+        return get_index(pos.x, pos.y, pos.z);
+    }
+
+    [[nodiscard]] auto category() const -> block_category {
+        return category_;
     }
 
     [[nodiscard]] auto is_empty(int32 x, int32 y, int32 z) const -> bool {
@@ -158,8 +182,8 @@ public:
         return pages_[page_index(px, py, pz)].mode();
     }
 
-    [[nodiscard]] auto get_page_fill_id(int32 px, int32 py, int32 pz) const -> block_id {
-        return pages_[page_index(px, py, pz)].fill_id();
+    [[nodiscard]] auto get_page_fill_index(int32 px, int32 py, int32 pz) const -> block_index {
+        return pages_[page_index(px, py, pz)].fill_index();
     }
 
     [[nodiscard]] auto get_page(int32 px, int32 py, int32 pz) const -> const page_type* {
@@ -184,6 +208,8 @@ private:
     // поднимает один раз на весь скоуп.
     friend class model_writer;
 
+    [[nodiscard]] auto to_index_(const voxel& v) const -> block_index;
+
     auto set_voxel_raw_(int32 x, int32 y, int32 z, const voxel& v) -> void;
     auto fill_page_raw_(int32 px, int32 py, int32 pz, const voxel& v) -> void;
 
@@ -203,6 +229,7 @@ private:
 
     model_identity_pool* identity_pool_;
     page_pool* pool_ptr_;
+    block_category category_;
     int32 width_{0}, height_{0}, depth_{0};
     int32 voxel_scale_{1};
     int32 pages_x_{0}, pages_y_{0}, pages_z_{0};
@@ -220,12 +247,14 @@ public:
     [[nodiscard]] auto has(std::string_view name) const -> bool;
     [[nodiscard]] auto get(std::string_view name) const -> std::shared_ptr<model>;
 
-    [[nodiscard]] auto create(std::string_view name, int32 width, int32 height, int32 depth)
+    [[nodiscard]] auto create(std::string_view name, block_category category, int32 width,
+                              int32 height, int32 depth) -> std::shared_ptr<model>;
+    [[nodiscard]] auto create(std::string_view name, block_category category, vec3i size)
         -> std::shared_ptr<model>;
-    [[nodiscard]] auto create(std::string_view name, vec3i size) -> std::shared_ptr<model>;
-    [[nodiscard]] auto create_unnamed(int32 width, int32 height, int32 depth)
+    [[nodiscard]] auto create_unnamed(block_category category, int32 width, int32 height,
+                                      int32 depth) -> std::shared_ptr<model>;
+    [[nodiscard]] auto create_unnamed(block_category category, vec3i size)
         -> std::shared_ptr<model>;
-    [[nodiscard]] auto create_unnamed(vec3i size) -> std::shared_ptr<model>;
     [[nodiscard]] auto create_clone(std::string_view name) -> std::shared_ptr<model>;
 
     auto erase(std::string_view name) -> void;

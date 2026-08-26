@@ -25,7 +25,7 @@ auto quad::pack(
     vec3i min_pos,
     vec3i max_pos,
     uint8 normal_id,
-    block_id block_id,
+    block_slot slot,
     uint8 corners_ao,
     uint8 corners_convex,
     uint16 corners_sky,
@@ -50,8 +50,8 @@ auto quad::pack(
     q.data1 =                                               //
         (span_u & 0x7Fu) |                                  //
         ((span_v & 0x7Fu) << 7) |                           //
-        (static_cast<uint32>(block_id.value) << 14) |       //
-        (static_cast<uint32>(corners_convex) << 22);
+        (static_cast<uint32>(slot.value) << 14) |            //
+        (static_cast<uint32>(corners_convex) << 24);
 
     // Оба канала в одном слове, небо в младшей половине. Старшая была свободна —
     // data2 держало шестнадцать бит и больше ничего, — поэтому второй канал не
@@ -537,7 +537,7 @@ auto build_face_mask(
         return (static_cast<std::size_t>(u) * static_cast<std::size_t>(axes.height)) + static_cast<std::size_t>(v);
     };
 
-    constexpr face_mask_cell empty_cell{blocks::air, 0};
+    constexpr face_mask_cell empty_cell{block_index{}, 0};
 
     for (int u_block = 0; u_block < axes.width; u_block += ps) {
         int u_end = std::min(u_block + ps, axes.width);
@@ -557,7 +557,7 @@ auto build_face_mask(
             }
 
             if (pm == vw::asset::page_mode::uniform) {
-                const auto fid = src.voxels.get_page_fill_id(pmx / ps, pmy / ps, pmz / ps);
+                const auto fid = src.voxels.get_page_fill_index(pmx / ps, pmy / ps, pmz / ps);
                 for (int u = u_block; u < u_end; u++) {
                     for (int v = v_block; v < v_end; v++) {
                         auto [mx, my, mz] = axes.to_model_coords(u, v, layer);
@@ -586,7 +586,7 @@ auto build_face_mask(
                     auto& vx          = (*page)[lx + ly * ps + lz * ps * ps];
                     if (!vx.is_empty() && is_face_visible(src, mx, my, mz, face_direction)) {
                         storage.mask[idx(u, v)] = {
-                            vx.id,
+                            vx,
                             compute_corner_darkness(src, mx, my, mz, face_direction),
                             compute_corner_light(src, mx, my, mz, face_direction),
                             compute_corner_convexity(src, mx, my, mz, face_direction)
@@ -605,7 +605,7 @@ auto add_quad(
     int face_direction,
     vec3i min_pos,
     vec3i max_pos,
-    block_id block_id,
+    block_slot slot,
     uint8 corner_ao,
     uint8 corner_convex,
     corner_light light
@@ -666,7 +666,7 @@ auto add_quad(
     }
 
     quads.push_back(quad::pack(
-        min_pos, max_pos, normal_id, block_id, ao_winding, convex_winding, sky_winding,
+        min_pos, max_pos, normal_id, slot, ao_winding, convex_winding, sky_winding,
         block_winding
     ));
 }
@@ -802,16 +802,19 @@ auto emit_rect(
     int v_start,
     int w,
     int h,
-    const face_mask_cell& cell
+    const face_mask_cell& cell,
+    const std::array<uint16, 256>& slots
 ) -> void {
     auto [min_pos, max_pos] = axes.to_local_min_max(u_start, v_start, w, h, layer);
 
+    // Номер в наборе переводится в слот палитры здесь — один раз на выпущенный
+    // прямоугольник, по строке, снятой с реестра один раз на меш.
     add_quad(
         storage.quads,
         face_direction,
         min_pos,
         max_pos,
-        block_id{cell.voxel_id},
+        block_slot{slots[cell.index.value]},
         cell.corner_ao,
         cell.corner_convex,
         cell.light
@@ -862,7 +865,7 @@ auto simple_mesh_generator::add_cube_face(
     int z,
     int face_direction,
     block_id voxel_id,
-    [[maybe_unused]] const block_registry& registry,
+    const block_registry& registry,
     [[maybe_unused]] mesh_options opts
 ) -> void {
     detail::add_quad(
@@ -870,7 +873,7 @@ auto simple_mesh_generator::add_cube_face(
         face_direction,
         {x, y, z},
         {x + 1, y + 1, z + 1},
-        voxel_id,
+        registry.slot_of(voxel_id),
         detail::compute_corner_darkness(src, x, y, z, face_direction),
         detail::compute_corner_convexity(src, x, y, z, face_direction),
         detail::compute_corner_light(src, x, y, z, face_direction)
@@ -930,13 +933,15 @@ auto strip_mesh_generator::generate_mesh_data(
 
 auto strip_mesh_generator::merge_and_emit_strips(
     mesh_generation_storage& storage,
-    [[maybe_unused]] mesh_source src,
+    mesh_source src,
     const detail::face_axis_mapping& axes,
     int face_direction,
     int layer,
-    [[maybe_unused]] const block_registry& registry,
+    const block_registry& registry,
     [[maybe_unused]] mesh_options opts
 ) -> void {
+    const auto& slots = registry.slot_row(src.voxels.category());
+
     auto idx = [&](int u, int v) -> std::size_t {
         return static_cast<std::size_t>(u) * static_cast<std::size_t>(axes.height) + static_cast<std::size_t>(v);
     };
@@ -957,7 +962,9 @@ auto strip_mesh_generator::merge_and_emit_strips(
             }
             int w = u - strip_start;
 
-            detail::emit_rect(storage, axes, face_direction, layer, strip_start, v, w, 1, cell);
+            detail::emit_rect(
+                storage, axes, face_direction, layer, strip_start, v, w, 1, cell, slots
+            );
         }
     }
 }
@@ -1073,7 +1080,8 @@ auto greedy_mesh_generator::merge_and_emit_rects_bits(
     const detail::face_axis_mapping& axes,
     int face_direction,
     int layer,
-    detail::layer_rows& rows
+    detail::layer_rows& rows,
+    const std::array<uint16, 256>& slots
 ) -> void {
     // Построчно по u, поэтому расширение серии идёт по непрерывной памяти.
     auto idx = [&](int u, int v) -> std::size_t {
@@ -1114,7 +1122,7 @@ auto greedy_mesh_generator::merge_and_emit_rects_bits(
             }
 
             row &= ~span;
-            detail::emit_rect(storage, axes, face_direction, layer, u, v, w, h, key);
+            detail::emit_rect(storage, axes, face_direction, layer, u, v, w, h, key, slots);
         }
 
         rows.visible[v] = 0;
@@ -1123,18 +1131,20 @@ auto greedy_mesh_generator::merge_and_emit_rects_bits(
 
 auto greedy_mesh_generator::merge_and_emit_rects(
     mesh_generation_storage& storage,
-    [[maybe_unused]] mesh_source src,
+    mesh_source src,
     const detail::face_axis_mapping& axes,
     int face_direction,
     int layer,
-    [[maybe_unused]] const block_registry& registry,
+    const block_registry& registry,
     [[maybe_unused]] mesh_options opts
 ) -> void {
+    const auto& slots = registry.slot_row(src.voxels.category());
+
     auto idx = [&](int u, int v) -> std::size_t {
         return static_cast<std::size_t>(u) * static_cast<std::size_t>(axes.height) + static_cast<std::size_t>(v);
     };
 
-    face_mask_cell empty_cell{blocks::air, 0};
+    face_mask_cell empty_cell{block_index{}, 0};
 
     for (int v = 0; v < axes.height; v++) {
         for (int u = 0; u < axes.width; u++) {
@@ -1167,7 +1177,7 @@ auto greedy_mesh_generator::merge_and_emit_rects(
                 }
             }
 
-            detail::emit_rect(storage, axes, face_direction, layer, u, v, w, h, cell);
+            detail::emit_rect(storage, axes, face_direction, layer, u, v, w, h, cell, slots);
         }
     }
 }
@@ -1179,6 +1189,10 @@ auto greedy_mesh_generator::generate_face_quads(
     const block_registry& registry,
     mesh_options opts
 ) -> void {
+    // Строка слотов снимается один раз на грань: набор у модели один, и таблица
+    // до самого выпуска квадов больше не нужна.
+    const auto& slots = registry.slot_row(src.voxels.category());
+
     detail::face_axis_mapping axes(src, face_direction);
     constexpr int ps = vw::asset::model::page_size;
 
@@ -1282,12 +1296,12 @@ auto greedy_mesh_generator::generate_face_quads(
                             : detail::compute_corner_light(src, mx, my, mz, face_direction);
 
                     storage.mask[idx(u, v)] = {
-                        src.voxels.get_voxel(mx, my, mz).id, dark, light, convex
+                        src.voxels.get_index(mx, my, mz), dark, light, convex
                     };
                 }
             }
 
-            merge_and_emit_rects_bits(storage, axes, face_direction, layer, rows);
+            merge_and_emit_rects_bits(storage, axes, face_direction, layer, rows, slots);
             continue;
         }
 

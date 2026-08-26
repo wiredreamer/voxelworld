@@ -60,7 +60,7 @@ struct light_stats {
 // сгенерировавший её, о них ничего не знает.
 class light_baker {
 public:
-    explicit light_baker(uint32 workers = 0);
+    explicit light_baker(const block_registry& blocks, uint32 workers = 0);
     ~light_baker();
 
     light_baker(const light_baker&)                    = delete;
@@ -100,10 +100,9 @@ private:
     light_worker_stats totals_;
     uint32 queue_peak_ = 0;
 
-    // Строится здесь, а не передаётся снаружи. У block_registry приватный reg и
-    // никакой настройки, поэтому таблица, которую он способен выдать, ровно одна —
-    // протаскивать её через set_loader значило бы завести аргумент с единственным
-    // возможным значением.
+    // Снимается с реестра, который дал мир. Раньше запекатель строил себе свой
+    // и был вторым источником истины: расширенный каталог до него бы не доехал, и
+    // светились бы не те блоки.
     asset::emission_table emission_;
 };
 

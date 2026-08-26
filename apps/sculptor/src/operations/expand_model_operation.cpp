@@ -31,7 +31,7 @@ auto expand_model_operation::execute() -> void {
         size.y + std::abs(params_.dir.y),
         size.z + std::abs(params_.dir.z)
     };
-    const auto new_model = model_reg.create_unnamed(new_size);
+    const auto new_model = model_reg.create_unnamed(model->category(), new_size);
 
     const auto zeroed_dir = vec3i{
         params_.dir.x < 0 ? 1 : 0,
@@ -88,7 +88,7 @@ auto expand_model_operation::undo() -> void {
         size.y - std::abs(params_.dir.y),
         size.z - std::abs(params_.dir.z)
     };
-    auto new_model = model_reg.create_unnamed(new_size);
+    auto new_model = model_reg.create_unnamed(model->category(), new_size);
 
     const vec3i beg = vec3i{
         params_.dir.x < 0 ? 1 : 0,

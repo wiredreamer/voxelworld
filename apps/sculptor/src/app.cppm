@@ -56,7 +56,7 @@ private:
 
     menu_bar menu_bar_;
     tool_panel tool_panel_;
-    color_palette_panel color_palette_panel_;
+    block_palette_panel block_palette_panel_;
     entity_properties_panel entity_properties_panel_;
     socket_panel socket_panel_;
     keyframe_properties_panel keyframe_properties_panel_;

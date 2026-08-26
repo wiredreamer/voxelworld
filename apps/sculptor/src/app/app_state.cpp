@@ -63,6 +63,22 @@ auto socket_state::clear_all(
     socket_previews.clear();
 }
 
+auto tool_state::brush_for(
+    block_category category, const block_registry& registry
+) const -> block_id {
+    const block_id remembered = brush_of_set[category.value];
+    if (remembered.category() == category && registry.slot_of(remembered) != missing_block_slot) {
+        return remembered;
+    }
+
+    for (const block_type& block : registry.all()) {
+        if (block.id.category() == category && block.id != blocks::air) {
+            return block.id;
+        }
+    }
+    return blocks::air;
+}
+
 auto app_state::reset(
     world_type& world
 ) -> void {

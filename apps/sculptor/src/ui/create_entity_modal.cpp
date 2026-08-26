@@ -24,6 +24,7 @@ auto create_entity_modal::open() -> void {
     name_        = std::format("new entity {}", state_->scene.name_to_entity.size());
     with_model_  = false;
     with_socket_ = false;
+    category_    = selected_model_category(*engine_, *state_);
 }
 
 auto create_entity_modal::render(
@@ -46,6 +47,7 @@ auto create_entity_modal::render(
 
         ImGui::Checkbox("With Model", &with_model_);
         if (with_model_) {
+            imgui_block_set_combo("Blocks", engine_->get_block_registry(), category_);
             imgui_input_int_left("Size X", &size_.x);
             imgui_input_int_left("Size Y", &size_.y);
             imgui_input_int_left("Size Z", &size_.z);
@@ -89,6 +91,7 @@ auto create_entity_modal::create_entity() -> bool {
         .with_model  = with_model_,
         .with_socket = with_socket_,
         .size        = size_,
+        .category    = category_,
     };
 
     auto op = std::make_unique<create_entity_operation>(*engine_, *state_, params);

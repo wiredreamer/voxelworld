@@ -17,6 +17,12 @@ struct vox_socket_data {
 
 struct vox_model_data {
     vec3i size;
+
+    // Набор блоков модели. Выводится из первого непустого вокселя, а остальные
+    // обязаны ему соответствовать: модель несёт ровно один набор, потому что
+    // страница хранит номер в наборе, а не идентификатор целиком.
+    block_category category;
+
     std::vector<std::pair<vec3i, voxel>> voxels;
 };
 
@@ -75,10 +81,16 @@ private:
     auto process_model_(std::istringstream& iss) -> void;
     auto process_voxel_(std::istringstream& iss) -> void;
 
+    [[nodiscard]] auto parse_block_id_(std::string_view token) -> std::optional<block_id>;
+
     const block_registry* block_registry_;
     vox_prefab_data prefab_;
     vox_entity_data* current_entity_ = nullptr;
     std::optional<error_type> error_;
+
+    // Блок вне каталога разбор не рвёт — он нарисуется заглушкой, и это видно.
+    // Но сказать о нём надо один раз, а не по разу на воксель.
+    std::unordered_set<uint16> unknown_blocks_;
 };
 
 inline constexpr std::string_view voxa_file_version = "1.0";

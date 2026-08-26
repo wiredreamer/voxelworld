@@ -34,6 +34,7 @@ private:
     bool need_open_ = false;
     std::string entity_name_;
     vec3i size_{8, 8, 8};
+    block_category category_;
     std::string error_;
 };
 
@@ -166,21 +167,33 @@ auto imgui_clamp_window_pos_to_viewport() -> void;
 
 auto imgui_drag_vec3f(std::string_view label, vec3f& vec, float label_offset = 60.f) -> bool;
 
+// Набор блоков выбранной модели. Им открываются и палитра, и диалоги создания:
+// набор задаётся конструктором модели и потом не меняется, так что дальше по
+// сцене работают, не переключаясь.
+[[nodiscard]] auto selected_model_category(gfx::engine& eng, const app_state& state)
+    -> block_category;
+
+auto imgui_block_set_combo(std::string_view label, const block_registry& registry,
+                           block_category& category) -> void;
+
 }  // namespace vw::sculptor
 
-// ---- from src/ui/color_palette_panel.h
+// ---- from src/ui/block_palette_panel.h
 export namespace vw::sculptor {
 
-class color_palette_panel final {
+class block_palette_panel final {
 public:
-    color_palette_panel(app_state& st, const block_registry& registry);
+    using engine_type = gfx::engine;
+
+    block_palette_panel(engine_type& eng, app_state& st);
 
     auto render(float delta_time) -> void;
 
 private:
+    auto swatch_(const block_type& block, int32 index_in_row) -> void;
 
+    engine_type* engine_;
     app_state* state_;
-    const block_registry* registry_;
 };
 
 }  // namespace vw::sculptor
@@ -211,6 +224,7 @@ private:
     bool with_model_  = false;
     bool with_socket_ = false;
     vec3i size_{12, 12, 12};
+    block_category category_;
 
     std::string error_;
 };

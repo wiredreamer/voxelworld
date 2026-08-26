@@ -28,7 +28,7 @@ app::app(
 
     , menu_bar_(eng, state_, op_manager_, file_service_)
     , tool_panel_(state_)
-    , color_palette_panel_(state_, eng.get_block_registry())
+    , block_palette_panel_(eng, state_)
     , entity_properties_panel_(eng, state_, op_manager_)
     , socket_panel_(eng, state_, op_manager_)
     , keyframe_properties_panel_(eng, state_, op_manager_)
@@ -118,7 +118,7 @@ auto app::render(
     if (state_.ui.show_timeline) {
         timeline_panel_.render(delta_time);
     }
-    color_palette_panel_.render(delta_time);
+    block_palette_panel_.render(delta_time);
 
     // right side
     entity_properties_panel_.render(delta_time);
