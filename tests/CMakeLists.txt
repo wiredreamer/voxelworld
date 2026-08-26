@@ -100,7 +100,10 @@ catch_discover_tests(world_tests)
 # The mesher is CPU-only but lives in vw.gfx, so its tests link the graphics
 # library and are skipped in a headless configuration. They never open a device.
 if(VW_BUILD_GFX)
-    add_executable(gfx_tests gfx/mesher.test.cpp)
+    add_executable(gfx_tests
+        gfx/mesher.test.cpp
+        gfx/camera.test.cpp
+    )
 
     target_link_libraries(gfx_tests PRIVATE
         vw_core
