@@ -241,3 +241,119 @@ TEST_CASE("a voxa file of the current version parses", "[serial]") {
 
     REQUIRE(clip.has_value());
 }
+
+namespace {
+
+auto parse_voxm(asset::model_registry& registry, std::string_view text) {
+    std::istringstream input{std::string{text}};
+    asset::voxm_deserializer deserializer{registry};
+    return deserializer.deserialize(input);
+}
+
+auto write_voxm(const asset::model& model) -> std::string {
+    std::ostringstream output;
+    asset::voxm_serializer{model}.serialize(output);
+    return output.str();
+}
+
+}  // namespace
+
+TEST_CASE("a voxm volume survives a round trip", "[serial]") {
+    asset::model_registry registry;
+
+    const auto source = registry.create_unnamed(blocks::creature::category, vec3i{6, 4, 3});
+    source->set_pivot(vec3f{2.5F, 1.5F, 0.5F});
+    source->set_voxel(vec3i{0, 0, 0}, voxel{blocks::creature::cloth_white[0]});
+    source->set_voxel(vec3i{1, 0, 0}, voxel{blocks::creature::cloth_white[0]});
+    source->set_voxel(vec3i{2, 0, 0}, voxel{blocks::creature::cloth_white[1]});
+    source->set_voxel(vec3i{5, 3, 2}, voxel{blocks::creature::cloth_white[2]});
+
+    const auto restored = parse_voxm(registry, write_voxm(*source));
+
+    REQUIRE(restored.has_value());
+
+    const auto& model = **restored;
+    REQUIRE(model.size() == source->size());
+    REQUIRE(model.category() == source->category());
+    REQUIRE(model.pivot() == source->pivot());
+
+    for (int32 z = 0; z < model.depth(); ++z) {
+        for (int32 y = 0; y < model.height(); ++y) {
+            for (int32 x = 0; x < model.width(); ++x) {
+                REQUIRE(model.get_voxel(x, y, z).id == source->get_voxel(x, y, z).id);
+            }
+        }
+    }
+}
+
+// Пробег — единственная форма записи вокселя, и строка из одного блока обязана
+// стать одной строкой файла, иначе разделение форматов не окупается.
+TEST_CASE("a voxm run collapses a row of one block", "[serial]") {
+    asset::model_registry registry;
+
+    const auto source = registry.create_unnamed(blocks::terrain::category, vec3i{8, 1, 1});
+    for (int32 x = 0; x < 8; ++x) {
+        source->set_voxel(vec3i{x, 0, 0}, voxel{blocks::terrain::grass[0]});
+    }
+
+    const auto text = write_voxm(*source);
+
+    std::istringstream lines{text};
+    std::string line;
+    int32 runs = 0;
+    while (std::getline(lines, line)) {
+        if (line.starts_with("r ")) {
+            ++runs;
+        }
+    }
+
+    REQUIRE(runs == 1);
+    REQUIRE(text.contains("r 0 0 0 8 "));
+}
+
+TEST_CASE("an empty voxm volume is a valid file", "[serial]") {
+    asset::model_registry registry;
+
+    const auto source   = registry.create_unnamed(blocks::creature::category, vec3i{4, 4, 4});
+    const auto restored = parse_voxm(registry, write_voxm(*source));
+
+    REQUIRE(restored.has_value());
+    REQUIRE((*restored)->size() == vec3i{4, 4, 4});
+}
+
+TEST_CASE("a voxm file of an unsupported major version is rejected", "[serial]") {
+    asset::model_registry registry;
+
+    const auto restored = parse_voxm(
+        registry,
+        "# Voxm File Version 99.0\n"
+        "category 2\n"
+        "size 2 2 2\n"
+    );
+
+    REQUIRE_FALSE(restored.has_value());
+    REQUIRE(restored.error() == asset::voxm_deserializer::error_type::unsupported_version);
+}
+
+// Пробег за границей объёма — это испорченный файл, а не повод писать мимо
+// страниц: молча обрезать его значило бы тихо потерять часть модели.
+TEST_CASE("a voxm run outside the volume is a parse error", "[serial]") {
+    asset::model_registry registry;
+
+    const auto restored = parse_voxm(
+        registry,
+        "category 2\n"
+        "size 2 2 2\n"
+        "r 0 0 0 5 51\n"
+    );
+
+    REQUIRE_FALSE(restored.has_value());
+}
+
+TEST_CASE("a voxm file without a size is a parse error", "[serial]") {
+    asset::model_registry registry;
+
+    const auto restored = parse_voxm(registry, "category 2\n");
+
+    REQUIRE_FALSE(restored.has_value());
+}

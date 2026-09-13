@@ -5,6 +5,7 @@ import std;
 import vw.core;
 import :model;
 import :anim;
+import :serial.version;
 
 export namespace vw::asset {
 

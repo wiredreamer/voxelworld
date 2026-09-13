@@ -19,7 +19,9 @@ target_sources(vw_asset
             src/anim/animation_clip.cppm
             src/anim/animation_fsm.cppm
             src/serial/serial.cppm
+            src/serial/version.cppm
             src/serial/vox_format.cppm
+            src/serial/voxm_format.cppm
             src/serial/voxa_format.cppm
             src/serial/asset_storage.cppm
     PRIVATE
@@ -28,6 +30,7 @@ target_sources(vw_asset
         src/model/chunk_volume.cpp
         src/anim/anim.cpp
         src/serial/serial.cpp
+        src/serial/voxm.cpp
 )
 
 target_link_libraries(vw_asset PUBLIC vw_core)

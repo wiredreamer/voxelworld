@@ -168,6 +168,7 @@ model::model(model&& other) noexcept
     , height_(other.height_)
     , depth_(other.depth_)
     , voxel_scale_(other.voxel_scale_)
+    , pivot_(other.pivot_)
     , pages_x_(other.pages_x_)
     , pages_y_(other.pages_y_)
     , pages_z_(other.pages_z_)
@@ -195,6 +196,7 @@ auto model::operator=(model&& other) noexcept -> model& {
         height_              = other.height_;
         depth_               = other.depth_;
         voxel_scale_         = other.voxel_scale_;
+        pivot_               = other.pivot_;
         pages_x_             = other.pages_x_;
         pages_y_             = other.pages_y_;
         pages_z_             = other.pages_z_;
