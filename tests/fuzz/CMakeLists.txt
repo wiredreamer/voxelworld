@@ -21,7 +21,7 @@
 function(vw_add_fuzzer name source)
     add_executable(${name} ${source})
 
-    target_link_libraries(${name} PRIVATE vw_core vw_ecs vw_world)
+    target_link_libraries(${name} PRIVATE vw_core vw_asset)
     target_compile_features(${name} PRIVATE cxx_std_23)
     vw_use_std_module(${name})
 

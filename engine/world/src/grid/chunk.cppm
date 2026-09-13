@@ -4,8 +4,8 @@ import :grid.visibility;
 import std;
 
 import vw.core;
+import vw.asset;
 import vw.ecs;
-import :model;
 import :light;
 
 export namespace vw::ecs {

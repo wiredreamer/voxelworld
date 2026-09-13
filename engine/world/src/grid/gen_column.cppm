@@ -4,7 +4,6 @@ import :terrain.generator;
 import std;
 
 import vw.core;
-import :model;
 
 export namespace vw::ecs {
 

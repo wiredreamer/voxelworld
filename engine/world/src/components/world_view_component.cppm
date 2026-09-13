@@ -4,9 +4,7 @@ import std;
 
 import vw.core;
 import vw.ecs;
-import :anim;
 import :spatial;
-import :model;
 
 export namespace vw::ecs {
 

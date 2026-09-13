@@ -5,7 +5,6 @@ import :terrain.column;
 import std;
 
 import vw.core;
-import :model;
 
 export namespace vw::ecs {
 

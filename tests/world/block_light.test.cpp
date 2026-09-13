@@ -3,6 +3,7 @@
 import std;
 
 import vw.core;
+import vw.asset;
 import vw.world;
 
 using namespace vw;

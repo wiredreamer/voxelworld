@@ -80,7 +80,7 @@ target_sources(vw_gfx
 )
 
 target_link_libraries(vw_gfx
-    PUBLIC vw_core vw_ecs vw_world vw_platform VulkanHppModule
+    PUBLIC vw_core vw_asset vw_ecs vw_world vw_platform VulkanHppModule
     PRIVATE glfw imgui::imgui)
 target_compile_features(vw_gfx PUBLIC cxx_std_23)
 vw_use_std_module(vw_gfx)

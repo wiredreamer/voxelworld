@@ -3,7 +3,7 @@ export module vw.world:light.column;
 import std;
 
 import vw.core;
-import :model;
+import vw.asset;
 
 export namespace vw::asset {
 
@@ -16,6 +16,7 @@ enum class light_channel : uint8 { sky = 0, block = 1 };
 [[nodiscard]] constexpr auto shift_of(light_channel channel) -> int32 {
     return channel == light_channel::sky ? 0 : 4;
 }
+
 
 // Буферы, в которых идёт одна заливка. Семь мегабайт на колонку в девять чанков:
 // пять под уровни и по мегабайту с четвертью на две битовых плоскости. Всё это

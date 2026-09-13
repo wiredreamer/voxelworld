@@ -4,25 +4,9 @@ target_sources(vw_world
     PUBLIC
         FILE_SET CXX_MODULES BASE_DIRS src FILES
             src/world.cppm
-            src/asset/model.cppm
-            src/asset/model_volume.cppm
-            src/asset/model_edit.cppm
-            src/asset/chunk_volume.cppm
-            src/asset/model_identity.cppm
-            src/asset/model_occupancy.cppm
-            src/asset/model_links.cppm
-            src/asset/light_field.cppm
-            src/asset/anim.cppm
-            src/asset/animation_keyframe.cppm
-            src/asset/animation_channel.cppm
-            src/asset/animation_clip.cppm
-            src/asset/animation_fsm.cppm
-            src/asset/serial.cppm
-            src/asset/vox_format.cppm
-            src/asset/voxa_format.cppm
-            src/asset/asset_storage.cppm
-            src/asset/scene_writer.cppm
-            src/asset/scene_serial.cppm
+            src/scene/scene.cppm
+            src/scene/scene_writer.cppm
+            src/scene/scene_serial.cppm
             src/components/components.cppm
             src/components/transform_component.cppm
             src/components/model_component.cppm
@@ -60,12 +44,8 @@ target_sources(vw_world
             src/systems/world_grid_system.cppm
     PRIVATE
         src/world.cpp
-        src/asset/model.cpp
-        src/asset/model_edit.cpp
-        src/asset/chunk_volume.cpp
-        src/asset/anim.cpp
-        src/asset/serial.cpp
-        src/asset/scene_serial.cpp
+        src/scene/scene_writer.cpp
+        src/scene/scene_serial.cpp
         src/light/light.cpp
         src/spatial/spatial.cpp
         src/grid/terrain.cpp
@@ -84,7 +64,7 @@ target_sources(vw_world
         src/systems/world_grid_system.cpp
 )
 
-target_link_libraries(vw_world PUBLIC vw_core vw_ecs)
+target_link_libraries(vw_world PUBLIC vw_core vw_asset vw_ecs)
 target_compile_features(vw_world PUBLIC cxx_std_23)
 vw_use_std_module(vw_world)
 vw_set_warnings(vw_world)

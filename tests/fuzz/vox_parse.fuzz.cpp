@@ -9,7 +9,7 @@
 import std;
 
 import vw.core;
-import vw.world;
+import vw.asset;
 
 namespace {
 

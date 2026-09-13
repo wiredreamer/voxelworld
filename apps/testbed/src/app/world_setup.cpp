@@ -2,6 +2,7 @@ module vw.testbed;
 
 import std;
 import vw.core;
+import vw.asset;
 import vw.ecs;
 import vw.world;
 import vw.platform;

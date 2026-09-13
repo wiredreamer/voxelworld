@@ -3,8 +3,8 @@ export module vw.world:light.baker;
 import std;
 
 import vw.core;
+import vw.asset;
 import vw.ecs;
-import :model;
 import :light.column;
 
 export namespace vw::ecs {

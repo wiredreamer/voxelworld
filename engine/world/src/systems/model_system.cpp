@@ -2,6 +2,7 @@ module vw.world;
 
 import std;
 import vw.core;
+import vw.asset;
 
 namespace vw::ecs {
 

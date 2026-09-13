@@ -1,9 +1,0 @@
-export module vw.world:serial;
-
-// Собирает форматы ассетов: разбор .vox, чтение и запись .voxa, хранилище
-// ассетов и запись сцены.
-export import :serial.vox;
-export import :serial.voxa;
-export import :serial.storage;
-export import :serial.writer;
-export import :serial.scene;

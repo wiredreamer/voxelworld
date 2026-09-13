@@ -3,6 +3,7 @@ export module vw.gfx:meshing;
 import std;
 
 import vw.core;
+import vw.asset;
 import vw.world;
 import vulkan;
 

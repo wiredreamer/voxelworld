@@ -2,9 +2,7 @@ export module vw.world;
 
 import std;
 
-export import :model;
-export import :anim;
-export import :serial;
+export import :scene;
 export import :spatial;
 export import :components;
 export import :terrain;
@@ -13,6 +11,7 @@ export import :grid;
 export import :systems;
 
 import vw.core;
+import vw.asset;
 import vw.ecs;
 
 export namespace vw::ecs {

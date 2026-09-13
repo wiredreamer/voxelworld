@@ -48,6 +48,23 @@ vw_use_std_module(core_tests)
 
 catch_discover_tests(core_tests)
 
+add_executable(asset_tests
+    asset/model_fill.test.cpp
+    asset/model_edit.test.cpp
+    asset/serial.test.cpp
+)
+
+target_link_libraries(asset_tests PRIVATE
+    vw_core
+    vw_asset
+    Catch2::Catch2WithMain
+)
+
+target_compile_features(asset_tests PRIVATE cxx_std_23)
+vw_use_std_module(asset_tests)
+
+catch_discover_tests(asset_tests)
+
 add_executable(ecs_tests
     ecs/entity_pool.test.cpp
     ecs/component_pool.test.cpp
@@ -59,6 +76,7 @@ add_executable(ecs_tests
 
 target_link_libraries(ecs_tests PRIVATE
     vw_core
+    vw_asset
     vw_ecs
     vw_world
     Catch2::Catch2WithMain
@@ -72,8 +90,6 @@ catch_discover_tests(ecs_tests)
 add_executable(world_tests
     world/headless.test.cpp
     world/column_staging.test.cpp
-    world/model_fill.test.cpp
-    world/model_edit.test.cpp
     world/surface.test.cpp
     world/sky_light.test.cpp
     world/emission.test.cpp
@@ -82,11 +98,11 @@ add_executable(world_tests
     world/chunk_links.test.cpp
     world/chunk_walk.test.cpp
     world/cave_culling.test.cpp
-    world/serial.test.cpp
 )
 
 target_link_libraries(world_tests PRIVATE
     vw_core
+    vw_asset
     vw_ecs
     vw_world
     Catch2::Catch2WithMain
@@ -107,6 +123,7 @@ if(VW_BUILD_GFX)
 
     target_link_libraries(gfx_tests PRIVATE
         vw_core
+        vw_asset
         vw_ecs
         vw_world
         vw_gfx

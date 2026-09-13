@@ -3,6 +3,7 @@ export module vw.gfx:resource.combined_buffer_pool;
 import std;
 
 import vw.core;
+import vw.asset;
 import vw.ecs;
 import vw.world;
 import :camera;

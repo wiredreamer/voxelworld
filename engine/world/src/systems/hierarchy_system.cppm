@@ -4,11 +4,9 @@ import std;
 
 import vw.core;
 import vw.ecs;
-import :anim;
 import :components;
 import :grid;
 import :spatial;
-import :model;
 import :light;
 import :terrain;
 
