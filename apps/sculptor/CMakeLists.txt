@@ -50,6 +50,7 @@ target_sources(${PROJECT_NAME}
         src/tools/color_picker_tool.cpp
         src/tools/paint_tool.cpp
         src/tools/remove_voxel_tool.cpp
+        src/tools/gizmo.cpp
         src/tools/select_entity_tool.cpp
         src/ui/add_model_component_modal.cpp
         src/ui/clip_manager_panel.cpp

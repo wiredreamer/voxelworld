@@ -75,6 +75,15 @@ public:
     auto draw_box(const transform& transform, const vec3f& size, color col = colors::red_4) -> void;
     auto draw_box(const vec3f& position, const vec3f& size, color col = colors::red_4) -> void;
 
+    // Залитая отладочная геометрия: рисуется поверх сцены, глубину не проверяет
+    // и смешивается по альфе. Так ручка манипулятора остаётся доступной, даже
+    // когда она внутри модели, — иначе до неё не дотянуться.
+    auto draw_triangle(const vec3f& a, const vec3f& b, const vec3f& c, color col = colors::red_4)
+        -> void;
+    auto draw_quad(
+        const vec3f& a, const vec3f& b, const vec3f& c, const vec3f& d, color col = colors::red_4
+    ) -> void;
+
     auto draw_grid(
         const mat4f& matrix, float cell_size, int cols, int rows, color clr = colors::red_4
     ) -> void;
@@ -200,7 +209,9 @@ private:
     auto sync_meshes_(world_type& world) -> void;
 
     auto render_debug_primitives() -> void;
+    auto render_debug_solids() -> void;
     auto update_debug_vertex_buffer() -> void;
+    auto update_debug_solid_vertex_buffer() -> void;
 
     auto render_imgui() const -> void;
 
@@ -308,7 +319,9 @@ private:
     // Рендеринг примитивов
     vk::PipelineLayout debug_pipeline_layout_ = nullptr;
     vk::Pipeline debug_pipeline_              = nullptr;
+    vk::Pipeline debug_solid_pipeline_        = nullptr;
     std::unique_ptr<vertex_buffer> debug_vertex_buffer_;
+    std::unique_ptr<vertex_buffer> debug_solid_vertex_buffer_;
     debug_primitives debug_primitives_;
 
     std::unique_ptr<shader> debug_vertex_shader_;

@@ -40,6 +40,7 @@ renderer::renderer(
 
     constexpr vk::DeviceSize initial_size = 512 * 2 * sizeof(debug_vertex);
     debug_vertex_buffer_                = std::make_unique<vertex_buffer>(*context_, initial_size);
+    debug_solid_vertex_buffer_ = std::make_unique<vertex_buffer>(*context_, initial_size);
 
     shadow_map_ = std::make_unique<shadow_map>(*context_);
 
@@ -568,6 +569,18 @@ auto renderer::draw_line(
     const vec3f& a, const vec3f& b, color col
 ) -> void {
     debug_primitives_.add_line(a, b, col);
+}
+
+auto renderer::draw_triangle(
+    const vec3f& a, const vec3f& b, const vec3f& c, color col
+) -> void {
+    debug_primitives_.add_triangle(a, b, c, col);
+}
+
+auto renderer::draw_quad(
+    const vec3f& a, const vec3f& b, const vec3f& c, const vec3f& d, color col
+) -> void {
+    debug_primitives_.add_quad(a, b, c, d, col);
 }
 
 auto renderer::draw_box(
@@ -1122,6 +1135,28 @@ auto renderer::create_debug_pipeline() -> void {
 
     debug_pipeline_ =
         vk_must(context_->get_device().createGraphicsPipeline(nullptr, pipeline_info), "create debug pipeline");
+
+    // Второй проход теми же шейдерами: вершина у залитой геометрии та же, а
+    // расходятся они четырьмя состояниями. Глубина выключена намеренно — ручка
+    // манипулятора обязана оставаться доступной внутри модели; отсечение снято,
+    // потому что на неё смотрят с любой стороны.
+    input_assembly.topology = vk::PrimitiveTopology::eTriangleList;
+    rasterizer.cullMode     = vk::CullModeFlagBits::eNone;
+
+    depth_stencil.depthTestEnable = vk::False;
+
+    color_blend_attachment.blendEnable         = vk::True;
+    color_blend_attachment.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
+    color_blend_attachment.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
+    color_blend_attachment.colorBlendOp        = vk::BlendOp::eAdd;
+    color_blend_attachment.srcAlphaBlendFactor = vk::BlendFactor::eOne;
+    color_blend_attachment.dstAlphaBlendFactor = vk::BlendFactor::eZero;
+    color_blend_attachment.alphaBlendOp        = vk::BlendOp::eAdd;
+
+    debug_solid_pipeline_ = vk_must(
+        context_->get_device().createGraphicsPipeline(nullptr, pipeline_info),
+        "create debug solid pipeline"
+    );
 }
 
 auto renderer::create_framebuffers() -> void {
@@ -1384,6 +1419,10 @@ auto renderer::cleanup_shadow_pipeline() -> void {
 }
 
 auto renderer::cleanup_debug_pipeline() -> void {
+    if (debug_solid_pipeline_ != nullptr) {
+        context_->get_device().destroyPipeline(debug_solid_pipeline_);
+        debug_solid_pipeline_ = nullptr;
+    }
     if (debug_pipeline_ != nullptr) {
         context_->get_device().destroyPipeline(debug_pipeline_);
         debug_pipeline_ = nullptr;
@@ -1510,6 +1549,7 @@ auto renderer::render_world_pass(
     stats_.timing.world_pass_debug_ms = measure_ms([&] {
         gpu_timer_->begin(cmd, gpu_stage::world_debug);
         render_debug_primitives();
+        render_debug_solids();
         gpu_timer_->end(cmd, gpu_stage::world_debug);
     });
 
@@ -1756,6 +1796,39 @@ auto renderer::update_debug_vertex_buffer() -> void {
     }
 
     debug_vertex_buffer_->copy_from_vector(debug_vertices);
+}
+
+auto renderer::render_debug_solids() -> void {
+    if (debug_primitives_.is_solid_empty()) {
+        return;
+    }
+
+    update_debug_solid_vertex_buffer();
+
+    auto cmd = command_buffers_[current_image_index_];
+
+    cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, debug_solid_pipeline_);
+    cmd.bindDescriptorSets(
+        vk::PipelineBindPoint::eGraphics, debug_pipeline_layout_, 0, descriptor_sets_[current_frame_],
+        nullptr
+    );
+
+    vk::Buffer vertex_buffer        = debug_solid_vertex_buffer_->get_buffer();
+    constexpr vk::DeviceSize offset = 0;
+    cmd.bindVertexBuffers(0, vertex_buffer, offset);
+
+    cmd.draw(static_cast<uint32>(debug_primitives_.get_solid_vertices().size()), 1, 0, 0);
+}
+
+auto renderer::update_debug_solid_vertex_buffer() -> void {
+    const auto& solid_vertices = debug_primitives_.get_solid_vertices();
+
+    const vk::DeviceSize required_size = sizeof(debug_vertex) * solid_vertices.size();
+    if (required_size > debug_solid_vertex_buffer_->get_size()) {
+        debug_solid_vertex_buffer_ = std::make_unique<vertex_buffer>(*context_, required_size);
+    }
+
+    debug_solid_vertex_buffer_->copy_from_vector(solid_vertices);
 }
 
 auto renderer::render_imgui() const -> void {

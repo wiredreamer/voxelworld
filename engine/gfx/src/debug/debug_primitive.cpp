@@ -44,6 +44,7 @@ auto debug_vertex::get_attribute_descriptions()
 
 auto debug_primitives::clear() -> void {
     vertices_.clear();
+    solid_vertices_.clear();
 }
 
 auto debug_primitives::add_line(
@@ -128,6 +129,29 @@ auto debug_primitives::add_grid(
 
 auto debug_primitives::is_empty() const -> bool {
     return vertices_.empty();
+}
+
+auto debug_primitives::add_triangle(
+    const vec3f& a, const vec3f& b, const vec3f& c, color clr
+) -> void {
+    solid_vertices_.emplace_back(a, clr);
+    solid_vertices_.emplace_back(b, clr);
+    solid_vertices_.emplace_back(c, clr);
+}
+
+auto debug_primitives::add_quad(
+    const vec3f& a, const vec3f& b, const vec3f& c, const vec3f& d, color clr
+) -> void {
+    add_triangle(a, b, c, clr);
+    add_triangle(a, c, d, clr);
+}
+
+auto debug_primitives::get_solid_vertices() const -> const std::vector<debug_vertex>& {
+    return solid_vertices_;
+}
+
+auto debug_primitives::is_solid_empty() const -> bool {
+    return solid_vertices_.empty();
 }
 
 }  // namespace vw::gfx

@@ -11,9 +11,9 @@ import vw.gfx;
 namespace vw::sculptor {
 
 select_entity_tool::select_entity_tool(
-    engine_type& eng, app_state& st
+    engine_type& eng, app_state& st, operation_manager& op_manager
 )
-    : engine_(&eng), state_(&st), hovered_entity_(ecs::invalid_entity) {}
+    : engine_(&eng), state_(&st), hovered_entity_(ecs::invalid_entity), gizmo_(eng, st, op_manager) {}
 
 auto select_entity_tool::render(
     [[maybe_unused]] float delta_time
@@ -24,6 +24,7 @@ auto select_entity_tool::render(
     if (has_selected) {
         const auto selected_ent = state_->scene.name_to_entity[state_->scene.selected_name];
         draw_entity_box_(selected_ent, colors::green_4);
+        gizmo_.render(selected_ent);
     }
 
     if (hovered_entity_.is_valid() &&
@@ -34,19 +35,43 @@ auto select_entity_tool::render(
 }
 
 auto select_entity_tool::on_key_press(
-    [[maybe_unused]] const plat::key_press_event& ev
-) -> void {}
+    const plat::key_press_event& ev
+) -> void {
+    // Не привычные по другим редакторам W/E/R: W, A, S и D заняты движением
+    // камеры, и опрашиваются они постоянно, а не только при захвате мыши.
+    switch (ev.key) {
+        case plat::keyboard::keys::E: gizmo_.set_mode(gizmo_mode::translate); break;
+        case plat::keyboard::keys::R: gizmo_.set_mode(gizmo_mode::rotate); break;
+        case plat::keyboard::keys::T: gizmo_.set_mode(gizmo_mode::scale); break;
+        default: break;
+    }
+}
 
 auto select_entity_tool::on_mouse_move(
     [[maybe_unused]] const plat::mouse_move_event& ev
 ) -> void {
-    update_hovered_entity_();
+    if (state_->scene.name_to_entity.contains(state_->scene.selected_name)) {
+        gizmo_.on_mouse_move(state_->scene.name_to_entity[state_->scene.selected_name]);
+    }
+
+    // Пока тянут ручку, курсор ездит по модели, и подсветка под ним только
+    // мешала бы: наведение считается лишь вне жеста.
+    if (!gizmo_.is_dragging()) {
+        update_hovered_entity_();
+    }
 }
 
 auto select_entity_tool::on_mouse_press(
     const plat::mouse_press_event& ev
 ) -> void {
     if (ev.button != plat::mouse::buttons::LEFT) {
+        return;
+    }
+
+    // Ручка манипулятора перекрывает выбор: клик по ней обязан начать жест, а не
+    // перекинуть выбор на то, что нарисовано за ней.
+    if (state_->scene.name_to_entity.contains(state_->scene.selected_name) &&
+        gizmo_.on_mouse_press(state_->scene.name_to_entity[state_->scene.selected_name])) {
         return;
     }
 
@@ -60,8 +85,12 @@ auto select_entity_tool::on_mouse_press(
 }
 
 auto select_entity_tool::on_mouse_release(
-    [[maybe_unused]] const plat::mouse_release_event& ev
-) -> void {}
+    const plat::mouse_release_event& ev
+) -> void {
+    if (ev.button == plat::mouse::buttons::LEFT) {
+        gizmo_.on_mouse_release();
+    }
+}
 
 auto select_entity_tool::on_activate() -> void {
     update_hovered_entity_();

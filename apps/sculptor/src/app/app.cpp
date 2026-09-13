@@ -45,7 +45,7 @@ app::app(
     auto& camera   = eng.get_camera();
     auto& renderer = eng.get_renderer();
 
-    tools_[tools::select_entity] = std::make_unique<select_entity_tool>(eng, state_);
+    tools_[tools::select_entity] = std::make_unique<select_entity_tool>(eng, state_, op_manager_);
     tools_[tools::add_voxel]     = std::make_unique<add_voxel_tool>(eng, state_, op_manager_);
     tools_[tools::remove_voxel]  = std::make_unique<remove_voxel_tool>(eng, state_, op_manager_);
     tools_[tools::paint_voxel]   = std::make_unique<paint_tool>(eng, state_, op_manager_);
