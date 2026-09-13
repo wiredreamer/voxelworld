@@ -23,7 +23,7 @@ auto select_entity_tool::render(
 
     if (has_selected) {
         const auto selected_ent = state_->scene.name_to_entity[state_->scene.selected_name];
-        draw_entity_box_(selected_ent, colors::green);
+        draw_entity_box_(selected_ent, colors::green_4);
     }
 
     if (hovered_entity_.is_valid() &&

@@ -83,7 +83,7 @@ private:
 
     static constexpr std::array<body_part, 4> parts{{
         {.target = "body", .model = "crowd_body", .size = {6, 12, 4},
-         .rest = {-3.0f, 0.0f, -2.0f}, .fill = blocks::character::cloth_blue[2], .lift = 1.0f, .peak = 0.30f},
+         .rest = {-3.0f, 0.0f, -2.0f}, .fill = blocks::creature::cloth_blue[2], .lift = 1.0f, .peak = 0.30f},
         {.target = "head", .model = "crowd_head", .size = {6, 6, 6},
          .rest = {-3.0f, 13.0f, -3.0f}, .fill = blocks::terrain::dirt[2], .lift = 2.0f, .peak = 0.45f},
         // Обе ладони делят одну модель: их две штуки на тело, и вторая копия

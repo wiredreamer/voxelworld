@@ -26,7 +26,7 @@ TEST_CASE("voxel is_empty", "[voxel]") {
     REQUIRE(blocks::air.value == 0);
 
     REQUIRE_FALSE(voxel{blocks::terrain::grass[0]}.is_empty());
-    REQUIRE_FALSE(voxel{blocks::character::skin_light[0]}.is_empty());
+    REQUIRE_FALSE(voxel{blocks::creature::skin_light[0]}.is_empty());
     REQUIRE_FALSE(voxel{block_id::from_raw(0xFFFF)}.is_empty());
 }
 
@@ -57,5 +57,5 @@ TEST_CASE("index zero is empty in any set", "[voxel]") {
     REQUIRE_FALSE(block_index{1}.is_empty());
 
     REQUIRE(blocks::terrain::grass[0].index() >= 1);
-    REQUIRE(blocks::character::skin_light[0].index() >= 1);
+    REQUIRE(blocks::creature::skin_light[0].index() >= 1);
 }

@@ -178,9 +178,9 @@ auto testbed_app::render(
     tick_torch_(cam_pos);
 
     auto& renderer_ref = get_engine().get_renderer();
-    renderer_ref.draw_line(vec3f{0, 0, 0}, vec3f{100, 0, 0}, colors::red);
-    renderer_ref.draw_line(vec3f{0, 0, 0}, vec3f{0, 100, 0}, colors::green);
-    renderer_ref.draw_line(vec3f{0, 0, 0}, vec3f{0, 0, 100}, colors::blue);
+    renderer_ref.draw_line(vec3f{0, 0, 0}, vec3f{100, 0, 0}, colors::red_4);
+    renderer_ref.draw_line(vec3f{0, 0, 0}, vec3f{0, 100, 0}, colors::green_4);
+    renderer_ref.draw_line(vec3f{0, 0, 0}, vec3f{0, 0, 100}, colors::blue_4);
 
     update_hovered_();
     draw_hover_();

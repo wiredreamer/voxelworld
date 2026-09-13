@@ -102,9 +102,9 @@ auto app::render(
     camera_controller_.update(delta_time);
 
     auto& renderer = get_engine().get_renderer();
-    renderer.draw_line(vec3f{0, 0, 0}, vec3f{100, 0, 0}, colors::blue);
-    renderer.draw_line(vec3f{0, 0, 0}, vec3f{0, 100, 0}, colors::green);
-    renderer.draw_line(vec3f{0, 0, 0}, vec3f{0, 0, 100}, colors::red);
+    renderer.draw_line(vec3f{0, 0, 0}, vec3f{100, 0, 0}, colors::blue_4);
+    renderer.draw_line(vec3f{0, 0, 0}, vec3f{0, 100, 0}, colors::green_4);
+    renderer.draw_line(vec3f{0, 0, 0}, vec3f{0, 0, 100}, colors::red_4);
 
     state_.ui.left_top_voffset    = 0.f;
     state_.ui.left_bottom_voffset = 0.f;

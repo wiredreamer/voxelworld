@@ -69,20 +69,20 @@ public:
         return storage_descriptor_set_layout_;
     }
 
-    auto draw_line(const vec3f& a, const vec3f& b, color col = colors::red) -> void;
+    auto draw_line(const vec3f& a, const vec3f& b, color col = colors::red_4) -> void;
 
-    auto draw_box(const mat4f& matrix, const vec3f& size, color col = colors::red) -> void;
-    auto draw_box(const transform& transform, const vec3f& size, color col = colors::red) -> void;
-    auto draw_box(const vec3f& position, const vec3f& size, color col = colors::red) -> void;
+    auto draw_box(const mat4f& matrix, const vec3f& size, color col = colors::red_4) -> void;
+    auto draw_box(const transform& transform, const vec3f& size, color col = colors::red_4) -> void;
+    auto draw_box(const vec3f& position, const vec3f& size, color col = colors::red_4) -> void;
 
     auto draw_grid(
-        const mat4f& matrix, float cell_size, int cols, int rows, color clr = colors::red
+        const mat4f& matrix, float cell_size, int cols, int rows, color clr = colors::red_4
     ) -> void;
     auto draw_grid(
-        const transform& transform, float cell_size, int cols, int rows, color clr = colors::red
+        const transform& transform, float cell_size, int cols, int rows, color clr = colors::red_4
     ) -> void;
     auto draw_grid(
-        const vec3f& position, float cell_size, int cols, int rows, color clr = colors::red
+        const vec3f& position, float cell_size, int cols, int rows, color clr = colors::red_4
     ) -> void;
 
     [[nodiscard]] auto get_directional_light_settings() -> directional_light_settings&;
@@ -141,7 +141,7 @@ public:
         return combined_buffer_pool_->is_chunk_cull_enabled();
     }
 
-    auto draw_colliders(world_type& w, color col = colors::green) -> void;
+    auto draw_colliders(world_type& w, color col = colors::green_4) -> void;
 
     // Получить ImTextureID для shadow map (для отображения в ImGui::Image)
     // В Vulkan это vk::DescriptorSet, приведенный к void*

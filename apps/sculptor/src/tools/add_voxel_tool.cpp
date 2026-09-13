@@ -53,7 +53,7 @@ auto add_voxel_tool::render(
         math::scale_matrix(vec3f{1.01f, 1.01f, 1.01f}) *  //
         math::translation_matrix(vec3f{-0.005f, -0.005f, -0.005f});
 
-    const auto draw_color = is_outside ? colors::red : colors::black;
+    const auto draw_color = is_outside ? colors::red_4 : colors::black;
 
     auto& renderer = engine_->get_renderer();
     renderer.draw_box(voxel_world_pos, vec3f{1.f, 1.f, 1.f}, draw_color);

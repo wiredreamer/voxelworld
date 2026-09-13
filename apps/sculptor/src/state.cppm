@@ -60,7 +60,7 @@ struct scene_state {
 
 struct tool_state {
     tools selected_tool     = tools::add_voxel;
-    block_id selected_block = blocks::character::cloth_white[2];
+    block_id selected_block = blocks::creature::cloth_white[2];
 
     // Кисть помнится на набор: модель несёт ровно один набор, и переход к
     // модели другого не должен стоить заново выбранного цвета. Плоский массив

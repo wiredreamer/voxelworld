@@ -56,22 +56,27 @@ TEST_CASE("color is_empty", "[color]") {
 TEST_CASE("color comparison", "[color]") {
     REQUIRE(color{0xFF0000FFU} == color{0xFF0000FFU});
     REQUIRE(color{0xFF0000FFU} != color{0x00FF00FFU});
-    REQUIRE(colors::red == colors::red);
-    REQUIRE(colors::red != colors::blue);
+    REQUIRE(colors::red_3 == colors::red_3);
+    REQUIRE(colors::red_3 != colors::blue_3);
 }
 
 TEST_CASE("color palette constants", "[color]") {
     REQUIRE(colors::white.value == 0xFFFFFFFFU);
     REQUIRE(colors::black.value == 0x000000FFU);
 
-    REQUIRE(colors::red.r() == 255);
-    REQUIRE(colors::red.g() == 0);
-    REQUIRE(colors::red.b() == 0);
+    REQUIRE(colors::all.size() == 48U);
+    REQUIRE(colors::all.front() == colors::blue_0);
+    REQUIRE(colors::all.back() == colors::black);
+    REQUIRE(colors::all[23] == colors::amber_5);
 
-    REQUIRE(colors::green.r() == 0);
-    REQUIRE(colors::green.g() == 255);
-
-    REQUIRE(colors::blue.b() == 255);
+    // Номер в имени - шаг рампы, и чем он больше, тем шаг светлее.
+    const auto luma = [](const color& c) -> uint32 {
+        return static_cast<uint32>(c.r()) + static_cast<uint32>(c.g()) + static_cast<uint32>(c.b());
+    };
+    REQUIRE(luma(colors::blue_0) < luma(colors::blue_3));
+    REQUIRE(luma(colors::blue_3) < luma(colors::blue_5));
+    REQUIRE(luma(colors::gray_0) < luma(colors::gray_9));
+    REQUIRE(luma(colors::amber_0) < luma(colors::amber_5));
 }
 
 TEST_CASE("color round-trip packing", "[color]") {

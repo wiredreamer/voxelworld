@@ -112,12 +112,12 @@ TEST_CASE("a block outside the catalog reads as the missing slot", "[blocks]") {
 
 TEST_CASE("a category is independent of every other", "[blocks]") {
     REQUIRE(blocks::terrain::grass[0].category() == blocks::terrain::category);
-    REQUIRE(blocks::character::skin_light[0].category() == blocks::character::category);
-    REQUIRE(blocks::terrain::category != blocks::character::category);
+    REQUIRE(blocks::creature::skin_light[0].category() == blocks::creature::category);
+    REQUIRE(blocks::terrain::category != blocks::creature::category);
 
     // Same index in two categories, two different blocks.
-    REQUIRE(blocks::terrain::grass[0].index() == blocks::character::skin_light[0].index());
-    REQUIRE(blocks::terrain::grass[0] != blocks::character::skin_light[0]);
+    REQUIRE(blocks::terrain::grass[0].index() == blocks::creature::skin_light[0].index());
+    REQUIRE(blocks::terrain::grass[0] != blocks::creature::skin_light[0]);
 }
 
 TEST_CASE("a material's variants sit next to each other", "[blocks]") {
@@ -130,7 +130,7 @@ TEST_CASE("a material's variants sit next to each other", "[blocks]") {
     REQUIRE(grass.contains(grass[0]));
     REQUIRE(grass.contains(grass[2]));
     REQUIRE_FALSE(grass.contains(blocks::terrain::dirt[0]));
-    REQUIRE_FALSE(grass.contains(blocks::character::skin_light[0]));
+    REQUIRE_FALSE(grass.contains(blocks::creature::skin_light[0]));
 }
 
 // The generator picks a variant out of a noise value, so the value is whatever
@@ -162,20 +162,20 @@ TEST_CASE("an extension recolours a catalog block in place", "[blocks]") {
     const block_registry base;
 
     const auto recoloured = std::array{
-        block_desc{blocks::terrain::grass[0], "terrain.grass_0", block_material{colors::all[27]}}
+        block_desc{blocks::terrain::grass[0], "terrain.grass_0", block_material{colors::red_3}}
     };
     const block_registry extended{recoloured};
 
     REQUIRE(extended.all().size() == base.all().size());
     REQUIRE(extended.slot_of(blocks::terrain::grass[0]) ==
             base.slot_of(blocks::terrain::grass[0]));
-    REQUIRE(extended.get(blocks::terrain::grass[0]).material.clr == colors::all[27]);
+    REQUIRE(extended.get(blocks::terrain::grass[0]).material.clr == colors::red_3);
 }
 
 TEST_CASE("an extension adds a block in a category of its own", "[blocks]") {
     constexpr auto modded = block_category{7};
     const auto extra      = std::array{
-        block_desc{block_id{modded, 3}, "mod.thing", block_material{colors::all[5]}}
+        block_desc{block_id{modded, 3}, "mod.thing", block_material{colors::blue_5}}
     };
 
     const block_registry registry{extra};
@@ -195,7 +195,7 @@ TEST_CASE("the registry names the sets it knows", "[blocks]") {
     REQUIRE(terrain->name == "terrain");
     REQUIRE_FALSE(terrain->groups.empty());
 
-    REQUIRE(registry.set_of(blocks::character::category)->name == "character");
+    REQUIRE(registry.set_of(blocks::creature::category)->name == "creature");
 }
 
 // An extension may add blocks in a category of its own without adding a set for
@@ -236,9 +236,9 @@ TEST_CASE("the groups of a set cover it once each", "[blocks]") {
 }
 
 TEST_CASE("a group hands out the blocks it spans", "[blocks]") {
-    constexpr auto group = block_group{"skin", blocks::character::skin_light[0], 9};
+    constexpr auto group = block_group{"skin", blocks::creature::skin_light[0], 12};
 
-    REQUIRE(group.at(0) == blocks::character::skin_light[0]);
-    REQUIRE(group.at(3) == blocks::character::skin_tan[0]);
-    REQUIRE(group.at(8) == blocks::character::skin_dark[2]);
+    REQUIRE(group.at(0) == blocks::creature::skin_light[0]);
+    REQUIRE(group.at(3) == blocks::creature::skin_tan[0]);
+    REQUIRE(group.at(8) == blocks::creature::skin_dark[2]);
 }

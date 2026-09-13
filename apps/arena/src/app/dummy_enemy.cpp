@@ -81,8 +81,8 @@ auto dummy_enemy::is_placed() const -> bool {
 
 auto dummy_enemy::create_model() -> std::shared_ptr<asset::model> {
     auto& model_reg = engine_.get_world().resource<asset::model_registry>();
-    auto model = model_reg.create_unnamed(blocks::character::category, 16, 32, 16);
-    model->fill(voxel{blocks::character::cloth_red[1]});
+    auto model = model_reg.create_unnamed(blocks::creature::category, 16, 32, 16);
+    model->fill(voxel{blocks::creature::cloth_red[1]});
     return model;
 }
 

@@ -124,7 +124,7 @@ auto testbed_app::draw_hover_() -> void {
     // came in through. Worth showing: at a scale of eight, guessing wrong
     // about which face is a whole block out of place.
     if (tool_ == edit_tool::place && hovered_->empty != hovered_->solid) {
-        outline(hovered_->empty, colors::green);
+        outline(hovered_->empty, colors::green_4);
     }
 }
 
