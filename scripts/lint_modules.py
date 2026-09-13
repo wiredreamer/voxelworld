@@ -68,6 +68,21 @@ def main() -> int:
         if path.suffix == ".cppm" and re.search(r"^export import vulkan;", raw, re.M):
             problems.append("%s: re-exports the Vulkan binding" % name)
 
+        # 7. vw.asset knows nothing about the ECS -- a model or a clip outlives
+        #    the entity that carries it, and reading a scene into a registry is
+        #    the other side of the line, in vw.world:scene.*
+        if name.startswith("engine/asset/src"):
+            if re.search(r"^\s*(?:export )?import vw\.ecs;", text, re.M):
+                problems.append("%s: vw.asset must not import vw.ecs" % name)
+            if "vw::ecs" in text or re.search(r"\bnamespace ecs\b", text):
+                problems.append("%s: names the ecs namespace inside vw.asset" % name)
+
+        # 8. ...and the other direction: vw::asset is declared in vw.asset alone,
+        #    so module and namespace stay the same boundary. Calling into it from
+        #    elsewhere is fine -- a using-directive, as vw.gfx does for vw::ecs.
+        elif re.search(r"^\s*(?:export )?namespace vw::asset\b", text, re.M):
+            problems.append("%s: opens namespace vw::asset outside vw.asset" % name)
+
     for p in sorted(problems):
         print(p)
     print("%d violation(s)" % len(problems))
