@@ -4,7 +4,9 @@ import std;
 import vw.core;
 import vw.asset;
 
-namespace vw::asset {
+namespace vw::ecs {
+
+using namespace ::vw::asset;
 
 namespace {
 
@@ -692,17 +694,17 @@ auto light_column::bake(int32 y_base, light_channel channel) const -> light_fiel
     return light_field{std::move(table), std::move(pages), std::move(around)};
 }
 
-}  // namespace vw::asset
+}  // namespace vw::ecs
 
 namespace vw::ecs {
 
 namespace {
 
 constexpr int32 light_page     = asset::model::page_size;
-constexpr int32 pages_per_side = asset::light_column::side / light_page;
-constexpr int32 skirt_pages = (asset::light_column::apron + light_page - 1) / light_page;
+constexpr int32 pages_per_side = ecs::light_column::side / light_page;
+constexpr int32 skirt_pages = (ecs::light_column::apron + light_page - 1) / light_page;
 
-static_assert(skirt_pages * light_page >= asset::light_column::apron);
+static_assert(skirt_pages * light_page >= ecs::light_column::apron);
 
 }  // namespace
 
@@ -842,7 +844,7 @@ auto light_baker::worker_() -> void {
     std::vector<std::vector<const asset::model*>> emitters(9);
 
     // И семь мегабайт, в которых работает сама заливка, по той же причине.
-    asset::light_scratch scratch;
+    ecs::light_scratch scratch;
 
     while (true) {
         light_request job;
@@ -865,7 +867,7 @@ auto light_baker::worker_() -> void {
 
         const auto started = std::chrono::steady_clock::now();
 
-        asset::light_column::neighbourhood around{};
+        ecs::light_column::neighbourhood around{};
 
         for (int32 dz = -1; dz <= 1; ++dz) {
             for (int32 dx = -1; dx <= 1; ++dx) {
@@ -903,7 +905,7 @@ auto light_baker::worker_() -> void {
                     pointers[slot].push_back(&held[slot][i]);
                 }
 
-                around[slot] = asset::light_column::column_slice{
+                around[slot] = ecs::light_column::column_slice{
                     .occupancy = pointers[slot],
                     .models    = emitters[slot],
                 };
@@ -912,7 +914,7 @@ auto light_baker::worker_() -> void {
 
         const auto rowed = std::chrono::steady_clock::now();
 
-        asset::light_column light{around, emission_, std::move(scratch)};
+        ecs::light_column light{around, emission_, std::move(scratch)};
 
         const auto flooded = std::chrono::steady_clock::now();
 

@@ -127,7 +127,7 @@ constexpr int32 face_verts[6][4][3] = {
 // model, so this checks the whole chain -- bake, boundary planes, mesher --
 // against the thing all three are meant to reproduce.
 auto expected_corner_light(
-    const asset::model& mdl, const asset::light_column& column, vec3i cell, int32 face,
+    const asset::model& mdl, const ecs::light_column& column, vec3i cell, int32 face,
     vec3i corner, asset::light_channel channel
 ) -> uint8 {
     constexpr int32 side = asset::light_field::side;
@@ -165,7 +165,7 @@ auto expected_corner_light(
             // Open sky above the column, and nothing else -- no lamp hangs
             // over the world, so the other channel reads dark up there.
             return channel == asset::light_channel::sky
-                       ? int32{asset::light_column::max_level}
+                       ? int32{ecs::light_column::max_level}
                        : 0;
         }
         return column.level_at(p.x, p.y, p.z, channel);
@@ -843,7 +843,7 @@ TEST_CASE("packed sky light matches the field at every corner", "[mesh]") {
     REQUIRE(mdl.build_occupancy(occupancy));
 
     const asset::chunk_occupancy* stack[1] = {&occupancy};
-    const asset::light_column column{
+    const ecs::light_column column{
         std::span<const asset::chunk_occupancy* const>{stack, 1}
     };
     fixture.chunk().set_sky_light(column.bake(0, asset::light_channel::sky));
@@ -953,13 +953,13 @@ TEST_CASE("packed block light matches the field at every corner", "[mesh]") {
     const asset::chunk_occupancy* stack[1] = {&occupancy};
     const asset::model* models[1]          = {&mdl};
 
-    asset::light_column::neighbourhood around{};
-    around[4] = asset::light_column::column_slice{
+    ecs::light_column::neighbourhood around{};
+    around[4] = ecs::light_column::column_slice{
         .occupancy = std::span<const asset::chunk_occupancy* const>{stack, 1},
         .models    = std::span<const asset::model* const>{models, 1},
     };
 
-    const asset::light_column column{
+    const ecs::light_column column{
         around, asset::build_emission_table(block_registry{}), {}
     };
 

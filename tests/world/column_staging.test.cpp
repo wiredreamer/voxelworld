@@ -425,7 +425,7 @@ TEST_CASE("a placed chunk arrives with its sky light", "[world][grid]") {
         for (int32 z = 0; z < asset::light_field::side && !saw_open_sky; ++z) {
             for (int32 x = 0; x < asset::light_field::side; ++x) {
                 if (light->level_at(x, asset::light_field::side - 1, z) ==
-                    asset::light_column::max_level) {
+                    ecs::light_column::max_level) {
                     saw_open_sky = true;
                     break;
                 }
@@ -495,7 +495,7 @@ TEST_CASE("digging to the sky relights the shaft", "[world][grid]") {
 
     for (vec3i at : shaft) {
         INFO("world y " << at.y);
-        REQUIRE(light_at(grid, at) == asset::light_column::max_level);
+        REQUIRE(light_at(grid, at) == ecs::light_column::max_level);
     }
 
     // And only the column that was dug. The shaft is in the middle of it, more

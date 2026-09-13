@@ -10,6 +10,7 @@ target_sources(vw_asset
             src/model/model_links.cppm
             src/model/model_volume.cppm
             src/model/model_edit.cppm
+            src/model/light_channel.cppm
             src/model/light_field.cppm
             src/model/chunk_volume.cppm
             src/anim/anim.cppm

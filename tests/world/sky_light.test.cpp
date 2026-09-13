@@ -40,12 +40,12 @@ public:
         fill_solid(0, 0, 0, side - 1, y, side - 1);
     }
 
-    [[nodiscard]] auto light() const -> asset::light_column {
+    [[nodiscard]] auto light() const -> ecs::light_column {
         std::vector<const asset::chunk_occupancy*> bottom_up;
         for (const auto& occ : occupancy_) {
             bottom_up.push_back(&occ);
         }
-        return asset::light_column{
+        return ecs::light_column{
             std::span<const asset::chunk_occupancy* const>{bottom_up}
         };
     }
@@ -285,9 +285,9 @@ public:
     // The nine columns as light_column wants them. drop_diagonals turns the
     // four corner columns into rock, which is how the tests below show the
     // corners are being read at all.
-    [[nodiscard]] auto light(bool drop_diagonals = false) const -> asset::light_column {
+    [[nodiscard]] auto light(bool drop_diagonals = false) const -> ecs::light_column {
         std::vector<std::vector<const asset::chunk_occupancy*>> held(9);
-        asset::light_column::neighbourhood around{};
+        ecs::light_column::neighbourhood around{};
 
         for (int32 i = 0; i < 9; ++i) {
             const bool corner = (i % 3) != 1 && (i / 3) != 1;
@@ -300,15 +300,15 @@ public:
             around[static_cast<std::size_t>(i)].occupancy = held[static_cast<std::size_t>(i)];
         }
 
-        return asset::light_column{around};
+        return ecs::light_column{around};
     }
 
-    [[nodiscard]] auto sealed() const -> asset::light_column {
+    [[nodiscard]] auto sealed() const -> ecs::light_column {
         std::vector<const asset::chunk_occupancy*> middle;
         for (int32 y = 0; y < heights_[4]; ++y) {
             middle.push_back(&occupancy_[slot(1, 1, y)]);
         }
-        return asset::light_column{std::span<const asset::chunk_occupancy* const>{middle}};
+        return ecs::light_column{std::span<const asset::chunk_occupancy* const>{middle}};
     }
 
     // A second implementation, on purpose the dumbest one that can be right: a
@@ -330,7 +330,7 @@ public:
                     if (solid_at(x, y, z)) {
                         break;
                     }
-                    level[flat(x, y, z)] = asset::light_column::max_level;
+                    level[flat(x, y, z)] = ecs::light_column::max_level;
                     current.push_back(flat(x, y, z));
                 }
             }
@@ -341,7 +341,7 @@ public:
         };
 
         std::vector<std::size_t> next;
-        for (uint8 value = asset::light_column::max_level; value > 1 && !current.empty();
+        for (uint8 value = ecs::light_column::max_level; value > 1 && !current.empty();
              --value) {
             const auto child = static_cast<uint8>(value - 1);
             next.clear();
@@ -395,7 +395,7 @@ private:
 // Every voxel of the middle column against the reference. Returns how many
 // disagreed, and names the first one on the way past.
 auto middle_mismatches(
-    const asset::light_column& light, const world_fixture& fixture,
+    const ecs::light_column& light, const world_fixture& fixture,
     const std::vector<uint8>& reference
 ) -> int32 {
     int32 mismatches = 0;
@@ -567,13 +567,13 @@ TEST_CASE("sky light cost on real terrain", "[.sky_light_measure]") {
     // costs more than filling it.
     std::vector<std::vector<asset::chunk_occupancy>> held(9);
     std::vector<std::vector<const asset::chunk_occupancy*>> pointers(9);
-    asset::light_scratch scratch;
+    ecs::light_scratch scratch;
 
     // Only the columns that have all eight neighbours, which is the only case
     // the engine ever lights.
     for (int32 cx = 1; cx < grid - 1; ++cx) {
         for (int32 cz = 1; cz < grid - 1; ++cz) {
-            asset::light_column::neighbourhood around{};
+            ecs::light_column::neighbourhood around{};
 
             const auto rows_started = std::chrono::steady_clock::now();
 
@@ -616,7 +616,7 @@ TEST_CASE("sky light cost on real terrain", "[.sky_light_measure]") {
 
             const auto time_fresh = [&] -> void {
                 const auto from = std::chrono::steady_clock::now();
-                const asset::light_column fresh{around};
+                const ecs::light_column fresh{around};
                 fresh_ns += static_cast<uint64>(
                     std::chrono::duration_cast<std::chrono::nanoseconds>(
                         std::chrono::steady_clock::now() - from
@@ -630,7 +630,7 @@ TEST_CASE("sky light cost on real terrain", "[.sky_light_measure]") {
             }
 
             const auto held_from = std::chrono::steady_clock::now();
-            asset::light_column light{around, asset::emission_table{}, std::move(scratch)};
+            ecs::light_column light{around, asset::emission_table{}, std::move(scratch)};
             const auto flooded = std::chrono::steady_clock::now();
 
             if (scratch_first) {

@@ -61,7 +61,7 @@ auto world_grid::set_voxel(
 auto world_grid::mark_light_dirty_(
     vec3i chunk_coord, vec3i local
 ) -> void {
-    constexpr int32 reach = asset::light_column::max_level;
+    constexpr int32 reach = ecs::light_column::max_level;
     static_assert(reach * 2 < chunk::size, "an edit must not reach past the next column");
 
     const vec2i column{chunk_coord.x, chunk_coord.z};

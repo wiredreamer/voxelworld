@@ -40,7 +40,7 @@ public:
         }
     }
 
-    [[nodiscard]] auto light() -> asset::light_column {
+    [[nodiscard]] auto light() -> ecs::light_column {
         occupancy_.resize(models_.size());
         occ_.clear();
         emitters_.clear();
@@ -51,10 +51,10 @@ public:
             emitters_.push_back(models_[i].get());
         }
 
-        asset::light_column::neighbourhood around{};
-        around[4] = asset::light_column::column_slice{.occupancy = occ_, .models = emitters_};
+        ecs::light_column::neighbourhood around{};
+        around[4] = ecs::light_column::column_slice{.occupancy = occ_, .models = emitters_};
 
-        return asset::light_column{
+        return ecs::light_column{
             around, asset::build_emission_table(block_registry{}), {}
         };
     }
@@ -74,7 +74,7 @@ TEST_CASE("a lamp lights its own voxel and falls one level a step", "[block_ligh
     column_fixture fixture{1};
     fixture.set(32, 32, 32, blocks::terrain::glowstone);
 
-    const asset::light_column light = fixture.light();
+    const ecs::light_column light = fixture.light();
 
     // The lamp block is solid, so its own level is never sampled by the mesher.
     // It is still written, because the spread starts from it.
@@ -95,7 +95,7 @@ TEST_CASE("lava carries one voxel further than a lamp", "[block_light]") {
     column_fixture fixture{1};
     fixture.set(10, 32, 32, blocks::terrain::lava);
 
-    const asset::light_column light = fixture.light();
+    const ecs::light_column light = fixture.light();
 
     REQUIRE(light.level_at(10, 32, 32, block) == 15);
     REQUIRE(light.level_at(11, 32, 32, block) == 14);
@@ -108,7 +108,7 @@ TEST_CASE("a wall stops block light", "[block_light]") {
     fixture.set(32, 32, 32, blocks::terrain::glowstone);
     fixture.fill(vec3i{34, 0, 0}, vec3i{34, side - 1, side - 1}, blocks::terrain::stone[0]);
 
-    const asset::light_column light = fixture.light();
+    const ecs::light_column light = fixture.light();
 
     REQUIRE(light.level_at(33, 32, 32, block) == 13);
     REQUIRE(light.level_at(35, 32, 32, block) == 0);
@@ -119,7 +119,7 @@ TEST_CASE("a world with no emitters has no block light at all", "[block_light]")
     column_fixture fixture{1};
     fixture.fill(vec3i{0, 0, 0}, vec3i{side - 1, 20, side - 1}, blocks::terrain::stone[0]);
 
-    const asset::light_column light = fixture.light();
+    const ecs::light_column light = fixture.light();
 
     for (int32 y = 0; y < side; y += 7) {
         for (int32 z = 0; z < side; z += 11) {
@@ -140,7 +140,7 @@ TEST_CASE("a solid page of lava lights all the way round itself", "[block_light]
     column_fixture fixture{1};
     fixture.fill(vec3i{8, 8, 8}, vec3i{15, 15, 15}, blocks::terrain::lava);
 
-    const asset::light_column light = fixture.light();
+    const ecs::light_column light = fixture.light();
 
     REQUIRE(light.level_at(12, 12, 12, block) == 15);
     REQUIRE(light.level_at(15, 12, 12, block) == 15);
@@ -162,7 +162,7 @@ TEST_CASE("the two channels do not touch each other", "[block_light]") {
     column_fixture fixture{1};
     fixture.set(32, 32, 32, blocks::terrain::glowstone);
 
-    const asset::light_column light = fixture.light();
+    const ecs::light_column light = fixture.light();
 
     REQUIRE(light.level_at(0, 0, 0, sky) == 15);
     REQUIRE(light.level_at(0, 0, 0, block) == 0);
@@ -176,7 +176,7 @@ TEST_CASE("a baked block field reads back what was flooded", "[block_light]") {
     fixture.set(20, 30, 40, blocks::terrain::glowstone);
     fixture.set(50, 10, 12, blocks::terrain::lava);
 
-    const asset::light_column light = fixture.light();
+    const ecs::light_column light = fixture.light();
 
     const asset::light_field baked_block = light.bake(0, block);
     const asset::light_field baked_sky   = light.bake(0, sky);
