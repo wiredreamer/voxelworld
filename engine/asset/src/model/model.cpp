@@ -6,6 +6,7 @@ import vw.core;
 namespace vw::asset {
 namespace {
 constexpr log::log_category lc_pool_{"page_pool"};
+constexpr log::log_category lc_registry_{"model_registry"};
 
 }  // namespace
 
@@ -855,7 +856,17 @@ auto model_registry::create(std::string_view name, block_category category, int3
                             int32 height, int32 depth) -> std::shared_ptr<model> {
     auto new_model =
         std::make_shared<model>(identity_pool_, page_pool_, category, width, height, depth);
-    models_[std::string(name)] = new_model;
+
+    // Имя здесь — имя сущности, и оно уникально только внутри одного префаба:
+    // два узла head из разных файлов дают одну запись. Прежняя модель при этом
+    // не пропадает — её держит компонент, — но из реестра она исчезает, и
+    // get вернёт чужую.
+    const auto [it, inserted] = models_.try_emplace(std::string(name), new_model);
+    if (!inserted) {
+        log::warn(lc_registry_, "model '{}' is already registered, the entry is replaced", name);
+        it->second = new_model;
+    }
+
     return new_model;
 }
 

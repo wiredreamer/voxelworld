@@ -98,6 +98,7 @@ add_executable(world_tests
     world/chunk_links.test.cpp
     world/chunk_walk.test.cpp
     world/cave_culling.test.cpp
+    world/scene_serial.test.cpp
 )
 
 target_link_libraries(world_tests PRIVATE

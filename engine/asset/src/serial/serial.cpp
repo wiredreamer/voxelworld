@@ -9,6 +9,34 @@ namespace vw::asset {
 
 namespace detail {
 constexpr log::log_category vox_parser_plain_lc{"vox_parser_plain"};
+
+// Сравниваются старшие номера: младший поднимают при добавлении команд, а
+// неизвестную команду разборщик и так переживает.
+auto major_version_differs(std::string_view version, std::string_view expected) -> bool {
+    const auto major_of = [](std::string_view text) -> std::string_view {
+        return text.substr(0, text.find('.'));
+    };
+    return major_of(version) != major_of(expected);
+}
+
+// Версия лежит в шапке-комментарии — «# Vox File Version 2.0». Её отсутствие
+// ошибкой не считается: без версии писались и файлы первых дней, и тексты в
+// тестах, и буфер из фаззера.
+auto read_header_version(std::istringstream& iss) -> std::optional<std::string> {
+    std::string token;
+    while (iss >> token) {
+        if (token != "Version") {
+            continue;
+        }
+
+        std::string version;
+        if (!(iss >> version)) {
+            return std::nullopt;
+        }
+        return version;
+    }
+    return std::nullopt;
+}
 }  // namespace detail
 
 vox_parser_plain::vox_parser_plain(const block_registry& block_registry)
@@ -44,7 +72,12 @@ auto vox_parser_plain::parse(std::istream& input)
         std::string cmd;
         iss >> cmd;
 
-        if (cmd.empty() || cmd[0] == '#') {
+        if (cmd.empty()) {
+            continue;
+        }
+
+        if (cmd[0] == '#') {
+            process_comment_(iss);
             continue;
         }
 
@@ -76,6 +109,21 @@ auto vox_parser_plain::parse(std::istream& input)
     }
 
     return std::move(prefab_);
+}
+
+auto vox_parser_plain::process_comment_(std::istringstream& iss) -> void {
+    const auto version = detail::read_header_version(iss);
+    if (!version.has_value()) {
+        return;
+    }
+
+    if (detail::major_version_differs(*version, vox_file_version)) {
+        log::warn(
+            detail::vox_parser_plain_lc, "unsupported vox version {}, expected {}", *version,
+            vox_file_version
+        );
+        error_ = error_type::unsupported_version;
+    }
 }
 
 auto vox_parser_plain::process_root_(std::istringstream& iss) -> void {
@@ -458,7 +506,12 @@ auto voxa_deserializer::deserialize(
         std::string cmd;
         iss >> cmd;
 
-        if (cmd.empty() || cmd[0] == '#') {
+        if (cmd.empty()) {
+            continue;
+        }
+
+        if (cmd[0] == '#') {
+            process_comment_(iss);
             continue;
         }
 
@@ -483,6 +536,21 @@ auto voxa_deserializer::deserialize(
     finalize_track_();
 
     return clip_;
+}
+
+auto voxa_deserializer::process_comment_(std::istringstream& iss) -> void {
+    const auto version = detail::read_header_version(iss);
+    if (!version.has_value()) {
+        return;
+    }
+
+    if (detail::major_version_differs(*version, voxa_file_version)) {
+        log::warn(
+            detail::voxa_deserializer_lc, "unsupported voxa version {}, expected {}", *version,
+            voxa_file_version
+        );
+        error_ = error_type::unsupported_version;
+    }
 }
 
 auto voxa_deserializer::process_clip_(std::istringstream& iss) -> void {

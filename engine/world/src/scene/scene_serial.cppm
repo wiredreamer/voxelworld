@@ -61,7 +61,13 @@ public:
     auto deserialize(const std::filesystem::path& filepath, const options& opts)
         -> std::expected<result, error_type>;
 
+    // Разбор и применение разведены: данные префаба существуют помимо файла —
+    // их отдаёт и разборщик потока, и тест, и будущая подстановка варианта.
+    [[nodiscard]] auto instantiate(const asset::vox_prefab_data& prefab, const options& opts)
+        -> result;
+
 private:
+    auto create_entity_(const asset::vox_entity_data& data, result& res) -> void;
     auto apply_entity_(const asset::vox_entity_data& data, result& res, const options& opts) -> void;
 
     world* world_;

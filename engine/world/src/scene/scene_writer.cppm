@@ -8,10 +8,6 @@ import vw.ecs;
 
 export namespace vw::ecs {
 
-// 2.0 отличается от 1.0 записью вокселя: вместо числа, которое было то цветом,
-// то индексом блока, стоит идентификатор блока «категория:номер».
-inline constexpr std::string_view vox_file_version = "2.0";
-
 // База для писателей формата .vox.
 class vox_writer {
 public:

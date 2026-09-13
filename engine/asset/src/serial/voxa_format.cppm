@@ -31,7 +31,7 @@ private:
 
 class voxa_deserializer final {
 public:
-    enum class error_type : uint8 { file_open_failed, parse_error };
+    enum class error_type : uint8 { file_open_failed, parse_error, unsupported_version };
 
     auto deserialize(const std::filesystem::path& filepath)
         -> std::expected<std::shared_ptr<animation_clip>, error_type>;
@@ -42,6 +42,7 @@ public:
         -> std::expected<std::shared_ptr<animation_clip>, error_type>;
 
 private:
+    auto process_comment_(std::istringstream& iss) -> void;
     auto process_clip_(std::istringstream& iss) -> void;
     auto process_track_(std::istringstream& iss) -> void;
     auto process_channel_(std::istringstream& iss) -> void;

@@ -172,3 +172,72 @@ TEST_CASE("the parsers survive rubbish", "[serial]") {
 
     SUCCEED("neither parser crashed");
 }
+
+// Версия в шапке — единственная защита от чтения будущего формата как мусора:
+// команды у него будут другие, каждая уедет в «неизвестную», и файл откроется
+// пустым вместо внятного отказа.
+TEST_CASE("a vox file of an unsupported major version is rejected", "[serial]") {
+    const auto prefab = parse_vox(
+        "# Vox File Version 99.0\n"
+        "root body\n"
+        "entity body\n"
+    );
+
+    REQUIRE_FALSE(prefab.has_value());
+    REQUIRE(prefab.error() == asset::vox_parser::error_type::unsupported_version);
+}
+
+TEST_CASE("a vox file of the current version parses", "[serial]") {
+    const auto prefab = parse_vox(
+        "# Vox File Version 2.0\n"
+        "root body\n"
+        "entity body\n"
+    );
+
+    REQUIRE(prefab.has_value());
+    REQUIRE(prefab->entities.size() == 1);
+}
+
+// Младший номер поднимают при добавлении команд, а незнакомую команду разборщик
+// и так переживает: ронять из-за неё файл значило бы запретить формату расти.
+TEST_CASE("a vox file of a newer minor version parses", "[serial]") {
+    const auto prefab = parse_vox(
+        "# Vox File Version 2.7\n"
+        "root body\n"
+        "entity body\n"
+    );
+
+    REQUIRE(prefab.has_value());
+}
+
+// Без версии писались и файлы первых дней, и тексты в тестах, и буфер из
+// фаззера. Отказывать им — значит требовать шапку там, где её никогда не было.
+TEST_CASE("a vox file without a version header parses", "[serial]") {
+    const auto prefab = parse_vox(
+        "# just a comment\n"
+        "root body\n"
+        "entity body\n"
+    );
+
+    REQUIRE(prefab.has_value());
+    REQUIRE(prefab->entities.size() == 1);
+}
+
+TEST_CASE("a voxa file of an unsupported major version is rejected", "[serial]") {
+    const auto clip = parse_voxa(
+        "# Voxa File Version 99.0\n"
+        "clip walk 60\n"
+    );
+
+    REQUIRE_FALSE(clip.has_value());
+    REQUIRE(clip.error() == asset::voxa_deserializer::error_type::unsupported_version);
+}
+
+TEST_CASE("a voxa file of the current version parses", "[serial]") {
+    const auto clip = parse_voxa(
+        "# Voxa File Version 1.0\n"
+        "clip walk 60\n"
+    );
+
+    REQUIRE(clip.has_value());
+}

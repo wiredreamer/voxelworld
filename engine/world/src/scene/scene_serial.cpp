@@ -8,6 +8,10 @@ import vw.asset;
 
 namespace vw::ecs {
 
+namespace detail {
+constexpr log::log_category vox_deserializer_lc{"vox_deserializer"};
+}  // namespace detail
+
 vox_serializer::vox_serializer(
     world& world, vox_writer& writer, entity root, options opts
 ) : world_(&world), writer_(&writer), root_(root), excluded_(std::move(opts.excluded)) {
@@ -162,24 +166,35 @@ auto vox_deserializer::deserialize(
 auto vox_deserializer::deserialize(
     const std::filesystem::path& filepath, const options& opts
 ) -> std::expected<result, error_type> {
-    auto prefab = parser_->parse(filepath);
+    const auto prefab = parser_->parse(filepath);
     if (!prefab.has_value()) {
         return std::unexpected(prefab.error());
     }
 
-    result res;
-    res.root_name = std::move(prefab->root_name);
+    return instantiate(*prefab, opts);
+}
 
-    for (const auto& ent_data : prefab->entities) {
+auto vox_deserializer::instantiate(
+    const asset::vox_prefab_data& prefab, const options& opts
+) -> result {
+    result res;
+    res.root_name = prefab.root_name;
+
+    // Два прохода: сначала заводятся все сущности, и только потом связывается
+    // иерархия. В один проход родитель обязан стоять в файле раньше ребёнка, а
+    // нарушение этого порядка теряло связь молча.
+    for (const auto& ent_data : prefab.entities) {
+        create_entity_(ent_data, res);
+    }
+
+    for (const auto& ent_data : prefab.entities) {
         apply_entity_(ent_data, res, opts);
     }
 
     return res;
 }
 
-auto vox_deserializer::apply_entity_(
-    const asset::vox_entity_data& data, result& res, const options& opts
-) -> void {
+auto vox_deserializer::create_entity_(const asset::vox_entity_data& data, result& res) -> void {
     const auto ent = world_->create()
         .with<hierarchy_component>()
         .with<transform_component>()
@@ -188,11 +203,25 @@ auto vox_deserializer::apply_entity_(
 
     res.name_to_entity[data.name] = ent;
     res.entity_to_name[ent]       = data.name;
+    res.entities.push_back(ent);
+}
 
-    if (!data.parent_name.empty() && res.name_to_entity.contains(data.parent_name)) {
-        auto parent_entity     = res.name_to_entity[data.parent_name];
-        auto& hierarchy_sys = world_->system<hierarchy_system>();
-        hierarchy_sys.modify(ent).set_parent(parent_entity);
+auto vox_deserializer::apply_entity_(
+    const asset::vox_entity_data& data, result& res, const options& opts
+) -> void {
+    const auto ent = res.name_to_entity[data.name];
+
+    if (!data.parent_name.empty()) {
+        const auto parent_it = res.name_to_entity.find(data.parent_name);
+        if (parent_it != res.name_to_entity.end()) {
+            auto& hierarchy_sys = world_->system<hierarchy_system>();
+            hierarchy_sys.modify(ent).set_parent(parent_it->second);
+        } else {
+            log::warn(
+                detail::vox_deserializer_lc, "entity '{}' refers to a missing parent '{}'",
+                data.name, data.parent_name
+            );
+        }
     }
 
     if (data.has_transform) {
@@ -242,8 +271,6 @@ auto vox_deserializer::apply_entity_(
             model_ptr->set_voxel(pos, v);
         }
     }
-
-    res.entities.push_back(ent);
 }
 
 }  // namespace vw::ecs

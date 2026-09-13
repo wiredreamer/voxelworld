@@ -38,7 +38,7 @@ auto vox_writer_plain::write(
 auto vox_writer_plain::write_header_(
     std::ofstream& file, const vw::asset::vox_prefab_data& prefab
 ) -> void {
-    file << std::format("# Vox File Version {}\n", vox_file_version);
+    file << std::format("# Vox File Version {}\n", asset::vox_file_version);
     file << std::format("root {}\n", prefab.root_name);
 }
 

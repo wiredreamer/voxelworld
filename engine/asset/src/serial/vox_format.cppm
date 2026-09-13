@@ -47,10 +47,14 @@ struct vox_prefab_data {
     std::vector<vox_entity_data> entities;
 };
 
+// 2.0 отличается от 1.0 записью вокселя: вместо числа, которое было то цветом,
+// то индексом блока, стоит идентификатор блока «категория:номер».
+inline constexpr std::string_view vox_file_version = "2.0";
+
 // База для разборщиков формата .vox.
 class vox_parser {
 public:
-    enum class error_type : uint8 { file_open_failed, parse_error };
+    enum class error_type : uint8 { file_open_failed, parse_error, unsupported_version };
 
     virtual ~vox_parser() = default;
 
@@ -71,6 +75,7 @@ public:
     auto parse(std::istream& input) -> std::expected<vox_prefab_data, error_type>;
 
 private:
+    auto process_comment_(std::istringstream& iss) -> void;
     auto process_root_(std::istringstream& iss) -> void;
     auto process_entity_(std::istringstream& iss) -> void;
     auto process_parent_(std::istringstream& iss) -> void;
