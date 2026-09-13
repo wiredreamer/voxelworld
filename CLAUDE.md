@@ -5,16 +5,19 @@
 
 ## Architecture
 
-Всё — именованные модули C++: движок из пяти библиотек плюс приложения
+Всё — именованные модули C++: движок из шести библиотек плюс приложения
 `vw.sculptor` и `vw.arena`. Заголовков движка не существует, только `import`.
 
 - **vw.core** (`engine/core/src/`, таргет `vw_core`) — типы, math, transform,
   лог, блоки, геометрия `vw::spatial`; каталоги `types/ math/ utils/ spatial/ blocks/ log/`
+- **vw.asset** (`engine/asset/src/`, таргет `vw_asset`) — модели, анимации,
+  форматы `.vox`/`.voxa`, хранилище ассетов. Зависит только от `vw.core` и
+  ничего не знает про ECS; каталоги `model/ anim/ serial/`
 - **vw.ecs** (`engine/ecs/src/`, таргет `vw_ecs`) — entity, type-erased пул,
   реестр с рантайм-идентификаторами компонентов
-- **vw.world** (`engine/world/src/`, таргет `vw_world`) — модели, анимации,
-  сериализаторы, компоненты, системы, сетка чанков. Собирается без Vulkan;
-  каталоги `asset/ components/ systems/ grid/ light/ spatial/`
+- **vw.world** (`engine/world/src/`, таргет `vw_world`) — компоненты, системы,
+  сетка чанков, свет, чтение и запись сцены. Собирается без Vulkan;
+  каталоги `scene/ components/ systems/ grid/ light/ spatial/`
 - **vw.platform** (`engine/platform/src/`, таргет `vw_platform`) — окно, ввод,
   события; GLFW живёт ровно в одном `.cpp`; каталоги `input/ window/`
 - **vw.gfx** (`engine/gfx/src/`, таргет `vw_gfx`) — рендер на `vk::` через
@@ -33,8 +36,8 @@
 
 Пространства имён: `vw` (core), `vw::spatial` (геометрия), `vw::asset` (данные
 ассетов), `vw::ecs` (реестр, мир, компоненты, системы), `vw::plat` (окно и ввод),
-`vw::gfx`, `vw::sculptor`. Модуль ≠ namespace: `vw.world` экспортирует и `vw::asset`, и
-`vw::ecs`.
+`vw::gfx`, `vw::sculptor`. Модуль ≠ namespace: `vw.world` экспортирует `vw::ecs`,
+включая сериализацию сцены в `:scene.*`, а `vw.asset` — одноимённое `vw::asset`.
 
 Undo/redo в Sculptor — command-паттерн через `base_operation`.
 

@@ -8,20 +8,30 @@
 | Модуль | Каталог | Таргет | Содержимое |
 |---|---|---|---|
 | `vw.core` | `engine/core/src/` | `vw_core` | типы, векторы и матрицы, цвет, math+transform, логгер, блоки, геометрия `vw::spatial` |
+| `vw.asset` | `engine/asset/src/` | `vw_asset` | модели и их объёмы, анимации, форматы `.vox`/`.voxa`, хранилище ассетов |
 | `vw.ecs` | `engine/ecs/src/` | `vw_ecs` | `entity`, пулы, реестр с рантайм-идентификаторами компонентов |
-| `vw.world` | `engine/world/src/` | `vw_world` | модели, анимации, сериализаторы, компоненты, системы, сетка чанков |
+| `vw.world` | `engine/world/src/` | `vw_world` | компоненты, системы, сетка чанков, свет, чтение и запись сцены |
 | `vw.platform` | `engine/platform/src/` | `vw_platform` | окно, ввод, события; GLFW ровно в одном `.cpp` |
 | `vw.gfx` | `engine/gfx/src/` | `vw_gfx` | рендер на Vulkan-Hpp, камера, ImGui, debug |
 
 Приложения тоже модули: `vw.sculptor` (`apps/sculptor/`) и `vw.arena`
 (`apps/arena/`). `apps/test_*` — по одному `main.cpp`.
 
-Зависимости строго односторонние: `core ← ecs ← world ← gfx`, `platform` стоит
-между `core` и `gfx`. `vw.world` собирается и тестируется без Vulkan — на этом
-держится headless-конфигурация.
+Зависимости строго односторонние: `core ← asset ← world ← gfx` и `core ← ecs ←
+world`, `platform` стоит между `core` и `gfx`. `vw.asset` и `vw.world`
+собираются и тестируются без Vulkan — на этом держится headless-конфигурация.
 
-Модуль не равен пространству имён: `vw.world` экспортирует и `vw::asset`
-(данные ассетов), и `vw::ecs` (мир, компоненты, системы).
+`vw.asset` не знает про ECS: данные ассета — модель, анимация, файл на диске —
+существуют до и помимо сущности, которая их носит. Сцена — чтение и запись
+`.vox` поверх реестра — живёт по другую сторону, в `vw.world:scene.*`.
+
+Границу стережёт `scripts/lint_modules.py` с обеих сторон: в `engine/asset/`
+нельзя назвать `vw::ecs`, а за его пределами — открыть `namespace vw::asset`.
+Звать чужие имена это не запрещает: `vw.world:light.column` и `vw.gfx` берут их
+через `using namespace`, как и заведено в движке.
+
+Модуль не равен пространству имён: `vw.world` экспортирует `vw::ecs` (мир,
+компоненты, системы), а `vw.asset` — одноимённое `vw::asset`.
 
 ## Раскладка исходников
 
@@ -31,8 +41,9 @@
 | Модуль | Каталоги |
 |---|---|
 | `vw.core` | `types/`, `math/`, `utils/`, `spatial/`, `blocks/`, `log/` |
+| `vw.asset` | `model/`, `anim/`, `serial/` |
 | `vw.ecs` | плоско: четыре юнита |
-| `vw.world` | `asset/`, `components/`, `systems/`, `grid/`, `light/`, `spatial/` |
+| `vw.world` | `scene/`, `components/`, `systems/`, `grid/`, `light/`, `spatial/` |
 | `vw.platform` | `input/`, `window/` |
 | `vw.gfx` | `camera/`, `resource/`, `render/`, `debug/`, `engine/` |
 
@@ -44,14 +55,16 @@
 
 Крупные партиции — агрегаторы: они только реэкспортируют части (`:systems`,
 `:components`, `:model`, `:anim`, `:light`, `:grid`, `:terrain`, `:serial`,
-`:resource`, `:render`, `:renderer`, `:debug`, `:gpu_buffers`).
+`:scene`, `:resource`, `:render`, `:renderer`, `:debug`, `:gpu_buffers`).
 
 - **`vw.core`**: `:types`, `:vector`, `:matrix`, `:transform`, `:math`, `:color`,
   `:blocks` и `:blocks.catalog` (механика и сам каталог), `:timing`, `:log`,
   `:spatial` (aabb, plane, ray, frustum — они взаимно зависимы).
-- **`vw.world`**: `:model.*` (identity, occupancy, links, light_field, volume,
-  edit, chunk), `:anim.*` (keyframe, channel, clip, fsm), `:serial.*` (vox, voxa,
-  storage, writer, scene), `:spatial`, `:components.*` (по группам компонентов),
+- **`vw.asset`**: `:model.*` (identity, occupancy, links, light_channel,
+  light_field, volume, edit, chunk), `:anim.*` (keyframe, channel, clip, fsm),
+  `:serial.*` (vox, voxa, storage).
+- **`vw.world`**: `:scene.*` (writer, serial — запись и чтение сцены поверх
+  реестра), `:spatial`, `:components.*` (по группам компонентов),
   `:terrain.*` (generator, column, loader, perlin), `:light.*` (column, baker),
   `:grid.*` (visibility, chunk, world_grid), `:systems.*` (hooks плюс партиция
   на каждую систему); класс `world` — в первичном юните `world.cppm`.
