@@ -8,7 +8,7 @@
 | Модуль | Каталог | Таргет | Содержимое |
 |---|---|---|---|
 | `vw.core` | `engine/core/src/` | `vw_core` | типы, векторы и матрицы, цвет, math+transform, логгер, блоки, геометрия `vw::spatial` |
-| `vw.asset` | `engine/asset/src/` | `vw_asset` | модели и их объёмы, анимации, форматы `.vox`/`.voxm`/`.voxa`, ссылки и хранилище ассетов |
+| `vw.asset` | `engine/asset/src/` | `vw_asset` | модели и их объёмы, анимации, форматы `.vox`/`.voxm`/`.voxa`, ссылки, раскладка каталогов и хранилище ассетов |
 | `vw.ecs` | `engine/ecs/src/` | `vw_ecs` | `entity`, пулы, реестр с рантайм-идентификаторами компонентов |
 | `vw.world` | `engine/world/src/` | `vw_world` | компоненты, системы, сетка чанков, свет, чтение и запись сцены |
 | `vw.platform` | `engine/platform/src/` | `vw_platform` | окно, ввод, события; GLFW ровно в одном `.cpp` |

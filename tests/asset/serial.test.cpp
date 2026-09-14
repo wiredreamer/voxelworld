@@ -23,7 +23,7 @@ auto parse_voxa(std::string_view text) {
 
 }  // namespace
 
-// Узлы взяты из assets/models/m_human.vox дословно, вплоть до «-0» и
+// Узлы взяты из assets/prefabs/m_human.vox дословно, вплоть до «-0» и
 // табуляций: дерево больше не носит вокселей, узел называет .voxm, а точку
 // вращения объём хранит сам.
 TEST_CASE("the vox parser reads a prefab out of a stream", "[serial]") {

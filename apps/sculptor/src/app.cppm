@@ -36,7 +36,7 @@ private:
     auto handle_animation_actions_() -> void;
     auto collect_dirty_models_() -> void;
     auto update_title_() -> void;
-    static auto init_asset_dir_() -> void;
+    static auto init_asset_dirs_() -> void;
 
     gfx::free_camera_controller camera_controller_;
     bool camera_movement_enabled_ = false;

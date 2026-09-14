@@ -13,6 +13,12 @@ namespace vw::sculptor {
 
 namespace {
 constexpr log::log_category lc_file{"file_service"};
+
+// Ссылка отсчитывается от корня ассетов, а рабочий каталог редактора к нему
+// отношения не имеет: на диск её переводит model_library.
+auto make_prefab_ref(std::string_view filename) -> asset::asset_ref {
+    return asset::asset_ref{std::format("{}/{}", asset::dirs::prefabs, filename)};
+}
 }  // namespace
 
 file_service::file_service(
@@ -27,20 +33,21 @@ auto file_service::save() -> bool {
         return false;
     }
 
-    return write_(asset::asset_ref{
-        std::format("{}/{}", app_state::asset_dir_name, state_->file.filename)
-    });
+    return write_(make_prefab_ref(state_->file.filename));
 }
 
 auto file_service::save_as(
-    const std::filesystem::path& filepath
+    std::string_view filename
 ) -> bool {
-    const auto ref = asset::asset_ref{filepath.generic_string()};
-    if (!write_(ref)) {
+    if (filename.empty()) {
         return false;
     }
 
-    state_->file.filename = filepath.filename().string();
+    if (!write_(make_prefab_ref(filename))) {
+        return false;
+    }
+
+    state_->file.filename = filename;
     return true;
 }
 

@@ -306,7 +306,7 @@ auto clip_manager_panel::load_voxa_filenames_() -> void {
 
     voxa_filenames_.clear();
 
-    fs::path asset_dir_path{app_state::asset_dir_name};
+    fs::path asset_dir_path = app_state::clip_dir();
     if (!fs::exists(asset_dir_path)) {
         return;
     }

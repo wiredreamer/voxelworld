@@ -27,8 +27,7 @@ auto clip_service::save_clip(
         return false;
     }
 
-    const fs::path asset_dir_path{app_state::asset_dir_name};
-    const fs::path filepath = asset_dir_path / std::format("{}.voxa", clip->get_name());
+    const fs::path filepath = app_state::clip_dir() / std::format("{}.voxa", clip->get_name());
     asset::voxa_serializer serializer(*clip);
     const auto result = serializer.serialize(filepath);
     if (result.has_value()) {
@@ -53,8 +52,7 @@ auto clip_service::save_clip_as(
     clip->set_name(new_name);
     registry.add(new_name, clip);
 
-    const fs::path asset_dir_path{app_state::asset_dir_name};
-    const fs::path filepath = asset_dir_path / std::format("{}.voxa", new_name);
+    const fs::path filepath = app_state::clip_dir() / std::format("{}.voxa", new_name);
     asset::voxa_serializer serializer(*clip);
     const auto result = serializer.serialize(filepath);
 
@@ -82,7 +80,7 @@ auto clip_service::save_all_clips() const -> void {
     namespace fs = std::filesystem;
 
     const auto& registry = engine_->get_world().resource<asset::animation_clip_registry>();
-    const fs::path asset_dir_path{app_state::asset_dir_name};
+    const fs::path asset_dir_path = app_state::clip_dir();
 
     for (const auto& [name, clip] : registry.all()) {
         if (!clip) {
@@ -102,7 +100,7 @@ auto clip_service::load_clip(
 ) const -> bool {
     namespace fs = std::filesystem;
 
-    const fs::path filepath = fs::path{app_state::asset_dir_name} / fs::path{filename};
+    const fs::path filepath = app_state::clip_dir() / fs::path{filename};
     asset::voxa_deserializer deserializer;
     const auto result = deserializer.deserialize(filepath);
     if (!result) {

@@ -95,8 +95,7 @@ auto new_file_modal::render_create_form() -> void {
 auto new_file_modal::create_file_() -> bool {
     namespace fs = std::filesystem;
 
-    fs::path asset_dir_path(app_state::asset_dir_name);
-    fs::path filepath(asset_dir_path / filename_);
+    fs::path filepath(app_state::prefab_dir() / filename_);
     if (filepath.extension() != ".vox") {
         filepath.replace_extension("vox");
     }

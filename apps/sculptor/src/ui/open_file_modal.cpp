@@ -85,11 +85,11 @@ auto open_file_modal::load_existing_filenames_() -> void {
     existing_filenames_.clear();
 
     namespace fs = std::filesystem;
-    const fs::path asset_dir_path{app_state::asset_dir_name};
-    if (!fs::exists(asset_dir_path)) {
-        log::critical("Asset directory does not exist: {}", asset_dir_path.string());
+    const fs::path prefab_dir_path = app_state::prefab_dir();
+    if (!fs::exists(prefab_dir_path)) {
+        log::critical("Prefab directory does not exist: {}", prefab_dir_path.string());
     }
-    for (const auto& entry : fs::directory_iterator(asset_dir_path)) {
+    for (const auto& entry : fs::directory_iterator(prefab_dir_path)) {
         if (entry.is_regular_file() && entry.path().extension() == ".vox") {
             existing_filenames_.emplace_back(entry.path().filename().string());
         }
@@ -102,8 +102,7 @@ auto open_file_modal::open_file_() -> bool {
     asset::vox_parser_plain parser;
     ecs::vox_deserializer deserializer{engine_->get_world(), parser, *library_};
 
-    const fs::path filepath =  //
-        fs::path{app_state::asset_dir_name} / fs::path{filename_};
+    const fs::path filepath = app_state::prefab_dir() / fs::path{filename_};
     auto result = deserializer.deserialize(filepath);
     if (!result.has_value()) {
         error_ = std::format("Failed to open file: {}", filepath.string());

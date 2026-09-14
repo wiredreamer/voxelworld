@@ -95,18 +95,17 @@ auto save_as_modal::render_save_form() -> void {
 auto save_as_modal::save_file_() -> bool {
     namespace fs = std::filesystem;
 
-    fs::path asset_dir_path(app_state::asset_dir_name);
-    fs::path filepath(asset_dir_path / filename_);
-    if (filepath.extension() != ".vox") {
-        filepath.replace_extension("vox");
+    fs::path filename(filename_);
+    if (filename.extension() != ".vox") {
+        filename.replace_extension("vox");
     }
 
-    if (!has_overwrite_confirmation_ && fs::exists(filepath)) {
+    if (!has_overwrite_confirmation_ && fs::exists(app_state::prefab_dir() / filename)) {
         need_overwrite_confirmation_ = true;
         return false;
     }
 
-    if (!file_service_->save_as(filepath)) {
+    if (!file_service_->save_as(filename.generic_string())) {
         error_ = "Failed to save file.";
         return false;
     }

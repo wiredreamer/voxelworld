@@ -72,18 +72,19 @@ auto menu_bar::render(
 
         ImGui::Separator();
 
-        if (ImGui::MenuItem("Open Models Folder")) {
+        if (ImGui::MenuItem("Open Assets Folder")) {
             namespace fs = std::filesystem;
-            const std::string models_dir = fs::absolute(app_state::asset_dir_name).string();
+            const std::string assets_dir =
+                fs::absolute(fs::path{app_state::asset_root_name}).string();
             // Результат отбрасывается явно: открыть папку — услуга, а не часть
             // работы редактора, и не открывшийся проводник ничего не меняет.
             // Явно — потому что glibc помечает system() как warn_unused_result.
 #ifdef _WIN32
-            ShellExecuteA(nullptr, "open", models_dir.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+            ShellExecuteA(nullptr, "open", assets_dir.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 #elifdef __APPLE__
-            static_cast<void>(std::system(("open \"" + models_dir + "\"").c_str()));
+            static_cast<void>(std::system(("open \"" + assets_dir + "\"").c_str()));
 #else
-            static_cast<void>(std::system(("xdg-open \"" + models_dir + "\"").c_str()));
+            static_cast<void>(std::system(("xdg-open \"" + assets_dir + "\"").c_str()));
 #endif
         }
 

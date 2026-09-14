@@ -97,7 +97,7 @@ TEST_CASE("a node with a missing parent survives", "[scene]") {
 }
 
 // Точка вращения принадлежит объёму, а не узлу: она входит в матрицу самого
-// объёма и детям не спускается. Числа взяты из assets/models/m_human.vox — до
+// объёма и детям не спускается. Числа взяты из assets/prefabs/m_human.vox — до
 // переезда origin стоял в узле, и родительский вычитался при спуске к ребёнку,
 // так что ошибка здесь сдвинула бы руку ровно на точку корня.
 TEST_CASE("the pivot of a parent does not move its child", "[scene]") {

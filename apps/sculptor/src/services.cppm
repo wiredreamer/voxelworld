@@ -55,7 +55,7 @@ public:
     file_service(engine_type& eng, app_state& state, asset::model_library& library);
 
     auto save() -> bool;
-    auto save_as(const std::filesystem::path& filepath) -> bool;
+    auto save_as(std::string_view filename) -> bool;
 
 private:
     auto write_(const asset::asset_ref& prefab_ref) -> bool;

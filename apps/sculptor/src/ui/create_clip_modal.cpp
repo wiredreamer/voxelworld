@@ -99,8 +99,7 @@ auto create_clip_modal::create_clip() -> bool {
     }
 
     if (!has_overwrite_confirmation_) {
-        fs::path filepath =
-            fs::path{app_state::asset_dir_name} / std::format("{}.voxa", name_);
+        fs::path filepath = app_state::clip_dir() / std::format("{}.voxa", name_);
         if (fs::exists(filepath)) {
             need_overwrite_confirmation_ = true;
             return false;

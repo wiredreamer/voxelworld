@@ -3,6 +3,7 @@ module vw.sculptor;
 import std;
 
 import vw.core;
+import vw.asset;
 import vw.ecs;
 import vw.world;
 import vw.platform;
@@ -116,6 +117,22 @@ auto animation_state::get_clip_settings_mut(
     const std::string& name
 ) -> clip_settings& {
     return clip_settings_map[name];
+}
+
+auto app_state::prefab_dir() -> std::filesystem::path {
+    return std::filesystem::path{asset_root_name} / asset::dirs::prefabs;
+}
+
+auto app_state::model_dir() -> std::filesystem::path {
+    return std::filesystem::path{asset_root_name} / asset::dirs::models;
+}
+
+auto app_state::clip_dir() -> std::filesystem::path {
+    return std::filesystem::path{asset_root_name} / asset::dirs::animations;
+}
+
+auto app_state::fsm_dir() -> std::filesystem::path {
+    return std::filesystem::path{asset_root_name} / asset::dirs::fsm;
 }
 
 }  // namespace vw::sculptor

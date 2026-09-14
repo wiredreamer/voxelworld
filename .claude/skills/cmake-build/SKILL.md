@@ -62,6 +62,14 @@ cmake -S . -B build/headless -G Ninja -DCMAKE_BUILD_TYPE=Release \
 `VW_BUILD_APPS=ON` при `VW_BUILD_GFX=OFF` — ошибка конфигурации: приложениям
 нужно окно.
 
+`VW_SCULPTOR_ASSET_ROOT` (по умолчанию `${CMAKE_SOURCE_DIR}/assets`) — каталог,
+который Sculptor открывает и в который пишет: `prefabs/`, `models/`,
+`animations/` и `fsm/` ищутся в нём (имена — `vw::asset::dirs`). Редактор правит
+ассеты репозитория, поэтому `git status` показывает правку сразу; сборке «на
+раздачу» нужно поставить `.`, и корнем станет каталог рядом с исполняемым
+файлом. Арене ассеты по-прежнему копирует `vw_setup_assets`
+(`cmake/assets.cmake`) — она их только читает.
+
 Зависимости gfx (glfw3, imgui) вынесены в vcpkg-фичу `gfx`, включённую по
 умолчанию; `-DVCPKG_MANIFEST_NO_DEFAULT_FEATURES=ON` оставляет только Catch2.
 

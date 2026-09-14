@@ -151,7 +151,19 @@ struct socket_state {
 };
 
 struct app_state {
-    static constexpr std::string_view asset_dir_name = "models";
+    // Корень ассетов задаётся на конфигурации (VW_SCULPTOR_ASSET_ROOT) и по
+    // умолчанию указывает на assets/ репозитория: редактор правит те же файлы,
+    // которые читают arena и git. Копия в каталоге сборки этого не давала бы —
+    // правка оставалась бы там и погибала при следующей сборке.
+    static constexpr std::string_view asset_root_name = VW_SCULPTOR_ASSET_ROOT;
+
+    // Имена каталогов лежат в vw.asset (asset::dirs): по ним же движок строит
+    // ссылку на безымянный объём. Здесь они только превращаются в путь на
+    // диске — ссылка отсчитывается от корня, а не от рабочего каталога.
+    [[nodiscard]] static auto prefab_dir() -> std::filesystem::path;
+    [[nodiscard]] static auto model_dir() -> std::filesystem::path;
+    [[nodiscard]] static auto clip_dir() -> std::filesystem::path;
+    [[nodiscard]] static auto fsm_dir() -> std::filesystem::path;
 
     ui_state ui;
     file_state file;

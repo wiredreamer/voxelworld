@@ -54,14 +54,7 @@ auto asset_ref::stem() const -> std::string_view {
 auto default_model_ref(
     const asset_ref& prefab, std::string_view entity_name
 ) -> asset_ref {
-    std::string_view dir = prefab.str();
-    const auto slash     = dir.find_last_of('/');
-    const auto dot       = dir.find_last_of('.');
-    if (dot != std::string_view::npos && (slash == std::string_view::npos || dot > slash + 1)) {
-        dir = dir.substr(0, dot);
-    }
-
-    return asset_ref{std::format("{}/{}.voxm", dir, entity_name)};
+    return asset_ref{std::format("{}/{}/{}.voxm", dirs::models, prefab.stem(), entity_name)};
 }
 
 }  // namespace vw::asset

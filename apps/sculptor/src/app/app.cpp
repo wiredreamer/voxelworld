@@ -25,7 +25,8 @@ app::app(
     // Корень ассетов у редактора — его рабочий каталог: ссылки в префабе
     // начинаются с папки моделей, а не с имени файла.
     , model_library_(
-          eng.get_world().resource<asset::model_registry>(), eng.get_block_registry(), "."
+          eng.get_world().resource<asset::model_registry>(), eng.get_block_registry(),
+          app_state::asset_root_name
       )
     , file_service_(eng, state_, model_library_)
     , clip_service_(eng, state_, op_manager_)
@@ -45,7 +46,7 @@ app::app(
     , new_file_modal_(eng, state_)
     , open_file_modal_(eng, state_, model_library_)
     , save_as_modal_(eng, state_, file_service_) {
-    init_asset_dir_();
+    init_asset_dirs_();
 
     auto& window   = eng.get_window();
     auto& camera   = eng.get_camera();
@@ -392,14 +393,20 @@ auto app::collect_dirty_models_() -> void {
     }
 }
 
-auto app::init_asset_dir_() -> void {
-    if (!std::filesystem::exists(app_state::asset_dir_name)) {
+auto app::init_asset_dirs_() -> void {
+    for (const auto& dir :
+         {app_state::prefab_dir(), app_state::model_dir(), app_state::clip_dir(),
+          app_state::fsm_dir()}) {
+        if (std::filesystem::exists(dir)) {
+            continue;
+        }
+
         std::error_code ec;
-        std::filesystem::create_directories(app_state::asset_dir_name, ec);
+        std::filesystem::create_directories(dir, ec);
         if (ec) {
             log::critical(
                 "Failed to create asset directory '{}': {}",  //
-                app_state::asset_dir_name,
+                dir.string(),
                 ec.message()
             );
         }

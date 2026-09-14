@@ -1,5 +1,12 @@
 project(sculptor VERSION 0.2.0 LANGUAGES CXX)
 
+# Редактор открывает ассеты прямо из репозитория: он их не только читает, но и
+# пишет, а копия в каталоге сборки уносила бы правки в сторону от git и гибла
+# при следующей сборке. Сборка «на раздачу» ставит сюда ".", и корнем становится
+# каталог рядом с исполняемым файлом.
+set(VW_SCULPTOR_ASSET_ROOT "${CMAKE_SOURCE_DIR}/assets"
+    CACHE PATH "Asset directory Sculptor reads and writes")
+
 find_package(imgui CONFIG REQUIRED)
 
 add_executable(${PROJECT_NAME})
@@ -78,6 +85,8 @@ target_sources(${PROJECT_NAME}
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE vwengine imgui::imgui)
+target_compile_definitions(${PROJECT_NAME}
+    PRIVATE VW_SCULPTOR_ASSET_ROOT="${VW_SCULPTOR_ASSET_ROOT}")
 vw_use_std_module(${PROJECT_NAME})
 vw_set_warnings(${PROJECT_NAME})
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_23)

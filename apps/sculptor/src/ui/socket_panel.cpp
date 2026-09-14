@@ -279,9 +279,9 @@ auto socket_panel::render_preview_file_list_() -> void {
         vox_filenames_.clear();
 
         namespace fs = std::filesystem;
-        const fs::path asset_dir{app_state::asset_dir_name};
-        if (fs::exists(asset_dir)) {
-            for (const auto& entry : fs::directory_iterator(asset_dir)) {
+        const fs::path prefab_dir = app_state::prefab_dir();
+        if (fs::exists(prefab_dir)) {
+            for (const auto& entry : fs::directory_iterator(prefab_dir)) {
                 if (entry.is_regular_file() && entry.path().extension() == ".vox") {
                     vox_filenames_.emplace_back(entry.path().filename().string());
                 }
@@ -346,7 +346,7 @@ auto socket_panel::load_preview_(
 
     asset::vox_parser_plain parser;
     ecs::vox_deserializer deserializer{engine_->get_world(), parser, *library_};
-    const fs::path filepath = fs::path{app_state::asset_dir_name} / fs::path{filename};
+    const fs::path filepath = app_state::prefab_dir() / fs::path{filename};
 
     const ecs::vox_deserializer::options opts{
         .skip_sockets = true,
