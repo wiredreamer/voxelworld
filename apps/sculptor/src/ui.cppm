@@ -318,6 +318,41 @@ private:
 
 }  // namespace vw::sculptor
 
+// ---- from src/ui/edit_components_modal.h
+export namespace vw::sculptor {
+
+// Один список всего, что узел может нести: панель свойств показывает только то,
+// что у узла уже есть, и состав правится отсюда. Так добавление и удаление
+// собраны в одном месте, а не разложены кнопками по секциям, где промах мимо
+// «Remove» стоит компонента.
+class edit_components_modal final {
+public:
+    using engine_type = gfx::engine;
+
+    edit_components_modal(engine_type& eng, app_state& st, operation_manager& op_manager);
+
+    auto open(const std::string& entity_name) -> void;
+    auto render() -> void;
+
+private:
+    auto render_model_row_(ecs::entity ent) -> void;
+    auto render_socket_row_(ecs::entity ent) -> void;
+    auto render_target_row_(ecs::entity ent) -> void;
+
+    static auto begin_row_(std::string_view label, std::string_view summary) -> void;
+
+    engine_type* engine_;
+    app_state* state_;
+    operation_manager* op_manager_;
+
+    add_model_component_modal add_model_modal_;
+
+    bool need_open_ = false;
+    std::string entity_name_;
+};
+
+}  // namespace vw::sculptor
+
 // ---- from src/ui/entity_properties_panel.h
 export namespace vw::sculptor {
 
@@ -330,21 +365,26 @@ public:
     auto render(float delta_time) -> void;
 
 private:
+    auto render_header_(ecs::entity ent) const -> void;
+    auto render_transform_(ecs::entity ent) const -> void;
+    auto render_model_(ecs::entity ent) -> void;
+    auto render_sockets_(ecs::entity ent) const -> void;
+    auto render_rig_(ecs::entity ent) const -> void;
+    auto render_animation_target_(ecs::entity ent) const -> void;
+
+    auto render_position_() const -> void;
+    auto render_rotation_() const -> void;
+    auto render_scale_() const -> void;
+
     engine_type* engine_;
     app_state* state_;
     operation_manager* op_manager_;
 
-    add_model_component_modal add_model_modal_;
+    edit_components_modal components_modal_;
 
     mutable std::string cached_rotation_entity_;
     mutable quat cached_rotation_quat_;
     mutable vec3f cached_rotation_deg_;
-
-    auto render_components_section() -> void;
-
-    auto render_position() const -> void;
-    auto render_rotation() const -> void;
-    auto render_scale() const -> void;
 };
 
 }  // namespace vw::sculptor

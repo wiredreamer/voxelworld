@@ -70,6 +70,7 @@ target_sources(${PROJECT_NAME}
         src/ui/create_keyframe_modal.cpp
         src/ui/delete_entity_modal.cpp
         src/ui/delete_track_modal.cpp
+        src/ui/edit_components_modal.cpp
         src/ui/entity_properties_panel.cpp
         src/ui/entity_tree_panel.cpp
         src/ui/keyframe_properties_panel.cpp
