@@ -44,6 +44,7 @@ public:
 private:
     auto process_comment_(std::istringstream& iss) -> void;
     auto process_clip_(std::istringstream& iss) -> void;
+    auto process_rig_(std::istringstream& iss) -> void;
     auto process_track_(std::istringstream& iss) -> void;
     auto process_channel_(std::istringstream& iss) -> void;
     auto process_keyframe_(std::istringstream& iss) -> void;
@@ -54,6 +55,10 @@ private:
 
     std::shared_ptr<animation_clip> clip_;
     std::optional<error_type> error_;
+
+    // Риг копится отдельно и применяется в конце: сам клип заводит команда
+    // clip, а порядок строк в шапке форматом не закреплён.
+    std::string rig_;
 
     std::unique_ptr<animation_track> current_track_;
     animation_property current_property_ = animation_property::position;

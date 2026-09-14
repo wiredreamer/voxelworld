@@ -61,6 +61,7 @@ private:
     tool_panel tool_panel_;
     block_palette_panel block_palette_panel_;
     entity_properties_panel entity_properties_panel_;
+    rig_panel rig_panel_;
     socket_panel socket_panel_;
     keyframe_properties_panel keyframe_properties_panel_;
     entity_tree_panel entity_tree_panel_;

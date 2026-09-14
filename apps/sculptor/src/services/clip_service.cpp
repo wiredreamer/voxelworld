@@ -96,19 +96,34 @@ auto clip_service::save_all_clips() const -> void {
 }
 
 auto clip_service::load_clip(
-    const std::string& filename
-) const -> bool {
+    const std::string& filename, bool ignore_rig
+) const -> clip_load_report {
     namespace fs = std::filesystem;
 
     const fs::path filepath = app_state::clip_dir() / fs::path{filename};
     asset::voxa_deserializer deserializer;
     const auto result = deserializer.deserialize(filepath);
     if (!result) {
-        return false;
+        return {.status = clip_load_status::file_error};
     }
 
     const auto& clip = *result;
-    auto& registry   = engine_->get_world().resource<asset::animation_clip_registry>();
+    auto& world      = engine_->get_world();
+
+    clip_load_report report;
+    const auto root_it = state_->scene.name_to_entity.find(state_->scene.root_name);
+    if (root_it != state_->scene.name_to_entity.end()) {
+        report.rig = world.system<ecs::animation_system>().check_clip(root_it->second, *clip);
+    }
+
+    // Чужой клип не отвергается насовсем: перецелить его — законная работа, но
+    // делать это молча значит открыть документ, который ничего не двигает.
+    if (!report.rig.ok() && !ignore_rig) {
+        report.status = clip_load_status::rig_mismatch;
+        return report;
+    }
+
+    auto& registry = world.resource<asset::animation_clip_registry>();
     registry.add(clip->get_name(), clip);
 
     state_->anim.selected_clip_name = clip->get_name();
@@ -116,7 +131,8 @@ auto clip_service::load_clip(
     state_->anim.selected_track_name.clear();
     state_->anim.selected_keyframe_id = asset::invalid_keyframe_id;
 
-    return true;
+    report.status = clip_load_status::loaded;
+    return report;
 }
 
 auto clip_service::close_clip(

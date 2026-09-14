@@ -67,6 +67,8 @@ auto clip_manager_panel::render(
     if (state_->ui.need_load_clip_modal) {
         load_voxa_filenames_();
         selected_load_filename_.clear();
+        load_error_.clear();
+        rig_mismatch_seen_ = false;
         ImGui::OpenPopup("Open Animation");
         state_->ui.need_load_clip_modal = false;
     }
@@ -271,6 +273,8 @@ auto clip_manager_panel::render_load_popup_() -> void {
                     bool is_selected = selected_load_filename_ == filename;
                     if (ImGui::Selectable(filename.c_str(), is_selected)) {
                         selected_load_filename_ = filename;
+                        load_error_.clear();
+                        rig_mismatch_seen_ = false;
                     }
                 }
             }
@@ -281,12 +285,30 @@ auto clip_manager_panel::render_load_popup_() -> void {
         ImGui::Separator();
         ImGui::Spacing();
 
+        if (!load_error_.empty()) {
+            ImGui::TextColored(ImVec4(1.f, 1.f, 0.f, 1.f), "%s", load_error_.c_str());
+            ImGui::Spacing();
+        }
+
         if (selected_load_filename_.empty()) {
             ImGui::BeginDisabled();
         }
-        if (ImGui::Button("Open")) {
-            if (clip_service_->load_clip(selected_load_filename_)) {
-                ImGui::CloseCurrentPopup();
+        if (ImGui::Button(rig_mismatch_seen_ ? "Open anyway" : "Open")) {
+            const auto report = clip_service_->load_clip(selected_load_filename_, rig_mismatch_seen_);
+            switch (report.status) {
+                case clip_load_status::loaded:
+                    load_error_.clear();
+                    rig_mismatch_seen_ = false;
+                    ImGui::CloseCurrentPopup();
+                    break;
+                case clip_load_status::file_error:
+                    load_error_        = "Failed to read the clip.";
+                    rig_mismatch_seen_ = false;
+                    break;
+                case clip_load_status::rig_mismatch:
+                    load_error_        = describe_rig_report_(report.rig);
+                    rig_mismatch_seen_ = true;
+                    break;
             }
         }
         if (selected_load_filename_.empty()) {
@@ -299,6 +321,35 @@ auto clip_manager_panel::render_load_popup_() -> void {
 
         ImGui::EndPopup();
     }
+}
+
+auto clip_manager_panel::describe_rig_report_(
+    const ecs::rig_report& report
+) -> std::string {
+    std::string text;
+
+    if (!report.rig_matches()) {
+        text = std::format(
+            "This clip is for rig '{}', the document is '{}'.", report.clip_rig, report.rig
+        );
+    }
+
+    if (!report.unknown_targets.empty()) {
+        if (!text.empty()) {
+            text += "\n";
+        }
+
+        text += "No node here for: ";
+        for (std::size_t i = 0; i < report.unknown_targets.size(); ++i) {
+            if (i != 0) {
+                text += ", ";
+            }
+            text += report.unknown_targets[i];
+        }
+        text += ".";
+    }
+
+    return text;
 }
 
 auto clip_manager_panel::load_voxa_filenames_() -> void {

@@ -33,6 +33,12 @@ auto vox_serializer::extract() const -> asset::vox_prefab_data {
     asset::vox_prefab_data prefab;
     prefab.root_name = entity_names_.at(root_);
 
+    // Риг — свойство префаба целиком, поэтому он на корне и в шапке, а не в
+    // узле: узлов с целями много, риг у них один.
+    if (world_->has<rig_component>(root_)) {
+        prefab.rig = world_->get<rig_component>(root_).get_name();
+    }
+
     std::deque<entity> to_process;
     to_process.push_back(root_);
 
@@ -177,7 +183,29 @@ auto vox_deserializer::instantiate(
         apply_entity_(ent_data, res, opts);
     }
 
+    attach_rig_(prefab, res);
+
     return res;
+}
+
+auto vox_deserializer::attach_rig_(
+    const asset::vox_prefab_data& prefab, const result& res
+) -> void {
+    if (prefab.rig.empty()) {
+        return;
+    }
+
+    const auto root_it = res.name_to_entity.find(prefab.root_name);
+    if (root_it == res.name_to_entity.end()) {
+        log::warn(
+            detail::vox_deserializer_lc, "prefab names rig '{}' but has no root '{}'", prefab.rig,
+            prefab.root_name
+        );
+        return;
+    }
+
+    world_->modify(root_it->second).with<rig_component>();
+    world_->system<animation_system>().modify_rig(root_it->second).set_name(prefab.rig);
 }
 
 auto vox_deserializer::create_entity_(const asset::vox_entity_data& data, result& res) -> void {

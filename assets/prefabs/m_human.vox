@@ -1,4 +1,5 @@
-# Vox File Version 3.0
+# Vox File Version 3.1
+rig humanoid
 root root
 entity root
 	transform 0 0 0	-0 -0 -0	1 1 1

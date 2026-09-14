@@ -37,6 +37,7 @@ app::app(
     , tool_panel_(state_)
     , block_palette_panel_(eng, state_)
     , entity_properties_panel_(eng, state_, op_manager_)
+    , rig_panel_(eng, state_, op_manager_)
     , socket_panel_(eng, state_, op_manager_, model_library_)
     , keyframe_properties_panel_(eng, state_, op_manager_)
     , entity_tree_panel_(eng, state_, op_manager_)
@@ -132,6 +133,9 @@ auto app::render(
     // right side
     entity_properties_panel_.render(delta_time);
     entity_tree_panel_.render(delta_time);
+    if (state_.ui.show_rig) {
+        rig_panel_.render(delta_time);
+    }
     if (state_.ui.show_sockets) {
         socket_panel_.render(delta_time);
     }

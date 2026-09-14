@@ -49,6 +49,7 @@ target_sources(${PROJECT_NAME}
         src/operations/remove_voxel_operation.cpp
         src/operations/set_socket_transform_operation.cpp
         src/operations/set_pivot_operation.cpp
+        src/operations/set_rig_operation.cpp
         src/operations/set_transform_operation.cpp
         src/services/clip_service.cpp
         src/services/file_service.cpp
@@ -76,6 +77,7 @@ target_sources(${PROJECT_NAME}
         src/ui/new_file_modal.cpp
         src/ui/open_file_modal.cpp
         src/ui/save_as_modal.cpp
+        src/ui/rig_panel.cpp
         src/ui/save_clip_as_modal.cpp
         src/ui/socket_panel.cpp
         src/ui/startup_modal.cpp

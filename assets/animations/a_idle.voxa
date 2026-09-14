@@ -1,5 +1,6 @@
-# Voxa File Version 1.0
+# Voxa File Version 1.1
 clip a_idle_0
+rig humanoid
 
 track body 60
   channel origin

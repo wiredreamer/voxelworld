@@ -70,6 +70,7 @@ private:
     auto create_entity_(const asset::vox_entity_data& data, result& res) -> void;
     auto apply_entity_(const asset::vox_entity_data& data, result& res, const options& opts) -> void;
     auto attach_model_(const asset::vox_entity_data& data, entity ent) -> void;
+    auto attach_rig_(const asset::vox_prefab_data& prefab, const result& res) -> void;
 
     world* world_;
     asset::vox_parser* parser_;

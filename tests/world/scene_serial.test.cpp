@@ -153,6 +153,51 @@ TEST_CASE("the pivot of a parent does not move its child", "[scene]") {
 
 // Узел 3.0 не носит вокселей: он называет .voxm, и это имя обязано вернуться из
 // записи тем же. Писатель и разборщик лежат в разных модулях и расходятся молча.
+// Риг едет в мир и обратно через компонент на корне: в файле он одна строка в
+// шапке, а в мире — свойство корневой сущности, и потеряться между ними нельзя.
+TEST_CASE("a rig name survives a round trip through the world", "[scene]") {
+    scene_fixture fx;
+    auto& w = fx.w;
+
+    asset::vox_prefab_data prefab;
+    prefab.root_name = "root";
+    prefab.rig       = "humanoid";
+
+    asset::vox_entity_data root;
+    root.name          = "root";
+    root.has_transform = true;
+    prefab.entities.push_back(root);
+
+    auto deserializer = fx.deserializer();
+    const auto res    = deserializer.instantiate(prefab, {});
+    w.update(0.016F);
+
+    const auto root_ent = res.name_to_entity.at("root");
+    REQUIRE(w.has<rig_component>(root_ent));
+    REQUIRE(w.get<rig_component>(root_ent).get_name() == "humanoid");
+
+    vox_writer_plain writer;
+    vox_serializer serializer{w, writer, root_ent, {.entity_names = res.entity_to_name}};
+
+    REQUIRE(serializer.extract().rig == "humanoid");
+}
+
+// Риг необязателен: у меча и стрелы его нет, и заводить компонент ради пустой
+// строки незачем — иначе в шапку поедет «rig » без имени.
+TEST_CASE("a prefab without a rig gets no rig component", "[scene]") {
+    scene_fixture fx;
+    auto& w = fx.w;
+
+    asset::vox_prefab_data prefab;
+    prefab.root_name = "root";
+    prefab.entities.push_back(make_node("root", ""));
+
+    auto deserializer = fx.deserializer();
+    const auto res    = deserializer.instantiate(prefab, {});
+
+    REQUIRE_FALSE(w.has<rig_component>(res.name_to_entity.at("root")));
+}
+
 TEST_CASE("a model ref survives a round trip through the world", "[scene]") {
     scene_fixture fx;
     auto& w      = fx.w;

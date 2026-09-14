@@ -140,6 +140,8 @@ private:
     auto render_load_popup_() -> void;
     auto load_voxa_filenames_() -> void;
 
+    [[nodiscard]] static auto describe_rig_report_(const ecs::rig_report& report) -> std::string;
+
     engine_type* engine_;
     app_state* state_;
     operation_manager* op_manager_;
@@ -153,6 +155,9 @@ private:
     bool need_close_confirm_popup_ = false;
     std::vector<std::string> voxa_filenames_;
     std::string selected_load_filename_;
+
+    std::string load_error_;
+    bool rig_mismatch_seen_ = false;
 };
 
 }  // namespace vw::sculptor
@@ -489,6 +494,32 @@ private:
 
     bool need_overwrite_confirmation_ = false;
     bool has_overwrite_confirmation_  = false;
+};
+
+}  // namespace vw::sculptor
+
+// ---- from src/ui/rig_panel.h
+export namespace vw::sculptor {
+
+// Риг документа: имя контракта плюс плоский список целей. Список нигде не
+// хранится — он и есть дерево, поэтому панель собирает его заново.
+class rig_panel final {
+public:
+    using engine_type = gfx::engine;
+
+    rig_panel(engine_type& eng, app_state& st, operation_manager& op_manager);
+
+    auto render(float delta_time) -> void;
+
+private:
+    auto render_name_(ecs::entity root) -> void;
+    auto render_targets_(ecs::entity root) -> void;
+
+    engine_type* engine_;
+    app_state* state_;
+    operation_manager* op_manager_;
+
+    std::string rig_input_;
 };
 
 }  // namespace vw::sculptor

@@ -32,10 +32,19 @@ public:
 
     auto set_name(std::string name) -> void;
 
+    // Имя рига, под который записан клип. Пустое — риг не указан: клип из файла
+    // старше этой проверки, и ругаться на него не за что.
+    [[nodiscard]] auto get_rig() const -> const std::string& {
+        return rig_;
+    }
+
+    auto set_rig(std::string rig) -> void;
+
     [[nodiscard]] auto get_target_names() const -> std::unordered_set<std::string>;
 
 private:
     std::string name_;
+    std::string rig_;
     std::vector<animation_track> tracks_;
 };
 

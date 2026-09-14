@@ -21,6 +21,21 @@ class spatial_system;
 class transform_system;
 class world_grid_system;
 
+// Риг — имя контракта анимации, а не список целей: цели выводятся из узлов с
+// animation_target_component, и сверка по ним остаётся настоящей проверкой.
+// Имя лежит на корне префаба и отвечает на вопрос, который по узлам не задашь:
+// «этот клип вообще про это существо?».
+struct rig_component final {
+    [[nodiscard]] auto get_name() const -> const std::string& {
+        return rig_name_;
+    }
+
+private:
+    friend class animation_system;
+
+    std::string rig_name_;
+};
+
 struct animation_target_component final {
     [[nodiscard]] auto get_name() const -> const std::string& {
         return target_name_;

@@ -6,6 +6,10 @@ import vw.asset;
 
 namespace vw::ecs {
 
+namespace detail {
+constexpr log::log_category animation_system_lc{"animation_system"};
+}  // namespace detail
+
 animation_system::animation_system(world& w)
     : world_(&w) {}
 
@@ -65,6 +69,8 @@ auto animation_system::add_active_entity(
     if (inserted) {
         build_and_cache_target_map(root_ent);
     }
+
+    warn_unknown_targets_(root_ent);
 }
 
 auto animation_system::remove_active_entity(
@@ -72,35 +78,124 @@ auto animation_system::remove_active_entity(
 ) -> void {
     active_entities_.erase(root_ent);
     target_maps_.erase(root_ent);
+    warned_targets_.erase(root_ent);
 }
 
 auto animation_system::build_and_cache_target_map(
     entity root_ent
 ) -> void {
-    std::unordered_map<std::string, entity> target_map;
+    target_maps_[root_ent] = collect_target_map_(root_ent);
 
-    to_visit_.clear();
-    to_visit_.push_back(root_ent);
+    // Дерево пересобрали — прежние жалобы больше ничего не значат: цель могла
+    // появиться, и о новой пропаже надо сказать заново.
+    warned_targets_.erase(root_ent);
+}
+
+auto animation_system::collect_target_list_(
+    entity root_ent
+) const -> std::vector<std::pair<std::string, entity>> {
+    std::vector<std::pair<std::string, entity>> targets;
+
+    std::deque<entity> to_visit;
+    to_visit.push_back(root_ent);
 
     auto& reg = world_->registry();
-    while (!to_visit_.empty()) {
-        entity current = to_visit_.front();
-        to_visit_.pop_front();
+    while (!to_visit.empty()) {
+        entity current = to_visit.front();
+        to_visit.pop_front();
 
         if (reg.has<animation_target_component>(current)) {
             const auto& target_comp = reg.get<animation_target_component>(current);
-            target_map[target_comp.get_name()] = current;
+            targets.emplace_back(target_comp.get_name(), current);
         }
 
         if (reg.has<hierarchy_component>(current)) {
             const auto& hierarchy = reg.get<hierarchy_component>(current);
             for (entity child : hierarchy.get_children()) {
-                to_visit_.push_back(child);
+                to_visit.push_back(child);
             }
         }
     }
 
-    target_maps_[root_ent] = std::move(target_map);
+    return targets;
+}
+
+auto animation_system::collect_target_map_(
+    entity root_ent
+) const -> std::unordered_map<std::string, entity> {
+    std::unordered_map<std::string, entity> target_map;
+    for (auto& [name, ent] : collect_target_list_(root_ent)) {
+        target_map[name] = ent;
+    }
+    return target_map;
+}
+
+auto animation_system::collect_targets(
+    entity root_ent
+) const -> std::vector<std::string> {
+    std::vector<std::string> names;
+    for (auto& [name, ent] : collect_target_list_(root_ent)) {
+        names.push_back(std::move(name));
+    }
+    return names;
+}
+
+auto animation_system::check_clip(
+    entity root_ent, const asset::animation_clip& clip
+) const -> rig_report {
+    rig_report report;
+    report.clip_rig = clip.get_rig();
+
+    auto& reg = world_->registry();
+    if (reg.has<rig_component>(root_ent)) {
+        report.rig = reg.get<rig_component>(root_ent).get_name();
+    }
+
+    const auto targets = collect_target_map_(root_ent);
+    for (const auto& track : clip.get_tracks()) {
+        if (!targets.contains(track.get_target_name())) {
+            report.unknown_targets.push_back(track.get_target_name());
+        }
+    }
+
+    return report;
+}
+
+auto animation_system::warn_unknown_targets_(
+    entity root_ent
+) -> void {
+    const auto* target_map = get_cached_target_map(root_ent);
+    if (target_map == nullptr) {
+        return;
+    }
+
+    auto& reg = world_->registry();
+    if (!reg.has<animation_player_component>(root_ent)) {
+        return;
+    }
+
+    const auto& player = reg.get<animation_player_component>(root_ent);
+    auto& warned       = warned_targets_[root_ent];
+
+    for (std::size_t i = 0; i < player.layer_count(); ++i) {
+        const auto& clip = player.get_layer(i).clip;
+        if (!clip) {
+            continue;
+        }
+
+        for (const auto& track : clip->get_tracks()) {
+            const auto& name = track.get_target_name();
+            if (target_map->contains(name) || !warned.insert(name).second) {
+                continue;
+            }
+
+            log::warn(
+                detail::animation_system_lc,
+                "clip '{}' animates target '{}', which this rig has no node for",
+                clip->get_name(), name
+            );
+        }
+    }
 }
 
 auto animation_system::get_cached_target_map(
@@ -658,6 +753,24 @@ auto animation_system::target_modifier::set_rest_transform(
     const transform& rest
 ) const -> void {
     component_->rest_transform_ = rest;
+}
+
+animation_system::rig_modifier::rig_modifier(
+    entity ent, rig_component* component
+)
+    : entity_(ent), component_(component) {}
+
+auto animation_system::modify_rig(
+    entity ent
+) -> rig_modifier {
+    auto& comp = world_->registry().get<rig_component>(ent);
+    return rig_modifier(ent, &comp);
+}
+
+auto animation_system::rig_modifier::set_name(
+    std::string name
+) const -> void {
+    component_->rig_name_ = std::move(name);
 }
 
 auto animation_system::merge_with_rest(

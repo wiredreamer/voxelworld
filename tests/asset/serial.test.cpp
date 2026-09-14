@@ -29,6 +29,7 @@ auto parse_voxa(std::string_view text) {
 TEST_CASE("the vox parser reads a prefab out of a stream", "[serial]") {
     const auto prefab = parse_vox(
         "# Vox File Version 3.0\n"
+        "rig humanoid\n"
         "root root\n"
         "entity root\n"
         "\ttransform 0 0 0\t-0 -0 -0\t1 1 1\n"
@@ -43,6 +44,7 @@ TEST_CASE("the vox parser reads a prefab out of a stream", "[serial]") {
 
     REQUIRE(prefab.has_value());
     REQUIRE(prefab->root_name == "root");
+    REQUIRE(prefab->rig == "humanoid");
     REQUIRE(prefab->entities.size() == 2);
 
     const auto& root = prefab->entities.front();
@@ -212,11 +214,26 @@ TEST_CASE("a voxa file of an unsupported major version is rejected", "[serial]")
 
 TEST_CASE("a voxa file of the current version parses", "[serial]") {
     const auto clip = parse_voxa(
+        "# Voxa File Version 1.1\n"
+        "clip walk 60\n"
+        "rig humanoid\n"
+    );
+
+    REQUIRE(clip.has_value());
+    REQUIRE((*clip)->get_rig() == "humanoid");
+}
+
+// Риг появился в 1.1 и остался необязательным, поэтому клип 1.0 читается как
+// «риг не указан», а не отвергается: пять записанных до этого клипов никуда не
+// делись.
+TEST_CASE("a voxa file without a rig parses as one without a rig", "[serial]") {
+    const auto clip = parse_voxa(
         "# Voxa File Version 1.0\n"
         "clip walk 60\n"
     );
 
     REQUIRE(clip.has_value());
+    REQUIRE((*clip)->get_rig().empty());
 }
 
 namespace {

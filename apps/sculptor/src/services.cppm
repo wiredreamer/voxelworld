@@ -14,6 +14,15 @@ import :operations;
 // ---- from src/services/clip_service.h
 export namespace vw::sculptor {
 
+enum class clip_load_status : uint8 { loaded, file_error, rig_mismatch };
+
+// Клип читается до того, как попасть в реестр: сверка с ригом документа имеет
+// смысл только до открытия, а не после.
+struct clip_load_report {
+    clip_load_status status = clip_load_status::file_error;
+    ecs::rig_report rig;
+};
+
 class clip_service final {
 public:
     using engine_type = gfx::engine;
@@ -23,7 +32,8 @@ public:
     auto save_clip(const std::string& clip_name) const -> bool;
     auto save_clip_as(const std::string& clip_name, const std::string& new_name) const -> bool;
     auto save_all_clips() const -> void;
-    auto load_clip(const std::string& filename) const -> bool;
+    auto load_clip(const std::string& filename, bool ignore_rig = false) const
+        -> clip_load_report;
     auto close_clip(const std::string& clip_name) const -> void;
 
     auto enter_animation_mode() -> void;

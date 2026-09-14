@@ -49,7 +49,9 @@ auto vox_parser_plain::parse(std::istream& input)
             continue;
         }
 
-        if (cmd == "root") {
+        if (cmd == "rig") {
+            process_rig_(iss);
+        } else if (cmd == "root") {
             process_root_(iss);
         } else if (cmd == "entity") {
             process_entity_(iss);
@@ -90,6 +92,17 @@ auto vox_parser_plain::process_comment_(std::istringstream& iss) -> void {
         );
         error_ = error_type::unsupported_version;
     }
+}
+
+auto vox_parser_plain::process_rig_(std::istringstream& iss) -> void {
+    std::string name;
+    iss >> name;
+    if (iss.fail()) {
+        error_ = error_type::parse_error;
+        return;
+    }
+
+    prefab_.rig = name;
 }
 
 auto vox_parser_plain::process_root_(std::istringstream& iss) -> void {
@@ -256,6 +269,9 @@ auto voxa_serializer::serialize(
 auto voxa_serializer::write_header_(std::ofstream& file) -> void {
     file << std::format("# Voxa File Version {}\n", voxa_file_version);
     file << std::format("clip {}\n", clip_->get_name());
+    if (!clip_->get_rig().empty()) {
+        file << std::format("rig {}\n", clip_->get_rig());
+    }
 }
 
 auto voxa_serializer::write_track_(
@@ -362,6 +378,7 @@ auto voxa_deserializer::deserialize(
     current_track_ = nullptr;
     has_current_channel_ = false;
     error_ = std::nullopt;
+    rig_.clear();
     vec3f_keyframes_.clear();
     quat_keyframes_.clear();
 
@@ -384,6 +401,8 @@ auto voxa_deserializer::deserialize(
 
         if (cmd == "clip") {
             process_clip_(iss);
+        } else if (cmd == "rig") {
+            process_rig_(iss);
         } else if (cmd == "track") {
             process_track_(iss);
         } else if (cmd == "channel") {
@@ -401,6 +420,10 @@ auto voxa_deserializer::deserialize(
 
     finalize_channel_();
     finalize_track_();
+
+    if (clip_ && !rig_.empty()) {
+        clip_->set_rig(rig_);
+    }
 
     return clip_;
 }
@@ -430,6 +453,15 @@ auto voxa_deserializer::process_clip_(std::istringstream& iss) -> void {
     clip_ = std::make_shared<animation_clip>(name);
 }
 
+auto voxa_deserializer::process_rig_(std::istringstream& iss) -> void {
+    std::string name;
+    iss >> name;
+    if (iss.fail()) {
+        error_ = error_type::parse_error;
+        return;
+    }
+    rig_ = name;
+}
 
 auto voxa_deserializer::process_track_(std::istringstream& iss) -> void {
     finalize_channel_();

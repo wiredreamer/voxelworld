@@ -39,6 +39,9 @@ auto vox_writer_plain::write_header_(
     std::ofstream& file, const vw::asset::vox_prefab_data& prefab
 ) -> void {
     file << std::format("# Vox File Version {}\n", asset::vox_file_version);
+    if (!prefab.rig.empty()) {
+        file << std::format("rig {}\n", prefab.rig);
+    }
     file << std::format("root {}\n", prefab.root_name);
 }
 

@@ -236,6 +236,12 @@ auto animation_clip::set_name(std::string name) -> void {
     name_ = std::move(name);
 }
 
+auto animation_clip::set_rig(
+    std::string rig
+) -> void {
+    rig_ = std::move(rig);
+}
+
 auto animation_clip::get_target_names() const -> std::unordered_set<std::string> {
     std::unordered_set<std::string> names;
     for (const auto& track : tracks_) {

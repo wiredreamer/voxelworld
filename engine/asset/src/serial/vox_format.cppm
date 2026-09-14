@@ -34,13 +34,20 @@ struct vox_entity_data {
 
 struct vox_prefab_data {
     std::string root_name;
+
+    // Имя рига в шапке — не список целей: цели выводятся из узлов, и сверка по
+    // ним остаётся настоящей проверкой. Имя отвечает на другой вопрос — «этот
+    // клип вообще про это существо?» — и отвечает, не читая узлов.
+    std::string rig;
+
     std::vector<vox_entity_data> entities;
 };
 
 // 3.0 вынесло воксели из дерева: узел ссылается на .voxm, а точка вращения
 // уехала в сам объём. Чтение 2.0 удалено вместе с переводом ассетов — старый
-// файл теперь отвергается по версии, а не читается наполовину.
-inline constexpr std::string_view vox_file_version = "3.0";
+// файл теперь отвергается по версии, а не читается наполовину. 3.1 добавило
+// в шапку имя рига — строка необязательная, поэтому младший номер.
+inline constexpr std::string_view vox_file_version = "3.1";
 
 // База для разборщиков формата .vox.
 class vox_parser {
@@ -65,6 +72,7 @@ public:
 
 private:
     auto process_comment_(std::istringstream& iss) -> void;
+    auto process_rig_(std::istringstream& iss) -> void;
     auto process_root_(std::istringstream& iss) -> void;
     auto process_entity_(std::istringstream& iss) -> void;
     auto process_parent_(std::istringstream& iss) -> void;
@@ -79,6 +87,8 @@ private:
     std::optional<error_type> error_;
 };
 
-inline constexpr std::string_view voxa_file_version = "1.0";
+// 1.1 добавило в шапку имя рига: строка необязательная, файл 1.0 читается как
+// клип без рига.
+inline constexpr std::string_view voxa_file_version = "1.1";
 
 }  // namespace vw::asset

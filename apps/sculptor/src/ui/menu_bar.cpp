@@ -112,6 +112,9 @@ auto menu_bar::render(
         if (ImGui::MenuItem("Sockets", "Alt+S", state_->ui.show_sockets)) {
             state_->ui.show_sockets ^= true;
         }
+        if (ImGui::MenuItem("Rig", nullptr, state_->ui.show_rig)) {
+            state_->ui.show_rig ^= true;
+        }
         if (ImGui::MenuItem("Animation Clips", "Alt+A", state_->ui.show_clip_manager)) {
             state_->ui.show_clip_manager ^= true;
         }

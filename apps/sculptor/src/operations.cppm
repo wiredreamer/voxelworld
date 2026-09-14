@@ -510,6 +510,35 @@ private:
 
 }  // namespace vw::sculptor
 
+// ---- from src/operations/set_rig_operation.h
+export namespace vw::sculptor {
+
+struct set_rig_params {
+    std::string rig_name;
+};
+
+// Риг у документа один и живёт на корне, поэтому операция не называет узла.
+// Пустое имя — «риг не указан»: компонент остаётся, но в шапку ничего не идёт.
+class set_rig_operation final : public base_operation {
+public:
+    using engine_type = gfx::engine;
+
+    set_rig_operation(engine_type& engine, app_state& st, const set_rig_params& params);
+
+    auto execute() -> void override;
+    auto undo() -> void override;
+
+private:
+    auto apply_(const std::string& rig_name) const -> void;
+
+    engine_type* engine_;
+    app_state* state_;
+    set_rig_params params_;
+    std::string previous_rig_;
+};
+
+}  // namespace vw::sculptor
+
 // ---- from src/operations/set_pivot_operation.h
 export namespace vw::sculptor {
 
