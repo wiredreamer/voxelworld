@@ -40,8 +40,7 @@ auto entity_tree_panel::render(
 
     ImGui::Begin("Entity Tree", nullptr, window_flags);
 
-    const bool can_add =
-        !state_->anim.animation_mode && state_->ctx.in_prefab() &&
+    const bool can_add = state_->ctx.in_prefab() &&
         (state_->scene.root_name.empty() || !state_->scene.selected_name.empty());
     if (!can_add) {
         ImGui::BeginDisabled();
@@ -55,7 +54,7 @@ auto entity_tree_panel::render(
 
     ImGui::SameLine();
 
-    const bool can_remove = !state_->anim.animation_mode && state_->ctx.in_prefab() &&
+    const bool can_remove = state_->ctx.in_prefab() &&
         !state_->scene.selected_name.empty() &&
         state_->scene.name_to_entity.contains(state_->scene.selected_name);
     if (!can_remove) {
@@ -86,11 +85,11 @@ auto entity_tree_panel::render(
     ImGui::End();
 }
 
-// Выбор узла — правка префаба, а внутри объёма её нет: провалившись в .voxm,
-// правишь именно тот узел, через который вошёл, и уехать из него мимо крошек
-// нельзя.
+// Провалившись в .voxm, правишь именно тот узел, через который вошёл, и уехать
+// из него мимо крошек нельзя. В клипе выбор, наоборот, нужен: им говорят, чью
+// дорожку правят.
 auto entity_tree_panel::select_(const std::string& name) const -> void {
-    if (!state_->ctx.in_prefab()) {
+    if (!state_->ctx.allows_node_select()) {
         return;
     }
     state_->scene.selected_name = name;
@@ -142,7 +141,7 @@ auto entity_tree_panel::render_entity_node(
         select_(name);
     }
 
-    if (!state_->anim.animation_mode && state_->ctx.in_prefab()) {
+    if (state_->ctx.in_prefab()) {
         const auto context_menu_id =
             std::format("EntityContextMenu_{}_{}", ent.index, ent.generation);
         if (ImGui::BeginPopupContextItem(context_menu_id.c_str())) {

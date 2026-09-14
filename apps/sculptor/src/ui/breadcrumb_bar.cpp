@@ -16,9 +16,9 @@ import vw.gfx;
 namespace vw::sculptor {
 
 breadcrumb_bar::breadcrumb_bar(
-    engine_type& eng, app_state& st
+    engine_type& eng, app_state& st, clip_service& clip_svc
 )
-    : engine_(&eng), state_(&st) {}
+    : engine_(&eng), state_(&st), clip_service_(&clip_svc) {}
 
 auto breadcrumb_bar::render(
     float /*delta_time*/
@@ -48,7 +48,7 @@ auto breadcrumb_bar::render(
         state_->file.filename.empty() ? std::string{"untitled"} : state_->file.filename;
 
     if (ImGui::Button(document.c_str())) {
-        state_->ctx.leave_to(0);
+        leave_to_(0);
     }
 
     for (std::size_t i = 0; i < stack.size(); ++i) {
@@ -58,7 +58,7 @@ auto breadcrumb_bar::render(
 
         const auto label = std::format("{}##crumb{}", label_of_(stack[i]), i);
         if (ImGui::Button(label.c_str())) {
-            state_->ctx.leave_to(i + 1);
+            leave_to_(i + 1);
         }
     }
 
@@ -67,11 +67,39 @@ auto breadcrumb_bar::render(
     ImGui::End();
 }
 
+auto breadcrumb_bar::leave_to_(
+    std::size_t depth
+) -> void {
+    const auto& stack = state_->ctx.stack;
+
+    bool drops_clip = false;
+    for (std::size_t i = depth; i < stack.size(); ++i) {
+        drops_clip = drops_clip || stack[i].kind == edit_kind::clip;
+    }
+
+    // Клип закрывается ровно как из своей панели: слои останавливаются, поза
+    // возвращается. Снять один контекст мало — панель осталась бы открытой и
+    // на следующем кадре вернула бы его обратно.
+    if (drops_clip) {
+        clip_service_->exit_animation_mode();
+        state_->ui.show_clip_manager = false;
+        state_->ui.show_timeline     = false;
+        return;
+    }
+
+    state_->ctx.leave_to(depth);
+}
+
 auto breadcrumb_bar::label_of_(
     const edit_context& ctx
 ) const -> std::string {
+    if (ctx.kind == edit_kind::clip) {
+        const auto& clip_name = state_->anim.selected_clip_name;
+        return clip_name.empty() ? std::string{"animation"} : std::format("{}.voxa", clip_name);
+    }
+
     if (ctx.kind != edit_kind::model) {
-        return std::format("{}{}", ctx.ref.stem(), ctx.ref.extension());
+        return ctx.node_name;
     }
 
     // Имя файла объёма берётся из мира, а не из контекста: у нового узла ссылки

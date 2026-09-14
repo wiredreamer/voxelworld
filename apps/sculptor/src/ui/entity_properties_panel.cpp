@@ -63,10 +63,10 @@ auto entity_properties_panel::render(
 
         render_header_(ent);
 
-        // Дерево префаба правится только в контексте префаба, а в режиме
-        // анимации трансформы ведёт клип. И там, и там панель остаётся
-        // справочной: значения видно, менять их нельзя.
-        const bool editable = state_->ctx.in_prefab() && !state_->anim.animation_mode;
+        // Узел правится только в контексте префаба: в объёме правят воксели, в
+        // клипе позу ведёт дорожка. И там, и там панель остаётся справочной —
+        // значения видно, менять их нельзя.
+        const bool editable = state_->ctx.in_prefab();
 
         ImGui::BeginDisabled(!editable);
 

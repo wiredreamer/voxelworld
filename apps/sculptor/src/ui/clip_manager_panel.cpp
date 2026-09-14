@@ -45,12 +45,12 @@ auto clip_manager_panel::render(
     bool still_open = true;
     ImGui::Begin("Animation Clips", &still_open, window_flags);
     if (!still_open) {
-        if (state_->anim.animation_mode) {
+        if (state_->ctx.in_clip()) {
             clip_service_->exit_animation_mode();
         }
         state_->ui.show_clip_manager = false;
         state_->ui.show_timeline     = false;
-    } else if (!state_->anim.animation_mode) {
+    } else if (!state_->ctx.in_clip()) {
         clip_service_->enter_animation_mode();
     }
 
@@ -209,7 +209,7 @@ auto clip_manager_panel::render(
             }
         }
 
-        if (state_->anim.animation_mode) {
+        if (state_->ctx.in_clip()) {
             ImGui::Spacing();
             if (ImGui::Button("Reset All")) {
                 clip_service_->reset_all();

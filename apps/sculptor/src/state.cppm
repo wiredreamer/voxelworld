@@ -60,18 +60,20 @@ struct file_state {
 // одним булевым полем такая вложенность не описывается.
 enum class edit_kind : uint8 { prefab, model, clip, fsm };
 
-// Под-ассет, в который провалились. Объём опознаётся узлом, а не ссылкой:
-// ссылка у нового узла появляется только при первой записи и меняется вместе с
-// именем префаба. Клип и автомат узла не имеют и опознаются файлом.
+// Под-ассет, в который провалились. Имени файла здесь нет намеренно: у объёма
+// его знает узел, у клипа — anim.selected_clip_name, и обе ссылки меняются под
+// рукой (переименование префаба, «Save As»). Контекст говорит, что правится, а
+// как оно называется сейчас, крошка спрашивает у мира.
 struct edit_context {
     edit_kind kind = edit_kind::model;
     std::string node_name;
-    asset::asset_ref ref;
 
-    // У объёма ссылка не хранится намеренно: её знает узел, и «Save As» меняет
-    // её вместе с именем префаба. Крошка спрашивает мир, а не контекст.
     [[nodiscard]] static auto model(std::string node_name) -> edit_context {
         return edit_context{.kind = edit_kind::model, .node_name = std::move(node_name)};
+    }
+
+    [[nodiscard]] static auto clip() -> edit_context {
+        return edit_context{.kind = edit_kind::clip};
     }
 };
 
@@ -88,6 +90,17 @@ struct context_state {
         return stack.empty();
     }
 
+    [[nodiscard]] auto in_clip() const -> bool {
+        return kind() == edit_kind::clip;
+    }
+
+    // Узел выбирают и в префабе, и в клипе: в клипе выбор говорит, чью дорожку
+    // правят и кого двигает гизмо. Внутри объёма выбирать нечего — узел уже
+    // назван контекстом, а в автомате узлов нет вовсе.
+    [[nodiscard]] auto allows_node_select() const -> bool {
+        return kind() == edit_kind::prefab || kind() == edit_kind::clip;
+    }
+
     // Узел, чей под-ассет открыт. Пусто — либо префаб, либо контекст без узла.
     [[nodiscard]] auto node_name() const -> std::string_view {
         return stack.empty() ? std::string_view{} : std::string_view{stack.back().node_name};
@@ -99,7 +112,7 @@ struct context_state {
     // когда-нибудь можно нажать здесь.
     [[nodiscard]] auto allows_tool(tools tool) const -> bool {
         switch (tool) {
-            case tools::select_entity: return in_prefab();
+            case tools::select_entity: return allows_node_select();
             case tools::add_voxel:
             case tools::remove_voxel:
             case tools::paint_voxel:
@@ -110,7 +123,7 @@ struct context_state {
     }
 
     [[nodiscard]] auto default_tool() const -> tools {
-        return in_prefab() ? tools::select_entity : tools::add_voxel;
+        return kind() == edit_kind::model ? tools::add_voxel : tools::select_entity;
     }
 
     auto enter(edit_context ctx) -> void {
@@ -166,7 +179,6 @@ struct animation_state {
     uint32 selected_keyframe_id = asset::invalid_keyframe_id;
     float32 timeline_cursor     = 0.f;
     std::unordered_set<std::string> expanded_tracks;
-    bool animation_mode = false;
 
     bool need_toggle_playback = false;
     bool need_stop_playback   = false;

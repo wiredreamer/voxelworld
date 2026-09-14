@@ -34,7 +34,7 @@ app::app(
     , keyframe_service_(eng, state_, op_manager_)
 
     , menu_bar_(eng, state_, op_manager_, file_service_)
-    , breadcrumb_bar_(eng, state_)
+    , breadcrumb_bar_(eng, state_, clip_service_)
     , tool_panel_(state_)
     , block_palette_panel_(eng, state_)
     , entity_properties_panel_(eng, state_, op_manager_)
@@ -154,7 +154,7 @@ auto app::render(
     }
     if (state_.ui.show_clip_manager) {
         clip_manager_panel_.render(delta_time);
-    } else if (state_.anim.animation_mode) {
+    } else if (state_.ctx.in_clip()) {
         clip_service_.force_exit_animation_mode();
     }
     keyframe_properties_panel_.render(delta_time);
@@ -173,12 +173,12 @@ auto app::render(
         state_.file.has_unsaved_changes != prev_unsaved_state_ ||
         state_.anim.selected_clip_name != prev_clip_name_ ||
         state_.anim.has_any_unsaved_clip() != prev_clip_unsaved_state_ ||
-        state_.anim.animation_mode != prev_animation_mode_) {
+        state_.ctx.in_clip() != prev_in_clip_) {
         prev_filename_           = state_.file.filename;
         prev_unsaved_state_      = state_.file.has_unsaved_changes;
         prev_clip_name_          = state_.anim.selected_clip_name;
         prev_clip_unsaved_state_ = state_.anim.has_any_unsaved_clip();
-        prev_animation_mode_     = state_.anim.animation_mode;
+        prev_in_clip_            = state_.ctx.in_clip();
         update_title_();
     }
 
@@ -279,7 +279,7 @@ auto app::handle_file_shortcuts(
         state_.ui.need_open_file_modal = true;
     }
     if (ev.key == keys::S && ev.with(mods::CTRL) && !ev.with(mods::SHIFT)) {
-        if (state_.anim.animation_mode && !state_.anim.selected_clip_name.empty()) {
+        if (state_.ctx.in_clip() && !state_.anim.selected_clip_name.empty()) {
             state_.ui.need_save_clip = true;
         } else {
             file_service_.save();
@@ -388,7 +388,7 @@ auto app::update_title_() -> void {
             title += std::format(" | {}.voxa{}", state_.anim.selected_clip_name, clip_suffix);
         }
 
-        if (state_.anim.animation_mode) {
+        if (state_.ctx.in_clip()) {
             title += " | ANIMATION";
         }
         if (state_.file.has_unsaved_changes) {

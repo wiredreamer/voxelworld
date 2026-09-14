@@ -142,7 +142,7 @@ auto menu_bar::render(
         if (ImGui::MenuItem("Play/Pause", "Space", false, has_clip)) {
             state_->anim.need_toggle_playback = true;
         }
-        if (ImGui::MenuItem("Stop", nullptr, false, state_->anim.animation_mode)) {
+        if (ImGui::MenuItem("Stop", nullptr, false, state_->ctx.in_clip())) {
             state_->anim.need_stop_playback = true;
         }
         ImGui::Separator();

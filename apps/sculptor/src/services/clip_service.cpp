@@ -144,23 +144,27 @@ auto clip_service::close_clip(
 }
 
 auto clip_service::enter_animation_mode() -> void {
-    if (state_->anim.animation_mode) {
+    if (state_->ctx.in_clip()) {
         return;
     }
 
     save_transforms();
-    state_->anim.animation_mode = true;
+
+    // Клип открывается поверх самого префаба, а не поверх объёма: внутри .voxm
+    // анимации нет, и крошки не должны делать вид, что walk.voxa лежит в голове.
+    state_->ctx.leave_to(0);
+    state_->ctx.enter(edit_context::clip());
 }
 
 auto clip_service::exit_animation_mode() -> void {
     stop_all_layers();
     restore_transforms();
-    state_->anim.animation_mode  = false;
+    state_->ctx.leave_to(0);
     state_->anim.timeline_cursor = 0.f;
 }
 
 auto clip_service::force_exit_animation_mode() -> void {
-    if (state_->anim.animation_mode) {
+    if (state_->ctx.in_clip()) {
         exit_animation_mode();
     }
     state_->ui.show_timeline = false;

@@ -554,15 +554,18 @@ class breadcrumb_bar final {
 public:
     using engine_type = gfx::engine;
 
-    breadcrumb_bar(engine_type& eng, app_state& st);
+    breadcrumb_bar(engine_type& eng, app_state& st, clip_service& clip_svc);
 
     auto render(float delta_time) -> void;
 
 private:
+    auto leave_to_(std::size_t depth) -> void;
+
     [[nodiscard]] auto label_of_(const edit_context& ctx) const -> std::string;
 
     engine_type* engine_;
     app_state* state_;
+    clip_service* clip_service_;
 };
 
 }  // namespace vw::sculptor
