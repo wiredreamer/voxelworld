@@ -55,6 +55,70 @@ struct file_state {
     std::unordered_set<ecs::entity> dirty_models;
 };
 
+// Что правится прямо сейчас. Не флаг «режим анимации», а тип документа: из
+// .voxf надо уметь провалиться в клип состояния, из префаба — в объём узла, и
+// одним булевым полем такая вложенность не описывается.
+enum class edit_kind : uint8 { prefab, model, clip, fsm };
+
+// Под-ассет, в который провалились. Объём опознаётся узлом, а не ссылкой:
+// ссылка у нового узла появляется только при первой записи и меняется вместе с
+// именем префаба. Клип и автомат узла не имеют и опознаются файлом.
+struct edit_context {
+    edit_kind kind = edit_kind::model;
+    std::string node_name;
+    asset::asset_ref ref;
+};
+
+struct context_state {
+    // Стек под-ассетов поверх документа. Пусто — правится сам префаб; его имя в
+    // крошках берётся из file.filename, чтобы «Save As» не оставил там старое.
+    std::vector<edit_context> stack;
+
+    [[nodiscard]] auto kind() const -> edit_kind {
+        return stack.empty() ? edit_kind::prefab : stack.back().kind;
+    }
+
+    [[nodiscard]] auto in_prefab() const -> bool {
+        return stack.empty();
+    }
+
+    // Узел, чей под-ассет открыт. Пусто — либо префаб, либо контекст без узла.
+    [[nodiscard]] auto node_name() const -> std::string_view {
+        return stack.empty() ? std::string_view{} : std::string_view{stack.back().node_name};
+    }
+
+    // Воксельные инструменты работают только внутри объёма, выбор узла — только
+    // в самом префабе. Инструмент, которому в этом контексте нечего трогать, не
+    // прячется «серым», а не показывается вовсе: серая кнопка обещает, что её
+    // когда-нибудь можно нажать здесь.
+    [[nodiscard]] auto allows_tool(tools tool) const -> bool {
+        switch (tool) {
+            case tools::select_entity: return in_prefab();
+            case tools::add_voxel:
+            case tools::remove_voxel:
+            case tools::paint_voxel:
+            case tools::color_picker: return kind() == edit_kind::model;
+            case tools::invalid: break;
+        }
+        return false;
+    }
+
+    [[nodiscard]] auto default_tool() const -> tools {
+        return in_prefab() ? tools::select_entity : tools::add_voxel;
+    }
+
+    auto enter(edit_context ctx) -> void {
+        stack.push_back(std::move(ctx));
+    }
+
+    // Выход по крошке: глубина 0 — сам документ.
+    auto leave_to(std::size_t depth) -> void {
+        if (depth < stack.size()) {
+            stack.resize(depth);
+        }
+    }
+};
+
 struct scene_state {
     std::string selected_name;
     std::string root_name;
@@ -168,6 +232,7 @@ struct app_state {
 
     ui_state ui;
     file_state file;
+    context_state ctx;
     scene_state scene;
     tool_state tool;
     animation_state anim;

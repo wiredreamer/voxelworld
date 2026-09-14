@@ -41,7 +41,8 @@ auto entity_tree_panel::render(
     ImGui::Begin("Entity Tree", nullptr, window_flags);
 
     const bool can_add =
-        !state_->anim.animation_mode && (state_->scene.root_name.empty() || !state_->scene.selected_name.empty());
+        !state_->anim.animation_mode && state_->ctx.in_prefab() &&
+        (state_->scene.root_name.empty() || !state_->scene.selected_name.empty());
     if (!can_add) {
         ImGui::BeginDisabled();
     }
@@ -54,7 +55,8 @@ auto entity_tree_panel::render(
 
     ImGui::SameLine();
 
-    const bool can_remove = !state_->anim.animation_mode && !state_->scene.selected_name.empty() &&
+    const bool can_remove = !state_->anim.animation_mode && state_->ctx.in_prefab() &&
+        !state_->scene.selected_name.empty() &&
         state_->scene.name_to_entity.contains(state_->scene.selected_name);
     if (!can_remove) {
         ImGui::BeginDisabled();
@@ -82,6 +84,16 @@ auto entity_tree_panel::render(
     state_->ui.right_top_voffset += ImGui::GetWindowHeight() + 10.0f;
 
     ImGui::End();
+}
+
+// Выбор узла — правка префаба, а внутри объёма её нет: провалившись в .voxm,
+// правишь именно тот узел, через который вошёл, и уехать из него мимо крошек
+// нельзя.
+auto entity_tree_panel::select_(const std::string& name) const -> void {
+    if (!state_->ctx.in_prefab()) {
+        return;
+    }
+    state_->scene.selected_name = name;
 }
 
 auto entity_tree_panel::render_entity_node(
@@ -122,15 +134,15 @@ auto entity_tree_panel::render_entity_node(
         }
     } else {
         if (ImGui::Selectable(node_id.c_str(), is_selected)) {
-            state_->scene.selected_name = name;
+            select_(name);
         }
     }
 
     if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
-        state_->scene.selected_name = name;
+        select_(name);
     }
 
-    if (!state_->anim.animation_mode) {
+    if (!state_->anim.animation_mode && state_->ctx.in_prefab()) {
         const auto context_menu_id =
             std::format("EntityContextMenu_{}_{}", ent.index, ent.generation);
         if (ImGui::BeginPopupContextItem(context_menu_id.c_str())) {

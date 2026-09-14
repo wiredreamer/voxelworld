@@ -176,6 +176,12 @@ auto entity_properties_panel::render_components_section() -> void {
             static_cast<int>(set_name.size()), set_name.data()
         );
         ImGui::SameLine();
+        if (ImGui::Button("Edit##model")) {
+            state_->ctx.enter(edit_context{
+                .kind = edit_kind::model, .node_name = name, .ref = model_comp.get_source()
+            });
+        }
+        ImGui::SameLine();
         if (ImGui::Button("Remove##model")) {
             op_manager_->execute(std::make_unique<remove_model_component_operation>(
                 *engine_, *state_, remove_model_component_params{.name = name}

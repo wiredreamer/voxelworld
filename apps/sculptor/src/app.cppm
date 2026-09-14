@@ -35,6 +35,7 @@ private:
 
     auto handle_animation_actions_() -> void;
     auto collect_dirty_models_() -> void;
+    auto prune_contexts_() -> void;
     auto update_title_() -> void;
     static auto init_asset_dirs_() -> void;
 
@@ -58,6 +59,7 @@ private:
     std::unordered_map<tools, std::unique_ptr<base_tool>> tools_;
 
     menu_bar menu_bar_;
+    breadcrumb_bar breadcrumb_bar_;
     tool_panel tool_panel_;
     block_palette_panel block_palette_panel_;
     entity_properties_panel entity_properties_panel_;

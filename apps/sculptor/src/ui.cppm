@@ -368,6 +368,8 @@ private:
     create_entity_modal creation_modal_;
     delete_entity_modal deletion_modal_;
 
+    auto select_(const std::string& name) const -> void;
+
     auto render_entity_node(
         const std::string& name, const std::unordered_set<ecs::entity>& preview_entities
     ) -> void;
@@ -494,6 +496,28 @@ private:
 
     bool need_overwrite_confirmation_ = false;
     bool has_overwrite_confirmation_  = false;
+};
+
+}  // namespace vw::sculptor
+
+// ---- from src/ui/breadcrumb_bar.h
+export namespace vw::sculptor {
+
+// Где мы находимся и как выйти. Единственное место, которое показывает стек
+// контекстов, поэтому и единственное, где он перематывается назад.
+class breadcrumb_bar final {
+public:
+    using engine_type = gfx::engine;
+
+    breadcrumb_bar(engine_type& eng, app_state& st);
+
+    auto render(float delta_time) -> void;
+
+private:
+    [[nodiscard]] auto label_of_(const edit_context& ctx) const -> std::string;
+
+    engine_type* engine_;
+    app_state* state_;
 };
 
 }  // namespace vw::sculptor

@@ -52,6 +52,10 @@ auto tool_panel::render(
 auto tool_panel::render_tool_button(
     tools tool, std::string_view label, std::string_view shortcut
 ) const -> void {
+    if (!state_->ctx.allows_tool(tool)) {
+        return;
+    }
+
     const bool is_selected        = state_->tool.selected_tool == tool;
     const auto button_color       = is_selected ? ImGuiCol_ButtonActive : ImGuiCol_Button;
     const auto button_hover_color = is_selected ? ImGuiCol_ButtonActive : ImGuiCol_ButtonHovered;

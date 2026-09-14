@@ -34,6 +34,7 @@ app::app(
     , keyframe_service_(eng, state_, op_manager_)
 
     , menu_bar_(eng, state_, op_manager_, file_service_)
+    , breadcrumb_bar_(eng, state_)
     , tool_panel_(state_)
     , block_palette_panel_(eng, state_)
     , entity_properties_panel_(eng, state_, op_manager_)
@@ -103,6 +104,14 @@ auto app::render(
     float delta_time
 ) -> void {
     collect_dirty_models_();
+    prune_contexts_();
+
+    // Правило одно и живёт в контексте, поэтому и горячие клавиши, и панель
+    // подчиняются ему здесь: выбранный инструмент, которому в этом контексте
+    // нечего делать, меняется на подходящий, а не тихо перестаёт работать.
+    if (!state_.ctx.allows_tool(state_.tool.selected_tool)) {
+        state_.tool.selected_tool = state_.ctx.default_tool();
+    }
 
     if (state_.tool.selected_tool != active_tool_) {
         active_tool_ = state_.tool.selected_tool;
@@ -121,6 +130,7 @@ auto app::render(
     state_.ui.right_top_voffset   = 0.f;
 
     menu_bar_.render(delta_time);
+    breadcrumb_bar_.render(delta_time);
 
     // left side
     tool_panel_.render(delta_time);
@@ -386,6 +396,23 @@ auto app::update_title_() -> void {
         }
     }
     get_engine().get_window().set_title(title);
+}
+
+// Узел может исчезнуть из-под контекста: удаление, undo создания, переоткрытие
+// документа. Проверять это в каждой панели значит забыть в одной из них, а
+// забытая проверка здесь — путь в никуда, по которому ещё и рисуют.
+auto app::prune_contexts_() -> void {
+    auto& stack = state_.ctx.stack;
+
+    const auto gone = [this](const edit_context& ctx) {
+        return ctx.kind == edit_kind::model &&
+               !state_.scene.name_to_entity.contains(ctx.node_name);
+    };
+
+    const auto it = std::ranges::find_if(stack, gone);
+    if (it != stack.end()) {
+        stack.erase(it, stack.end());
+    }
 }
 
 auto app::collect_dirty_models_() -> void {
