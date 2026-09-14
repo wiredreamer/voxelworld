@@ -19,14 +19,14 @@ auto color_picker_tool::render(
     [[maybe_unused]] float delta_time
 ) -> void {
     const bool is_hovered = hovered_voxel_ != vec3i{-1, -1, -1};
-    const bool has_selected_entity =
-        state_->scene.name_to_entity.contains(state_->scene.selected_name);
-    if (!is_hovered || !has_selected_entity) {
+    const bool has_edited_entity =
+        state_->scene.name_to_entity.contains(state_->edited_node());
+    if (!is_hovered || !has_edited_entity) {
         return;
     }
 
     auto& world    = engine_->get_world();
-    const auto ent = state_->scene.name_to_entity[state_->scene.selected_name];
+    const auto ent = state_->scene.name_to_entity[state_->edited_node()];
 
     const bool is_renderable =  //
         world.has<ecs::transform_component>(ent) &&
@@ -71,14 +71,14 @@ auto color_picker_tool::on_mouse_press(
     }
 
     const bool is_hovered = hovered_voxel_ != vec3i{-1, -1, -1};
-    const bool has_selected_entity =
-        state_->scene.name_to_entity.contains(state_->scene.selected_name);
-    if (!is_hovered || !has_selected_entity) {
+    const bool has_edited_entity =
+        state_->scene.name_to_entity.contains(state_->edited_node());
+    if (!is_hovered || !has_edited_entity) {
         return;
     }
 
     auto& world    = engine_->get_world();
-    const auto ent = state_->scene.name_to_entity[state_->scene.selected_name];
+    const auto ent = state_->scene.name_to_entity[state_->edited_node()];
 
     const bool is_renderable =  //
         world.has<ecs::transform_component>(ent) &&
@@ -115,10 +115,10 @@ auto color_picker_tool::update_hovered_voxel_() -> void {
         return;
     }
 
-    const bool is_selected_entity =  //
-        state_->scene.name_to_entity.contains(state_->scene.selected_name) &&
-        hit->ent == state_->scene.name_to_entity[state_->scene.selected_name];
-    if (is_selected_entity) {
+    const bool is_edited_entity =  //
+        state_->scene.name_to_entity.contains(state_->edited_node()) &&
+        hit->ent == state_->scene.name_to_entity[state_->edited_node()];
+    if (is_edited_entity) {
         hovered_voxel_ = hit->voxel_pos;
     }
 }

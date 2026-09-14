@@ -67,6 +67,12 @@ struct edit_context {
     edit_kind kind = edit_kind::model;
     std::string node_name;
     asset::asset_ref ref;
+
+    // У объёма ссылка не хранится намеренно: её знает узел, и «Save As» меняет
+    // её вместе с именем префаба. Крошка спрашивает мир, а не контекст.
+    [[nodiscard]] static auto model(std::string node_name) -> edit_context {
+        return edit_context{.kind = edit_kind::model, .node_name = std::move(node_name)};
+    }
 };
 
 struct context_state {
@@ -237,6 +243,13 @@ struct app_state {
     tool_state tool;
     animation_state anim;
     socket_state sockets;
+
+    // Узел, который правят воксельные инструменты: его называет контекст, а не
+    // выделение. Undo умеет вернуть контекст чужого объёма, и красить тогда надо
+    // тот узел, чьё имя стоит в крошках.
+    [[nodiscard]] auto edited_node() const -> const std::string& {
+        return ctx.in_prefab() ? scene.selected_name : ctx.stack.back().node_name;
+    }
 
     auto reset(world_type& world) -> void;
 };

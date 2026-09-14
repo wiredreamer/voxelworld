@@ -45,8 +45,8 @@ app::app(
     , clip_manager_panel_(eng, state_, op_manager_, clip_service_)
     , timeline_panel_(eng, state_, op_manager_, clip_service_, keyframe_service_)
     , startup_modal_(eng, state_)
-    , new_file_modal_(eng, state_)
-    , open_file_modal_(eng, state_, model_library_)
+    , new_file_modal_(eng, state_, op_manager_)
+    , open_file_modal_(eng, state_, model_library_, op_manager_)
     , save_as_modal_(eng, state_, file_service_) {
     init_asset_dirs_();
 

@@ -13,6 +13,8 @@ import :state;
 // ---- from src/operations/base_operation.h
 export namespace vw::sculptor {
 
+class operation_manager;
+
 class base_operation {
 public:
     base_operation()          = default;
@@ -26,6 +28,17 @@ public:
 
     virtual auto execute() -> void = 0;
     virtual auto undo() -> void    = 0;
+
+    // Контекст, в котором правку сделали: по нему undo возвращает редактор туда,
+    // где её видно. Иначе Ctrl+Z из префаба меняет воксель в закрытом объёме.
+    [[nodiscard]] auto get_context() const -> const std::vector<edit_context>& {
+        return context_;
+    }
+
+private:
+    friend class operation_manager;
+
+    std::vector<edit_context> context_;
 };
 
 }  // namespace vw::sculptor
@@ -404,12 +417,16 @@ export namespace vw::sculptor {
 
 class operation_manager final {
 public:
-    operation_manager() = default;
+    explicit operation_manager(app_state& st);
 
     operation_manager(const operation_manager&)                    = delete;
     auto operator=(const operation_manager&) -> operation_manager& = delete;
 
     auto execute(std::unique_ptr<base_operation> op) -> void;
+
+    // История принадлежит документу: с новым документом откатывать нечего, а
+    // старые операции откатили бы правку в сцене, которой уже нет.
+    auto clear() -> void;
 
     [[nodiscard]] auto is_undo_empty() const -> bool;
     auto undo() -> void;
@@ -418,6 +435,8 @@ public:
     auto redo() -> void;
 
 private:
+    app_state* state_;
+
     std::deque<std::unique_ptr<base_operation>> undo_;
     std::deque<std::unique_ptr<base_operation>> redo_;
 };

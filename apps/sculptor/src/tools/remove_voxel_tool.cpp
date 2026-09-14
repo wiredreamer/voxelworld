@@ -22,11 +22,11 @@ auto remove_voxel_tool::render(
         return;
     }
 
-    if (!state_->scene.name_to_entity.contains(state_->scene.selected_name)) {
+    if (!state_->scene.name_to_entity.contains(state_->edited_node())) {
         return;
     }
 
-    auto ent = state_->scene.name_to_entity[state_->scene.selected_name];
+    auto ent = state_->scene.name_to_entity[state_->edited_node()];
 
     auto& world        = engine_->get_world();
     bool is_renderable =  //
@@ -73,12 +73,12 @@ auto remove_voxel_tool::on_mouse_press(
             return;
         }
 
-        if (!state_->scene.name_to_entity.contains(state_->scene.selected_name)) {
+        if (!state_->scene.name_to_entity.contains(state_->edited_node())) {
             return;
         }
 
         remove_voxel_params params = {
-            .name = state_->scene.selected_name,
+            .name = state_->edited_node(),
             .position = hovered_voxel_,
         };
 
@@ -111,10 +111,10 @@ auto remove_voxel_tool::update_hovered_voxel_() -> void {
         return;
     }
 
-    const bool is_selected_entity =  //
-        state_->scene.name_to_entity.contains(state_->scene.selected_name) &&
-        hit->ent == state_->scene.name_to_entity[state_->scene.selected_name];
-    if (is_selected_entity) {
+    const bool is_edited_entity =  //
+        state_->scene.name_to_entity.contains(state_->edited_node()) &&
+        hit->ent == state_->scene.name_to_entity[state_->edited_node()];
+    if (is_edited_entity) {
         hovered_voxel_ = hit->voxel_pos;
     }
 }

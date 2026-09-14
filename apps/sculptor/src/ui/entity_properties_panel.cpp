@@ -241,11 +241,7 @@ auto entity_properties_panel::render_model_(
     }
 
     if (ImGui::Button("Edit voxels")) {
-        state_->ctx.enter(
-            edit_context{
-                .kind = edit_kind::model, .node_name = name, .ref = model_comp.get_source()
-            }
-        );
+        state_->ctx.enter(edit_context::model(name));
     }
 }
 

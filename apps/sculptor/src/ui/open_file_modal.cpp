@@ -16,9 +16,10 @@ import vw.gfx;
 namespace vw::sculptor {
 
 open_file_modal::open_file_modal(
-    engine_type& eng, app_state& st, asset::model_library& library
+    engine_type& eng, app_state& st, asset::model_library& library,
+    operation_manager& op_manager
 )
-    : engine_(&eng), state_(&st), library_(&library) {}
+    : engine_(&eng), state_(&st), library_(&library), op_manager_(&op_manager) {}
 
 auto open_file_modal::render(
     float /*delta_time*/
@@ -110,6 +111,7 @@ auto open_file_modal::open_file_() -> bool {
     }
 
     state_->reset(engine_->get_world());
+    op_manager_->clear();
 
     state_->ui.need_startup_modal = false;
 

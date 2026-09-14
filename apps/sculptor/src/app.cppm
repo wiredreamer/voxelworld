@@ -48,7 +48,7 @@ private:
     std::string prev_filename_;
 
     app_state state_;
-    operation_manager op_manager_;
+    operation_manager op_manager_{state_};
     asset::model_library model_library_;
     file_service file_service_;
     clip_service clip_service_;

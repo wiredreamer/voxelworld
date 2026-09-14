@@ -18,15 +18,16 @@ add_voxel_tool::add_voxel_tool(
 auto add_voxel_tool::render(
     float /*delta_time*/
 ) -> void {
-    const bool is_hovered          = hovered_voxel_ != vec3i{-1, -1, -1};
-    const bool has_selected_entity = state_->scene.name_to_entity.contains(state_->scene.selected_name);
+    const bool is_hovered = hovered_voxel_ != vec3i{-1, -1, -1};
+    const bool has_edited_entity =
+        state_->scene.name_to_entity.contains(state_->edited_node());
 
-    if (!is_hovered || !has_selected_entity) {
+    if (!is_hovered || !has_edited_entity) {
         return;
     }
 
     auto& world    = engine_->get_world();
-    const auto ent = state_->scene.name_to_entity[state_->scene.selected_name];
+    const auto ent = state_->scene.name_to_entity[state_->edited_node()];
 
     const bool is_renderable =  //
         world.has<ecs::transform_component>(ent) &&
@@ -81,11 +82,11 @@ auto add_voxel_tool::on_mouse_press(
             return;
         }
 
-        if (!state_->scene.name_to_entity.contains(state_->scene.selected_name)) {
+        if (!state_->scene.name_to_entity.contains(state_->edited_node())) {
             return;
         }
 
-        const auto ent = state_->scene.name_to_entity[state_->scene.selected_name];
+        const auto ent = state_->scene.name_to_entity[state_->edited_node()];
 
         auto& world        = engine_->get_world();
         const bool is_renderable =  //
@@ -116,7 +117,7 @@ auto add_voxel_tool::on_mouse_press(
             const auto expand_dir = vec3i{x, y, z};
 
             expand_model_params expand_params = {
-                .name = state_->scene.selected_name,
+                .name = state_->edited_node(),
                 .dir  = expand_dir,
             };
             auto expand_op =
@@ -128,7 +129,7 @@ auto add_voxel_tool::on_mouse_press(
         }
 
         add_voxel_params params;
-        params.name      = state_->scene.selected_name;
+        params.name      = state_->edited_node();
         params.position  = hovered_voxel_;
         params.new_block = state_->tool.selected_block;
 
@@ -159,10 +160,10 @@ auto add_voxel_tool::update_hovered_voxel_() -> void {
         return;
     }
 
-    const bool is_selected_entity =  //
-        state_->scene.name_to_entity.contains(state_->scene.selected_name) &&
-        hit->ent == state_->scene.name_to_entity[state_->scene.selected_name];
-    if (is_selected_entity) {
+    const bool is_edited_entity =  //
+        state_->scene.name_to_entity.contains(state_->edited_node()) &&
+        hit->ent == state_->scene.name_to_entity[state_->edited_node()];
+    if (is_edited_entity) {
         hovered_voxel_ = hit->empty_pos;
     }
 }
