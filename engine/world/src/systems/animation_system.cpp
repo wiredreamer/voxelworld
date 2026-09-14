@@ -682,9 +682,6 @@ auto animation_system::merge_with_rest(
     if (!has_keyframes(asset::animation_property::scale)) {
         result.set_scale(rest.get_scale());
     }
-    if (!has_keyframes(asset::animation_property::origin)) {
-        result.set_origin(rest.get_origin());
-    }
 
     return result;
 }

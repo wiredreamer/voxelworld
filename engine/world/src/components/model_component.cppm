@@ -6,6 +6,7 @@ import vw.core;
 import vw.asset;
 import vw.ecs;
 import :spatial;
+import :components.transform;
 
 export namespace vw::ecs {
 
@@ -73,11 +74,36 @@ struct model_component final {
         return model_->get_identity();
     }
 
+    // Точка объёма, которой он садится на начало координат узла. У сущности без
+    // модели её попросту нет, и объём тогда не рисуется.
+    [[nodiscard]] auto get_pivot() const -> vec3f {
+        return model_ ? model_->pivot() : vec3f{};
+    }
+
+    // Из какого .voxm пришёл объём. Пустая ссылка законна: у чанка мира и у
+    // только что созданного узла файла ещё нет, имя ему даёт первая запись.
+    [[nodiscard]] auto get_source() const -> const asset::asset_ref& {
+        return source_;
+    }
+
 private:
     friend class model_system;
 
     std::shared_ptr<asset::model> model_;
     std::shared_ptr<asset::chunk_volume> chunk_;
+    asset::asset_ref source_;
 };
+
+// Матрица, в которой лежит сам воксельный объём: матрица узла плюс сдвиг на
+// точку вращения модели. Двух компонентов она требует не случайно — объём без
+// узла негде поставить, а узел без объёма её и не спрашивает. Дети наследуют
+// матрицу узла и точку модели не видят, иначе замена варианта таскала бы за
+// собой всё поддерево.
+[[nodiscard]] inline auto model_matrix(
+    const transform_component& transform_comp, const model_component& model_comp
+) -> mat4f {
+    return transform_comp.get_world_matrix() *
+        math::translation_matrix(-model_comp.get_pivot());
+}
 
 }  // namespace vw::ecs

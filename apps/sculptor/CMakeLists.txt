@@ -41,6 +41,7 @@ target_sources(${PROJECT_NAME}
         src/operations/remove_track_operation.cpp
         src/operations/remove_voxel_operation.cpp
         src/operations/set_socket_transform_operation.cpp
+        src/operations/set_pivot_operation.cpp
         src/operations/set_transform_operation.cpp
         src/services/clip_service.cpp
         src/services/file_service.cpp

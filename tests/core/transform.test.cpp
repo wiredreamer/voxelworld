@@ -10,7 +10,6 @@ TEST_CASE("transform default state", "[transform]") {
     REQUIRE(t.get_position() == vec3f{0.0f, 0.0f, 0.0f});
     REQUIRE(t.get_rotation() == quat{});
     REQUIRE(t.get_scale() == vec3f{1.0f, 1.0f, 1.0f});
-    REQUIRE(t.get_origin() == vec3f{0.0f, 0.0f, 0.0f});
 }
 
 TEST_CASE("transform setters and getters", "[transform]") {
@@ -31,9 +30,6 @@ TEST_CASE("transform setters and getters", "[transform]") {
 
     t.set_scale(vec3f{2.0f, 3.0f, 4.0f});
     REQUIRE(t.get_scale() == vec3f{2.0f, 3.0f, 4.0f});
-
-    t.set_origin(vec3f{5.0f, 5.0f, 5.0f});
-    REQUIRE(t.get_origin() == vec3f{5.0f, 5.0f, 5.0f});
 }
 
 TEST_CASE("transform translate", "[transform]") {
@@ -99,14 +95,12 @@ TEST_CASE("transform calc_matrix", "[transform]") {
         t.set_position(vec3f{1.0f, 2.0f, 3.0f});
         t.set_rotation_euler(vec3f{0.1f, 0.2f, 0.3f});
         t.set_scale(vec3f{1.5f, 1.5f, 1.5f});
-        t.set_origin(vec3f{0.5f, 0.5f, 0.5f});
 
         auto m = t.calc_matrix();
         auto expected = math::transform_matrix(
             vec3f{1.0f, 2.0f, 3.0f},
             vec3f{0.1f, 0.2f, 0.3f},
-            vec3f{1.5f, 1.5f, 1.5f},
-            vec3f{0.5f, 0.5f, 0.5f}
+            vec3f{1.5f, 1.5f, 1.5f}
         );
         REQUIRE(math::approx_equal(m, expected));
     }

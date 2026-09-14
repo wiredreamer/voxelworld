@@ -28,9 +28,7 @@ dummy_enemy::dummy_enemy(gfx::engine& engine, const vec2f& spawn_xz)
         .with<ecs::model_component>()
         .get_entity();
 
-    transform_sys.modify(ent_)
-        .set_position({spawn_xz_.x, 500.0f, spawn_xz_.y})
-        .set_origin({-8.0f, -16.0f, -8.0f});
+    transform_sys.modify(ent_).set_position({spawn_xz_.x, 500.0f, spawn_xz_.y});
 
     physics_sys.modify_collider(ent_)
         .set_extents({16.0f, 32.0f, 16.0f})
@@ -84,6 +82,7 @@ auto dummy_enemy::create_model() -> std::shared_ptr<asset::model> {
     auto& model_reg = engine_.get_world().resource<asset::model_registry>();
     auto model = model_reg.create_unnamed(blocks::creature::category, 16, 32, 16);
     model->fill(voxel{blocks::creature::cloth_red[1]});
+    model->set_pivot({8.0f, 16.0f, 8.0f});
     return model;
 }
 

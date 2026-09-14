@@ -50,6 +50,34 @@ auto model_system::model_modifier::set_model(
     system_->world_->registry().request_change<model_component>(entity_);
 }
 
+auto model_system::model_modifier::set_model(
+    std::shared_ptr<asset::model> model_ptr, const asset::asset_ref& source
+) -> void {
+    component_->source_ = source;
+    set_model(std::move(model_ptr));
+}
+
+auto model_system::model_modifier::set_source(
+    const asset::asset_ref& source
+) -> void {
+    component_->source_ = source;
+}
+
+auto model_system::model_modifier::set_pivot(
+    const vec3f& pivot
+) -> void {
+    if (!component_->model_) {
+        return;
+    }
+
+    component_->model_->set_pivot(pivot);
+
+    // Меняется место объёма, а не его геометрия, поэтому правка заявляется по
+    // трансформу: изменение модели гонит меш на пересборку, а матрицу в буфере
+    // рендера переписывает именно ветка трансформа.
+    system_->world_->registry().request_change<transform_component>(entity_);
+}
+
 auto model_system::model_modifier::set_chunk(
     std::shared_ptr<asset::chunk_volume> volume
 ) -> void {

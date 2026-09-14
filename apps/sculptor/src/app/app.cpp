@@ -8,6 +8,7 @@ module vw.sculptor;
 import std;
 
 import vw.core;
+import vw.asset;
 import vw.ecs;
 import vw.world;
 import vw.platform;
@@ -21,7 +22,12 @@ app::app(
     : gfx::app(eng)
     , camera_controller_(0.1f, 5.0f)
 
-    , file_service_(eng, state_)
+    // Корень ассетов у редактора — его рабочий каталог: ссылки в префабе
+    // начинаются с папки моделей, а не с имени файла.
+    , model_library_(
+          eng.get_world().resource<asset::model_registry>(), eng.get_block_registry(), "."
+      )
+    , file_service_(eng, state_, model_library_)
     , clip_service_(eng, state_, op_manager_)
     , playback_service_(eng, state_)
     , keyframe_service_(eng, state_, op_manager_)
@@ -30,14 +36,14 @@ app::app(
     , tool_panel_(state_)
     , block_palette_panel_(eng, state_)
     , entity_properties_panel_(eng, state_, op_manager_)
-    , socket_panel_(eng, state_, op_manager_)
+    , socket_panel_(eng, state_, op_manager_, model_library_)
     , keyframe_properties_panel_(eng, state_, op_manager_)
     , entity_tree_panel_(eng, state_, op_manager_)
     , clip_manager_panel_(eng, state_, op_manager_, clip_service_)
     , timeline_panel_(eng, state_, op_manager_, clip_service_, keyframe_service_)
     , startup_modal_(eng, state_)
     , new_file_modal_(eng, state_)
-    , open_file_modal_(eng, state_)
+    , open_file_modal_(eng, state_, model_library_)
     , save_as_modal_(eng, state_, file_service_) {
     init_asset_dir_();
 
@@ -94,6 +100,8 @@ app::~app() {
 auto app::render(
     float delta_time
 ) -> void {
+    collect_dirty_models_();
+
     if (state_.tool.selected_tool != active_tool_) {
         active_tool_ = state_.tool.selected_tool;
         tools_[active_tool_]->on_activate();
@@ -373,6 +381,15 @@ auto app::update_title_() -> void {
         }
     }
     get_engine().get_window().set_title(title);
+}
+
+auto app::collect_dirty_models_() -> void {
+    // Правку объёма ловим общим признаком изменения, а не из каждой операции:
+    // иначе список придётся дописывать в каждой новой из них, и первая же
+    // забытая молча потеряет правку при сохранении.
+    for (const auto ent : get_engine().get_world().changed<ecs::model_component>()) {
+        state_.file.dirty_models.insert(ent);
+    }
 }
 
 auto app::init_asset_dir_() -> void {

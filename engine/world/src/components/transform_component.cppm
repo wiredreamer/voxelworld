@@ -53,10 +53,6 @@ struct transform_component final {
         return transform_.get_scale();
     }
 
-    [[nodiscard]] auto get_origin() const -> const vec3f& {
-        return transform_.get_origin();
-    }
-
 private:
     friend class hierarchy_system;
     friend class transform_system;

@@ -3,6 +3,7 @@ export module vw.sculptor:services;
 import std;
 
 import vw.core;
+import vw.asset;
 import vw.ecs;
 import vw.world;
 import vw.platform;
@@ -51,14 +52,22 @@ class file_service final {
 public:
     using engine_type = gfx::engine;
 
-    file_service(engine_type& eng, app_state& state);
+    file_service(engine_type& eng, app_state& state, asset::model_library& library);
 
     auto save() -> bool;
     auto save_as(const std::filesystem::path& filepath) -> bool;
 
 private:
+    auto write_(const asset::asset_ref& prefab_ref) -> bool;
+
+    // Узел, объём которого ещё ни разу не лежал в файле, получает имя здесь:
+    // куда ляжет .voxm, знает только запись — она одна знает путь префаба.
+    auto assign_missing_refs_(const asset::asset_ref& prefab_ref) -> void;
+    auto write_dirty_models_() -> void;
+
     engine_type* engine_;
     app_state* state_;
+    asset::model_library* library_;
 };
 
 }  // namespace vw::sculptor

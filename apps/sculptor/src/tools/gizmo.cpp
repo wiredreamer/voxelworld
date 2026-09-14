@@ -172,10 +172,9 @@ auto gizmo::build_frame_(
 
     const auto& tc = world.get<ecs::transform_component>(ent);
 
-    // Точка вращения узла, а не угол его модели: в матрице origin стоит справа
-    // от поворота, поэтому неподвижна при вращении именно локальная точка
-    // -origin.
-    const auto pivot = tc.get_world_matrix() * (-tc.get_origin());
+    // Начало координат узла и есть его точка вращения: объём висит вокруг неё
+    // со сдвигом на собственный pivot, но сама она в матрице узла — это ноль.
+    const auto pivot = tc.get_world_matrix() * vec3f{0.0F, 0.0F, 0.0F};
 
     frame fr;
     fr.pivot = pivot;

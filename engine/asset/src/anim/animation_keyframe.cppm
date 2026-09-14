@@ -10,7 +10,9 @@ enum class animation_state : uint8 { stopped, playing, paused };
 
 enum class animation_loop_mode : uint8 { once, loop, ping_pong };
 
-enum class animation_property : uint8 { position, rotation, scale, origin };
+// Точки вращения тут нет намеренно: она описывает геометрию модели, а не позу
+// узла, и клип, знающий её, ломается от любой правки объёма.
+enum class animation_property : uint8 { position, rotation, scale };
 
 struct transition {
     float32 duration               = 0.0F;
@@ -34,11 +36,6 @@ struct animation_property_traits<animation_property::rotation> {
 
 template <>
 struct animation_property_traits<animation_property::scale> {
-    using type = vec3f;
-};
-
-template <>
-struct animation_property_traits<animation_property::origin> {
     using type = vec3f;
 };
 

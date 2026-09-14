@@ -79,9 +79,9 @@ auto voxm_serializer::serialize(
 }
 
 voxm_deserializer::voxm_deserializer(
-    model_registry& registry
+    model_registry& registry, const block_registry& blocks
 )
-    : registry_(&registry) {}
+    : registry_(&registry), blocks_(&blocks) {}
 
 auto voxm_deserializer::deserialize(
     const std::filesystem::path& filepath
@@ -107,6 +107,7 @@ auto voxm_deserializer::deserialize(
     has_category_ = false;
     has_size_     = false;
     pivot_        = vec3f{};
+    unknown_blocks_.clear();
 
     std::string line;
     while (std::getline(input, line)) {
@@ -240,6 +241,16 @@ auto voxm_deserializer::process_run_(std::istringstream& iss) -> void {
     }
 
     const auto id = block_id{category_, static_cast<uint8>(index)};
+
+    // Блок вне каталога — не повод потерять пробег: он нарисуется заглушкой, и
+    // это видно сразу, а половина модели из-за одного номера пропасть не может.
+    if (id != blocks::air && blocks_->slot_of(id) == missing_block_slot &&
+        unknown_blocks_.insert(id.value).second) {
+        log::warn(
+            detail::voxm_lc, "block {}:{} is not in the catalog and will draw as the missing block",
+            category_.value, index
+        );
+    }
 
     model_writer writer{*model_};
     for (int32 i = 0; i < count; ++i) {

@@ -621,25 +621,15 @@ auto scale_matrix(
 }
 
 auto transform_matrix(
-    const vec3f& position, const vec3f& rotation, const vec3f& scale, const vec3f& origin
+    const vec3f& position, const vec3f& rotation, const vec3f& scale
 ) -> mat4f {
-    const mat4f trans     = translation_matrix(position);
-    const mat4f orig_back = translation_matrix(origin);
-    const mat4f rot       = rotation_matrix(rotation);
-    const mat4f scl       = scale_matrix(scale);
-
-    return trans * rot * scl * orig_back;
+    return translation_matrix(position) * rotation_matrix(rotation) * scale_matrix(scale);
 }
 
 auto transform_matrix(
-    const vec3f& position, const quat& rotation, const vec3f& scale, const vec3f& origin
+    const vec3f& position, const quat& rotation, const vec3f& scale
 ) -> mat4f {
-    const mat4f trans     = translation_matrix(position);
-    const mat4f orig_back = translation_matrix(origin);
-    const mat4f rot       = rotation_matrix(rotation);
-    const mat4f scl       = scale_matrix(scale);
-
-    return trans * rot * scl * orig_back;
+    return translation_matrix(position) * rotation_matrix(rotation) * scale_matrix(scale);
 }
 
 auto transpose_matrix(
@@ -673,7 +663,6 @@ auto lerp(
     result.set_position(lerp(a.get_position(), b.get_position(), t));
     result.set_rotation(slerp(a.get_rotation(), b.get_rotation(), t));
     result.set_scale(lerp(a.get_scale(), b.get_scale(), t));
-    result.set_origin(lerp(a.get_origin(), b.get_origin(), t));
     return result;
 }
 

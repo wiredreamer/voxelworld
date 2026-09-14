@@ -28,7 +28,6 @@ public:
 private:
     auto write_header_(std::ofstream& file, const asset::vox_prefab_data& prefab) -> void;
     auto write_entity_(std::ofstream& file, const asset::vox_entity_data& ent) -> void;
-    auto write_model_(std::ofstream& file, const asset::vox_model_data& mdl) -> void;
 };
 
 }  // namespace vw::ecs

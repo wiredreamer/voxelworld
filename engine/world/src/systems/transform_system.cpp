@@ -101,25 +101,6 @@ auto transform_system::transform_modifier::set_scale(
     return *this;
 }
 
-auto transform_system::transform_modifier::set_origin(
-    const vec3f& origin
-) -> transform_modifier& {
-    auto& reg = system_->world_->registry();
-    if (!reg.has<transform_component>(entity_)) {
-        return *this;
-    }
-
-    auto& transform_comp = reg.get<transform_component>(entity_);
-    transform_comp.transform_.set_origin(origin);
-    transform_comp.local_dirty_ = true;
-    transform_comp.world_dirty_ = true;
-
-    reg.request_change<transform_component>(entity_);
-    system_->mark_children_world_dirty(entity_);
-
-    return *this;
-}
-
 auto transform_system::transform_modifier::translate(
     const vec3f& offset
 ) -> transform_modifier& {
@@ -311,10 +292,8 @@ auto transform_system::update_entity_world_matrix(
                 const auto& parent_transform_comp =
                     reg.get<transform_component>(parent);
 
-                auto parent_world_matrix = parent_transform_comp.get_world_matrix() *
-                    math::translation_matrix(-parent_transform_comp.get_origin());
-
-                transform_comp.world_matrix_ = parent_world_matrix * local_matrix;
+                transform_comp.world_matrix_ =
+                    parent_transform_comp.get_world_matrix() * local_matrix;
             }
         }
     }

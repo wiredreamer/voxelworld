@@ -340,7 +340,6 @@ private:
     auto render_position() const -> void;
     auto render_rotation() const -> void;
     auto render_scale() const -> void;
-    auto render_origin() const -> void;
 };
 
 }  // namespace vw::sculptor
@@ -446,7 +445,7 @@ class open_file_modal final {
 public:
     using engine_type = gfx::engine;
 
-    open_file_modal(engine_type& eng, app_state& st);
+    open_file_modal(engine_type& eng, app_state& st, asset::model_library& library);
 
     auto render(float delta_time) -> void;
 
@@ -456,6 +455,7 @@ private:
 
     engine_type* engine_;
     app_state* state_;
+    asset::model_library* library_;
 
     std::string filename_;
     std::string error_;
@@ -500,7 +500,10 @@ class socket_panel final {
 public:
     using engine_type = gfx::engine;
 
-    socket_panel(engine_type& eng, app_state& st, operation_manager& op_manager);
+    socket_panel(
+        engine_type& eng, app_state& st, operation_manager& op_manager,
+        asset::model_library& library
+    );
 
     auto render(float delta_time) -> void;
 
@@ -519,6 +522,7 @@ private:
     engine_type* engine_;
     app_state* state_;
     operation_manager* op_manager_;
+    asset::model_library* library_;
 
     std::string new_socket_name_;
     std::string add_socket_error_;

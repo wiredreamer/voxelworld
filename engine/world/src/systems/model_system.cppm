@@ -28,6 +28,10 @@ public:
         [[nodiscard]] auto get_model() const -> std::shared_ptr<asset::model>;
 
         auto set_model(std::shared_ptr<asset::model> model_ptr) -> void;
+        auto set_model(std::shared_ptr<asset::model> model_ptr, const asset::asset_ref& source)
+            -> void;
+        auto set_pivot(const vec3f& pivot) -> void;
+        auto set_source(const asset::asset_ref& source) -> void;
 
         // Ставит и чанк, и его модель разом: у сущности чанка они всегда пара.
         auto set_chunk(std::shared_ptr<asset::chunk_volume> volume) -> void;

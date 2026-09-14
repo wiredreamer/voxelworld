@@ -53,16 +53,19 @@ auto vox_writer_plain::write_entity_(
 
     if (ent.has_transform) {
         file << std::format(
-            "\tt {} {} {}\t{} {} {}\t{} {} {}\t{} {} {}\n",
+            "\ttransform {} {} {}\t{} {} {}\t{} {} {}\n",
             ent.position.x, ent.position.y, ent.position.z,
             ent.rotation.x, ent.rotation.y, ent.rotation.z,
-            ent.scale.x, ent.scale.y, ent.scale.z,
-            ent.origin.x, ent.origin.y, ent.origin.z
+            ent.scale.x, ent.scale.y, ent.scale.z
         );
     }
 
+    if (!ent.model.empty()) {
+        file << std::format("\tmodel {}\n", ent.model.str());
+    }
+
     if (ent.animation_target_name.has_value()) {
-        file << std::format("\ttarget {}\n", *ent.animation_target_name);
+        file << std::format("\tanim_target {}\n", *ent.animation_target_name);
     }
 
     if (ent.has_sockets) {
@@ -76,22 +79,6 @@ auto vox_writer_plain::write_entity_(
                 sp.scale.x, sp.scale.y, sp.scale.z
             );
         }
-    }
-
-    if (ent.model.has_value()) {
-        write_model_(file, *ent.model);
-    }
-}
-
-auto vox_writer_plain::write_model_(
-    std::ofstream& file, const vw::asset::vox_model_data& mdl
-) -> void {
-    file << std::format("\tm {} {} {}\n", mdl.size.x, mdl.size.y, mdl.size.z);
-
-    for (const auto& [pos, v] : mdl.voxels) {
-        file << std::format(
-            "\t\tv {} {} {} {}:{}\n", pos.x, pos.y, pos.z, v.id.category().value, v.id.index()
-        );
     }
 }
 

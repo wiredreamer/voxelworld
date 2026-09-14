@@ -16,9 +16,9 @@ import vw.gfx;
 namespace vw::sculptor {
 
 open_file_modal::open_file_modal(
-    engine_type& eng, app_state& st
+    engine_type& eng, app_state& st, asset::model_library& library
 )
-    : engine_(&eng), state_(&st) {}
+    : engine_(&eng), state_(&st), library_(&library) {}
 
 auto open_file_modal::render(
     float /*delta_time*/
@@ -99,8 +99,8 @@ auto open_file_modal::load_existing_filenames_() -> void {
 auto open_file_modal::open_file_() -> bool {
     namespace fs = std::filesystem;
 
-    asset::vox_parser_plain parser{engine_->get_block_registry()};
-    ecs::vox_deserializer deserializer{engine_->get_world(), parser};
+    asset::vox_parser_plain parser;
+    ecs::vox_deserializer deserializer{engine_->get_world(), parser, *library_};
 
     const fs::path filepath =  //
         fs::path{app_state::asset_dir_name} / fs::path{filename_};

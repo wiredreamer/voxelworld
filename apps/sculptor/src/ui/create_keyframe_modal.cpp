@@ -47,10 +47,8 @@ auto create_keyframe_modal::open(
                 value_euler_deg_ = {
                     math::degrees(rot.x), math::degrees(rot.y), math::degrees(rot.z)
                 };
-            } else if (prop == asset::animation_property::scale) {
-                value_vec3f_ = tc.get_scale();
             } else {
-                value_vec3f_ = tc.get_origin();
+                value_vec3f_ = tc.get_scale();
             }
         }
     }
@@ -96,10 +94,8 @@ auto create_keyframe_modal::render(
                     value_euler_deg_ = {
                         math::degrees(rot.x), math::degrees(rot.y), math::degrees(rot.z)
                     };
-                } else if (prop == asset::animation_property::scale) {
-                    value_vec3f_ = tc.get_scale();
                 } else {
-                    value_vec3f_ = tc.get_origin();
+                    value_vec3f_ = tc.get_scale();
                 }
             }
         }

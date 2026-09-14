@@ -61,7 +61,6 @@ auto entity_properties_panel::render(float /*delta_time*/) -> void {
             render_position();
             render_rotation();
             render_scale();
-            render_origin();
             ImGui::EndDisabled();
         }
 
@@ -145,22 +144,6 @@ auto entity_properties_panel::render_scale() const -> void {
     }
 }
 
-auto entity_properties_panel::render_origin() const -> void {
-    const auto ent             = state_->scene.name_to_entity[state_->scene.selected_name];
-    auto& world                = engine_->get_world();
-    const auto& transform_comp = world.get<ecs::transform_component>(ent);
-    vec3f origin               = transform_comp.get_origin();
-    if (imgui_drag_vec3f("Origin", origin)) {
-        transform new_transform = transform_comp.get_transform();
-        new_transform.set_origin(origin);
-        set_transform_params params = {
-            .name          = state_->scene.selected_name,
-            .new_transform = new_transform,
-        };
-        op_manager_->execute(std::make_unique<set_transform_operation>(*engine_, *state_, params));
-    }
-}
-
 auto entity_properties_panel::render_components_section() -> void {
     if (!ImGui::CollapsingHeader("Components")) {
         return;
@@ -196,6 +179,14 @@ auto entity_properties_panel::render_components_section() -> void {
         if (ImGui::Button("Remove##model")) {
             op_manager_->execute(std::make_unique<remove_model_component_operation>(
                 *engine_, *state_, remove_model_component_params{.name = name}
+            ));
+        }
+
+        // Точка вращения объёма: узел садится на неё, а поддерево её не видит.
+        vec3f pivot = model_comp.get_pivot();
+        if (imgui_drag_vec3f("Pivot", pivot)) {
+            op_manager_->execute(std::make_unique<set_pivot_operation>(
+                *engine_, *state_, set_pivot_params{.name = name, .new_pivot = pivot}
             ));
         }
     } else {

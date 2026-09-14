@@ -159,7 +159,7 @@ auto spatial_system::calculate_aabb_from_model(
         static_cast<float32>(model_size.z)
     };
 
-    const mat4f world_matrix = transform_comp.get_world_matrix();
+    const mat4f world_matrix = model_matrix(transform_comp, model_comp);
 
     const std::array vertices = {
         vec3f{local_min.x, local_min.y, local_min.z},
@@ -254,7 +254,7 @@ auto spatial_system::voxel_ray_cast(
         const int height = model_size.y;
         const int depth  = model_size.z;
 
-        const mat4f world_matrix    = transform_comp.get_world_matrix();
+        const mat4f world_matrix    = model_matrix(transform_comp, model_comp);
         const auto inv_result       = math::inverse_matrix(world_matrix);
         const mat4f inverse_world   = inv_result.value_or(math::identity_matrix());
         const vec3f local_start     = inverse_world * r.start;

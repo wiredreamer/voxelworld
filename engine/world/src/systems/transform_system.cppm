@@ -31,7 +31,6 @@ public:
         auto set_rotation(const quat& rotation) -> transform_modifier&;
         auto set_rotation_euler(const vec3f& euler) -> transform_modifier&;
         auto set_scale(const vec3f& scale) -> transform_modifier&;
-        auto set_origin(const vec3f& origin) -> transform_modifier&;
         auto translate(const vec3f& offset) -> transform_modifier&;
         auto rotate(const vec3f& angles) -> transform_modifier&;
         auto scale(const vec3f& factor) -> transform_modifier&;

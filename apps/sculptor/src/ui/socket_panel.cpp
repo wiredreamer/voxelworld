@@ -16,9 +16,10 @@ import vw.gfx;
 namespace vw::sculptor {
 
 socket_panel::socket_panel(
-    engine_type& eng, app_state& st, operation_manager& op_manager
+    engine_type& eng, app_state& st, operation_manager& op_manager,
+    asset::model_library& library
 )
-    : engine_(&eng), state_(&st), op_manager_(&op_manager) {}
+    : engine_(&eng), state_(&st), op_manager_(&op_manager), library_(&library) {}
 
 auto socket_panel::render(
     float /*delta_time*/
@@ -343,8 +344,8 @@ auto socket_panel::load_preview_(
 
     namespace fs = std::filesystem;
 
-    asset::vox_parser_plain parser{engine_->get_block_registry()};
-    ecs::vox_deserializer deserializer{engine_->get_world(), parser};
+    asset::vox_parser_plain parser;
+    ecs::vox_deserializer deserializer{engine_->get_world(), parser, *library_};
     const fs::path filepath = fs::path{app_state::asset_dir_name} / fs::path{filename};
 
     const ecs::vox_deserializer::options opts{

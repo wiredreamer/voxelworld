@@ -44,10 +44,8 @@ auto keyframe_service::add_keyframe() -> void {
         kf_val = asset::keyframe_quat(time, tc.get_rotation());
     } else if (prop == asset::animation_property::position) {
         kf_val = asset::keyframe_vec3f(time, tc.get_position());
-    } else if (prop == asset::animation_property::scale) {
-        kf_val = asset::keyframe_vec3f(time, tc.get_scale());
     } else {
-        kf_val = asset::keyframe_vec3f(time, tc.get_origin());
+        kf_val = asset::keyframe_vec3f(time, tc.get_scale());
     }
 
     if (!clip->has_track(entity_name)) {

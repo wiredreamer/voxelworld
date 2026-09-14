@@ -10,10 +10,8 @@ using namespace vw;
 namespace {
 
 auto parse_vox(std::string_view text) {
-    static const block_registry registry;
-
     std::istringstream input{std::string{text}};
-    asset::vox_parser_plain parser{registry};
+    asset::vox_parser_plain parser;
     return parser.parse(input);
 }
 
@@ -25,75 +23,40 @@ auto parse_voxa(std::string_view text) {
 
 }  // namespace
 
+// Узлы взяты из assets/models/m_human.vox дословно, вплоть до «-0» и
+// табуляций: дерево больше не носит вокселей, узел называет .voxm, а точку
+// вращения объём хранит сам.
 TEST_CASE("the vox parser reads a prefab out of a stream", "[serial]") {
     const auto prefab = parse_vox(
-        "# comment\n"
-        "root body\n"
-        "entity body\n"
-        "\tt 1 2 3\t0 0 0\t1 1 1\t0 0 0\n"
-        "\tm 2 2 2\n"
-        "\t\tv 0 0 0 1:1\n"
-        "\t\tv 1 1 1 1:13\n"
+        "# Vox File Version 3.0\n"
+        "root root\n"
+        "entity root\n"
+        "\ttransform 0 0 0\t-0 -0 -0\t1 1 1\n"
+        "entity hand_right\n"
+        "\tparent root\n"
+        "\ttransform 10 2 0\t1.5707963 -0 -0\t1 1 1\n"
+        "\tmodel models/m_human/hand_right.voxm\n"
+        "\tanim_target hand_right\n"
+        "\tsockets\n"
+        "\t\tsocket hand_right 0 0 0 -1.570796 -0 -0 0.99 0.99 0.99\n"
     );
 
     REQUIRE(prefab.has_value());
-    REQUIRE(prefab->root_name == "body");
-    REQUIRE(prefab->entities.size() == 1);
+    REQUIRE(prefab->root_name == "root");
+    REQUIRE(prefab->entities.size() == 2);
 
-    const auto& entity = prefab->entities.front();
-    REQUIRE(entity.name == "body");
-    REQUIRE(entity.has_transform);
-    REQUIRE(entity.position == vec3f{1.0F, 2.0F, 3.0F});
+    const auto& root = prefab->entities.front();
+    REQUIRE(root.has_transform);
+    REQUIRE(root.model.empty());
 
-    REQUIRE(entity.model.has_value());
-    REQUIRE(entity.model->size == vec3i{2, 2, 2});
-    REQUIRE(entity.model->voxels.size() == 2);
-    REQUIRE(entity.model->voxels[0].second.id == blocks::terrain::grass[0]);
-    REQUIRE(entity.model->voxels[1].second.id == blocks::terrain::dirt[0]);
-    REQUIRE(entity.model->category == blocks::terrain::category);
-}
-
-// В 1.0 на месте блока стояло число, которое было то цветом, то индексом. Читать
-// его как «категория:номер» нельзя ни при каком отображении, поэтому ответ —
-// ошибка разбора, а не догадка.
-TEST_CASE("a vox 1.0 voxel is a parse error", "[serial]") {
-    const auto prefab = parse_vox(
-        "root body\n"
-        "entity body\n"
-        "\tm 2 2 2\n"
-        "\t\tv 0 0 0 0x13\n"
-    );
-
-    REQUIRE_FALSE(prefab.has_value());
-}
-
-// Модель несёт ровно один набор: страница хранит номер в наборе, а сам набор —
-// у модели. Файл из двух наборов не представим, и молча взять первый значило бы
-// перекрасить половину модели.
-TEST_CASE("a vox model may not mix block sets", "[serial]") {
-    const auto prefab = parse_vox(
-        "root body\n"
-        "entity body\n"
-        "\tm 2 2 2\n"
-        "\t\tv 0 0 0 1:1\n"
-        "\t\tv 1 1 1 2:1\n"
-    );
-
-    REQUIRE_FALSE(prefab.has_value());
-}
-
-// Блок вне каталога рвать разбор не должен: он нарисуется заглушкой, и это
-// видно сразу, а половина модели из-за одного вокселя пропасть не может.
-TEST_CASE("a vox block outside the catalog still parses", "[serial]") {
-    const auto prefab = parse_vox(
-        "root body\n"
-        "entity body\n"
-        "\tm 2 2 2\n"
-        "\t\tv 0 0 0 200:7\n"
-    );
-
-    REQUIRE(prefab.has_value());
-    REQUIRE(prefab->entities.front().model->voxels.size() == 1);
+    const auto& hand = prefab->entities.back();
+    REQUIRE(hand.parent_name == "root");
+    REQUIRE(hand.position == vec3f{10.0F, 2.0F, 0.0F});
+    REQUIRE(hand.model == asset::asset_ref{"models/m_human/hand_right.voxm"});
+    REQUIRE(hand.animation_target_name == "hand_right");
+    REQUIRE(hand.has_sockets);
+    REQUIRE(hand.sockets.size() == 1);
+    REQUIRE(hand.sockets.front().name == "hand_right");
 }
 
 // Разбор идёт построчно, и незнакомая команда — не повод бросать файл: так
@@ -115,7 +78,7 @@ TEST_CASE("a truncated vox transform is a parse error", "[serial]") {
     const auto prefab = parse_vox(
         "root body\n"
         "entity body\n"
-        "\tt 1 2\n"
+        "\ttransform 1 2\n"
     );
 
     REQUIRE_FALSE(prefab.has_value());
@@ -187,9 +150,23 @@ TEST_CASE("a vox file of an unsupported major version is rejected", "[serial]") 
     REQUIRE(prefab.error() == asset::vox_parser::error_type::unsupported_version);
 }
 
-TEST_CASE("a vox file of the current version parses", "[serial]") {
+// Файл 2.0 нёс воксели прямо в дереве и другие теги узла. Читать его больше
+// нечем, и молчать об этом нельзя: без проверки версии каждая его строка ушла бы
+// в «неизвестную команду», а документ открылся бы пустым.
+TEST_CASE("a vox 2.0 file is rejected by version", "[serial]") {
     const auto prefab = parse_vox(
         "# Vox File Version 2.0\n"
+        "root body\n"
+        "entity body\n"
+    );
+
+    REQUIRE_FALSE(prefab.has_value());
+    REQUIRE(prefab.error() == asset::vox_parser::error_type::unsupported_version);
+}
+
+TEST_CASE("a vox file of the current version parses", "[serial]") {
+    const auto prefab = parse_vox(
+        "# Vox File Version 3.0\n"
         "root body\n"
         "entity body\n"
     );
@@ -202,7 +179,7 @@ TEST_CASE("a vox file of the current version parses", "[serial]") {
 // и так переживает: ронять из-за неё файл значило бы запретить формату расти.
 TEST_CASE("a vox file of a newer minor version parses", "[serial]") {
     const auto prefab = parse_vox(
-        "# Vox File Version 2.7\n"
+        "# Vox File Version 3.7\n"
         "root body\n"
         "entity body\n"
     );
@@ -245,8 +222,10 @@ TEST_CASE("a voxa file of the current version parses", "[serial]") {
 namespace {
 
 auto parse_voxm(asset::model_registry& registry, std::string_view text) {
+    static const block_registry blocks;
+
     std::istringstream input{std::string{text}};
-    asset::voxm_deserializer deserializer{registry};
+    asset::voxm_deserializer deserializer{registry, blocks};
     return deserializer.deserialize(input);
 }
 
@@ -356,4 +335,20 @@ TEST_CASE("a voxm file without a size is a parse error", "[serial]") {
     const auto restored = parse_voxm(registry, "category 2\n");
 
     REQUIRE_FALSE(restored.has_value());
+}
+
+// Блок вне каталога рвать чтение не должен: он нарисуется заглушкой, и это
+// видно сразу, а половина модели из-за одного номера пропасть не может.
+TEST_CASE("a voxm block outside the catalog still parses", "[serial]") {
+    asset::model_registry registry;
+
+    const auto restored = parse_voxm(
+        registry,
+        "category 200\n"
+        "size 2 2 2\n"
+        "r 0 0 0 1 7\n"
+    );
+
+    REQUIRE(restored.has_value());
+    REQUIRE((*restored)->get_voxel(0, 0, 0).id == block_id{block_category{200}, 7});
 }

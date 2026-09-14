@@ -96,7 +96,7 @@ auto combined_buffer_pool::process_destroyed_(world_type& world) -> void {
                                  .get_bounds();
                 }
                 buffers_[info.buffer_index]->write_transform(
-                    *swapped, tc.get_world_matrix(), bounds);
+                    *swapped, model_matrix(tc, world.get<model_component>(*swapped)), bounds);
             }
             entity_buffer_infos_.erase(ent);
         }
@@ -253,7 +253,8 @@ auto combined_buffer_pool::update_meshes_(
                                           .get_bounds();
                     }
                     buffers_[buffer_info.buffer_index]->write_transform(
-                        *swapped, tc.get_world_matrix(), swap_bounds);
+                        *swapped, model_matrix(tc, world.get<model_component>(*swapped)),
+                        swap_bounds);
                 }
                 entity_buffer_infos_.erase(ent);
             }
@@ -290,8 +291,9 @@ auto combined_buffer_pool::update_meshes_(
         const vk::DeviceSize mesh_staging_cost = (quad_count * sizeof(quad)) + sizeof(uint32) +
             sizeof(draw_command) + (sizeof(mat4f) * 2);
 
-        const auto& transform_comp    = world.get<transform_component>(ent);
-        const mat4f& transform_matrix = transform_comp.get_world_matrix();
+        const auto& transform_comp = world.get<transform_component>(ent);
+        const mat4f transform_matrix =
+            model_matrix(transform_comp, world.get<model_component>(ent));
 
         vw::spatial::aabb ent_bounds{};
         if (world.has<spatial_component>(ent)) {
@@ -334,7 +336,8 @@ auto combined_buffer_pool::update_meshes_(
                     sw_bounds = world.get<spatial_component>(*swapped)
                                     .get_bounds();
                 }
-                buffer->write_transform(*swapped, tc.get_world_matrix(), sw_bounds);
+                buffer->write_transform(
+                    *swapped, model_matrix(tc, world.get<model_component>(*swapped)), sw_bounds);
             }
         } else if (staging_.available() < mesh_staging_cost) {
             merge_buffer_.push_back(ent);
@@ -634,7 +637,7 @@ auto combined_buffer_pool::update_transforms_(
             tr_bounds = world.get<spatial_component>(ent).get_bounds();
         }
         buffers_[info.buffer_index]->write_transform(
-            ent, transform_comp.get_world_matrix(), tr_bounds);
+            ent, model_matrix(transform_comp, world.get<model_component>(ent)), tr_bounds);
         touched_bounds_.push_back(info.bounds);
         touched_bounds_.push_back(tr_bounds);
         info.bounds = tr_bounds;

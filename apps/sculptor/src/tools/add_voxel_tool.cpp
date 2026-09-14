@@ -48,7 +48,9 @@ auto add_voxel_tool::render(
     };
 
     const auto voxel_world_pos =  //
-        world.get<ecs::transform_component>(ent).get_world_matrix() *
+        ecs::model_matrix(
+            world.get<ecs::transform_component>(ent), world.get<ecs::model_component>(ent)
+        ) *
         math::translation_matrix(voxel_local_pos) *       //
         math::scale_matrix(vec3f{1.01f, 1.01f, 1.01f}) *  //
         math::translation_matrix(vec3f{-0.005f, -0.005f, -0.005f});

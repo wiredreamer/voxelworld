@@ -392,8 +392,7 @@ auto timeline_panel::render_track_row(
         constexpr asset::animation_property props[] = {
             asset::animation_property::position,
             asset::animation_property::rotation,
-            asset::animation_property::scale,
-            asset::animation_property::origin
+            asset::animation_property::scale
         };
 
         for (auto prop : props) {
@@ -685,13 +684,12 @@ auto timeline_panel::render_expanded_channels(
     float clip_duration,
     float scroll_offset
 ) -> void {
-    for (int i = 0; i < 4; ++i) {
-        constexpr std::array prop_names{"Position", "Rotation", "Scale", "Origin"};
+    for (int i = 0; i < 3; ++i) {
+        constexpr std::array prop_names{"Position", "Rotation", "Scale"};
         constexpr std::array props = {
             asset::animation_property::position,
             asset::animation_property::rotation,
-            asset::animation_property::scale,
-            asset::animation_property::origin
+            asset::animation_property::scale
         };
 
         const auto prop = props[i];

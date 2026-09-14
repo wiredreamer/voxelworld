@@ -11,9 +11,6 @@ namespace detail {
 constexpr log::log_category vox_parser_plain_lc{"vox_parser_plain"};
 }  // namespace detail
 
-vox_parser_plain::vox_parser_plain(const block_registry& block_registry)
-    : block_registry_(&block_registry) {}
-
 auto vox_parser_plain::parse(const std::filesystem::path& filepath)
     -> std::expected<vox_prefab_data, error_type> {
     std::ifstream file(filepath);
@@ -34,7 +31,6 @@ auto vox_parser_plain::parse(std::istream& input)
     prefab_ = {};
     current_entity_ = nullptr;
     error_ = std::nullopt;
-    unknown_blocks_.clear();
 
     std::string line;
     while (std::getline(input, line)) {
@@ -59,18 +55,16 @@ auto vox_parser_plain::parse(std::istream& input)
             process_entity_(iss);
         } else if (cmd == "parent") {
             process_parent_(iss);
-        } else if (cmd == "t") {
+        } else if (cmd == "transform") {
             process_transform_(iss);
-        } else if (cmd == "target") {
+        } else if (cmd == "anim_target") {
             process_target_(iss);
         } else if (cmd == "sockets") {
             process_sockets_();
         } else if (cmd == "socket") {
             process_socket_(iss);
-        } else if (cmd == "m") {
+        } else if (cmd == "model") {
             process_model_(iss);
-        } else if (cmd == "v") {
-            process_voxel_(iss);
         } else {
             log::warn(detail::vox_parser_plain_lc, "unknown command: {}", cmd);
         }
@@ -151,18 +145,14 @@ auto vox_parser_plain::process_transform_(std::istringstream& iss) -> void {
     vec3f scale;
     iss >> scale.x >> scale.y >> scale.z;
 
-    vec3f origin;
-    iss >> origin.x >> origin.y >> origin.z;
-
     if (iss.fail()) {
         error_ = error_type::parse_error;
         return;
     }
 
-    current_entity_->position = position;
-    current_entity_->rotation = rotation;
-    current_entity_->scale = scale;
-    current_entity_->origin = origin;
+    current_entity_->position      = position;
+    current_entity_->rotation      = rotation;
+    current_entity_->scale         = scale;
     current_entity_->has_transform = true;
 }
 
@@ -219,108 +209,14 @@ auto vox_parser_plain::process_model_(std::istringstream& iss) -> void {
         return;
     }
 
-    vec3i size;
-    iss >> size.x >> size.y >> size.z;
+    std::string path;
+    iss >> path;
     if (iss.fail()) {
         error_ = error_type::parse_error;
         return;
     }
 
-    current_entity_->model = vox_model_data{.size = size, .category = {}, .voxels = {}};
-}
-
-auto vox_parser_plain::process_voxel_(std::istringstream& iss) -> void {
-    if (!current_entity_ || !current_entity_->model.has_value()) {
-        return;
-    }
-
-    vec3i position;
-    iss >> position.x >> position.y >> position.z;
-    if (iss.fail()) {
-        error_ = error_type::parse_error;
-        return;
-    }
-
-    std::string token;
-    iss >> token;
-    if (iss.fail()) {
-        error_ = error_type::parse_error;
-        return;
-    }
-
-    const std::optional<block_id> id = parse_block_id_(token);
-    if (!id.has_value()) {
-        error_ = error_type::parse_error;
-        return;
-    }
-
-    // Набор модели задаёт первый непустой воксель, остальные обязаны совпасть:
-    // страница хранит номер в наборе, и модель из двух наборов не представима.
-    // То, что состоит из разных наборов, — это разные модели.
-    vox_model_data& mdl = *current_entity_->model;
-    if (*id != blocks::air) {
-        if (mdl.category == block_category{}) {
-            mdl.category = id->category();
-        } else if (id->category() != mdl.category) {
-            log::warn(
-                detail::vox_parser_plain_lc,
-                "model '{}' mixes block sets {} and {}; a model carries exactly one",
-                current_entity_->name,
-                mdl.category.value,
-                id->category().value
-            );
-            error_ = error_type::parse_error;
-            return;
-        }
-    }
-
-    mdl.voxels.emplace_back(position, voxel{*id});
-}
-
-auto vox_parser_plain::parse_block_id_(
-    std::string_view token
-) -> std::optional<block_id> {
-    const std::size_t sep = token.find(':');
-    if (sep == std::string_view::npos) {
-        log::warn(
-            detail::vox_parser_plain_lc,
-            "voxel wants a block id as category:index, got '{}'; .vox 1.0 kept a colour there "
-            "and is no longer read",
-            token
-        );
-        return std::nullopt;
-    }
-
-    const char* first = token.data();
-    const char* mid   = first + sep;
-    const char* last  = first + token.size();
-
-    uint32 category = 0;
-    uint32 index    = 0;
-    const auto head = std::from_chars(first, mid, category);
-    const auto tail = std::from_chars(mid + 1, last, index);
-
-    if (head.ec != std::errc{} || head.ptr != mid || tail.ec != std::errc{} ||
-        tail.ptr != last || category > 0xFF || index > 0xFF) {
-        log::warn(detail::vox_parser_plain_lc, "malformed block id: {}", token);
-        return std::nullopt;
-    }
-
-    const auto id = block_id{
-        block_category{static_cast<uint8>(category)}, static_cast<uint8>(index)
-    };
-
-    if (id != blocks::air && block_registry_->slot_of(id) == missing_block_slot &&
-        unknown_blocks_.insert(id.value).second) {
-        log::warn(
-            detail::vox_parser_plain_lc,
-            "block {}:{} is not in the catalog and will draw as the missing block",
-            category,
-            index
-        );
-    }
-
-    return id;
+    current_entity_->model = asset_ref{path};
 }
 
 }  // namespace vw::asset
@@ -382,7 +278,6 @@ auto voxa_serializer::write_channel_(
                 case animation_property::position: prop_name = "position"; break;
                 case animation_property::rotation: prop_name = "rotation"; break;
                 case animation_property::scale: prop_name = "scale"; break;
-                case animation_property::origin: prop_name = "origin"; break;
             }
             file << std::format("  channel {}\n", prop_name);
 
@@ -535,6 +430,7 @@ auto voxa_deserializer::process_clip_(std::istringstream& iss) -> void {
     clip_ = std::make_shared<animation_clip>(name);
 }
 
+
 auto voxa_deserializer::process_track_(std::istringstream& iss) -> void {
     finalize_channel_();
     finalize_track_();
@@ -570,8 +466,11 @@ auto voxa_deserializer::process_channel_(std::istringstream& iss) -> void {
         current_property_ = animation_property::scale;
         current_channel_is_quat_ = false;
     } else if (prop_name == "origin") {
-        current_property_ = animation_property::origin;
-        current_channel_is_quat_ = false;
+        // Точка вращения перестала быть свойством позы. В клипах прежних версий
+        // канал объявлен, но пуст, поэтому его достаточно пропустить.
+        log::warn(detail::voxa_deserializer_lc, "channel 'origin' is obsolete and is skipped");
+        has_current_channel_ = false;
+        return;
     }
 
     has_current_channel_ = true;
@@ -628,9 +527,6 @@ auto voxa_deserializer::finalize_channel_() -> void {
             case animation_property::scale:
                 current_track_->add<animation_property::scale>(std::move(ch));
                 break;
-            case animation_property::origin:
-                current_track_->add<animation_property::origin>(std::move(ch));
-                break;
             default: break;
         }
         vec3f_keyframes_.clear();
@@ -668,37 +564,27 @@ namespace detail {
 constexpr log::log_category asset_storage_lc{"asset_storage"};
 }  // namespace detail
 
-asset_storage::asset_storage(vox_parser& parser, model_registry& registry)
-    : parser_(&parser), model_registry_(&registry) {}
+asset_storage::asset_storage(vox_parser& parser, model_library& library)
+    : parser_(&parser), library_(&library) {}
 
 auto asset_storage::load_prefab(
-    std::string_view name, const std::filesystem::path& filepath
+    std::string_view name, const asset_ref& ref
 ) -> void {
-    auto result = parser_->parse(filepath);
+    auto result = parser_->parse(library_->path_of(ref));
     if (!result.has_value()) {
-        log::warn(detail::asset_storage_lc, "failed to load prefab '{}': {}", name, filepath.string());
+        log::warn(detail::asset_storage_lc, "failed to load prefab '{}': {}", name, ref.str());
         return;
     }
 
-    std::string name_str(name);
-
-    for (auto& ent : result->entities) {
-        if (!ent.model.has_value()) {
-            continue;
+    // Битая ссылка загрузку не рвёт: узел останется без объёма, о чём сказано в
+    // логе библиотекой, а остальной префаб встанет целиком.
+    for (const auto& ent : result->entities) {
+        if (!ent.model.empty()) {
+            static_cast<void>(library_->load(ent.model));
         }
-
-        std::string model_key = name_str + "/" + ent.name;
-        auto m = model_registry_->create(model_key, ent.model->category, ent.model->size);
-
-        for (const auto& [pos, v] : ent.model->voxels) {
-            m->set_voxel(pos, v);
-        }
-
-        models_[model_key] = std::move(m);
-        ent.model = std::nullopt;
     }
 
-    prefabs_[name_str] = std::move(*result);
+    prefabs_[std::string(name)] = std::move(*result);
 }
 
 auto asset_storage::load_clip(
@@ -731,10 +617,15 @@ auto asset_storage::get_entity(
 auto asset_storage::get_model(
     std::string_view prefab, std::string_view entity_name
 ) const -> std::shared_ptr<model> {
-    std::string key = std::string(prefab) + "/" + std::string(entity_name);
-    auto it = models_.find(key);
-    if (it != models_.end()) {
-        return it->second;
+    const auto pit = prefabs_.find(std::string(prefab));
+    if (pit == prefabs_.end()) {
+        return nullptr;
+    }
+
+    for (const auto& ent : pit->second.entities) {
+        if (ent.name == entity_name) {
+            return library_->find(ent.model);
+        }
     }
     return nullptr;
 }

@@ -32,9 +32,7 @@ player::player(
         .with<ecs::animation_fsm_component>()
         .get_entity();
 
-    transform_sys.modify(root_)
-        .set_position({0.0f, 500.0f, 0.0f})
-        .set_origin({-6.0f, -6.0f, -6.0f});
+    transform_sys.modify(root_).set_position({0.0f, 500.0f, 0.0f});
 
     physics_sys.modify_collider(root_)
         .set_extents({12.0f, 28.0f, 12.0f})
@@ -162,9 +160,6 @@ auto player::toggle_sword() -> void {
             .with<ecs::model_component>()
             .get_entity();
 
-        const auto& ent_data = assets_.get_entity("m_sword", "root");
-
-        world.system<ecs::transform_system>().modify(sword_).set_origin(ent_data.origin);
         world.system<ecs::model_system>().modify(sword_).set_model(assets_.get_model("m_sword", "root"));
         world.system<ecs::socket_system>().modify(hand_ent).attach("hand_right", sword_);
         world.system<ecs::spatial_system>().modify(sword_).set_layer(ecs::spatial_layer::character);
@@ -225,7 +220,6 @@ auto player::create_body_part(
     rest.set_position(ent_data.position);
     rest.set_rotation_euler(ent_data.rotation);
     rest.set_scale(ent_data.scale);
-    rest.set_origin(ent_data.origin);
 
     transform_sys.modify(ent).set_transform(rest);
 

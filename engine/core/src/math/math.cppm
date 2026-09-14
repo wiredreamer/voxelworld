@@ -174,10 +174,10 @@ auto rotation_matrix(const vec3f& rotation) -> mat4f;
 auto rotation_matrix(const quat& rotation) -> mat4f;
 auto scale_matrix(const vec3f& scale) -> mat4f;
 auto transform_matrix(
-    const vec3f& position, const vec3f& rotation, const vec3f& scale, const vec3f& origin
+    const vec3f& position, const vec3f& rotation, const vec3f& scale
 ) -> mat4f;
 auto transform_matrix(
-    const vec3f& position, const quat& rotation, const vec3f& scale, const vec3f& origin
+    const vec3f& position, const quat& rotation, const vec3f& scale
 ) -> mat4f;
 
 auto identity_matrix() -> mat4f;

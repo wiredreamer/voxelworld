@@ -106,7 +106,6 @@ auto vox_serializer::extract_entity_(entity ent) const -> asset::vox_entity_data
     data.position = transform_comp.get_position();
     data.rotation = transform_comp.get_rotation_euler();
     data.scale = transform_comp.get_scale();
-    data.origin = transform_comp.get_origin();
     data.has_transform = true;
 
     if (world_->has<animation_target_component>(ent)) {
@@ -123,26 +122,11 @@ auto vox_serializer::extract_entity_(entity ent) const -> asset::vox_entity_data
         }
     }
 
+    // Воксели в дереве больше не лежат: узел называет .voxm, а сам объём пишет
+    // тот, кто владеет библиотекой. Узел без ссылки законен — её раздаёт первая
+    // запись, и до неё он просто ни на что не ссылается.
     if (world_->has<model_component>(ent)) {
-        auto& model_comp = world_->get<model_component>(ent);
-        auto size = model_comp.size();
-
-        asset::vox_model_data model_data;
-        model_data.size = size;
-
-        for (int32 z = 0; z < size.z; ++z) {
-            for (int32 y = 0; y < size.y; ++y) {
-                for (int32 x = 0; x < size.x; ++x) {
-                    voxel v = model_comp.get_voxel(x, y, z);
-                    if (v.is_empty()) {
-                        continue;
-                    }
-                    model_data.voxels.emplace_back(vec3i{x, y, z}, v);
-                }
-            }
-        }
-
-        data.model = std::move(model_data);
+        data.model = world_->get<model_component>(ent).get_source();
     }
 
     return data;
@@ -154,8 +138,10 @@ auto vox_serializer::extract_entity_(entity ent) const -> asset::vox_entity_data
 namespace vw::ecs {
 
 
-vox_deserializer::vox_deserializer(world& world, asset::vox_parser& parser)
-    : world_(&world), parser_(&parser) {}
+vox_deserializer::vox_deserializer(
+    world& world, asset::vox_parser& parser, asset::model_library& library
+)
+    : world_(&world), parser_(&parser), library_(&library) {}
 
 auto vox_deserializer::deserialize(
     const std::filesystem::path& filepath
@@ -229,8 +215,7 @@ auto vox_deserializer::apply_entity_(
         transform_sys.modify(ent)
             .set_position(data.position)
             .set_rotation_euler(data.rotation)
-            .set_scale(data.scale)
-            .set_origin(data.origin);
+            .set_scale(data.scale);
     }
 
     if (data.animation_target_name.has_value() && !opts.skip_targets) {
@@ -243,7 +228,6 @@ auto vox_deserializer::apply_entity_(
             rest.set_position(data.position);
             rest.set_rotation_euler(data.rotation);
             rest.set_scale(data.scale);
-            rest.set_origin(data.origin);
             target_mod.set_rest_transform(rest);
         }
     }
@@ -258,19 +242,27 @@ auto vox_deserializer::apply_entity_(
         }
     }
 
-    if (data.model.has_value()) {
-        auto& model_reg = world_->resource<asset::model_registry>();
-        auto model_ptr = model_reg.create(data.name, data.model->category, data.model->size);
+    attach_model_(data, ent);
+}
 
-        world_->modify(ent).with<model_component>();
-
-        auto& model_sys = world_->system<model_system>();
-        model_sys.modify(ent).set_model(model_ptr);
-
-        for (const auto& [pos, v] : data.model->voxels) {
-            model_ptr->set_voxel(pos, v);
-        }
+auto vox_deserializer::attach_model_(const asset::vox_entity_data& data, entity ent) -> void {
+    if (data.model.empty()) {
+        return;
     }
+
+    // Битая ссылка не повод ронять загрузку: узел встаёт без объёма, о чём
+    // сказано в логе, и остальной префаб открывается целиком.
+    auto loaded = library_->load(data.model);
+    if (!loaded.has_value()) {
+        log::warn(
+            detail::vox_deserializer_lc, "entity '{}' refers to a missing model '{}'", data.name,
+            data.model.str()
+        );
+        return;
+    }
+
+    world_->modify(ent).with<model_component>();
+    world_->system<model_system>().modify(ent).set_model(*loaded, data.model);
 }
 
 }  // namespace vw::ecs

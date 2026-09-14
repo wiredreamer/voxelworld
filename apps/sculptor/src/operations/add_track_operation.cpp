@@ -41,10 +41,6 @@ auto add_track_operation::execute() -> void {
             auto channel = asset::make_animation_channel<asset::animation_property::scale>();
             channel.add(std::get<asset::keyframe_vec3f>(kf));
             track.add<asset::animation_property::scale>(std::move(channel));
-        } else if (prop == asset::animation_property::origin) {
-            auto channel = asset::make_animation_channel<asset::animation_property::origin>();
-            channel.add(std::get<asset::keyframe_vec3f>(kf));
-            track.add<asset::animation_property::origin>(std::move(channel));
         }
     }
 

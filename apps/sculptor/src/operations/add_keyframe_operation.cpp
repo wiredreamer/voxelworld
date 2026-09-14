@@ -42,10 +42,6 @@ auto add_keyframe_operation::execute() -> void {
             auto channel = asset::make_animation_channel<asset::animation_property::scale>();
             channel.add(std::get<asset::keyframe_vec3f>(params_.keyframe));
             track->add<asset::animation_property::scale>(std::move(channel));
-        } else if (params_.property == asset::animation_property::origin) {
-            auto channel = asset::make_animation_channel<asset::animation_property::origin>();
-            channel.add(std::get<asset::keyframe_vec3f>(params_.keyframe));
-            track->add<asset::animation_property::origin>(std::move(channel));
         }
         created_channel_ = true;
     } else {

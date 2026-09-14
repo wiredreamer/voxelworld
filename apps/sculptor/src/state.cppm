@@ -47,6 +47,11 @@ struct ui_state {
 struct file_state {
     std::string filename;
     bool has_unsaved_changes = false;
+
+    // Узлы, чьи объёмы правились с последней записи. Флага на весь документ
+    // мало: объёмы лежат отдельными файлами, и правка одного вокселя не должна
+    // переписывать все .voxm префаба и шуметь в git.
+    std::unordered_set<ecs::entity> dirty_models;
 };
 
 struct scene_state {

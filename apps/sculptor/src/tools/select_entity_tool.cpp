@@ -139,9 +139,7 @@ auto select_entity_tool::draw_entity_box_(
     const auto padding = 0.1f;
     const auto offset  = vec3f{-padding, -padding, -padding};
 
-    const auto box_matrix =
-        tc.get_world_matrix() *
-        math::translation_matrix(offset);
+    const auto box_matrix = ecs::model_matrix(tc, mc) * math::translation_matrix(offset);
 
     const auto box_size = vec3f{
         model_size.x + padding * 2.f,

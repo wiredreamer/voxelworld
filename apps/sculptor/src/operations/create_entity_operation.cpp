@@ -19,7 +19,6 @@ create_entity_operation::create_entity_operation(
 auto create_entity_operation::execute() -> void {
     auto& world            = engine_->get_world();
     auto& hierarchy_sys = world.system<ecs::hierarchy_system>();
-    auto& transform_sys = world.system<ecs::transform_system>();
     auto& model_reg = world.resource<asset::model_registry>();
     auto& model_sys = world.system<ecs::model_system>();
 
@@ -45,10 +44,10 @@ auto create_entity_operation::execute() -> void {
 
     const auto ent = modifier.get_entity();
 
-    transform_sys.modify(ent)
-        .set_origin(vec3f{-params_.size.x / 2.f, -params_.size.y / 2.f, -params_.size.z / 2.f});
-
     if (model) {
+        model->set_pivot(
+            vec3f{params_.size.x / 2.f, params_.size.y / 2.f, params_.size.z / 2.f}
+        );
         model_sys.modify(ent).set_model(model);
     }
 

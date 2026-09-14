@@ -64,9 +64,6 @@ auto animation_track::recompile_if_needed() const -> void {
                             case animation_property::scale:
                                 t.set_scale(value);
                                 break;
-                            case animation_property::origin:
-                                t.set_origin(value);
-                                break;
                             default:
                                 break;
                         }

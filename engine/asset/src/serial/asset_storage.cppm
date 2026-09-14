@@ -5,6 +5,8 @@ import std;
 import vw.core;
 import :model;
 import :anim;
+import :serial.ref;
+import :serial.library;
 import :serial.vox;
 import :serial.voxa;
 
@@ -13,9 +15,9 @@ export namespace vw::asset {
 // Хранит загруженные префабы (модели с метаданными) и клипы анимаций.
 class asset_storage final {
 public:
-    asset_storage(vox_parser& parser, model_registry& registry);
+    asset_storage(vox_parser& parser, model_library& library);
 
-    auto load_prefab(std::string_view name, const std::filesystem::path& filepath) -> void;
+    auto load_prefab(std::string_view name, const asset_ref& ref) -> void;
     auto load_clip(std::string_view name, const std::filesystem::path& filepath) -> void;
 
     [[nodiscard]] auto get_entity(std::string_view prefab, std::string_view entity_name) const
@@ -29,9 +31,8 @@ public:
 
 private:
     vox_parser* parser_;
-    model_registry* model_registry_;
+    model_library* library_;
     std::unordered_map<std::string, vox_prefab_data> prefabs_;
-    std::unordered_map<std::string, std::shared_ptr<model>> models_;
     std::unordered_map<std::string, std::shared_ptr<animation_clip>> clips_;
 };
 

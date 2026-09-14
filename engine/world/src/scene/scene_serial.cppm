@@ -55,7 +55,7 @@ public:
         std::vector<entity> entities;
     };
 
-    vox_deserializer(world& world, asset::vox_parser& parser);
+    vox_deserializer(world& world, asset::vox_parser& parser, asset::model_library& library);
 
     auto deserialize(const std::filesystem::path& filepath) -> std::expected<result, error_type>;
     auto deserialize(const std::filesystem::path& filepath, const options& opts)
@@ -69,9 +69,11 @@ public:
 private:
     auto create_entity_(const asset::vox_entity_data& data, result& res) -> void;
     auto apply_entity_(const asset::vox_entity_data& data, result& res, const options& opts) -> void;
+    auto attach_model_(const asset::vox_entity_data& data, entity ent) -> void;
 
     world* world_;
     asset::vox_parser* parser_;
+    asset::model_library* library_;
 };
 
 }  // namespace vw::ecs

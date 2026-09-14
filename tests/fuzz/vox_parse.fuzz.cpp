@@ -35,7 +35,7 @@ extern "C" auto LLVMFuzzerTestOneInput(const vw::uint8* data, std::size_t size) 
 
     std::istringstream stream(std::string(reinterpret_cast<const char*>(data), size));
 
-    vw::asset::vox_parser_plain parser{registry};
+    vw::asset::vox_parser_plain parser;
     const auto result = parser.parse(stream);
 
     if (result.has_value()) {

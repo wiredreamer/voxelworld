@@ -3,6 +3,7 @@ export module vw.sculptor:app;
 import std;
 
 import vw.core;
+import vw.asset;
 import vw.ecs;
 import vw.world;
 import vw.platform;
@@ -33,6 +34,7 @@ private:
     auto handle_mouse_release(const plat::mouse_release_event& ev) -> void;
 
     auto handle_animation_actions_() -> void;
+    auto collect_dirty_models_() -> void;
     auto update_title_() -> void;
     static auto init_asset_dir_() -> void;
 
@@ -46,6 +48,7 @@ private:
 
     app_state state_;
     operation_manager op_manager_;
+    asset::model_library model_library_;
     file_service file_service_;
     clip_service clip_service_;
     playback_service playback_service_;

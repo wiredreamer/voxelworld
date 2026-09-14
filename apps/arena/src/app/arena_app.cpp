@@ -15,8 +15,12 @@ arena_app::arena_app(
     gfx::engine& eng
 )
     : app{eng}
-    , parser_(eng.get_block_registry())
-    , assets_(parser_, eng.get_world().resource<asset::model_registry>())
+    // Корень ассетов у игры — папка assets рядом с исполняемым файлом: ссылки
+    // внутри префабов те же, что у редактора, а корень у каждого свой.
+    , model_library_(
+          eng.get_world().resource<asset::model_registry>(), eng.get_block_registry(), "assets"
+      )
+    , assets_(parser_, model_library_)
     , input_controller_(get_engine().get_window())
     , camera_controller_(
           get_engine().get_camera(),
@@ -102,8 +106,8 @@ auto arena_app::render(
 }
 
 auto arena_app::load_assets() -> void {
-    assets_.load_prefab("m_human", "assets/models/m_human.vox");
-    assets_.load_prefab("m_sword", "assets/models/m_sword.vox");
+    assets_.load_prefab("m_human", asset::asset_ref{"models/m_human.vox"});
+    assets_.load_prefab("m_sword", asset::asset_ref{"models/m_sword.vox"});
     assets_.load_clip("a_idle", "assets/animations/a_idle.voxa");
     assets_.load_clip("a_walk", "assets/animations/a_walk.voxa");
     assets_.load_clip("a_jump_left", "assets/animations/a_jump_left.voxa");

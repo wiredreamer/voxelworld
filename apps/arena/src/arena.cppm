@@ -118,6 +118,7 @@ private:
     auto load_assets() -> void;
 
     asset::vox_parser_plain parser_;
+    asset::model_library model_library_;
     asset::asset_storage assets_;
 
     gfx::player_input_controller input_controller_;

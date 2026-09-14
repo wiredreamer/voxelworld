@@ -32,7 +32,7 @@ class voxm_deserializer final {
 public:
     enum class error_type : uint8 { file_open_failed, parse_error, unsupported_version };
 
-    explicit voxm_deserializer(model_registry& registry);
+    voxm_deserializer(model_registry& registry, const block_registry& blocks);
 
     auto deserialize(const std::filesystem::path& filepath)
         -> std::expected<std::shared_ptr<model>, error_type>;
@@ -54,9 +54,14 @@ private:
     [[nodiscard]] auto ensure_model_() -> bool;
 
     model_registry* registry_;
+    const block_registry* blocks_;
 
     std::shared_ptr<model> model_;
     std::optional<error_type> error_;
+
+    // Блок вне каталога чтение не рвёт — он нарисуется заглушкой, и это видно.
+    // Но сказать о нём надо один раз, а не по разу на пробег.
+    std::unordered_set<uint16> unknown_blocks_;
 
     block_category category_{};
     vec3i size_{};

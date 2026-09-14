@@ -612,8 +612,7 @@ TEST_CASE("math matrix functions", "[math][mat4]") {
         auto m = math::transform_matrix(
             vec3f{0.0f, 0.0f, 0.0f},
             vec3f{0.0f, 0.0f, 0.0f},
-            vec3f{1.0f, 1.0f, 1.0f},
-            vec3f{0.0f, 0.0f, 0.0f}
+            vec3f{1.0f, 1.0f, 1.0f}
         );
         REQUIRE(math::approx_equal(m, math::identity_matrix()));
     }

@@ -54,7 +54,8 @@ auto third_person_camera_controller::update(
 
     if (hit) {
         const auto& hit_tc  = registry.get<transform_component>(hit->ent);
-        vec3f hit_world_pos = hit_tc.get_world_matrix() *
+        const auto& hit_mc  = registry.get<model_component>(hit->ent);
+        vec3f hit_world_pos = model_matrix(hit_tc, hit_mc) *
             vec3f{
                 static_cast<float32>(hit->voxel_pos.x) + 0.5f,
                 static_cast<float32>(hit->voxel_pos.y) + 0.5f,

@@ -18,12 +18,8 @@ auto transform::get_scale() const -> const vec3f& {
     return scale_;
 }
 
-auto transform::get_origin() const -> const vec3f& {
-    return origin_;
-}
-
 auto transform::calc_matrix() const -> mat4f {
-    return math::transform_matrix(position_, rotation_, scale_, origin_);
+    return math::transform_matrix(position_, rotation_, scale_);
 }
 
 auto transform::set_position(
@@ -48,12 +44,6 @@ auto transform::set_scale(
     const vec3f& scale
 ) -> void {
     scale_ = scale;
-}
-
-auto transform::set_origin(
-    const vec3f& origin
-) -> void {
-    origin_ = origin;
 }
 
 auto transform::translate(

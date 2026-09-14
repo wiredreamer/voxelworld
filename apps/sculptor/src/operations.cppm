@@ -510,6 +510,34 @@ private:
 
 }  // namespace vw::sculptor
 
+// ---- from src/operations/set_pivot_operation.h
+export namespace vw::sculptor {
+
+struct set_pivot_params {
+    std::string name;
+    vec3f new_pivot;
+};
+
+// Точка вращения принадлежит модели, а не узлу, поэтому и правится отдельно от
+// трансформа: сдвинув её, узел с места не двигают.
+class set_pivot_operation final : public base_operation {
+public:
+    using engine_type = gfx::engine;
+
+    set_pivot_operation(engine_type& engine, app_state& st, const set_pivot_params& params);
+
+    auto execute() -> void override;
+    auto undo() -> void override;
+
+private:
+    engine_type* engine_;
+    app_state* state_;
+    set_pivot_params params_;
+    vec3f previous_pivot_;
+};
+
+}  // namespace vw::sculptor
+
 // ---- from src/operations/remove_model_component_operation.h
 export namespace vw::sculptor {
 

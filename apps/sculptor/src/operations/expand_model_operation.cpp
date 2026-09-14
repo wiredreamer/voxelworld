@@ -21,7 +21,6 @@ auto expand_model_operation::execute() -> void {
     auto& world        = engine_->get_world();
     auto& model_reg = world.resource<asset::model_registry>();
     auto& model_sys = world.system<ecs::model_system>();
-    auto& transform_sys = world.system<ecs::transform_system>();
 
     const auto& model_comp = world.get<ecs::model_component>(ent);
     const auto model = model_comp.get_model();
@@ -60,15 +59,13 @@ auto expand_model_operation::execute() -> void {
         }
     }
 
-    model_sys.modify(ent).set_model(new_model);
+    new_model->set_pivot(model->pivot() + vec3f{
+        static_cast<float32>(zeroed_dir.x),
+        static_cast<float32>(zeroed_dir.y),
+        static_cast<float32>(zeroed_dir.z)
+    });
 
-    auto& transform_comp = world.get<ecs::transform_component>(ent);
-    auto new_origin = transform_comp.get_origin() - vec3f{
-        static_cast<float>(zeroed_dir.x),
-        static_cast<float>(zeroed_dir.y),
-        static_cast<float>(zeroed_dir.z)
-    };
-    transform_sys.modify(ent).set_origin(new_origin);
+    model_sys.modify(ent).set_model(new_model);
     state_->file.has_unsaved_changes = true;
 }
 
@@ -78,7 +75,6 @@ auto expand_model_operation::undo() -> void {
     auto& world        = engine_->get_world();
     auto& model_reg = world.resource<asset::model_registry>();
     auto& model_sys = world.system<ecs::model_system>();
-    auto& transform_sys = world.system<ecs::transform_system>();
 
     auto& model_comp = world.get<ecs::model_component>(ent);
     auto model = model_comp.get_model();
@@ -125,15 +121,13 @@ auto expand_model_operation::undo() -> void {
         }
     }
 
-    model_sys.modify(ent).set_model(new_model);
+    new_model->set_pivot(model->pivot() - vec3f{
+        static_cast<float32>(zeroed_dir.x),
+        static_cast<float32>(zeroed_dir.y),
+        static_cast<float32>(zeroed_dir.z)
+    });
 
-    auto& transform_comp = world.get<ecs::transform_component>(ent);
-    auto new_origin = transform_comp.get_origin() + vec3f{
-        static_cast<float>(zeroed_dir.x),
-        static_cast<float>(zeroed_dir.y),
-        static_cast<float>(zeroed_dir.z)
-    };
-    transform_sys.modify(ent).set_origin(new_origin);
+    model_sys.modify(ent).set_model(new_model);
     state_->file.has_unsaved_changes = true;
 }
 

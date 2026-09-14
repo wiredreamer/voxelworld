@@ -51,6 +51,8 @@ catch_discover_tests(core_tests)
 add_executable(asset_tests
     asset/model_fill.test.cpp
     asset/model_edit.test.cpp
+    asset/asset_ref.test.cpp
+    asset/model_library.test.cpp
     asset/serial.test.cpp
 )
 
