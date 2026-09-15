@@ -9,4 +9,5 @@ export import :components.light;
 export import :components.physics;
 export import :components.socket;
 export import :components.animation;
+export import :components.variant;
 export import :components.world_view;

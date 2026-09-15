@@ -13,4 +13,5 @@ export import :systems.character_controller;
 export import :systems.socket;
 export import :systems.animation;
 export import :systems.animation_fsm;
+export import :systems.variant;
 export import :systems.world_grid;

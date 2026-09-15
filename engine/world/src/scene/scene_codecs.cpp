@@ -127,6 +127,64 @@ auto register_anim_target(component_registry& codecs) -> void {
     codecs.register_for<animation_target_component>(std::move(codec));
 }
 
+auto register_variant(component_registry& codecs) -> void {
+    component_codec codec;
+    codec.tag = "variant";
+
+    codec.read = [](const component_read& in) {
+        in.target.modify(in.ent).with<variant_slot_component>();
+
+        const auto* tag = in.tags.front();
+        auto slot       = in.target.system<variant_system>().modify(in.ent);
+        slot.set_name(std::string{tag->value});
+
+        std::vector<asset::asset_ref> candidates;
+        std::vector<std::string> targets;
+        std::vector<std::string> sockets;
+        std::size_t selected = 0;
+
+        // Ключи повторяются: кандидатов у слота несколько, и требований тоже.
+        // prop() вернул бы только первый, поэтому свойства читаются подряд.
+        for (const auto& [key, value] : tag->props) {
+            if (key == "candidate") {
+                candidates.emplace_back(value);
+            } else if (key == "selected") {
+                std::from_chars(value.data(), value.data() + value.size(), selected);
+            } else if (key == "target") {
+                targets.push_back(value);
+            } else if (key == "socket") {
+                sockets.push_back(value);
+            }
+        }
+
+        slot.set_candidates(std::move(candidates));
+        slot.set_required_targets(std::move(targets));
+        slot.set_required_sockets(std::move(sockets));
+        slot.select(selected);
+    };
+
+    codec.write = [](const component_write& out) {
+        const auto& slot = out.source.get<variant_slot_component>(out.ent);
+
+        auto& tag = out.out.add("variant", slot.get_name());
+        for (const auto& ref : slot.get_candidates()) {
+            tag.set_prop("candidate", ref.str());
+        }
+
+        tag.set_prop("selected", std::format("{}", slot.get_selected()));
+
+        for (const auto& target : slot.required_targets()) {
+            tag.set_prop("target", target);
+        }
+
+        for (const auto& socket : slot.required_sockets()) {
+            tag.set_prop("socket", socket);
+        }
+    };
+
+    codecs.register_for<variant_slot_component>(std::move(codec));
+}
+
 auto register_socket(component_registry& codecs) -> void {
     component_codec codec;
     codec.tag = "socket";
@@ -167,6 +225,7 @@ component_registry::component_registry() {
     register_model(*this);
     register_anim_target(*this);
     register_socket(*this);
+    register_variant(*this);
 }
 
 auto component_registry::find(
