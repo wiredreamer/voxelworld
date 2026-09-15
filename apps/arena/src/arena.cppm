@@ -66,7 +66,8 @@ private:
 
     auto handle_attack() const -> void;
     [[nodiscard]] auto can_attack() const -> bool;
-    auto setup_animation_fsm() const -> void;
+    // Автоматы приходят из префаба: их список и порядок — это слои.
+    auto attach_machines_() const -> void;
 
     gfx::engine& engine_;
     asset::asset_storage& assets_;

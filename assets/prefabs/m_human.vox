@@ -1,5 +1,7 @@
 # Vox File Version 4.0
 rig humanoid
+fsm fsm/humanoid_locomotion.voxf
+fsm fsm/humanoid_action.voxf
 root root
 entity root
 	transform 0 0 0	-0 -0 -0	1 1 1

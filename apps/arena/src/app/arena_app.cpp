@@ -108,11 +108,6 @@ auto arena_app::render(
 auto arena_app::load_assets() -> void {
     assets_.load_prefab("m_human", asset::asset_ref{"prefabs/m_human.vox"});
     assets_.load_prefab("m_sword", asset::asset_ref{"prefabs/m_sword.vox"});
-    assets_.load_clip("a_idle", "assets/animations/a_idle.voxa");
-    assets_.load_clip("a_walk", "assets/animations/a_walk.voxa");
-    assets_.load_clip("a_jump_left", "assets/animations/a_jump_left.voxa");
-    assets_.load_clip("a_jump_right", "assets/animations/a_jump_right.voxa");
-    assets_.load_clip("a_sword_attack", "assets/animations/a_sword_attack.voxa");
 }
 
 auto arena_app::handle_key_press(

@@ -47,7 +47,29 @@ player::player(
     foot_right_ = create_body_part("m_human", "foot_right");
     foot_left_  = create_body_part("m_human", "foot_left");
 
-    setup_animation_fsm();
+    attach_machines_();
+}
+
+auto player::attach_machines_() const -> void {
+    const auto* prefab = assets_.get_prefab("m_human");
+    if (prefab == nullptr) {
+        return;
+    }
+
+    auto& world = engine_.get_world();
+
+    // Порядок ссылок в префабе — это номера слоёв: нулевой ведёт тело, первый
+    // накладывается поверх.
+    for (std::size_t layer = 0; layer < prefab->fsm_refs.size(); ++layer) {
+        const auto* data = assets_.get_fsm(prefab->fsm_refs[layer]);
+        if (data == nullptr) {
+            continue;
+        }
+
+        const auto machines = world.system<ecs::animation_fsm_system>().modify(root_);
+        machines.add_machine(layer, assets_.make_fsm(*data));
+        machines.declare_parameters(*data);
+    }
 }
 
 player::~player() {
@@ -217,149 +239,6 @@ auto player::create_body_part(
     ecs::apply_node(world, ent, ent_data, assets_.library());
 
     return ent;
-}
-
-auto player::setup_animation_fsm() const -> void {
-    const auto ent = root_;
-    auto& world    = engine_.get_world();
-
-    using asset::fsm_compare;
-
-    // Условия — данные, а не лямбды: лямбду не записать в .voxf, а автомат туда
-    // и едет. Скорость и опору кладёт на доску система, счётчик прыжков — сам
-    // player.
-    constexpr auto moving      = std::string_view{"speed"};
-    constexpr auto grounded    = std::string_view{"grounded"};
-    constexpr auto jump_count  = std::string_view{"jump_count"};
-
-    const asset::fsm_condition is_walk{std::string{moving}, fsm_compare::greater, 0.0F};
-    const asset::fsm_condition is_idle{std::string{moving}, fsm_compare::equal, 0.0F};
-    const asset::fsm_condition in_air{std::string{grounded}, fsm_compare::equal, 0.0F};
-    const asset::fsm_condition on_ground{std::string{grounded}, fsm_compare::greater, 0.0F};
-    const asset::fsm_condition first_jump{std::string{jump_count}, fsm_compare::equal, 0.0F};
-    const asset::fsm_condition second_jump{std::string{jump_count}, fsm_compare::equal, 1.0F};
-
-    constexpr asset::transition blend_fast{.duration = 0.15f};
-    constexpr asset::transition blend_normal{.duration = 0.25f};
-    constexpr asset::transition blend_slow{.duration = 0.35f};
-
-    asset::animation_fsm fsm_movement;
-
-    fsm_movement.add_state({
-        .name      = "idle",
-        .clip      = assets_.get_clip("a_idle"),
-        .loop_mode = asset::animation_loop_mode::loop,
-        .transitions =
-            {
-                {.target_state = "walk", .conditions = {is_walk}, .blend = blend_fast},
-                {
-                    .target_state     = "jump_left",
-                    .conditions       = {first_jump, in_air},
-                    .blend            = blend_fast,
-                    .wait_until_blend = true,
-                },
-                {
-                    .target_state     = "jump_right",
-                    .conditions       = {second_jump, in_air},
-                    .blend            = blend_fast,
-                    .wait_until_blend = true,
-                },
-            },
-    });
-
-    fsm_movement.add_state({
-        .name           = "walk",
-        .clip           = assets_.get_clip("a_walk"),
-        .loop_mode      = asset::animation_loop_mode::loop,
-        .playback_speed = 1.25f,
-        .transitions =
-            {
-                {.target_state = "idle", .conditions = {is_idle}, .blend = blend_fast},
-                {
-                    .target_state = "jump_left",
-                    .conditions   = {first_jump, in_air},
-                    .blend        = blend_fast,
-                },
-                {
-                    .target_state = "jump_right",
-                    .conditions   = {second_jump, in_air},
-                    .blend        = blend_fast,
-                },
-            },
-    });
-
-    fsm_movement.add_state({
-        .name           = "jump_right",
-        .clip           = assets_.get_clip("a_jump_right"),
-        .loop_mode      = asset::animation_loop_mode::loop,
-        .playback_speed = 1.0f,
-        .transitions =
-            {
-                {
-                    .target_state     = "idle",
-                    .conditions       = {on_ground},
-                    .blend            = blend_normal,
-                    .wait_until_blend = true,
-                },
-            },
-    });
-
-    fsm_movement.add_state({
-        .name           = "jump_left",
-        .clip           = assets_.get_clip("a_jump_left"),
-        .loop_mode      = asset::animation_loop_mode::loop,
-        .playback_speed = 1.0f,
-        .transitions =
-            {
-                {
-                    .target_state     = "idle",
-                    .conditions       = {on_ground},
-                    .blend            = blend_normal,
-                    .wait_until_blend = true,
-                },
-            },
-    });
-
-    fsm_movement.set_entry_state("idle");
-
-    world.system<ecs::animation_fsm_system>().modify(ent).add_machine(0, std::move(fsm_movement));
-
-    asset::animation_fsm fsm_action;
-
-    fsm_action.add_state({
-        .name = "none",
-        .transitions =
-            {
-                {
-                    .target_state = "sword_attack",
-                    .trigger_name = "attack",
-                    .blend        = blend_fast,
-                },
-            },
-    });
-
-    fsm_action.add_state({
-        .name            = "sword_attack",
-        .clip            = assets_.get_clip("a_sword_attack"),
-        .loop_mode       = asset::animation_loop_mode::once,
-        .playback_speed  = 2.f,
-        .layer_blend_in  = blend_normal,
-        .layer_blend_out = blend_slow,
-        .transitions =
-            {
-                // Ни триггера, ни условий: «когда клип доиграет» — это и есть
-                // весь переход, и делают его wait_*.
-                {
-                    .target_state     = "none",
-                    .wait_until_end   = true,
-                    .wait_until_blend = true,
-                },
-            },
-    });
-
-    fsm_action.set_entry_state("none");
-
-    world.system<ecs::animation_fsm_system>().modify(ent).add_machine(1, std::move(fsm_action));
 }
 
 }  // namespace vw::arena

@@ -1,0 +1,18 @@
+# Voxf File Version 1.0
+rig humanoid
+entry none
+param attack trigger
+state none
+	playback loop
+	to sword_attack
+		on attack
+		blend 0.15
+state sword_attack
+	clip animations/a_sword_attack.voxa
+	playback once
+	rate 2
+	fade_in 0.25
+	fade_out 0.35
+	to none
+		wait end
+		wait blend

@@ -1,0 +1,51 @@
+# Voxf File Version 1.0
+rig humanoid
+entry idle
+param speed float
+param grounded bool true
+param jump_count int
+state idle
+	clip animations/a_idle.voxa
+	playback loop
+	to walk
+		when speed > 0
+		blend 0.15
+	to jump_left
+		when jump_count == 0
+		when grounded == false
+		blend 0.15
+		wait blend
+	to jump_right
+		when jump_count == 1
+		when grounded == false
+		blend 0.15
+		wait blend
+state walk
+	clip animations/a_walk.voxa
+	playback loop
+	rate 1.25
+	to idle
+		when speed == 0
+		blend 0.15
+	to jump_left
+		when jump_count == 0
+		when grounded == false
+		blend 0.15
+	to jump_right
+		when jump_count == 1
+		when grounded == false
+		blend 0.15
+state jump_left
+	clip animations/a_jump_left.voxa
+	playback loop
+	to idle
+		when grounded > 0
+		blend 0.25
+		wait blend
+state jump_right
+	clip animations/a_jump_right.voxa
+	playback loop
+	to idle
+		when grounded > 0
+		blend 0.25
+		wait blend
