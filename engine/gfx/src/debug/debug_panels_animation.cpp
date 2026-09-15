@@ -1,0 +1,131 @@
+module;
+
+#include <imgui.h>
+
+module vw.gfx;
+
+import std;
+import vw.core;
+import vw.asset;
+import vw.ecs;
+import vw.world;
+
+namespace vw::gfx {
+
+namespace {
+
+auto state_text(asset::animation_state state) -> const char* {
+    switch (state) {
+        case asset::animation_state::stopped: return "stopped";
+        case asset::animation_state::playing: return "playing";
+        case asset::animation_state::paused: return "paused";
+    }
+
+    return "stopped";
+}
+
+auto loop_text(asset::animation_loop_mode mode) -> const char* {
+    switch (mode) {
+        case asset::animation_loop_mode::once: return "once";
+        case asset::animation_loop_mode::loop: return "loop";
+        case asset::animation_loop_mode::ping_pong: return "ping_pong";
+    }
+
+    return "loop";
+}
+
+auto clip_name(const std::shared_ptr<asset::animation_clip>& clip) -> const char* {
+    return clip ? clip->get_name().c_str() : "-";
+}
+
+}  // namespace
+
+auto debug_window::render_animation_panel() -> void {
+    auto& world = engine_->get_world();
+
+    std::vector<ecs::entity> animated;
+    for (auto [ent, fsm, player] :
+         world.view<ecs::animation_fsm_component, ecs::animation_player_component>()) {
+        animated.push_back(ent);
+    }
+
+    if (animated.empty()) {
+        ImGui::TextUnformatted("no animated entities");
+        return;
+    }
+
+    // Выбранное существо держится за идентификатор, а не за место в списке:
+    // список пересобирается каждый кадр, и порядок в нём — дело реестра.
+    const auto selected = std::ranges::find(animated, animation_entity_);
+    if (selected == animated.end()) {
+        animation_entity_ = animated.front();
+    }
+
+    if (ImGui::BeginCombo("entity", std::format("{}", animation_entity_.index).c_str())) {
+        for (const auto ent : animated) {
+            const auto label = std::format("{}", ent.index);
+            if (ImGui::Selectable(label.c_str(), ent == animation_entity_)) {
+                animation_entity_ = ent;
+            }
+        }
+        ImGui::EndCombo();
+    }
+
+    auto& registry     = world.registry();
+    const auto& fsm    = registry.get<ecs::animation_fsm_component>(animation_entity_);
+    const auto& player = registry.get<ecs::animation_player_component>(animation_entity_);
+
+    for (std::size_t index = 0; index < fsm.machine_count(); ++index) {
+        ImGui::SeparatorText(std::format("layer {}", index).c_str());
+
+        ImGui::Text("%-10s %s", "state", fsm.get_machine(index).get_current_state().c_str());
+
+        if (!player.has_layer(index)) {
+            ImGui::TextUnformatted("not playing yet");
+            continue;
+        }
+
+        const auto& layer = player.get_layer(index);
+        ImGui::Text(
+            "%-10s %s (%s, %s, %.2fx)", "clip", clip_name(layer.clip), state_text(layer.state),
+            loop_text(layer.loop_mode), layer.playback_speed
+        );
+
+        // Прогресс перехода — то, ради чего окно и заводилось: по числу видно,
+        // доиграет ли смешивание до того, как условие сменится обратно.
+        if (layer.is_blending()) {
+            const auto fraction = layer.blend_elapsed / layer.blend_transition.duration;
+            ImGui::Text("%-10s from %s", "blending", clip_name(layer.blend_prev_clip));
+            ImGui::ProgressBar(
+                fraction, ImVec2(-1.0f, 0.0f),
+                std::format("{:.2f} / {:.2f}s", layer.blend_elapsed,
+                            layer.blend_transition.duration)
+                    .c_str()
+            );
+        }
+
+        if (layer.fade_influence < 1.0f || layer.fade_is_out) {
+            ImGui::Text(
+                "%-10s %.2f%s", "influence", layer.fade_influence, layer.fade_is_out ? " (out)" : ""
+            );
+        }
+
+        ImGui::Text("%-10s %zu targets", "mask", layer.mask.size());
+    }
+
+    // Доска одна на все слои: скорость и опора не бывают отдельно для локомоции
+    // и отдельно для атаки.
+    ImGui::SeparatorText("parameters");
+
+    const auto entries = fsm.get_board().entries();
+    if (entries.empty()) {
+        ImGui::TextUnformatted("none declared");
+        return;
+    }
+
+    for (const auto& [name, value] : entries) {
+        ImGui::Text("%-14s %8.3f", name.c_str(), value);
+    }
+}
+
+}  // namespace vw::gfx

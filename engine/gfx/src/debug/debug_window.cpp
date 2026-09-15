@@ -188,6 +188,9 @@ auto debug_window::render_panel_body(
         case panel::world:
             render_world_panel();
             break;
+        case panel::animation:
+            render_animation_panel();
+            break;
         case panel::view:
             render_view_panel();
             break;

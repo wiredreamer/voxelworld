@@ -3,6 +3,7 @@ export module vw.gfx:debug.window;
 import std;
 
 import vw.core;
+import vw.ecs;
 
 export namespace vw::gfx {
 
@@ -32,13 +33,14 @@ public:
     [[nodiscard]] auto is_visible() const -> bool;
 
 private:
-    // Порядок здесь — порядок пунктов в меню; первые четыре живут под Stats,
-    // остальные под Settings.
+    // Порядок здесь — порядок пунктов в меню; всё до view живёт под Stats,
+    // остальное под Settings.
     enum class panel : uint8 {
         systems,
         render,
         buffers,
         world,
+        animation,
         view,
         lighting,
         shadows,
@@ -51,16 +53,16 @@ private:
         static_cast<std::size_t>(panel::view);
 
     static constexpr std::array<const char*, panel_count> panel_names{
-        "Systems", "Render",   "Buffers", "World", "View",
-        "Lighting", "Shadows", "Lights",  "Fog",
+        "Systems", "Render",  "Buffers", "World", "Animation",
+        "View",    "Lighting", "Shadows", "Lights", "Fog",
     };
 
     static constexpr std::array<const char*, panel_count> panel_titles{
-        "Debug Tool - Systems",  "Debug Tool - Render",
-        "Debug Tool - Buffers",  "Debug Tool - World",
-        "Debug Tool - View",     "Debug Tool - Lighting",
-        "Debug Tool - Shadows",  "Debug Tool - Lights",
-        "Debug Tool - Fog",
+        "Debug Tool - Systems",   "Debug Tool - Render",
+        "Debug Tool - Buffers",   "Debug Tool - World",
+        "Debug Tool - Animation", "Debug Tool - View",
+        "Debug Tool - Lighting",  "Debug Tool - Shadows",
+        "Debug Tool - Lights",    "Debug Tool - Fog",
     };
 
     auto render_main_window() -> void;
@@ -83,6 +85,7 @@ private:
     auto render_render_panel() -> void;
     auto render_buffers_panel() -> void;
     auto render_world_panel() -> void;
+    auto render_animation_panel() -> void;
 
     auto render_view_panel() -> void;
     auto render_lighting_panel() -> void;
@@ -96,6 +99,10 @@ private:
     std::array<bool, panel_count> panel_open_{};
 
     bool show_colliders_ = false;
+
+    // Существо, чей автомат показывает панель анимации. Держится за дескриптор,
+    // а не за место в списке: список пересобирается каждый кадр.
+    ecs::entity animation_entity_;
 
     std::unordered_map<std::string, float32> metric_max_;
 
