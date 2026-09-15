@@ -41,6 +41,7 @@ auto tool_panel::render(
     render_tool_button(tools::remove_voxel, "Remove voxel", "(2)");
     render_tool_button(tools::paint_voxel, "Paint voxel", "(3)");
     render_tool_button(tools::color_picker, "Color picker", "(4)");
+    render_tool_button(tools::move_pivot, "Move pivot", "(5)");
 
     ImGui::PopStyleVar(1);
 

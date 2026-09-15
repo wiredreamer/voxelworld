@@ -180,6 +180,10 @@ export namespace vw::sculptor {
 
 enum class gizmo_mode : uint8 { translate, rotate, scale };
 
+// Что двигает манипулятор: сам узел или точку вращения его объёма. Точка живёт
+// в вокселях объёма, поэтому ходит по осям самого узла и шагает полвокселя.
+enum class gizmo_target : uint8 { node, pivot };
+
 enum class gizmo_axis : uint8 { none, x, y, z };
 
 // Манипулятор выбранной сущности. Не инструмент: он живёт поверх выбора и
@@ -189,7 +193,10 @@ class gizmo final {
 public:
     using engine_type = gfx::engine;
 
-    gizmo(engine_type& eng, app_state& st, operation_manager& op_manager);
+    gizmo(
+        engine_type& eng, app_state& st, operation_manager& op_manager,
+        gizmo_target target = gizmo_target::node
+    );
 
     auto render(ecs::entity ent) -> void;
 
@@ -226,6 +233,7 @@ private:
     [[nodiscard]] auto snap_enabled_() const -> bool;
 
     auto apply_translate_(ecs::entity ent, const frame& fr) -> void;
+    auto apply_pivot_(ecs::entity ent, const frame& fr) -> void;
     auto apply_rotate_(ecs::entity ent, const frame& fr) -> void;
     auto apply_scale_(ecs::entity ent, const frame& fr) -> void;
 
@@ -237,6 +245,8 @@ private:
     app_state* state_;
     operation_manager* op_manager_;
 
+    gizmo_target target_;
+
     gizmo_mode mode_    = gizmo_mode::translate;
     gizmo_axis hovered_ = gizmo_axis::none;
     gizmo_axis active_  = gizmo_axis::none;
@@ -246,6 +256,7 @@ private:
     // Снимок на начало жеста: правка идёт от него, а не от предыдущего кадра,
     // иначе ошибка копится, а undo обязан вернуть ровно исходное состояние.
     transform start_transform_;
+    vec3f start_pivot_{};
     float32 start_offset_ = 0.0F;
     float32 start_angle_  = 0.0F;
 
@@ -253,6 +264,36 @@ private:
     // узел, она сама уезжает вслед за ним, и следующий кадр меряет смещение уже
     // от нового места — узел начинает дёргаться.
     frame drag_frame_{};
+};
+
+}  // namespace vw::sculptor
+
+// ---- from src/tools/move_pivot_tool.h
+export namespace vw::sculptor {
+
+// Точку вращения объёма двигает тот же манипулятор, что и узлы, — просто целится
+// он в неё. Своей работы с мышью у инструмента нет: провалившись в объём, правят
+// либо воксели, либо точку, и второе целиком отдано манипулятору.
+class move_pivot_tool final : public base_tool {
+public:
+    using engine_type = gfx::engine;
+
+    move_pivot_tool(engine_type& eng, app_state& st, operation_manager& op_manager);
+
+    auto render(float delta_time) -> void override;
+    auto on_key_press(const plat::key_press_event& ev) -> void override;
+    auto on_mouse_move(const plat::mouse_move_event& ev) -> void override;
+    auto on_mouse_press(const plat::mouse_press_event& ev) -> void override;
+    auto on_mouse_release(const plat::mouse_release_event& ev) -> void override;
+    auto on_activate() -> void override;
+
+private:
+    [[nodiscard]] auto target_entity_() const -> ecs::entity;
+
+    engine_type* engine_;
+    app_state* state_;
+
+    gizmo gizmo_;
 };
 
 }  // namespace vw::sculptor

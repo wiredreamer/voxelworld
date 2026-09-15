@@ -38,6 +38,11 @@ constexpr float32 screen_size = 0.18F;
 constexpr float32 pick_tolerance = 0.09F;
 
 constexpr float32 snap_translate = 0.5F;
+
+// Шаг точки вращения — полвокселя, и он не отключается: середина вокселя
+// приходится ровно на половину, а осмысленных значений между этими двумя у
+// точки вращения нет.
+constexpr float32 snap_pivot = 0.5F;
 constexpr float32 snap_rotate    = 15.0F * math::deg_to_rad;
 constexpr float32 snap_scale     = 0.1F;
 
@@ -149,14 +154,16 @@ auto snapped(float32 value, float32 step) -> float32 {
 }  // namespace
 
 gizmo::gizmo(
-    engine_type& eng, app_state& st, operation_manager& op_manager
+    engine_type& eng, app_state& st, operation_manager& op_manager, gizmo_target target
 )
-    : engine_(&eng), state_(&st), op_manager_(&op_manager) {}
+    : engine_(&eng), state_(&st), op_manager_(&op_manager), target_(target) {}
 
 auto gizmo::set_mode(
     gizmo_mode mode
 ) -> void {
-    if (dragging_) {
+    // У точки вращения есть только перенос: поворачивать и масштабировать точку
+    // нечего, поэтому манипулятор с такой целью режима не меняет вовсе.
+    if (dragging_ || target_ == gizmo_target::pivot) {
         return;
     }
     mode_ = mode;
@@ -180,10 +187,21 @@ auto gizmo::build_frame_(
     fr.pivot = pivot;
     fr.axes  = {axis_x, axis_y, axis_z};
 
+    // Точка вращения задана в вокселях объёма, а объём повёрнут вместе с самим
+    // узлом — значит, и ручки ходят по его осям, а не по родительским.
+    if (target_ == gizmo_target::pivot) {
+        const auto& node_matrix = tc.get_world_matrix();
+        const auto base         = node_matrix * vec3f{0.0F, 0.0F, 0.0F};
+        for (std::size_t i = 0; i < fr.axes.size(); ++i) {
+            const auto tip = node_matrix * fr.axes[i];
+            fr.axes[i]     = math::normalize(tip - base);
+        }
+    }
+
     // Позиция и поворот узла заданы в пространстве родителя, поэтому и ручки
     // ходят по его осям: иначе дельта по мировой оси легла бы в локальные поля
     // криво, стоит родителю повернуться.
-    if (world.has<ecs::hierarchy_component>(ent)) {
+    if (target_ == gizmo_target::node && world.has<ecs::hierarchy_component>(ent)) {
         const auto parent = world.get<ecs::hierarchy_component>(ent).get_parent();
         if (parent.is_valid() && world.has<ecs::transform_component>(parent)) {
             const auto& parent_matrix = world.get<ecs::transform_component>(parent).get_world_matrix();
@@ -298,6 +316,11 @@ auto gizmo::on_mouse_move(
         return;
     }
 
+    if (target_ == gizmo_target::pivot) {
+        apply_pivot_(ent, drag_frame_);
+        return;
+    }
+
     switch (mode_) {
         case gizmo_mode::translate: apply_translate_(ent, drag_frame_); break;
         case gizmo_mode::rotate: apply_rotate_(ent, drag_frame_); break;
@@ -325,6 +348,10 @@ auto gizmo::on_mouse_press(
     dragging_        = true;
     drag_frame_      = *fr;
     start_transform_ = world.get<ecs::transform_component>(ent).get_transform();
+
+    if (target_ == gizmo_target::pivot && world.has<ecs::model_component>(ent)) {
+        start_pivot_ = world.get<ecs::model_component>(ent).get_pivot();
+    }
 
     const auto& window = engine_->get_window();
     const auto& camera = engine_->get_camera();
@@ -355,24 +382,35 @@ auto gizmo::on_mouse_release() -> void {
     dragging_ = false;
     active_   = gizmo_axis::none;
 
-    if (state_->scene.selected_name.empty()) {
+    const auto& name = state_->edited_node();
+    if (!state_->scene.name_to_entity.contains(name)) {
         return;
     }
 
-    auto& world = engine_->get_world();
-    const auto ent = state_->scene.name_to_entity[state_->scene.selected_name];
-    const auto final_transform = world.get<ecs::transform_component>(ent).get_transform();
+    auto& world    = engine_->get_world();
+    const auto ent = state_->scene.name_to_entity[name];
 
-    // Жест — одна запись в истории. Пока тянут, трансформ правится напрямую, и
-    // только на отпускании операция получает пару «было / стало»: иначе Ctrl+Z
+    // Жест — одна запись в истории. Пока тянут, правка идёт напрямую, и только
+    // на отпускании операция получает пару «было / стало»: иначе Ctrl+Z
     // откатывал бы по кадру.
+    if (target_ == gizmo_target::pivot) {
+        const auto final_pivot = world.get<ecs::model_component>(ent).get_pivot();
+        world.system<ecs::model_system>().modify(ent).set_pivot(start_pivot_);
+
+        op_manager_->execute(
+            std::make_unique<set_pivot_operation>(
+                *engine_, *state_, set_pivot_params{.name = name, .new_pivot = final_pivot}
+            )
+        );
+        return;
+    }
+
+    const auto final_transform = world.get<ecs::transform_component>(ent).get_transform();
     world.system<ecs::transform_system>().modify(ent).set_transform(start_transform_);
 
     auto op = std::make_unique<set_transform_operation>(
         *engine_, *state_,
-        set_transform_params{
-            .name = state_->scene.selected_name, .new_transform = final_transform
-        }
+        set_transform_params{.name = name, .new_transform = final_transform}
     );
     op_manager_->execute(std::move(op));
 }
@@ -404,6 +442,34 @@ auto gizmo::apply_translate_(
     }
 
     engine_->get_world().system<ecs::transform_system>().modify(ent).set_position(next);
+}
+
+auto gizmo::apply_pivot_(
+    ecs::entity ent, const frame& fr
+) -> void {
+    const auto& window = engine_->get_window();
+    const auto& camera = engine_->get_camera();
+    const auto r       = camera.screen_to_world_ray(window.get_cursor_pos(), window.get_size());
+    const auto& axis   = fr.axes[axis_index(active_)];
+
+    float32 t = 0.0F;
+    if (!closest_on_axis(fr.pivot, axis, r, t)) {
+        return;
+    }
+
+    const auto delta = snapped(t - start_offset_, snap_pivot);
+
+    auto next = start_pivot_;
+    switch (active_) {
+        case gizmo_axis::x: next.x += delta; break;
+        case gizmo_axis::y: next.y += delta; break;
+        case gizmo_axis::z: next.z += delta; break;
+        default: return;
+    }
+
+    // Сам маркер при этом не двигается: он стоит в начале координат узла, а
+    // переезжает объём. Точку ставят не «сюда», а «на этот воксель модели».
+    engine_->get_world().system<ecs::model_system>().modify(ent).set_pivot(next);
 }
 
 auto gizmo::apply_rotate_(

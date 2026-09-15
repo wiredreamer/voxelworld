@@ -22,6 +22,7 @@ enum class tools : uint8 {
     remove_voxel,
     paint_voxel,
     color_picker,
+    move_pivot,
 };
 
 struct ui_state {
@@ -123,7 +124,8 @@ struct context_state {
             case tools::add_voxel:
             case tools::remove_voxel:
             case tools::paint_voxel:
-            case tools::color_picker: return kind() == edit_kind::model;
+            case tools::color_picker:
+            case tools::move_pivot: return kind() == edit_kind::model;
             case tools::invalid: break;
         }
         return false;

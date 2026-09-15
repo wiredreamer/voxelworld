@@ -58,6 +58,7 @@ target_sources(${PROJECT_NAME}
         src/services/playback_service.cpp
         src/tools/add_voxel_tool.cpp
         src/tools/color_picker_tool.cpp
+        src/tools/move_pivot_tool.cpp
         src/tools/paint_tool.cpp
         src/tools/remove_voxel_tool.cpp
         src/tools/gizmo.cpp

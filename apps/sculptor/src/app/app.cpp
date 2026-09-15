@@ -59,6 +59,7 @@ app::app(
     tools_[tools::remove_voxel]  = std::make_unique<remove_voxel_tool>(eng, state_, op_manager_);
     tools_[tools::paint_voxel]   = std::make_unique<paint_tool>(eng, state_, op_manager_);
     tools_[tools::color_picker]  = std::make_unique<color_picker_tool>(eng, state_, op_manager_);
+    tools_[tools::move_pivot]    = std::make_unique<move_pivot_tool>(eng, state_, op_manager_);
 
     camera_controller_.setup(window, camera);
     camera_controller_.set_camera_speed(20.f);
@@ -243,6 +244,9 @@ auto app::handle_key_press(
     }
     if (ev.key == keys::KEY_4) {
         state_.tool.selected_tool = tools::color_picker;
+    }
+    if (ev.key == keys::KEY_5) {
+        state_.tool.selected_tool = tools::move_pivot;
     }
 
     tools_[active_tool_]->on_key_press(ev);
