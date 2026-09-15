@@ -26,6 +26,7 @@ target_sources(vw_asset
             src/serial/voxm_format.cppm
             src/serial/model_library.cppm
             src/serial/voxa_format.cppm
+            src/serial/voxf_format.cppm
             src/serial/asset_storage.cppm
     PRIVATE
         src/model/model.cpp
@@ -34,6 +35,7 @@ target_sources(vw_asset
         src/anim/anim.cpp
         src/serial/serial.cpp
         src/serial/voxm.cpp
+        src/serial/voxf.cpp
         src/serial/asset_ref.cpp
         src/serial/model_library.cpp
 )

@@ -15,10 +15,12 @@ enum class animation_loop_mode : uint8 { once, loop, ping_pong };
 enum class animation_property : uint8 { position, rotation, scale };
 
 struct transition {
-    float32 duration               = 0.0F;
+    float32 duration                = 0.0F;
     math::interpolation_type interp = math::interpolation_type::linear;
-    float32 tangent_in             = 0.0F;
-    float32 tangent_out            = 1.0F;
+    float32 tangent_in              = 0.0F;
+    float32 tangent_out             = 1.0F;
+
+    [[nodiscard]] auto operator==(const transition& other) const -> bool = default;
 };
 
 template <animation_property Prop>

@@ -90,6 +90,8 @@ struct fsm_condition {
     float32 value       = 0.0F;
 
     [[nodiscard]] auto holds(const fsm_blackboard& board) const -> bool;
+
+    [[nodiscard]] auto operator==(const fsm_condition& other) const -> bool = default;
 };
 
 class animation_fsm final {
@@ -105,6 +107,8 @@ public:
         transition blend;
         bool wait_until_end   = false;
         bool wait_until_blend = false;
+
+        [[nodiscard]] auto operator==(const transition_rule& other) const -> bool = default;
     };
 
     struct state_node {
