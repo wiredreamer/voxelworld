@@ -123,4 +123,29 @@ private:
     bool touched_ = false;
 };
 
+// Габарит непустых вокселей — не габарит модели. После расширения модель часто
+// болтается внутри собственного объёма, и разница между этими двумя и есть то,
+// что срезает trimmed.
+struct voxel_bounds {
+    vec3i min;
+    vec3i max;
+
+    [[nodiscard]] auto size() const -> vec3i {
+        return vec3i{max.x - min.x + 1, max.y - min.y + 1, max.z - min.z + 1};
+    }
+};
+
+// Пусто — в модели нет ни одного непустого вокселя.
+[[nodiscard]] auto occupied_bounds(const model& source) -> std::optional<voxel_bounds>;
+
+// Копия без пустых слоёв по краям. Точка вращения съезжает на срезанное с
+// нижнего угла: она задана в вокселях объёма, и без компенсации узел прыгнул бы
+// на величину среза.
+//
+// nullptr — резать нечего: либо модель пуста, либо непустые воксели уже стоят
+// впритык к границам. Вызывающий на это и смотрит, чтобы не заводить в истории
+// правок операцию, которая ничего не меняет.
+[[nodiscard]] auto trimmed(const model& source, model_registry& registry)
+    -> std::shared_ptr<model>;
+
 }  // namespace vw::asset
