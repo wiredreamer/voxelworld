@@ -176,6 +176,13 @@ auto component_registry::find(
     return it != codecs_.end() ? &(*it) : nullptr;
 }
 
+auto has_component(
+    world& target, entity ent, uint32 component
+) -> bool {
+    const auto* pool = target.registry().try_pool(component);
+    return pool != nullptr && pool->has(ent);
+}
+
 auto default_components() -> component_registry& {
     static component_registry registry;
     return registry;
@@ -229,11 +236,8 @@ auto apply_node(
 auto extract_node(
     world& source, entity ent, asset::vox_entity_data& out, const component_registry& codecs
 ) -> void {
-    auto& registry = source.registry();
-
     for (const auto& codec : codecs.all()) {
-        const auto* pool = registry.try_pool(codec.component);
-        if (pool == nullptr || !pool->has(ent)) {
+        if (!has_component(source, ent, codec.component)) {
             continue;
         }
 
