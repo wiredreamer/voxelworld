@@ -949,3 +949,53 @@ private:
 };
 
 }  // namespace vw::sculptor
+
+// ---- from src/operations/fsm_operations.h
+export namespace vw::sculptor {
+
+// Отмена автомата — снимок всего документа, а не правка поля. Файл маленький,
+// правки в нём крупные, а семейство операций на каждое поле дало бы тот же
+// результат дюжиной классов.
+struct set_fsm_params {
+    asset::voxf_data before;
+    asset::voxf_data after;
+};
+
+class set_fsm_operation final : public base_operation {
+public:
+    set_fsm_operation(app_state& st, set_fsm_params params);
+
+    auto execute() -> void override;
+    auto undo() -> void override;
+
+private:
+    app_state* state_;
+    set_fsm_params params_;
+};
+
+// Список автоматов префаба целиком: добавление, удаление и перестановка — это
+// одно и то же действие над упорядоченным списком, потому что порядок в нём
+// значит номера слоёв.
+struct set_machines_params {
+    std::vector<asset::asset_ref> machines;
+};
+
+class set_machines_operation final : public base_operation {
+public:
+    using engine_type = gfx::engine;
+
+    set_machines_operation(engine_type& engine, app_state& st, set_machines_params params);
+
+    auto execute() -> void override;
+    auto undo() -> void override;
+
+private:
+    auto apply_(const std::vector<asset::asset_ref>& machines) -> void;
+
+    engine_type* engine_;
+    app_state* state_;
+    set_machines_params params_;
+    std::vector<asset::asset_ref> previous_;
+};
+
+}  // namespace vw::sculptor

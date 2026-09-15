@@ -32,6 +32,7 @@ app::app(
     , clip_service_(eng, state_, op_manager_)
     , playback_service_(eng, state_)
     , keyframe_service_(eng, state_, op_manager_)
+    , fsm_service_(eng, state_, model_library_)
 
     , menu_bar_(eng, state_, op_manager_, file_service_)
     , breadcrumb_bar_(eng, state_, clip_service_)
@@ -44,10 +45,12 @@ app::app(
     , entity_tree_panel_(eng, state_, op_manager_)
     , clip_manager_panel_(eng, state_, op_manager_, clip_service_)
     , timeline_panel_(eng, state_, op_manager_, clip_service_, keyframe_service_)
+    , fsm_panel_(state_, op_manager_, fsm_service_)
     , startup_modal_(eng, state_)
     , new_file_modal_(eng, state_, op_manager_)
     , open_file_modal_(eng, state_, model_library_, op_manager_)
-    , save_as_modal_(eng, state_, file_service_) {
+    , save_as_modal_(eng, state_, file_service_)
+    , add_machine_modal_(eng, state_, op_manager_, fsm_service_) {
     init_asset_dirs_();
 
     auto& window   = eng.get_window();
@@ -133,6 +136,11 @@ auto app::render(
     state_.ui.left_bottom_voffset = 0.f;
     state_.ui.right_top_voffset   = 0.f;
 
+    if (state_.ui.need_enter_machine.has_value()) {
+        static_cast<void>(fsm_service_.enter(*state_.ui.need_enter_machine));
+        state_.ui.need_enter_machine.reset();
+    }
+
     menu_bar_.render(delta_time);
     breadcrumb_bar_.render(delta_time);
 
@@ -161,6 +169,7 @@ auto app::render(
     } else if (state_.ctx.in_clip()) {
         clip_service_.force_exit_animation_mode();
     }
+    fsm_panel_.render(delta_time);
     keyframe_properties_panel_.render(delta_time);
 
     // modals
@@ -168,6 +177,7 @@ auto app::render(
     new_file_modal_.render(delta_time);
     open_file_modal_.render(delta_time);
     save_as_modal_.render(delta_time);
+    add_machine_modal_.render();
 
     handle_animation_actions_();
 
@@ -411,7 +421,12 @@ auto app::update_title_() -> void {
 auto app::prune_contexts_() -> void {
     auto& stack = state_.ctx.stack;
 
-    const auto gone = [this](const edit_context& ctx) {
+    const auto machine_count = fsm_service_.machines().size();
+
+    const auto gone = [this, machine_count](const edit_context& ctx) {
+        if (ctx.kind == edit_kind::fsm) {
+            return ctx.layer >= machine_count;
+        }
         return ctx.kind == edit_kind::model &&
                !state_.scene.name_to_entity.contains(ctx.node_name);
     };

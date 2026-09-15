@@ -56,6 +56,7 @@ private:
     clip_service clip_service_;
     playback_service playback_service_;
     keyframe_service keyframe_service_;
+    fsm_service fsm_service_;
 
     tools active_tool_ = tools::add_voxel;
     std::unordered_map<tools, std::unique_ptr<base_tool>> tools_;
@@ -71,11 +72,13 @@ private:
     entity_tree_panel entity_tree_panel_;
     clip_manager_panel clip_manager_panel_;
     timeline_panel timeline_panel_;
+    fsm_panel fsm_panel_;
 
     startup_modal startup_modal_;
     new_file_modal new_file_modal_;
     open_file_modal open_file_modal_;
     save_as_modal save_as_modal_;
+    add_machine_modal add_machine_modal_;
 };
 
 }  // namespace vw::sculptor

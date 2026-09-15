@@ -392,6 +392,87 @@ auto register_variant(component_drawer_registry& drawers) -> void {
     drawers.register_for<ecs::variant_slot_component>(std::move(drawer));
 }
 
+// Автоматы принадлежат префабу целиком, как и риг, поэтому секция появляется
+// на корне. Порядок в списке — номера слоёв, и стрелка вверх этим и занята.
+auto register_machines(component_drawer_registry& drawers) -> void {
+    component_drawer drawer;
+    drawer.tag   = "fsm";
+    drawer.title = "State machines";
+
+    drawer.draw = [](const component_drawer_context& in) {
+        const auto sources =
+            in.engine.get_world().get<ecs::animation_machines_component>(in.ent).get_sources();
+
+        std::vector<asset::asset_ref> machines{sources.begin(), sources.end()};
+
+        std::optional<std::size_t> to_remove;
+        std::optional<std::size_t> to_lift;
+
+        for (std::size_t i = 0; i < machines.size(); ++i) {
+            ImGui::PushID(static_cast<int32>(i));
+
+            ImGui::AlignTextToFramePadding();
+            ImGui::Text("%zu", i);
+            ImGui::SameLine(label_column);
+            ImGui::TextUnformatted(machines[i].stem().data(),
+                                   machines[i].stem().data() + machines[i].stem().size());
+
+            ImGui::SameLine();
+            if (ImGui::SmallButton("Edit")) {
+                in.state.ui.need_enter_machine = i;
+            }
+
+            if (i > 0) {
+                ImGui::SameLine();
+                if (ImGui::SmallButton("^")) {
+                    to_lift = i;
+                }
+            }
+
+            ImGui::SameLine();
+            if (ImGui::SmallButton("x")) {
+                to_remove = i;
+            }
+
+            ImGui::PopID();
+        }
+
+        if (ImGui::Button("Add machine...")) {
+            in.state.ui.need_add_machine_modal = true;
+        }
+
+        if (to_lift.has_value()) {
+            std::swap(machines[*to_lift], machines[*to_lift - 1]);
+        } else if (to_remove.has_value()) {
+            machines.erase(machines.begin() + static_cast<std::ptrdiff_t>(*to_remove));
+        } else {
+            return;
+        }
+
+        in.ops.execute(std::make_unique<set_machines_operation>(
+            in.engine, in.state, set_machines_params{.machines = std::move(machines)}
+        ));
+    };
+
+    drawer.summary = [](const component_drawer_context& in) {
+        const auto count =
+            in.engine.get_world().get<ecs::animation_machines_component>(in.ent).get_sources().size();
+        return std::format("{} layer(s)", count);
+    };
+
+    drawer.add = [](const component_drawer_context& in) {
+        in.state.ui.need_add_machine_modal = true;
+    };
+
+    drawer.remove = [](const component_drawer_context& in) {
+        in.ops.execute(
+            std::make_unique<set_machines_operation>(in.engine, in.state, set_machines_params{})
+        );
+    };
+
+    drawers.register_for<ecs::animation_machines_component>(std::move(drawer));
+}
+
 auto register_rig(component_drawer_registry& drawers) -> void {
     component_drawer drawer;
     drawer.tag   = "rig";
@@ -423,6 +504,7 @@ component_drawer_registry::component_drawer_registry() {
     register_variant(*this);
     register_rig(*this);
     register_anim_target(*this);
+    register_machines(*this);
 }
 
 auto default_drawers() -> component_drawer_registry& {

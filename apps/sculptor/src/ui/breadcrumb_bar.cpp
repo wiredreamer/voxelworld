@@ -98,6 +98,11 @@ auto breadcrumb_bar::label_of_(
         return clip_name.empty() ? std::string{"animation"} : std::format("{}.voxa", clip_name);
     }
 
+    if (ctx.kind == edit_kind::fsm) {
+        return state_->fsm.is_open() ? std::string{state_->fsm.source.stem()} + ".voxf"
+                                     : std::string{"machine"};
+    }
+
     if (ctx.kind != edit_kind::model) {
         return ctx.node_name;
     }

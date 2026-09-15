@@ -54,10 +54,12 @@ target_sources(${PROJECT_NAME}
         src/operations/remove_variant_slot_operation.cpp
         src/operations/select_variant_operation.cpp
         src/operations/set_variant_candidates_operation.cpp
+        src/operations/fsm_operations.cpp
         src/operations/set_transform_operation.cpp
         src/operations/trim_model_operation.cpp
         src/services/clip_service.cpp
         src/services/file_service.cpp
+        src/services/fsm_service.cpp
         src/services/keyframe_service.cpp
         src/services/playback_service.cpp
         src/tools/add_voxel_tool.cpp
@@ -88,6 +90,8 @@ target_sources(${PROJECT_NAME}
         src/ui/open_file_modal.cpp
         src/ui/save_as_modal.cpp
         src/ui/rig_panel.cpp
+        src/ui/add_machine_modal.cpp
+        src/ui/fsm_panel.cpp
         src/ui/save_clip_as_modal.cpp
         src/ui/socket_panel.cpp
         src/ui/startup_modal.cpp

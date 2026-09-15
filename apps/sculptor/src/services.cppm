@@ -120,3 +120,33 @@ private:
 };
 
 }  // namespace vw::sculptor
+
+// ---- from src/services/fsm_service.h
+export namespace vw::sculptor {
+
+class fsm_service final {
+public:
+    using engine_type = gfx::engine;
+
+    fsm_service(engine_type& eng, app_state& state, asset::model_library& library);
+
+    // Провалиться в автомат слоя. Ссылку берём у корня: в контексте лежит номер
+    // слоя, а чем этот слой занят — знает префаб.
+    auto enter(std::size_t layer) -> bool;
+
+    auto save() -> bool;
+    auto leave() -> void;
+
+    // Пустой файл под новый автомат: одно состояние, оно же входное. Автомат без
+    // состояний не запустится, и городить для этого отдельную проверку не за что.
+    auto create(std::string_view filename) -> std::optional<asset::asset_ref>;
+
+    [[nodiscard]] auto machines() const -> std::vector<asset::asset_ref>;
+
+private:
+    engine_type* engine_;
+    app_state* state_;
+    asset::model_library* library_;
+};
+
+}  // namespace vw::sculptor

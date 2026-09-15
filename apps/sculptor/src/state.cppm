@@ -47,6 +47,13 @@ struct ui_state {
     // Узел, чьему слоту просят выбрать кандидата: список файлов — тоже диалог.
     std::string need_add_candidate_for;
 
+    // Корню просят добавить автомат: список файлов — тоже диалог. Узла здесь
+    // нет — автоматы принадлежат префабу целиком, как и риг.
+    bool need_add_machine_modal = false;
+
+    // Слой, в автомат которого просят провалиться.
+    std::optional<std::size_t> need_enter_machine;
+
     bool need_create_clip_modal = false;
     bool need_save_clip         = false;
     bool need_load_clip_modal   = false;
@@ -76,12 +83,21 @@ struct edit_context {
     edit_kind kind = edit_kind::model;
     std::string node_name;
 
+    // Слой автомата. Здесь номер, а не ссылка, по той же причине, по какой тут
+    // нет имени файла: ссылка живёт на корне и меняется под рукой, а чем сейчас
+    // занят слой — спрашивают у мира.
+    std::size_t layer = 0;
+
     [[nodiscard]] static auto model(std::string node_name) -> edit_context {
         return edit_context{.kind = edit_kind::model, .node_name = std::move(node_name)};
     }
 
     [[nodiscard]] static auto clip() -> edit_context {
         return edit_context{.kind = edit_kind::clip};
+    }
+
+    [[nodiscard]] static auto fsm(std::size_t layer) -> edit_context {
+        return edit_context{.kind = edit_kind::fsm, .layer = layer};
     }
 };
 
@@ -100,6 +116,15 @@ struct context_state {
 
     [[nodiscard]] auto in_clip() const -> bool {
         return kind() == edit_kind::clip;
+    }
+
+    [[nodiscard]] auto in_fsm() const -> bool {
+        return kind() == edit_kind::fsm;
+    }
+
+    // Слой открытого автомата. Спрашивать имеет смысл только в контексте fsm.
+    [[nodiscard]] auto layer() const -> std::size_t {
+        return stack.empty() ? 0 : stack.back().layer;
     }
 
     // Узел выбирают и в префабе, и в клипе: в клипе выбор говорит, чью дорожку
@@ -257,6 +282,52 @@ struct socket_state {
     auto clear_all(world_type& world) -> void;
 };
 
+// Открытый .voxf. Документ лежит целиком, а не ссылкой в реестр: автомат — это
+// файл, у редактора он один за раз, и отмена работает снимком всего документа.
+struct fsm_document {
+    asset::asset_ref source;
+    asset::voxf_data data;
+    bool has_unsaved_changes = false;
+
+    // Состояние, чьи переходы и «входящие» раскрыты. Имя, а не номер: список
+    // состояний перетасовывается правкой.
+    std::string selected_state;
+
+    [[nodiscard]] auto is_open() const -> bool {
+        return !source.empty();
+    }
+
+    // Кто ведёт в это состояние. Считается по всему файлу и потому не хранится:
+    // ответ меняется от любой правки чужого перехода.
+    [[nodiscard]] auto incoming(std::string_view state_name) const -> std::vector<std::string> {
+        std::vector<std::string> sources;
+
+        for (const auto& state : data.states) {
+            const auto leads = std::ranges::any_of(
+                state.transitions,
+                [state_name](const asset::animation_fsm::transition_rule& rule) {
+                    return rule.target_state == state_name;
+                }
+            );
+            if (leads) {
+                sources.push_back(state.name);
+            }
+        }
+
+        const auto from_any = std::ranges::any_of(
+            data.any_transitions,
+            [state_name](const asset::animation_fsm::transition_rule& rule) {
+                return rule.target_state == state_name;
+            }
+        );
+        if (from_any) {
+            sources.emplace_back("any");
+        }
+
+        return sources;
+    }
+};
+
 struct app_state {
     // Корень ассетов задаётся на конфигурации (VW_SCULPTOR_ASSET_ROOT) и по
     // умолчанию указывает на assets/ репозитория: редактор правит те же файлы,
@@ -275,6 +346,7 @@ struct app_state {
     ui_state ui;
     file_state file;
     context_state ctx;
+    fsm_document fsm;
     scene_state scene;
     volume_state volume;
     tool_state tool;

@@ -853,3 +853,78 @@ private:
 };
 
 }  // namespace vw::sculptor
+
+// ---- from src/ui/add_machine_modal.h
+export namespace vw::sculptor {
+
+class add_machine_modal final {
+public:
+    using engine_type = gfx::engine;
+
+    add_machine_modal(
+        engine_type& eng, app_state& st, operation_manager& op_manager, fsm_service& service
+    );
+
+    auto open() -> void;
+    auto render() -> void;
+
+private:
+    auto confirm_() -> void;
+
+    engine_type* engine_;
+    app_state* state_;
+    operation_manager* op_manager_;
+    fsm_service* service_;
+
+    bool need_open_ = false;
+    std::string selected_;
+    std::string new_name_;
+    std::vector<asset::asset_ref> files_;
+};
+
+}  // namespace vw::sculptor
+
+// ---- from src/ui/fsm_panel.h
+export namespace vw::sculptor {
+
+// Автомат плоским списком в три уровня: состояние → переход → условие, плюс
+// вычисляемая секция «входящие». Графового редактора нет намеренно: граф
+// циклический, деревом он не выражается, а список даёт даром то, чего граф не
+// даёт, — ответ на вопрос «кто сюда ведёт».
+class fsm_panel final {
+public:
+    using engine_type = gfx::engine;
+
+    fsm_panel(app_state& st, operation_manager& op_manager, fsm_service& service);
+
+    auto render(float delta_time) -> void;
+
+private:
+    auto render_header_() -> void;
+    auto render_params_() -> void;
+    auto render_states_() -> void;
+    auto render_state_(std::size_t index) -> void;
+    auto render_rules_(std::vector<asset::animation_fsm::transition_rule>& rules, const char* id)
+        -> void;
+    auto render_rule_(
+        std::vector<asset::animation_fsm::transition_rule>& rules, std::size_t index
+    ) -> void;
+    auto render_incoming_(const std::string& state_name) -> void;
+
+    auto state_combo_(const char* label, std::string& target) -> bool;
+
+    // Правка идёт в документ сразу, а в историю ложится одним шагом — когда
+    // виджет отпустили: иначе каждый кадр перетаскивания стал бы шагом отмены.
+    auto begin_edit_() -> void;
+    auto commit_edit_() -> void;
+
+    app_state* state_;
+    operation_manager* op_manager_;
+    fsm_service* service_;
+
+    // Снимок документа до правки: в историю она ложится одним шагом.
+    asset::voxf_data before_;
+    bool editing_ = false;
+};
+
+}  // namespace vw::sculptor
