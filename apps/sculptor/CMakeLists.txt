@@ -50,6 +50,7 @@ target_sources(${PROJECT_NAME}
         src/operations/set_socket_transform_operation.cpp
         src/operations/set_pivot_operation.cpp
         src/operations/set_rig_operation.cpp
+        src/operations/select_variant_operation.cpp
         src/operations/set_transform_operation.cpp
         src/operations/trim_model_operation.cpp
         src/services/clip_service.cpp

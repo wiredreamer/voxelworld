@@ -285,6 +285,64 @@ auto register_anim_target(component_drawer_registry& drawers) -> void {
     drawers.register_for<ecs::animation_target_component>(std::move(drawer));
 }
 
+auto register_variant(component_drawer_registry& drawers) -> void {
+    component_drawer drawer;
+    drawer.tag   = "variant";
+    drawer.title = "Variant";
+
+    drawer.draw = [](const component_drawer_context& in) {
+        const auto& slot = in.engine.get_world().get<ecs::variant_slot_component>(in.ent);
+
+        field_label("Slot");
+        ImGui::TextDisabled("%s", slot.get_name().c_str());
+
+        const auto& candidates = slot.get_candidates();
+        if (candidates.empty()) {
+            field_label("Candidates");
+            ImGui::TextDisabled("none");
+            return;
+        }
+
+        // Кандидаты подписаны именами файлов: путь у них общий и длинный, а
+        // различаются они последним куском.
+        const auto label_of = [&candidates](std::size_t index) {
+            return std::format("{}{}", candidates[index].stem(), candidates[index].extension());
+        };
+
+        const auto current = slot.get_selected();
+        std::optional<std::size_t> picked;
+
+        field_label("Current");
+        ImGui::SetNextItemWidth(150.f);
+        if (ImGui::BeginCombo("##variant", label_of(current).c_str())) {
+            for (std::size_t i = 0; i < candidates.size(); ++i) {
+                if (ImGui::Selectable(label_of(i).c_str(), i == current) && i != current) {
+                    picked = i;
+                }
+            }
+            ImGui::EndCombo();
+        }
+
+        // Операция идёт после того, как список закрыт: она меняет объём узла, а
+        // ссылка на слот взята до неё.
+        if (picked.has_value()) {
+            in.ops.execute(
+                std::make_unique<select_variant_operation>(
+                    in.engine, in.state, in.library,
+                    select_variant_params{.name = in.node_name, .index = *picked}
+                )
+            );
+        }
+    };
+
+    drawer.summary = [](const component_drawer_context& in) {
+        const auto& slot = in.engine.get_world().get<ecs::variant_slot_component>(in.ent);
+        return std::format("{} of {}", slot.get_selected() + 1, slot.get_candidates().size());
+    };
+
+    drawers.register_for<ecs::variant_slot_component>(std::move(drawer));
+}
+
 auto register_rig(component_drawer_registry& drawers) -> void {
     component_drawer drawer;
     drawer.tag   = "rig";
@@ -313,6 +371,7 @@ component_drawer_registry::component_drawer_registry() {
     register_transform(*this);
     register_model(*this);
     register_sockets(*this);
+    register_variant(*this);
     register_rig(*this);
     register_anim_target(*this);
 }

@@ -16,12 +16,13 @@ import vw.gfx;
 namespace vw::sculptor {
 
 entity_properties_panel::entity_properties_panel(
-    engine_type& eng, app_state& st, operation_manager& op_manager
+    engine_type& eng, app_state& st, operation_manager& op_manager, asset::model_library& library
 )
     : engine_(&eng)
     , state_(&st)
     , op_manager_(&op_manager)
-    , components_modal_(eng, st, op_manager) {}
+    , library_(&library)
+    , components_modal_(eng, st, op_manager, library) {}
 
 auto entity_properties_panel::render(
     float /*delta_time*/
@@ -55,6 +56,7 @@ auto entity_properties_panel::render(
             .engine    = *engine_,
             .state     = *state_,
             .ops       = *op_manager_,
+            .library   = *library_,
             .ent       = ent,
             .node_name = name,
         };

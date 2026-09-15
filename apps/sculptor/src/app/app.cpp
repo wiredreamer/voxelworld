@@ -37,7 +37,7 @@ app::app(
     , breadcrumb_bar_(eng, state_, clip_service_)
     , tool_panel_(state_)
     , block_palette_panel_(eng, state_)
-    , entity_properties_panel_(eng, state_, op_manager_)
+    , entity_properties_panel_(eng, state_, op_manager_, model_library_)
     , rig_panel_(eng, state_, op_manager_)
     , socket_panel_(eng, state_, op_manager_, model_library_)
     , keyframe_properties_panel_(eng, state_, op_manager_)

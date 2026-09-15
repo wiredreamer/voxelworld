@@ -380,6 +380,40 @@ private:
 
 }  // namespace vw::sculptor
 
+// ---- from src/operations/select_variant_operation.h
+export namespace vw::sculptor {
+
+struct select_variant_params {
+    std::string name;
+    std::size_t index = 0;
+};
+
+class select_variant_operation final : public base_operation {
+public:
+    using engine_type = gfx::engine;
+
+    select_variant_operation(
+        engine_type& eng, app_state& st, asset::model_library& library,
+        const select_variant_params& params
+    );
+
+    auto execute() -> void override;
+    auto undo() -> void override;
+
+private:
+    engine_type* engine_;
+    app_state* state_;
+
+    // Кандидат — файл, и ставится он загрузкой: библиотека тут не роскошь, а
+    // единственный способ не завести второй экземпляр того же объёма.
+    asset::model_library* library_;
+
+    select_variant_params params_;
+    std::size_t previous_ = 0;
+};
+
+}  // namespace vw::sculptor
+
 // ---- from src/operations/trim_model_operation.h
 export namespace vw::sculptor {
 

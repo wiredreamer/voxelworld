@@ -23,11 +23,12 @@ constexpr float32 action_column  = 250.f;
 }  // namespace
 
 edit_components_modal::edit_components_modal(
-    engine_type& eng, app_state& st, operation_manager& op_manager
+    engine_type& eng, app_state& st, operation_manager& op_manager, asset::model_library& library
 )
     : engine_(&eng)
     , state_(&st)
     , op_manager_(&op_manager)
+    , library_(&library)
     , add_model_modal_(eng, st, op_manager) {}
 
 auto edit_components_modal::open(
@@ -110,6 +111,7 @@ auto edit_components_modal::render_row_(
         .engine    = *engine_,
         .state     = *state_,
         .ops       = *op_manager_,
+        .library   = *library_,
         .ent       = ent,
         .node_name = entity_name_,
     };

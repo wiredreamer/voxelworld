@@ -327,6 +327,7 @@ struct component_drawer_context {
     engine_type& engine;
     app_state& state;
     operation_manager& ops;
+    asset::model_library& library;
 
     ecs::entity ent;
     const std::string& node_name;
@@ -392,7 +393,10 @@ class edit_components_modal final {
 public:
     using engine_type = gfx::engine;
 
-    edit_components_modal(engine_type& eng, app_state& st, operation_manager& op_manager);
+    edit_components_modal(
+        engine_type& eng, app_state& st, operation_manager& op_manager,
+        asset::model_library& library
+    );
 
     auto open(const std::string& entity_name) -> void;
     auto render() -> void;
@@ -405,6 +409,7 @@ private:
     engine_type* engine_;
     app_state* state_;
     operation_manager* op_manager_;
+    asset::model_library* library_;
 
     add_model_component_modal add_model_modal_;
 
@@ -422,7 +427,10 @@ class entity_properties_panel final {
 public:
     using engine_type = gfx::engine;
 
-    entity_properties_panel(engine_type& eng, app_state& st, operation_manager& op_manager);
+    entity_properties_panel(
+        engine_type& eng, app_state& st, operation_manager& op_manager,
+        asset::model_library& library
+    );
 
     auto render(float delta_time) -> void;
 
@@ -432,6 +440,7 @@ private:
     engine_type* engine_;
     app_state* state_;
     operation_manager* op_manager_;
+    asset::model_library* library_;
 
     edit_components_modal components_modal_;
 };
