@@ -380,6 +380,36 @@ private:
 
 }  // namespace vw::sculptor
 
+// ---- from src/operations/trim_model_operation.h
+export namespace vw::sculptor {
+
+struct trim_model_params {
+    std::string name;
+};
+
+// Обратная к expand_model_operation: срезает пустые слои с краёв объёма и
+// двигает точку вращения на срезанное, чтобы узел не сдвинулся.
+class trim_model_operation final : public base_operation {
+public:
+    using engine_type = gfx::engine;
+
+    trim_model_operation(engine_type& eng, app_state& st, const trim_model_params& params);
+
+    auto execute() -> void override;
+    auto undo() -> void override;
+
+private:
+    engine_type* engine_;
+    app_state* state_;
+    trim_model_params params_;
+
+    // Прежний объём хранится целиком, а не пересчитывается обратно: срез теряет
+    // и размер, и то, сколько было пустых слоёв с какой стороны.
+    std::shared_ptr<asset::model> previous_;
+};
+
+}  // namespace vw::sculptor
+
 // ---- from src/operations/modify_keyframe_operation.h
 export namespace vw::sculptor {
 

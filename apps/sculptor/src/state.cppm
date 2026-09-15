@@ -101,6 +101,13 @@ struct context_state {
         return kind() == edit_kind::prefab || kind() == edit_kind::clip;
     }
 
+    // Сам объём правят и из префаба, и провалившись в него: точка вращения и
+    // обрезка нужны там же, где воксели. В клипе не правится ничего — позу
+    // ведёт дорожка.
+    [[nodiscard]] auto allows_volume_edit() const -> bool {
+        return kind() == edit_kind::prefab || kind() == edit_kind::model;
+    }
+
     // Узел, чей под-ассет открыт. Пусто — либо префаб, либо контекст без узла.
     [[nodiscard]] auto node_name() const -> std::string_view {
         return stack.empty() ? std::string_view{} : std::string_view{stack.back().node_name};
@@ -256,11 +263,14 @@ struct app_state {
     animation_state anim;
     socket_state sockets;
 
-    // Узел, который правят воксельные инструменты: его называет контекст, а не
-    // выделение. Undo умеет вернуть контекст чужого объёма, и красить тогда надо
-    // тот узел, чьё имя стоит в крошках.
+    // Узел, о котором идёт речь: его называет контекст, а если контекст узла не
+    // называет — префаб и клип не называют — то выделение. Undo умеет вернуть
+    // контекст чужого объёма, и править тогда надо тот узел, чьё имя в крошках.
     [[nodiscard]] auto edited_node() const -> const std::string& {
-        return ctx.in_prefab() ? scene.selected_name : ctx.stack.back().node_name;
+        if (!ctx.stack.empty() && !ctx.stack.back().node_name.empty()) {
+            return ctx.stack.back().node_name;
+        }
+        return scene.selected_name;
     }
 
     auto reset(world_type& world) -> void;

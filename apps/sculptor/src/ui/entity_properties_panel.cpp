@@ -56,22 +56,30 @@ auto entity_properties_panel::render(
 
     ImGui::Begin("Entity Properties", nullptr, window_flags);
 
-    if (state_->scene.selected_name.empty()) {
+    // Внутри объёма панель говорит про узел из крошек, а не про выделение: туда
+    // выделение не ходит, а undo умеет вернуть контекст чужого объёма.
+    const auto& name = state_->edited_node();
+
+    if (!state_->scene.name_to_entity.contains(name)) {
         ImGui::TextDisabled("No entity selected");
     } else {
-        const auto ent = state_->scene.name_to_entity[state_->scene.selected_name];
+        const auto ent = state_->scene.name_to_entity[name];
 
         render_header_(ent);
 
-        // Узел правится только в контексте префаба: в объёме правят воксели, в
-        // клипе позу ведёт дорожка. И там, и там панель остаётся справочной —
-        // значения видно, менять их нельзя.
-        const bool editable = state_->ctx.in_prefab();
+        // Сам узел и его состав правятся только в префабе: в клипе позу ведёт
+        // дорожка, а внутри объёма речь идёт про объём. Объём поэтому и остаётся
+        // живым — провалившись в него, правят именно его.
+        const bool node_editable = state_->ctx.in_prefab();
 
-        ImGui::BeginDisabled(!editable);
-
+        ImGui::BeginDisabled(!node_editable);
         render_transform_(ent);
+        ImGui::EndDisabled();
+
         render_model_(ent);
+
+        ImGui::BeginDisabled(!node_editable);
+
         render_sockets_(ent);
         render_rig_(ent);
         render_animation_target_(ent);
@@ -79,7 +87,7 @@ auto entity_properties_panel::render(
         ImGui::Spacing();
         ImGui::Spacing();
         if (ImGui::Button("Components...")) {
-            components_modal_.open(state_->scene.selected_name);
+            components_modal_.open(name);
         }
 
         ImGui::EndDisabled();
@@ -97,7 +105,7 @@ auto entity_properties_panel::render(
 auto entity_properties_panel::render_header_(
     ecs::entity ent
 ) const -> void {
-    ImGui::TextUnformatted(state_->scene.selected_name.c_str());
+    ImGui::TextUnformatted(state_->edited_node().c_str());
     ImGui::SameLine();
     ImGui::TextDisabled("%u.%u", ent.index, ent.generation);
 }
@@ -118,7 +126,8 @@ auto entity_properties_panel::render_transform_(
 }
 
 auto entity_properties_panel::render_position_() const -> void {
-    const auto ent             = state_->scene.name_to_entity[state_->scene.selected_name];
+    const auto& name           = state_->edited_node();
+    const auto ent             = state_->scene.name_to_entity[name];
     auto& world                = engine_->get_world();
     const auto& transform_comp = world.get<ecs::transform_component>(ent);
     vec3f position             = transform_comp.get_position();
@@ -126,7 +135,7 @@ auto entity_properties_panel::render_position_() const -> void {
         transform new_transform = transform_comp.get_transform();
         new_transform.set_position(position);
         set_transform_params params = {
-            .name          = state_->scene.selected_name,
+            .name          = name,
             .new_transform = new_transform,
         };
         op_manager_->execute(std::make_unique<set_transform_operation>(*engine_, *state_, params));
@@ -134,7 +143,7 @@ auto entity_properties_panel::render_position_() const -> void {
 }
 
 auto entity_properties_panel::render_rotation_() const -> void {
-    const auto& name           = state_->scene.selected_name;
+    const auto& name           = state_->edited_node();
     const auto ent             = state_->scene.name_to_entity[name];
     auto& world                = engine_->get_world();
     const auto& transform_comp = world.get<ecs::transform_component>(ent);
@@ -169,7 +178,8 @@ auto entity_properties_panel::render_rotation_() const -> void {
 }
 
 auto entity_properties_panel::render_scale_() const -> void {
-    const auto ent       = state_->scene.name_to_entity[state_->scene.selected_name];
+    const auto& name     = state_->edited_node();
+    const auto ent       = state_->scene.name_to_entity[name];
     auto& world          = engine_->get_world();
     auto& transform_comp = world.get<ecs::transform_component>(ent);
     vec3f scale          = transform_comp.get_scale();
@@ -177,7 +187,7 @@ auto entity_properties_panel::render_scale_() const -> void {
         transform new_transform = transform_comp.get_transform();
         new_transform.set_scale(scale);
         set_transform_params params = {
-            .name          = state_->scene.selected_name,
+            .name          = name,
             .new_transform = new_transform,
         };
         op_manager_->execute(std::make_unique<set_transform_operation>(*engine_, *state_, params));
@@ -194,7 +204,7 @@ auto entity_properties_panel::render_model_(
 
     ImGui::SeparatorText("Model");
 
-    const auto& name       = state_->scene.selected_name;
+    const auto& name       = state_->edited_node();
     const auto& model_comp = world.get<ecs::model_component>(ent);
 
     // Имя файла, а не весь путь: панель прижата к правому краю, и полный путь
@@ -230,6 +240,22 @@ auto entity_properties_panel::render_model_(
         set_name.data()
     );
 
+    // Занятый объём показывается, только когда он меньше габарита: совпали —
+    // говорить не о чем, а разошлись — это и есть ответ на вопрос, почему модель
+    // болтается внутри себя и что срежет Trim.
+    const auto& bounds  = occupied_bounds_(model.get());
+    const bool can_trim = bounds.has_value() && bounds->size() != model_size;
+    if (!bounds.has_value()) {
+        field_label("Occupied");
+        ImGui::TextDisabled("empty");
+    } else if (can_trim) {
+        const auto occupied = bounds->size();
+        field_label("Occupied");
+        ImGui::TextDisabled("%dx%dx%d", occupied.x, occupied.y, occupied.z);
+    }
+
+    ImGui::BeginDisabled(!state_->ctx.allows_volume_edit());
+
     // Точка вращения объёма: узел садится на неё, а поддерево её не видит.
     vec3f pivot = model_comp.get_pivot();
     if (imgui_drag_vec3f("Pivot", pivot, label_column)) {
@@ -240,9 +266,44 @@ auto entity_properties_panel::render_model_(
         );
     }
 
-    if (ImGui::Button("Edit voxels")) {
-        state_->ctx.enter(edit_context::model(name));
+    if (can_trim && ImGui::Button("Trim")) {
+        op_manager_->execute(
+            std::make_unique<trim_model_operation>(
+                *engine_, *state_, trim_model_params{.name = name}
+            )
+        );
     }
+
+    ImGui::EndDisabled();
+
+    if (state_->ctx.in_prefab()) {
+        if (can_trim) {
+            ImGui::SameLine();
+        }
+        if (ImGui::Button("Edit voxels")) {
+            state_->ctx.enter(edit_context::model(name));
+        }
+    }
+}
+
+auto entity_properties_panel::occupied_bounds_(
+    const asset::model* model
+) const -> const std::optional<asset::voxel_bounds>& {
+    if (model == nullptr) {
+        cached_bounds_id_ = asset::invalid_model_identity;
+        cached_bounds_.reset();
+        return cached_bounds_;
+    }
+
+    // Обход всего объёма ради строки в панели — только когда модель менялась: у
+    // 64-куба это четверть миллиона проверок, и каждый кадр их делать не за что.
+    const auto id = model->get_identity();
+    if (id != cached_bounds_id_) {
+        cached_bounds_id_ = id;
+        cached_bounds_    = asset::occupied_bounds(*model);
+    }
+
+    return cached_bounds_;
 }
 
 auto entity_properties_panel::render_sockets_(

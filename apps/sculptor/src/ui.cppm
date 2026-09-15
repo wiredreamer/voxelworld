@@ -376,6 +376,9 @@ private:
     auto render_rotation_() const -> void;
     auto render_scale_() const -> void;
 
+    [[nodiscard]] auto occupied_bounds_(const asset::model* model) const
+        -> const std::optional<asset::voxel_bounds>&;
+
     engine_type* engine_;
     app_state* state_;
     operation_manager* op_manager_;
@@ -385,6 +388,9 @@ private:
     mutable std::string cached_rotation_entity_;
     mutable quat cached_rotation_quat_;
     mutable vec3f cached_rotation_deg_;
+
+    mutable asset::model_identity cached_bounds_id_;
+    mutable std::optional<asset::voxel_bounds> cached_bounds_;
 };
 
 }  // namespace vw::sculptor
