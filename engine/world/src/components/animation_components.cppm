@@ -88,6 +88,12 @@ struct animation_fsm_component final {
         return machines_[index];
     }
 
+    // Доска параметров одна на все слои сущности: условия в них общие — скорость
+    // и опора не бывают отдельно для локомоции и отдельно для атаки.
+    [[nodiscard]] auto get_board() const -> const asset::fsm_blackboard& {
+        return board_;
+    }
+
 private:
     friend class animation_fsm_system;
 
@@ -95,6 +101,7 @@ private:
 
     std::vector<asset::animation_fsm> machines_;
     trigger_set triggers_;
+    asset::fsm_blackboard board_;
 };
 
 }  // namespace vw::ecs

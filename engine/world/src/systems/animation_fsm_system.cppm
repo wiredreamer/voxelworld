@@ -28,6 +28,10 @@ public:
         auto add_machine(std::size_t index, asset::animation_fsm machine) const -> void;
         auto fire_trigger(std::string_view name) const -> void;
 
+        // Параметр от приложения: встроенные система заполняет сама, а всё, чего
+        // в мире нет — счётчик прыжков, выбранное оружие, — приходит отсюда.
+        auto set_parameter(std::string_view name, float32 value) const -> void;
+
     private:
         friend class animation_fsm_system;
         explicit modifier(animation_fsm_component* component);
@@ -38,6 +42,10 @@ public:
     auto modify(entity ent) -> modifier;
 
 private:
+    // Встроенные параметры заполняются здесь, а не тем, кто собирает автомат: их
+    // источник — компоненты мира, и файлу про это знать незачем.
+    auto fill_builtins_(entity ent, asset::fsm_blackboard& board) const -> void;
+
     world* world_;
 };
 

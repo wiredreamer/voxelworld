@@ -115,6 +115,12 @@ auto player::update(
         jump_counter_     = (jump_counter_ + 1) % 2;
         need_update_jump_ = false;
     }
+
+    // Скорость и опору система кладёт на доску сама, а счётчик прыжков — чисто
+    // игровое понятие, и приходит он отсюда.
+    world.system<ecs::animation_fsm_system>().modify(ent).set_parameter(
+        "jump_count", static_cast<float32>(jump_counter_)
+    );
 }
 
 auto player::try_place(
@@ -217,28 +223,21 @@ auto player::setup_animation_fsm() const -> void {
     const auto ent = root_;
     auto& world    = engine_.get_world();
 
-    auto is_walk = [&, ent]() -> bool {
-        const auto& move = world.get<ecs::movement_intent_component>(ent);
-        const auto& v    = move.get_wish_velocity();
-        return v.x != 0.0f || v.z != 0.0f;
-    };
-    auto is_idle = [&, ent]() -> bool {
-        const auto& move = world.get<ecs::movement_intent_component>(ent);
-        const auto& v    = move.get_wish_velocity();
-        return v.x == 0.0f && v.z == 0.0f;
-    };
-    auto is_jump_left = [&, ent]() -> bool {
-        const auto& rb = world.get<ecs::rigid_body_component>(ent);
-        return jump_counter_ == 0 && !rb.is_grounded();
-    };
-    auto is_jump_right = [&, ent]() -> bool {
-        const auto& rb = world.get<ecs::rigid_body_component>(ent);
-        return jump_counter_ == 1 && !rb.is_grounded();
-    };
-    auto is_grounded = [&, ent]() -> bool {
-        const auto& rb = world.get<ecs::rigid_body_component>(ent);
-        return rb.is_grounded();
-    };
+    using asset::fsm_compare;
+
+    // Условия — данные, а не лямбды: лямбду не записать в .voxf, а автомат туда
+    // и едет. Скорость и опору кладёт на доску система, счётчик прыжков — сам
+    // player.
+    constexpr auto moving      = std::string_view{"speed"};
+    constexpr auto grounded    = std::string_view{"grounded"};
+    constexpr auto jump_count  = std::string_view{"jump_count"};
+
+    const asset::fsm_condition is_walk{std::string{moving}, fsm_compare::greater, 0.0F};
+    const asset::fsm_condition is_idle{std::string{moving}, fsm_compare::equal, 0.0F};
+    const asset::fsm_condition in_air{std::string{grounded}, fsm_compare::equal, 0.0F};
+    const asset::fsm_condition on_ground{std::string{grounded}, fsm_compare::greater, 0.0F};
+    const asset::fsm_condition first_jump{std::string{jump_count}, fsm_compare::equal, 0.0F};
+    const asset::fsm_condition second_jump{std::string{jump_count}, fsm_compare::equal, 1.0F};
 
     constexpr asset::transition blend_fast{.duration = 0.15f};
     constexpr asset::transition blend_normal{.duration = 0.25f};
@@ -252,16 +251,16 @@ auto player::setup_animation_fsm() const -> void {
         .loop_mode = asset::animation_loop_mode::loop,
         .transitions =
             {
-                {.target_state = "walk", .condition = is_walk, .blend = blend_fast},
+                {.target_state = "walk", .conditions = {is_walk}, .blend = blend_fast},
                 {
                     .target_state     = "jump_left",
-                    .condition        = is_jump_left,
+                    .conditions       = {first_jump, in_air},
                     .blend            = blend_fast,
                     .wait_until_blend = true,
                 },
                 {
                     .target_state     = "jump_right",
-                    .condition        = is_jump_right,
+                    .conditions       = {second_jump, in_air},
                     .blend            = blend_fast,
                     .wait_until_blend = true,
                 },
@@ -275,15 +274,15 @@ auto player::setup_animation_fsm() const -> void {
         .playback_speed = 1.25f,
         .transitions =
             {
-                {.target_state = "idle", .condition = is_idle, .blend = blend_fast},
+                {.target_state = "idle", .conditions = {is_idle}, .blend = blend_fast},
                 {
                     .target_state = "jump_left",
-                    .condition    = is_jump_left,
+                    .conditions   = {first_jump, in_air},
                     .blend        = blend_fast,
                 },
                 {
                     .target_state = "jump_right",
-                    .condition    = is_jump_right,
+                    .conditions   = {second_jump, in_air},
                     .blend        = blend_fast,
                 },
             },
@@ -298,7 +297,7 @@ auto player::setup_animation_fsm() const -> void {
             {
                 {
                     .target_state     = "idle",
-                    .condition        = is_grounded,
+                    .conditions       = {on_ground},
                     .blend            = blend_normal,
                     .wait_until_blend = true,
                 },
@@ -314,7 +313,7 @@ auto player::setup_animation_fsm() const -> void {
             {
                 {
                     .target_state     = "idle",
-                    .condition        = is_grounded,
+                    .conditions       = {on_ground},
                     .blend            = blend_normal,
                     .wait_until_blend = true,
                 },
@@ -348,9 +347,10 @@ auto player::setup_animation_fsm() const -> void {
         .layer_blend_out = blend_slow,
         .transitions =
             {
+                // Ни триггера, ни условий: «когда клип доиграет» — это и есть
+                // весь переход, и делают его wait_*.
                 {
                     .target_state     = "none",
-                    .condition        = []() -> bool { return true; },
                     .wait_until_end   = true,
                     .wait_until_blend = true,
                 },

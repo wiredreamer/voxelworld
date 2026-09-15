@@ -51,13 +51,56 @@ struct animation_layer {
     }
 };
 
+// Доска параметров: плоский список пар. Их единицы, линейный поиск по ним
+// дешевле хеша, и порядок в файле совпадает с порядком здесь.
+//
+// Тип один — число. Булево живёт здесь же нулём и единицей, целое точным
+// значением: отдельные типы стоили бы варианта в каждом сравнении ради того,
+// что и так помещается.
+class fsm_blackboard final {
+public:
+    auto set(std::string_view name, float32 value) -> void;
+
+    // Нет параметра — ноль, а не отказ: условие по незаполненному параметру
+    // просто не выполняется, и автомат остаётся там, где стоял.
+    [[nodiscard]] auto get(std::string_view name) const -> float32;
+
+    [[nodiscard]] auto entries() const -> std::span<const std::pair<std::string, float32>> {
+        return values_;
+    }
+
+private:
+    std::vector<std::pair<std::string, float32>> values_;
+};
+
+enum class fsm_compare : uint8 {
+    equal,
+    not_equal,
+    less,
+    less_equal,
+    greater,
+    greater_equal,
+};
+
+// Условие перехода — данные, а не лямбда: лямбду не записать в файл, и до этого
+// автомат мог существовать только в коде.
+struct fsm_condition {
+    std::string parameter;
+    fsm_compare compare = fsm_compare::greater;
+    float32 value       = 0.0F;
+
+    [[nodiscard]] auto holds(const fsm_blackboard& board) const -> bool;
+};
+
 class animation_fsm final {
 public:
-    using condition_fn = std::function<bool()>;
-
     struct transition_rule {
         std::string target_state;
-        condition_fn condition;
+
+        // Все условия разом: «или» выражается двумя переходами в одно
+        // состояние, и читается это лучше, чем дерево из скобок в файле.
+        std::vector<fsm_condition> conditions;
+
         std::string trigger_name;
         transition blend;
         bool wait_until_end   = false;
@@ -89,19 +132,33 @@ public:
     auto add_state(state_node state) -> void;
     auto set_entry_state(std::string_view name) -> void;
 
+    // Переход из любого состояния. Проверяется раньше правил текущего: правило,
+    // объявленное для всех состояний, — это и есть «важнее того, что сейчас».
+    auto add_any_transition(transition_rule rule) -> void;
+
     [[nodiscard]] auto get_current_state() const -> const std::string& {
         return current_state_;
     }
 
     [[nodiscard]] auto get_current_state_node() const -> const state_node*;
-    [[nodiscard]] auto evaluate(const animation_layer& layer, trigger_set& triggers)
-        -> std::optional<transition_result>;
+    [[nodiscard]] auto evaluate(
+        const animation_layer& layer, trigger_set& triggers, const fsm_blackboard& board
+    ) -> std::optional<transition_result>;
 
     auto apply_transition(const transition_result& result) -> void;
 
 private:
+    [[nodiscard]] auto match_(
+        const transition_rule& rule, const animation_layer& layer, trigger_set& triggers,
+        const fsm_blackboard& board
+    ) const -> bool;
+
+    [[nodiscard]] auto result_of_(const transition_rule& rule) const
+        -> std::optional<transition_result>;
+
     std::string current_state_;
     std::string entry_state_;
     std::unordered_map<std::string, state_node> states_;
+    std::vector<transition_rule> any_transitions_;
 };
 }  // namespace vw::asset

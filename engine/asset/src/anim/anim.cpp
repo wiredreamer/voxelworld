@@ -297,49 +297,114 @@ auto animation_fsm::get_current_state_node() const -> const state_node* {
     return it != states_.end() ? &it->second : nullptr;
 }
 
-auto animation_fsm::evaluate(const animation_layer& layer, trigger_set& triggers)
+auto fsm_blackboard::set(std::string_view name, float32 value) -> void {
+    const auto it = std::ranges::find(values_, name, &std::pair<std::string, float32>::first);
+    if (it != values_.end()) {
+        it->second = value;
+        return;
+    }
+
+    values_.emplace_back(std::string{name}, value);
+}
+
+auto fsm_blackboard::get(std::string_view name) const -> float32 {
+    const auto it = std::ranges::find(values_, name, &std::pair<std::string, float32>::first);
+    return it != values_.end() ? it->second : 0.0F;
+}
+
+auto fsm_condition::holds(const fsm_blackboard& board) const -> bool {
+    const auto actual = board.get(parameter);
+
+    switch (compare) {
+        case fsm_compare::equal: return actual == value;
+        case fsm_compare::not_equal: return actual != value;
+        case fsm_compare::less: return actual < value;
+        case fsm_compare::less_equal: return actual <= value;
+        case fsm_compare::greater: return actual > value;
+        case fsm_compare::greater_equal: return actual >= value;
+    }
+
+    return false;
+}
+
+auto animation_fsm::add_any_transition(transition_rule rule) -> void {
+    any_transitions_.push_back(std::move(rule));
+}
+
+auto animation_fsm::match_(
+    const transition_rule& rule, const animation_layer& layer, trigger_set& triggers,
+    const fsm_blackboard& board
+) const -> bool {
+    if (rule.wait_until_end && layer.state != animation_state::stopped) {
+        return false;
+    }
+    if (rule.wait_until_blend && layer.is_blending()) {
+        return false;
+    }
+
+    // Триггер и условия — разные вопросы: триггер это «случилось», условия это
+    // «сейчас так». Ни того, ни другого — переход безусловный: так пишется
+    // «когда клип доиграет», где всю работу делают wait_*.
+    if (!rule.trigger_name.empty() && !triggers.contains(rule.trigger_name)) {
+        return false;
+    }
+
+    return std::ranges::all_of(rule.conditions, [&board](const fsm_condition& condition) {
+        return condition.holds(board);
+    });
+}
+
+auto animation_fsm::result_of_(const transition_rule& rule) const
     -> std::optional<transition_result> {
+    const auto target_it = states_.find(rule.target_state);
+    if (target_it == states_.end()) {
+        return std::nullopt;
+    }
+
+    const auto& target = target_it->second;
+    return transition_result{
+        .target_state    = rule.target_state,
+        .clip            = target.clip,
+        .loop_mode       = target.loop_mode,
+        .playback_speed  = target.playback_speed,
+        .blend           = rule.blend,
+        .layer_blend_in  = target.layer_blend_in,
+        .layer_blend_out = target.layer_blend_out,
+    };
+}
+
+auto animation_fsm::evaluate(
+    const animation_layer& layer, trigger_set& triggers, const fsm_blackboard& board
+) -> std::optional<transition_result> {
+    // Правила «из любого» идут первыми: объявить переход для всех состояний и
+    // значит сказать, что он важнее того, что сейчас играет.
+    for (const auto& rule : any_transitions_) {
+        if (rule.target_state == current_state_ || !match_(rule, layer, triggers, board)) {
+            continue;
+        }
+
+        auto result = result_of_(rule);
+        if (result.has_value()) {
+            triggers.erase(rule.trigger_name);
+            return result;
+        }
+    }
+
     const auto it = states_.find(current_state_);
     if (it == states_.end()) {
         return std::nullopt;
     }
 
-    const auto& current = it->second;
-    for (const auto& rule : current.transitions) {
-        if (rule.wait_until_end && layer.state != animation_state::stopped) {
-            continue;
-        }
-        if (rule.wait_until_blend && layer.is_blending()) {
+    for (const auto& rule : it->second.transitions) {
+        if (!match_(rule, layer, triggers, board)) {
             continue;
         }
 
-        bool triggered = !rule.trigger_name.empty() && triggers.contains(rule.trigger_name);
-        if (!triggered && rule.condition) {
-            triggered = rule.condition();
-        }
-        if (!triggered) {
-            continue;
-        }
-
-        const auto target_it = states_.find(rule.target_state);
-        if (target_it == states_.end()) {
-            continue;
-        }
-
-        if (!rule.trigger_name.empty()) {
+        auto result = result_of_(rule);
+        if (result.has_value()) {
             triggers.erase(rule.trigger_name);
+            return result;
         }
-
-        const auto& target = target_it->second;
-        return transition_result{
-            .target_state    = rule.target_state,
-            .clip            = target.clip,
-            .loop_mode       = target.loop_mode,
-            .playback_speed  = target.playback_speed,
-            .blend           = rule.blend,
-            .layer_blend_in  = target.layer_blend_in,
-            .layer_blend_out = target.layer_blend_out,
-        };
     }
 
     return std::nullopt;
