@@ -6,6 +6,7 @@ import vw.core;
 import vw.asset;
 import vw.ecs;
 import :components;
+import :systems.variant;
 import :scene.codecs;
 
 export namespace vw::ecs {
@@ -19,7 +20,6 @@ public:
 
     struct options {
         std::optional<entity_names_type> entity_names;
-        std::unordered_set<entity> excluded;
     };
 
     vox_serializer(
@@ -40,7 +40,6 @@ private:
     const component_registry* codecs_;
     entity root_;
     entity_names_type entity_names_;
-    std::unordered_set<entity> excluded_;
 };
 
 class vox_deserializer final {
@@ -70,11 +69,18 @@ public:
         -> std::expected<result, error_type>;
 
     // Разбор и применение разведены: данные префаба существуют помимо файла —
-    // их отдаёт и разборщик потока, и тест, и будущая подстановка варианта.
+    // их отдаёт и разборщик потока, и тест, и подстановка варианта.
     [[nodiscard]] auto instantiate(const asset::vox_prefab_data& prefab, const options& opts)
         -> result;
 
+    // Поставить в слот кандидата-поддерево. Здесь, а не в системе вариантов:
+    // поддерево — это файл, а файл умеет читать только тот, у кого есть
+    // разборщик. Отказ ничего не трогает — контракт проверяется до того, как
+    // прежнее содержимое снято.
+    auto put_variant(entity node, std::size_t index) -> std::expected<void, variant_error>;
+
 private:
+    auto clear_content_(entity node) -> void;
     auto create_entity_(const asset::vox_entity_data& data, result& res) -> void;
     auto link_parent_(const asset::vox_entity_data& data, result& res) -> void;
     auto attach_rig_(const asset::vox_prefab_data& prefab, const result& res) -> void;

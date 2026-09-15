@@ -104,6 +104,7 @@ add_executable(world_tests
     world/scene_serial.test.cpp
     world/component_codec.test.cpp
     world/variant.test.cpp
+    world/variant_subtree.test.cpp
     world/rig.test.cpp
 )
 

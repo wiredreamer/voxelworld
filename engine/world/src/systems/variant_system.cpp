@@ -54,6 +54,52 @@ auto variant_system::variant_modifier::select(
     component_->selected_ = index;
 }
 
+auto variant_system::variant_modifier::set_content(
+    std::vector<entity> content
+) const -> void {
+    component_->content_ = std::move(content);
+}
+
+auto check_candidate(
+    const variant_slot_component& slot, const asset::vox_prefab_data& candidate
+) -> variant_report {
+    std::unordered_set<std::string_view> targets;
+    std::unordered_set<std::string_view> sockets;
+
+    for (const auto& node : candidate.entities) {
+        for (const auto& tag : node.tags) {
+            if (tag.name == "anim_target") {
+                targets.insert(tag.value);
+            } else if (tag.name == "socket") {
+                sockets.insert(tag.value);
+            }
+        }
+    }
+
+    variant_report report;
+
+    for (const auto& required : slot.required_targets()) {
+        if (!targets.contains(required)) {
+            report.missing_targets.push_back(required);
+        }
+    }
+
+    for (const auto& required : slot.required_sockets()) {
+        if (!sockets.contains(required)) {
+            report.missing_sockets.push_back(required);
+        }
+    }
+
+    return report;
+}
+
+auto variant_system::mark_content(
+    entity content, entity owner
+) -> void {
+    world_->modify(content).with<slot_content_component>();
+    world_->registry().get<slot_content_component>(content).owner_ = owner;
+}
+
 auto variant_system::modify(
     entity ent
 ) -> variant_modifier {

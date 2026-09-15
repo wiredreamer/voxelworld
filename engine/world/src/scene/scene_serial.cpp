@@ -16,11 +16,7 @@ vox_serializer::vox_serializer(
     world& world, asset::vox_writer& writer, entity root, options opts,
     const component_registry& codecs
 )
-    : world_(&world)
-    , writer_(&writer)
-    , root_(root)
-    , excluded_(std::move(opts.excluded))
-    , codecs_(&codecs) {
+    : world_(&world), writer_(&writer), root_(root), codecs_(&codecs) {
     if (opts.entity_names.has_value()) {
         entity_names_ = std::move(opts.entity_names.value());
     } else {
@@ -52,7 +48,10 @@ auto vox_serializer::extract() const -> asset::vox_prefab_data {
         entity current = to_process.front();
         to_process.pop_front();
 
-        if (excluded_.contains(current)) {
+        // Содержимое по ссылке в дерево не пишется: его принесёт кандидат слота
+        // или превью сокета, а не этот файл. Поддерево такого узла тоже не
+        // обходится — оно всё пришло вместе с ним.
+        if (world_->has<slot_content_component>(current)) {
             continue;
         }
 
@@ -85,7 +84,7 @@ auto vox_serializer::generate_entity_names_() -> void {
         entity current = to_process.front();
         to_process.pop_front();
 
-        if (excluded_.contains(current)) {
+        if (world_->has<slot_content_component>(current)) {
             continue;
         }
 
@@ -178,6 +177,76 @@ auto vox_deserializer::instantiate(
     attach_rig_(prefab, res);
 
     return res;
+}
+
+auto vox_deserializer::put_variant(
+    entity node, std::size_t index
+) -> std::expected<void, variant_error> {
+    auto& registry = world_->registry();
+    if (!registry.has<variant_slot_component>(node)) {
+        return std::unexpected(variant_error::no_slot);
+    }
+
+    const auto& slot = registry.get<variant_slot_component>(node);
+    if (index >= slot.get_candidates().size()) {
+        return std::unexpected(variant_error::out_of_range);
+    }
+
+    const auto ref = slot.get_candidates()[index];
+    if (ref.extension() != ".vox") {
+        // Объём ставит система: разборщик ей для этого не нужен.
+        return world_->system<variant_system>().apply(node, *library_, index);
+    }
+
+    const auto prefab = parser_->parse(library_->path_of(ref));
+    if (!prefab.has_value()) {
+        log::warn(detail::vox_deserializer_lc, "failed to read candidate '{}'", ref.str());
+        return std::unexpected(variant_error::load_failed);
+    }
+
+    const auto report = check_candidate(slot, *prefab);
+    if (!report.ok()) {
+        log::warn(
+            detail::vox_deserializer_lc,
+            "candidate '{}' does not close slot '{}': {} target(s) and {} socket(s) missing",
+            ref.str(), slot.get_name(), report.missing_targets.size(),
+            report.missing_sockets.size()
+        );
+        return std::unexpected(variant_error::contract_unmet);
+    }
+
+    clear_content_(node);
+
+    auto res = instantiate(*prefab, {});
+
+    auto& variants = world_->system<variant_system>();
+    for (const auto ent : res.entities) {
+        variants.mark_content(ent, node);
+    }
+
+    const auto root_it = res.name_to_entity.find(res.root_name);
+    if (root_it != res.name_to_entity.end()) {
+        world_->system<hierarchy_system>().modify(root_it->second).set_parent(node);
+    }
+
+    auto slot_mod = variants.modify(node);
+    slot_mod.set_content(std::move(res.entities));
+    slot_mod.select(index);
+
+    return {};
+}
+
+auto vox_deserializer::clear_content_(
+    entity node
+) -> void {
+    const auto& slot = world_->registry().get<variant_slot_component>(node);
+
+    const auto content = slot.get_content();
+    for (const auto ent : content) {
+        world_->destroy(ent);
+    }
+
+    world_->system<variant_system>().modify(node).set_content({});
 }
 
 auto vox_deserializer::attach_rig_(

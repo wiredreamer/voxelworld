@@ -365,6 +365,13 @@ auto socket_panel::load_preview_(
         return;
     }
 
+    // Превью — содержимое по ссылке, как и кандидат слота: в запись оно не
+    // идёт, и решает это метка на сущностях, а не список исключений у писателя.
+    auto& variants = world.system<ecs::variant_system>();
+    for (const auto ent : result->entities) {
+        variants.mark_content(ent, parent_ent);
+    }
+
     socket_state::socket_preview preview;
     preview.filename          = filename;
     preview.preview_root_name = result->root_name;

@@ -44,6 +44,12 @@ struct variant_slot_component final {
         return required_sockets_;
     }
 
+    // Что слот поставил в прошлый раз: поддерево кандидата снимается целиком,
+    // и помнить его состав больше некому — в файле его нет, оно по ссылке.
+    [[nodiscard]] auto get_content() const -> const std::vector<entity>& {
+        return content_;
+    }
+
 private:
     friend class variant_system;
 
@@ -53,6 +59,21 @@ private:
 
     std::vector<std::string> required_targets_;
     std::vector<std::string> required_sockets_;
+    std::vector<entity> content_;
+};
+
+// Метка «содержимое по ссылке»: узел встал не из этого файла, а из кандидата
+// слота или превью сокета. В запись такие не идут — их принесёт ссылка, а не
+// дерево, — и уходят они целиком, когда ссылка меняется.
+struct slot_content_component final {
+    [[nodiscard]] auto get_owner() const -> entity {
+        return owner_;
+    }
+
+private:
+    friend class variant_system;
+
+    entity owner_;
 };
 
 }  // namespace vw::ecs
