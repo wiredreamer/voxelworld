@@ -318,6 +318,69 @@ private:
 
 }  // namespace vw::sculptor
 
+// ---- from src/ui/component_drawers.h
+export namespace vw::sculptor {
+
+struct component_drawer_context {
+    using engine_type = gfx::engine;
+
+    engine_type& engine;
+    app_state& state;
+    operation_manager& ops;
+
+    ecs::entity ent;
+    const std::string& node_name;
+};
+
+// Что должно быть открыто, чтобы секцию можно было править. Объём правится и
+// изнутри себя: провалившись в .voxm, правят именно его, и точка вращения с
+// обрезкой обязаны быть под рукой там же, где воксели.
+enum class drawer_scope : uint8 { prefab, volume };
+
+// Как компонент выглядит в редакторе. Тег тот же, что у кодека записи: одно имя
+// на компонент по обе стороны от файла.
+struct component_drawer {
+    std::string tag;
+    std::string title;
+    drawer_scope scope = drawer_scope::prefab;
+
+    // Рантайм-идентификатор компонента ставит register_for<T>: по нему панель
+    // решает, показывать ли секцию, а диалог состава — что предложить.
+    uint32 component = 0;
+
+    // Секция панели свойств. Пусто — компонент в панели не показывается.
+    std::function<void(const component_drawer_context&)> draw;
+
+    // Строка диалога состава. Без add и remove компонент в диалоге не
+    // показывается вовсе: он там не про «что это», а про «что поставить».
+    std::function<std::string(const component_drawer_context&)> summary;
+    std::function<void(const component_drawer_context&)> add;
+    std::function<void(const component_drawer_context&)> remove;
+};
+
+class component_drawer_registry final {
+public:
+    component_drawer_registry();
+
+    template <typename T>
+    auto register_for(component_drawer drawer) -> void {
+        drawer.component = ecs::component_id_of<T>();
+        drawers_.push_back(std::move(drawer));
+    }
+
+    [[nodiscard]] auto all() const -> std::span<const component_drawer> {
+        return drawers_;
+    }
+
+private:
+    std::vector<component_drawer> drawers_;
+};
+
+// Реестр по умолчанию: описывает вид компонента, а не состояние документа.
+[[nodiscard]] auto default_drawers() -> component_drawer_registry&;
+
+}  // namespace vw::sculptor
+
 // ---- from src/ui/edit_components_modal.h
 export namespace vw::sculptor {
 
@@ -335,9 +398,7 @@ public:
     auto render() -> void;
 
 private:
-    auto render_model_row_(ecs::entity ent) -> void;
-    auto render_socket_row_(ecs::entity ent) -> void;
-    auto render_target_row_(ecs::entity ent) -> void;
+    auto render_row_(const component_drawer& drawer, ecs::entity ent) -> void;
 
     static auto begin_row_(std::string_view label, std::string_view summary) -> void;
 
@@ -347,7 +408,8 @@ private:
 
     add_model_component_modal add_model_modal_;
 
-    bool need_open_ = false;
+    bool need_open_  = false;
+    bool need_close_ = false;
     std::string entity_name_;
 };
 
@@ -366,26 +428,12 @@ public:
 
 private:
     auto render_header_(ecs::entity ent) const -> void;
-    auto render_transform_(ecs::entity ent) const -> void;
-    auto render_model_(ecs::entity ent) -> void;
-    auto render_sockets_(ecs::entity ent) const -> void;
-    auto render_rig_(ecs::entity ent) const -> void;
-    auto render_animation_target_(ecs::entity ent) const -> void;
-
-    auto render_position_() const -> void;
-    auto render_rotation_() const -> void;
-    auto render_scale_() const -> void;
-
 
     engine_type* engine_;
     app_state* state_;
     operation_manager* op_manager_;
 
     edit_components_modal components_modal_;
-
-    mutable std::string cached_rotation_entity_;
-    mutable quat cached_rotation_quat_;
-    mutable vec3f cached_rotation_deg_;
 };
 
 }  // namespace vw::sculptor

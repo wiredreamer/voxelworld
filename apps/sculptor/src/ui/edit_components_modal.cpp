@@ -25,7 +25,10 @@ constexpr float32 action_column  = 250.f;
 edit_components_modal::edit_components_modal(
     engine_type& eng, app_state& st, operation_manager& op_manager
 )
-    : engine_(&eng), state_(&st), op_manager_(&op_manager), add_model_modal_(eng, st, op_manager) {}
+    : engine_(&eng)
+    , state_(&st)
+    , op_manager_(&op_manager)
+    , add_model_modal_(eng, st, op_manager) {}
 
 auto edit_components_modal::open(
     const std::string& entity_name
@@ -40,22 +43,40 @@ auto edit_components_modal::render() -> void {
         need_open_ = false;
     }
 
+    // Компоненту, которому мало одной кнопки, отвечает свой диалог, а этот
+    // уходит с дороги: вложенных модальных окон не бывает, да и выбирать размер
+    // объёма поверх списка состава нечитаемо.
+    if (!state_->ui.need_add_model_for.empty()) {
+        add_model_modal_.open(state_->ui.need_add_model_for);
+        state_->ui.need_add_model_for.clear();
+        need_close_ = true;
+    }
+
     constexpr ImGuiWindowFlags flags =  //
         ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove;
 
     if (ImGui::BeginPopupModal("Components", nullptr, flags)) {
         const auto it = state_->scene.name_to_entity.find(entity_name_);
-        if (it == state_->scene.name_to_entity.end()) {
-            // Узел исчез из-под диалога: undo создания, удаление, переоткрытие.
+
+        if (need_close_ || it == state_->scene.name_to_entity.end()) {
+            // Либо уступили место другому диалогу, либо узел исчез из-под этого:
+            // undo создания, удаление, переоткрытие.
+            need_close_ = false;
             ImGui::CloseCurrentPopup();
         } else {
             ImGui::Text("Entity: %s", entity_name_.c_str());
             ImGui::Separator();
             ImGui::Spacing();
 
-            render_model_row_(it->second);
-            render_socket_row_(it->second);
-            render_target_row_(it->second);
+            // Состав — тот же реестр, что и панель: компонент, который нечем
+            // поставить и нечем снять, в диалоге про состав не показывается.
+            for (const auto& drawer : default_drawers().all()) {
+                if (!drawer.add && !drawer.remove) {
+                    continue;
+                }
+
+                render_row_(drawer, it->second);
+            }
 
             ImGui::Spacing();
             ImGui::Separator();
@@ -69,9 +90,6 @@ auto edit_components_modal::render() -> void {
         ImGui::EndPopup();
     }
 
-    // Диалог объёма открывается только после того, как этот закрылся: вложенных
-    // модальных окон не бывает, да и выбирать размер поверх списка состава
-    // нечитаемо.
     add_model_modal_.render();
 }
 
@@ -85,91 +103,32 @@ auto edit_components_modal::begin_row_(
     ImGui::SameLine(action_column);
 }
 
-auto edit_components_modal::render_model_row_(
-    ecs::entity ent
+auto edit_components_modal::render_row_(
+    const component_drawer& drawer, ecs::entity ent
 ) -> void {
-    auto& world = engine_->get_world();
+    const component_drawer_context context{
+        .engine    = *engine_,
+        .state     = *state_,
+        .ops       = *op_manager_,
+        .ent       = ent,
+        .node_name = entity_name_,
+    };
 
-    if (!world.has<ecs::model_component>(ent)) {
-        begin_row_("Model", "none");
-        if (ImGui::Button("Add##model")) {
-            // Объёму нужны размер и набор блоков, поэтому строка передаёт работу
-            // своему диалогу, а не заводит компонент на месте.
-            add_model_modal_.open(entity_name_);
-            ImGui::CloseCurrentPopup();
+    const bool present = ecs::has_component(engine_->get_world(), ent, drawer.component);
+    const auto summary = present && drawer.summary ? drawer.summary(context) : std::string{"none"};
+
+    ImGui::PushID(drawer.tag.c_str());
+    begin_row_(drawer.title, summary);
+
+    if (present) {
+        if (drawer.remove && ImGui::Button("Remove")) {
+            drawer.remove(context);
         }
-        return;
+    } else if (drawer.add && ImGui::Button("Add")) {
+        drawer.add(context);
     }
 
-    const auto size = world.get<ecs::model_component>(ent).size();
-    begin_row_("Model", std::format("{}x{}x{}", size.x, size.y, size.z));
-    if (ImGui::Button("Remove##model")) {
-        op_manager_->execute(
-            std::make_unique<remove_model_component_operation>(
-                *engine_, *state_, remove_model_component_params{.name = entity_name_}
-            )
-        );
-    }
-}
-
-auto edit_components_modal::render_socket_row_(
-    ecs::entity ent
-) -> void {
-    auto& world = engine_->get_world();
-
-    if (!world.has<ecs::socket_component>(ent)) {
-        begin_row_("Sockets", "none");
-        if (ImGui::Button("Add##sockets")) {
-            op_manager_->execute(
-                std::make_unique<add_socket_component_operation>(
-                    *engine_, *state_, add_socket_component_params{.name = entity_name_}
-                )
-            );
-        }
-        return;
-    }
-
-    const auto count = world.get<ecs::socket_component>(ent).get_sockets().size();
-    begin_row_("Sockets", std::format("{} point(s)", count));
-    if (ImGui::Button("Remove##sockets")) {
-        op_manager_->execute(
-            std::make_unique<remove_socket_component_operation>(
-                *engine_, *state_, remove_socket_component_params{.name = entity_name_}
-            )
-        );
-    }
-}
-
-auto edit_components_modal::render_target_row_(
-    ecs::entity ent
-) -> void {
-    auto& world = engine_->get_world();
-
-    if (!world.has<ecs::animation_target_component>(ent)) {
-        begin_row_("Anim. target", "none");
-        if (ImGui::Button("Add##anim_target")) {
-            op_manager_->execute(
-                std::make_unique<add_animation_target_operation>(
-                    *engine_,
-                    *state_,
-                    add_animation_target_params{
-                        .entity_name = entity_name_, .target_name = entity_name_
-                    }
-                )
-            );
-        }
-        return;
-    }
-
-    const auto& target = world.get<ecs::animation_target_component>(ent);
-    begin_row_("Anim. target", target.get_name());
-    if (ImGui::Button("Remove##anim_target")) {
-        op_manager_->execute(
-            std::make_unique<remove_animation_target_operation>(
-                *engine_, *state_, remove_animation_target_params{.entity_name = entity_name_}
-            )
-        );
-    }
+    ImGui::PopID();
 }
 
 }  // namespace vw::sculptor

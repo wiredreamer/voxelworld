@@ -40,6 +40,10 @@ struct ui_state {
     bool show_clip_manager      = false;
     bool show_sockets           = true;
     bool show_rig               = true;
+    // Узел, которому диалог состава просит завести объём: сам он этого не
+    // умеет — объёму нужны размер и набор блоков.
+    std::string need_add_model_for;
+
     bool need_create_clip_modal = false;
     bool need_save_clip         = false;
     bool need_load_clip_modal   = false;
