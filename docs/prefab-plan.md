@@ -99,6 +99,8 @@ FSM в префабе — **список**, по одной на слой: `anim
 # vox 4.0
 kind character
 rig humanoid
+fsm fsm/humanoid_locomotion.voxf
+fsm fsm/humanoid_action.voxf
 root root
 entity root
 	transform -6 -6 -6	0 0 0	1 1 1
@@ -113,7 +115,6 @@ entity hand_right
 		pos 0.5 0 0
 		rot 0 0 0
 		scale 1 1 1
-fsm fsm/humanoid_locomotion.voxf fsm/humanoid_action.voxf
 ```
 
 ### Грамматика `.vox` 4.0
