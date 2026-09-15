@@ -563,6 +563,11 @@ public:
 private:
     auto render_overwrite_confirmation() -> void;
     auto render_create_form() -> void;
+
+    // Тип документа: он решает, каким набором блоков откроется первый объём, и
+    // уезжает в шапку файла. Пустой — предмет, которому ни то ни другое слово не
+    // подходит.
+    std::string kind_;
     auto create_file_() -> bool;
 
     engine_type* engine_;

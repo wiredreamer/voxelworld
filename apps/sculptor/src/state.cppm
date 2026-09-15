@@ -62,6 +62,11 @@ struct ui_state {
 
 struct file_state {
     std::string filename;
+
+    // Тип документа из шапки: character, structure — или пусто у предмета. В
+    // мире его нет, потому что ни один компонент от него не зависит; он решает,
+    // каким набором блоков открывать документ.
+    std::string kind;
     bool has_unsaved_changes = false;
 
     // Узлы, чьи объёмы правились с последней записи. Флага на весь документ
@@ -364,6 +369,11 @@ struct app_state {
     }
 
     auto reset(world_type& world) -> void;
+
+    // Тип документа выбирает набор блоков, которым откроется первый объём:
+    // структура строится из terrain, всё прочее — из creature. Дальше набор
+    // помнит сам объём, и панель идёт за ним.
+    auto apply_kind_defaults() -> void;
 };
 
 }  // namespace vw::sculptor

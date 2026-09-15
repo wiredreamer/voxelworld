@@ -999,3 +999,68 @@ private:
 };
 
 }  // namespace vw::sculptor
+
+// ---- from src/operations/structure_operations.h
+export namespace vw::sculptor {
+
+// Метаданные структуры правятся целиком: полей четыре, они короткие, и снимок
+// всей четвёрки дешевле четырёх классов операций с одинаковым телом.
+struct set_structure_params {
+    std::string name;
+    std::string type;
+    std::vector<std::string> races;
+    uint8 tier = 0;
+    ecs::structure_size size = ecs::structure_size::unspecified;
+};
+
+class set_structure_operation final : public base_operation {
+public:
+    using engine_type = gfx::engine;
+
+    set_structure_operation(engine_type& engine, app_state& st, set_structure_params params);
+
+    auto execute() -> void override;
+    auto undo() -> void override;
+
+private:
+    auto apply_(const set_structure_params& params) -> void;
+
+    engine_type* engine_;
+    app_state* state_;
+    set_structure_params params_;
+    set_structure_params previous_;
+};
+
+// Точка — метка на узле: категория мебели или профиль стыка. Компонент здесь
+// заводится и снимается тем же действием, что и задаётся текст, потому что
+// точка без своего слова смысла не имеет.
+enum class point_kind : uint8 { furniture, connection };
+
+struct set_point_params {
+    std::string name;
+    point_kind kind = point_kind::furniture;
+
+    // Пусто — снять метку с узла.
+    std::string tag;
+    bool present = true;
+};
+
+class set_point_operation final : public base_operation {
+public:
+    using engine_type = gfx::engine;
+
+    set_point_operation(engine_type& engine, app_state& st, set_point_params params);
+
+    auto execute() -> void override;
+    auto undo() -> void override;
+
+private:
+    auto apply_(const set_point_params& params) -> void;
+
+    engine_type* engine_;
+    app_state* state_;
+    set_point_params params_;
+    set_point_params previous_;
+};
+
+}  // namespace vw::sculptor

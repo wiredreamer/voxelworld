@@ -55,6 +55,7 @@ target_sources(${PROJECT_NAME}
         src/operations/select_variant_operation.cpp
         src/operations/set_variant_candidates_operation.cpp
         src/operations/fsm_operations.cpp
+        src/operations/structure_operations.cpp
         src/operations/set_transform_operation.cpp
         src/operations/trim_model_operation.cpp
         src/services/clip_service.cpp

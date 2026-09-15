@@ -116,11 +116,14 @@ auto open_file_modal::open_file_() -> bool {
     state_->ui.need_startup_modal = false;
 
     state_->file.filename        = filename_;
+    state_->file.kind            = result->kind;
     state_->scene.root_name      = result->root_name;
     state_->scene.selected_name  = result->root_name;
     state_->scene.name_to_entity = std::move(result->name_to_entity);
     state_->scene.entity_to_name = std::move(result->entity_to_name);
     state_->scene.entities       = std::move(result->entities);
+
+    state_->apply_kind_defaults();
 
     return true;
 }

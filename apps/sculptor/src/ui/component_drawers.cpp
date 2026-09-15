@@ -496,6 +496,190 @@ auto register_rig(component_drawer_registry& drawers) -> void {
 
 }  // namespace
 
+namespace {
+
+constexpr std::array<const char*, 5> structure_size_names{"-", "S", "M", "L", "XL"};
+
+auto races_to_text(std::span<const std::string> races) -> std::string {
+    std::string text;
+    for (const auto& race : races) {
+        if (!text.empty()) {
+            text += ' ';
+        }
+        text += race;
+    }
+    return text;
+}
+
+auto races_from_text(std::string_view text) -> std::vector<std::string> {
+    std::vector<std::string> races;
+
+    std::size_t pos = 0;
+    while (pos < text.size()) {
+        const auto start = text.find_first_not_of(' ', pos);
+        if (start == std::string_view::npos) {
+            break;
+        }
+
+        const auto end = text.find(' ', start);
+        races.emplace_back(text.substr(
+            start, end == std::string_view::npos ? std::string_view::npos : end - start
+        ));
+        pos = end == std::string_view::npos ? text.size() : end;
+    }
+
+    return races;
+}
+
+auto params_of(const ecs::structure_component& structure, std::string name)
+    -> set_structure_params {
+    const auto races = structure.get_races();
+
+    return set_structure_params{
+        .name  = std::move(name),
+        .type  = structure.get_type(),
+        .races = {races.begin(), races.end()},
+        .tier  = structure.get_tier(),
+        .size  = structure.get_size(),
+    };
+}
+
+// Метаданные генератора. Тип и раса — открытые словари: их состав знает
+// генератор, и выбирать их из списка значило бы держать этот список в двух
+// местах.
+auto register_structure(component_drawer_registry& drawers) -> void {
+    component_drawer drawer;
+    drawer.tag   = "structure";
+    drawer.title = "Structure";
+
+    drawer.draw = [](const component_drawer_context& in) {
+        const auto& structure =
+            in.engine.get_world().get<ecs::structure_component>(in.ent);
+
+        auto params = params_of(structure, in.node_name);
+        bool commit = false;
+
+        auto type = params.type;
+        field_label("Type");
+        imgui_input_text_string("##structure_type", type);
+        if (ImGui::IsItemDeactivatedAfterEdit() && type != params.type) {
+            params.type = type;
+            commit      = true;
+        }
+
+        auto races = races_to_text(structure.get_races());
+        const auto races_before = races;
+        field_label("Races");
+        imgui_input_text_string("##structure_races", races);
+        if (ImGui::IsItemDeactivatedAfterEdit() && races != races_before) {
+            params.races = races_from_text(races);
+            commit       = true;
+        }
+
+        auto tier = static_cast<int32>(params.tier);
+        field_label("Tier");
+        ImGui::SetNextItemWidth(80.f);
+        if (ImGui::SliderInt("##structure_tier", &tier, 0, 5, tier == 0 ? "-" : "%d")) {
+            params.tier = static_cast<uint8>(tier);
+            commit      = true;
+        }
+
+        auto size = static_cast<int32>(params.size);
+        field_label("Size");
+        ImGui::SetNextItemWidth(80.f);
+        if (ImGui::Combo("##structure_size", &size, structure_size_names.data(),
+                         static_cast<int32>(structure_size_names.size()))) {
+            params.size = static_cast<ecs::structure_size>(size);
+            commit      = true;
+        }
+
+        if (commit) {
+            in.ops.execute(
+                std::make_unique<set_structure_operation>(in.engine, in.state, std::move(params))
+            );
+        }
+    };
+
+    drawer.summary = [](const component_drawer_context& in) {
+        const auto& structure = in.engine.get_world().get<ecs::structure_component>(in.ent);
+        return structure.get_type().empty() ? std::string{"untyped"} : structure.get_type();
+    };
+
+    drawer.add = [](const component_drawer_context& in) {
+        in.ops.execute(std::make_unique<set_structure_operation>(
+            in.engine, in.state, set_structure_params{.name = in.node_name}
+        ));
+    };
+
+    drawer.remove = [](const component_drawer_context& in) {
+        in.engine.get_world()
+            .modify(in.state.scene.name_to_entity.at(in.node_name))
+            .without<ecs::structure_component>();
+        in.state.file.has_unsaved_changes = true;
+    };
+
+    drawers.register_for<ecs::structure_component>(std::move(drawer));
+}
+
+// Мебель и стык — одна и та же форма: узел с трансформом и словом. Отрисовщик
+// поэтому один на два компонента, с точностью до подписи.
+auto register_point(
+    component_drawer_registry& drawers, point_kind kind, std::string tag, std::string title,
+    std::string_view field
+) -> void {
+    component_drawer drawer;
+    drawer.tag   = std::move(tag);
+    drawer.title = std::move(title);
+
+    const auto read = [kind](const component_drawer_context& in) -> std::string {
+        const auto& world = in.engine.get_world();
+        return kind == point_kind::furniture
+                   ? world.get<ecs::furniture_point_component>(in.ent).get_category()
+                   : world.get<ecs::connection_point_component>(in.ent).get_profile();
+    };
+
+    drawer.draw = [kind, read, label = std::string{field}](const component_drawer_context& in) {
+        auto value            = read(in);
+        const auto before     = value;
+
+        field_label(label);
+        imgui_input_text_string("##point_tag", value);
+
+        if (ImGui::IsItemDeactivatedAfterEdit() && value != before) {
+            in.ops.execute(std::make_unique<set_point_operation>(
+                in.engine, in.state,
+                set_point_params{.name = in.node_name, .kind = kind, .tag = std::move(value)}
+            ));
+        }
+    };
+
+    drawer.summary = [read](const component_drawer_context& in) {
+        auto value = read(in);
+        return value.empty() ? std::string{"unnamed"} : value;
+    };
+
+    drawer.add = [kind](const component_drawer_context& in) {
+        in.ops.execute(std::make_unique<set_point_operation>(
+            in.engine, in.state, set_point_params{.name = in.node_name, .kind = kind}
+        ));
+    };
+
+    drawer.remove = [kind](const component_drawer_context& in) {
+        in.ops.execute(std::make_unique<set_point_operation>(
+            in.engine, in.state,
+            set_point_params{.name = in.node_name, .kind = kind, .present = false}
+        ));
+    };
+
+    if (kind == point_kind::furniture) {
+        drawers.register_for<ecs::furniture_point_component>(std::move(drawer));
+    } else {
+        drawers.register_for<ecs::connection_point_component>(std::move(drawer));
+    }
+}
+
+}  // namespace
+
 component_drawer_registry::component_drawer_registry() {
     // Порядок регистрации — он же порядок секций в панели.
     register_transform(*this);
@@ -505,6 +689,9 @@ component_drawer_registry::component_drawer_registry() {
     register_rig(*this);
     register_anim_target(*this);
     register_machines(*this);
+    register_structure(*this);
+    register_point(*this, point_kind::furniture, "furniture", "Furniture point", "Category");
+    register_point(*this, point_kind::connection, "connection", "Connection", "Profile");
 }
 
 auto default_drawers() -> component_drawer_registry& {

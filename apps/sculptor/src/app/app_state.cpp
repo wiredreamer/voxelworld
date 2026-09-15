@@ -88,6 +88,11 @@ auto app_state::reset(
     *this = app_state{};
 }
 
+auto app_state::apply_kind_defaults() -> void {
+    tool.selected_block = file.kind == asset::kinds::structure ? blocks::terrain::stone[0]
+                                                      : blocks::creature::cloth_white[2];
+}
+
 auto animation_state::has_unsaved_clip(
     const std::string& name
 ) const -> bool {
