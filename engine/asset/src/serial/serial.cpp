@@ -107,7 +107,8 @@ auto vox_parser_plain::process_version_(
 auto vox_parser_plain::process_top_(
     std::string_view name, std::string_view value
 ) -> void {
-    if (name != "entity" && name != "root" && name != "rig" && name != "fsm") {
+    if (name != "entity" && name != "root" && name != "rig" && name != "fsm" &&
+        name != "kind") {
         log::warn(detail::vox_parser_plain_lc, "unknown top-level command: {}", name);
         return;
     }
@@ -119,6 +120,11 @@ auto vox_parser_plain::process_top_(
 
     if (name == "root") {
         prefab_.root_name = std::string{value};
+        return;
+    }
+
+    if (name == "kind") {
+        prefab_.kind = std::string{value};
         return;
     }
 
@@ -220,6 +226,9 @@ auto vox_writer_plain::write_header_(
     std::ostream& output, const vox_prefab_data& prefab
 ) -> void {
     output << std::format("# Vox File Version {}\n", vox_file_version);
+    if (!prefab.kind.empty()) {
+        output << std::format("kind {}\n", prefab.kind);
+    }
     if (!prefab.rig.empty()) {
         output << std::format("rig {}\n", prefab.rig);
     }

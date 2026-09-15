@@ -16,7 +16,8 @@ vox_serializer::vox_serializer(
     world& world, asset::vox_writer& writer, entity root, options opts,
     const component_registry& codecs
 )
-    : world_(&world), writer_(&writer), root_(root), codecs_(&codecs) {
+    : world_(&world), writer_(&writer), root_(root), codecs_(&codecs),
+      kind_(std::move(opts.kind)) {
     if (opts.entity_names.has_value()) {
         entity_names_ = std::move(opts.entity_names.value());
     } else {
@@ -34,6 +35,7 @@ auto vox_serializer::serialize(
 auto vox_serializer::extract() const -> asset::vox_prefab_data {
     asset::vox_prefab_data prefab;
     prefab.root_name = entity_names_.at(root_);
+    prefab.kind      = kind_;
 
     // Риг — свойство префаба целиком, поэтому он на корне и в шапке, а не в
     // узле: узлов с целями много, риг у них один.
@@ -158,6 +160,7 @@ auto vox_deserializer::instantiate(
 ) -> result {
     result res;
     res.root_name = prefab.root_name;
+    res.kind      = prefab.kind;
 
     // Проходов три, и это фазы, а не удобство. Сущности заводятся все сразу: в
     // один проход родитель обязан стоять в файле раньше ребёнка, а нарушение

@@ -20,6 +20,10 @@ public:
 
     struct options {
         std::optional<entity_names_type> entity_names;
+
+        // Тип документа в шапку. Мир о нём ничего не знает — от kind не зависит
+        // ни один компонент, — поэтому он приходит отсюда, а не из сущностей.
+        std::string kind;
     };
 
     vox_serializer(
@@ -40,6 +44,7 @@ private:
     const component_registry* codecs_;
     entity root_;
     entity_names_type entity_names_;
+    std::string kind_;
 };
 
 class vox_deserializer final {
@@ -54,6 +59,7 @@ public:
 
     struct result {
         std::string root_name;
+        std::string kind;
         std::unordered_map<std::string, entity> name_to_entity;
         std::unordered_map<entity, std::string> entity_to_name;
         std::vector<entity> entities;

@@ -198,6 +198,34 @@ TEST_CASE("a prefab survives a write and a read", "[serial]") {
     REQUIRE(*second == *first);
 }
 
+// Тип документа строкой, а не перечислением: из шести префабов пять предметы, и
+// меч не character и не structure.
+TEST_CASE("a prefab carries the kind of document it is", "[serial]") {
+    const auto first = parse_vox(
+        "# Vox File Version 4.0\nkind structure\nroot root\nentity root\n"
+    );
+
+    REQUIRE(first.has_value());
+    REQUIRE(first->kind == "structure");
+
+    std::ostringstream written;
+    asset::vox_writer_plain writer;
+    REQUIRE(writer.write(written, *first).has_value());
+
+    const auto second = parse_vox(written.str());
+    REQUIRE(second.has_value());
+    REQUIRE(second->kind == "structure");
+
+    // Не сказано — не пишется: пустая строка «kind » была бы ответом, которого
+    // автор не давал.
+    const auto item = parse_vox("# Vox File Version 4.0\nroot root\nentity root\n");
+    REQUIRE(item.has_value());
+
+    std::ostringstream item_written;
+    REQUIRE(writer.write(item_written, *item).has_value());
+    REQUIRE_FALSE(item_written.str().contains("kind"));
+}
+
 // Порядок ссылок на автоматы — это номера слоёв, поэтому повтор тега здесь не
 // просто список, а список упорядоченный, и запись обязана его сохранить.
 TEST_CASE("a prefab names its state machines in layer order", "[serial]") {
