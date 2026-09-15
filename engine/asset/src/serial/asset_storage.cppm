@@ -26,6 +26,12 @@ public:
     [[nodiscard]] auto get_model(std::string_view prefab, std::string_view entity_name) const
         -> std::shared_ptr<model>;
 
+    // Библиотека объёмов наружу: тот, кто ставит узел префаба в мир, грузит
+    // его объём через неё же, а не заводит вторую копию рядом.
+    [[nodiscard]] auto library() const -> model_library& {
+        return *library_;
+    }
+
     [[nodiscard]] auto get_clip(std::string_view name) const -> std::shared_ptr<animation_clip>;
     [[nodiscard]] auto has_clip(std::string_view name) const -> bool;
 

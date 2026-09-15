@@ -349,8 +349,7 @@ auto socket_panel::load_preview_(
     const fs::path filepath = app_state::prefab_dir() / fs::path{filename};
 
     const ecs::vox_deserializer::options opts{
-        .skip_sockets = true,
-        .skip_targets = true,
+        .skip_tags = {"socket", "anim_target"},
     };
 
     auto result = deserializer.deserialize(filepath, opts);

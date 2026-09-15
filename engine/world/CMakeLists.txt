@@ -5,6 +5,7 @@ target_sources(vw_world
         FILE_SET CXX_MODULES BASE_DIRS src FILES
             src/world.cppm
             src/scene/scene.cppm
+            src/scene/scene_codecs.cppm
             src/scene/scene_serial.cppm
             src/components/components.cppm
             src/components/transform_component.cppm
@@ -43,6 +44,7 @@ target_sources(vw_world
             src/systems/world_grid_system.cppm
     PRIVATE
         src/world.cpp
+        src/scene/scene_codecs.cpp
         src/scene/scene_serial.cpp
         src/light/light.cpp
         src/spatial/spatial.cpp
