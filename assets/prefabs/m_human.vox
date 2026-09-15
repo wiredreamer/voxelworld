@@ -1,4 +1,4 @@
-# Vox File Version 3.1
+# Vox File Version 4.0
 rig humanoid
 root root
 entity root
@@ -18,15 +18,19 @@ entity hand_right
 	transform 10 2 0	1.5707963 -0 -0	1 1 1
 	model models/m_human/hand_right.voxm
 	anim_target hand_right
-	sockets
-		socket hand_right 0 0 0 -1.570796 -0 -0 0.99 0.99 0.99
+	socket hand_right
+		pos 0 0 0
+		rot -1.570796 -0 -0
+		scale 0.99 0.99 0.99
 entity hand_left
 	parent root
 	transform -10 2 0	1.5707963 -0 -0	1 1 1
 	model models/m_human/hand_left.voxm
 	anim_target hand_left
-	sockets
-		socket hand_left 0 0 0 -1.570796 -0 -0 0.99 0.99 0.99
+	socket hand_left
+		pos 0 0 0
+		rot -1.570796 -0 -0
+		scale 0.99 0.99 0.99
 entity foot_right
 	parent root
 	transform 5 -9 0	-0 -0 -0	1 1 1

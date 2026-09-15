@@ -26,50 +26,47 @@ auto vox_parser_plain::parse(const std::filesystem::path& filepath)
     return result;
 }
 
+namespace {
+
+auto trim(std::string_view text) -> std::string_view {
+    const auto first = text.find_first_not_of(" \t\r\n");
+    if (first == std::string_view::npos) {
+        return {};
+    }
+
+    return text.substr(first, text.find_last_not_of(" \t\r\n") - first + 1);
+}
+
+}  // namespace
+
+auto parse_floats(
+    std::string_view text, std::span<float32> out
+) -> bool {
+    std::istringstream iss{std::string{text}};
+    for (auto& value : out) {
+        iss >> value;
+        if (iss.fail()) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 auto vox_parser_plain::parse(std::istream& input)
     -> std::expected<vox_prefab_data, error_type> {
-    prefab_ = {};
-    current_entity_ = nullptr;
-    error_ = std::nullopt;
+    prefab_       = {};
+    entity_index_ = no_index;
+    tag_index_    = no_index;
+    error_        = std::nullopt;
 
     std::string line;
     while (std::getline(input, line)) {
-        if (error_.has_value()) break;
-
-        std::istringstream iss(line);
-        std::string cmd;
-        iss >> cmd;
-
-        if (cmd.empty()) {
-            continue;
+        if (error_.has_value()) {
+            break;
         }
 
-        if (cmd[0] == '#') {
-            process_comment_(iss);
-            continue;
-        }
-
-        if (cmd == "rig") {
-            process_rig_(iss);
-        } else if (cmd == "root") {
-            process_root_(iss);
-        } else if (cmd == "entity") {
-            process_entity_(iss);
-        } else if (cmd == "parent") {
-            process_parent_(iss);
-        } else if (cmd == "transform") {
-            process_transform_(iss);
-        } else if (cmd == "anim_target") {
-            process_target_(iss);
-        } else if (cmd == "sockets") {
-            process_sockets_();
-        } else if (cmd == "socket") {
-            process_socket_(iss);
-        } else if (cmd == "model") {
-            process_model_(iss);
-        } else {
-            log::warn(detail::vox_parser_plain_lc, "unknown command: {}", cmd);
-        }
+        process_line_(line);
     }
 
     if (error_.has_value()) {
@@ -79,7 +76,43 @@ auto vox_parser_plain::parse(std::istream& input)
     return std::move(prefab_);
 }
 
-auto vox_parser_plain::process_comment_(std::istringstream& iss) -> void {
+auto vox_parser_plain::process_line_(
+    std::string_view line
+) -> void {
+    // Вся структура файла — в отступе: ноль табуляций это шапка и узлы, одна —
+    // тег узла, две и глубже — свойство тега.
+    std::size_t depth = 0;
+    while (depth < line.size() && line[depth] == '\t') {
+        ++depth;
+    }
+
+    const auto body = trim(line.substr(depth));
+    if (body.empty()) {
+        return;
+    }
+
+    if (body.front() == '#') {
+        process_version_(body);
+        return;
+    }
+
+    const auto space = body.find_first_of(" \t");
+    const auto name  = body.substr(0, space);
+    const auto value =
+        space == std::string_view::npos ? std::string_view{} : trim(body.substr(space + 1));
+
+    switch (depth) {
+        case 0: process_top_(name, value); return;
+        case 1: process_tag_(name, value); return;
+        default: process_prop_(name, value); return;
+    }
+}
+
+auto vox_parser_plain::process_version_(
+    std::string_view text
+) -> void {
+    std::istringstream iss{std::string{text}};
+
     const auto version = detail::read_header_version(iss);
     if (!version.has_value()) {
         return;
@@ -94,142 +127,143 @@ auto vox_parser_plain::process_comment_(std::istringstream& iss) -> void {
     }
 }
 
-auto vox_parser_plain::process_rig_(std::istringstream& iss) -> void {
-    std::string name;
-    iss >> name;
-    if (iss.fail()) {
+auto vox_parser_plain::process_top_(
+    std::string_view name, std::string_view value
+) -> void {
+    if (name != "entity" && name != "root" && name != "rig") {
+        log::warn(detail::vox_parser_plain_lc, "unknown top-level command: {}", name);
+        return;
+    }
+
+    if (value.empty()) {
         error_ = error_type::parse_error;
         return;
     }
 
-    prefab_.rig = name;
+    if (name == "root") {
+        prefab_.root_name = std::string{value};
+        return;
+    }
+
+    if (name == "rig") {
+        prefab_.rig = std::string{value};
+        return;
+    }
+
+    prefab_.entities.push_back(vox_entity_data{.name = std::string{value}});
+    entity_index_ = prefab_.entities.size() - 1;
+    tag_index_    = no_index;
 }
 
-auto vox_parser_plain::process_root_(std::istringstream& iss) -> void {
-    std::string name;
-    iss >> name;
-    if (iss.fail()) {
+auto vox_parser_plain::process_tag_(
+    std::string_view name, std::string_view value
+) -> void {
+    if (entity_index_ == no_index) {
         error_ = error_type::parse_error;
         return;
     }
 
-    prefab_.root_name = name;
+    auto& entity = prefab_.entities[entity_index_];
+
+    // Родитель — не компонент: на нём держится дерево, и читается он до того,
+    // как хоть один тег дойдёт до мира.
+    if (name == "parent") {
+        entity.parent_name = std::string{value};
+        tag_index_         = no_index;
+        return;
+    }
+
+    entity.add(std::string{name}, std::string{value});
+    tag_index_ = entity.tags.size() - 1;
 }
 
-auto vox_parser_plain::process_entity_(std::istringstream& iss) -> void {
-    std::string name;
-    iss >> name;
-    if (iss.fail()) {
+auto vox_parser_plain::process_prop_(
+    std::string_view name, std::string_view value
+) -> void {
+    if (entity_index_ == no_index || tag_index_ == no_index) {
         error_ = error_type::parse_error;
         return;
     }
 
-    prefab_.entities.emplace_back();
-    current_entity_ = &prefab_.entities.back();
-    current_entity_->name = name;
+    prefab_.entities[entity_index_].tags[tag_index_].set_prop(
+        std::string{name}, std::string{value}
+    );
 }
 
-auto vox_parser_plain::process_parent_(std::istringstream& iss) -> void {
-    if (!current_entity_) {
-        return;
+}  // namespace vw::asset
+
+
+namespace vw::asset {
+
+namespace detail {
+constexpr log::log_category vox_writer_plain_lc{"vox_writer_plain"};
+}  // namespace detail
+
+auto vox_writer_plain::write(
+    const std::filesystem::path& filepath, const vox_prefab_data& prefab
+) -> std::expected<void, error_type> {
+    std::ofstream file(filepath.string(), std::ios::trunc);
+    if (!file.is_open()) {
+        log::warn(
+            detail::vox_writer_plain_lc, "failed to open file for writing: {}", filepath.string()
+        );
+        return std::unexpected(error_type::file_open_failed);
     }
 
-    std::string parent_name;
-    iss >> parent_name;
-    if (iss.fail()) {
-        error_ = error_type::parse_error;
-        return;
+    const auto result = write(file, prefab);
+    if (!result.has_value()) {
+        log::warn(detail::vox_writer_plain_lc, "write error for file: {}", filepath.string());
     }
 
-    current_entity_->parent_name = parent_name;
+    return result;
 }
 
-auto vox_parser_plain::process_transform_(std::istringstream& iss) -> void {
-    if (!current_entity_) {
-        return;
+auto vox_writer_plain::write(
+    std::ostream& output, const vox_prefab_data& prefab
+) -> std::expected<void, error_type> {
+    write_header_(output, prefab);
+
+    for (const auto& ent : prefab.entities) {
+        write_entity_(output, ent);
     }
 
-    vec3f position;
-    iss >> position.x >> position.y >> position.z;
-
-    vec3f rotation;
-    iss >> rotation.x >> rotation.y >> rotation.z;
-
-    vec3f scale;
-    iss >> scale.x >> scale.y >> scale.z;
-
-    if (iss.fail()) {
-        error_ = error_type::parse_error;
-        return;
+    if (!output.good()) {
+        return std::unexpected(error_type::write_failed);
     }
 
-    current_entity_->position      = position;
-    current_entity_->rotation      = rotation;
-    current_entity_->scale         = scale;
-    current_entity_->has_transform = true;
+    return {};
 }
 
-auto vox_parser_plain::process_target_(std::istringstream& iss) -> void {
-    if (!current_entity_) {
-        return;
+auto vox_writer_plain::write_header_(
+    std::ostream& output, const vox_prefab_data& prefab
+) -> void {
+    output << std::format("# Vox File Version {}\n", vox_file_version);
+    if (!prefab.rig.empty()) {
+        output << std::format("rig {}\n", prefab.rig);
     }
-
-    std::string target_name;
-    iss >> target_name;
-    if (iss.fail()) {
-        error_ = error_type::parse_error;
-        return;
-    }
-
-    current_entity_->animation_target_name = target_name;
+    output << std::format("root {}\n", prefab.root_name);
 }
 
-auto vox_parser_plain::process_sockets_() -> void {
-    if (!current_entity_) {
-        return;
+auto vox_writer_plain::write_entity_(
+    std::ostream& output, const vox_entity_data& ent
+) -> void {
+    output << std::format("entity {}\n", ent.name);
+
+    if (!ent.parent_name.empty()) {
+        output << std::format("\tparent {}\n", ent.parent_name);
     }
 
-    current_entity_->has_sockets = true;
-}
+    for (const auto& tag : ent.tags) {
+        if (tag.value.empty()) {
+            output << std::format("\t{}\n", tag.name);
+        } else {
+            output << std::format("\t{} {}\n", tag.name, tag.value);
+        }
 
-auto vox_parser_plain::process_socket_(std::istringstream& iss) -> void {
-    if (!current_entity_) {
-        return;
+        for (const auto& [key, value] : tag.props) {
+            output << std::format("\t\t{} {}\n", key, value);
+        }
     }
-
-    std::string name;
-    iss >> name;
-
-    vec3f position;
-    iss >> position.x >> position.y >> position.z;
-
-    vec3f rotation;
-    iss >> rotation.x >> rotation.y >> rotation.z;
-
-    vec3f scale;
-    iss >> scale.x >> scale.y >> scale.z;
-
-    if (iss.fail()) {
-        error_ = error_type::parse_error;
-        return;
-    }
-
-    current_entity_->sockets.push_back({name, position, rotation, scale});
-}
-
-auto vox_parser_plain::process_model_(std::istringstream& iss) -> void {
-    if (!current_entity_) {
-        return;
-    }
-
-    std::string path;
-    iss >> path;
-    if (iss.fail()) {
-        error_ = error_type::parse_error;
-        return;
-    }
-
-    current_entity_->model = asset_ref{path};
 }
 
 }  // namespace vw::asset
@@ -611,8 +645,9 @@ auto asset_storage::load_prefab(
     // Битая ссылка загрузку не рвёт: узел останется без объёма, о чём сказано в
     // логе библиотекой, а остальной префаб встанет целиком.
     for (const auto& ent : result->entities) {
-        if (!ent.model.empty()) {
-            static_cast<void>(library_->load(ent.model));
+        const auto source = ent.value_of("model");
+        if (!source.empty()) {
+            static_cast<void>(library_->load(asset_ref{source}));
         }
     }
 
@@ -656,7 +691,7 @@ auto asset_storage::get_model(
 
     for (const auto& ent : pit->second.entities) {
         if (ent.name == entity_name) {
-            return library_->find(ent.model);
+            return library_->find(asset_ref{ent.value_of("model")});
         }
     }
     return nullptr;

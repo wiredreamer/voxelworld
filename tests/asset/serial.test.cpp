@@ -24,11 +24,11 @@ auto parse_voxa(std::string_view text) {
 }  // namespace
 
 // Узлы взяты из assets/prefabs/m_human.vox дословно, вплоть до «-0» и
-// табуляций: дерево больше не носит вокселей, узел называет .voxm, а точку
-// вращения объём хранит сам.
+// табуляций. Разборщик не знает ни одного из этих тегов: он видит имя, остаток
+// строки и глубину отступа, а смысл придаёт читатель.
 TEST_CASE("the vox parser reads a prefab out of a stream", "[serial]") {
     const auto prefab = parse_vox(
-        "# Vox File Version 3.0\n"
+        "# Vox File Version 4.0\n"
         "rig humanoid\n"
         "root root\n"
         "entity root\n"
@@ -38,8 +38,10 @@ TEST_CASE("the vox parser reads a prefab out of a stream", "[serial]") {
         "\ttransform 10 2 0\t1.5707963 -0 -0\t1 1 1\n"
         "\tmodel models/m_human/hand_right.voxm\n"
         "\tanim_target hand_right\n"
-        "\tsockets\n"
-        "\t\tsocket hand_right 0 0 0 -1.570796 -0 -0 0.99 0.99 0.99\n"
+        "\tsocket hand_right\n"
+        "\t\tpos 0 0 0\n"
+        "\t\trot -1.570796 -0 -0\n"
+        "\t\tscale 0.99 0.99 0.99\n"
     );
 
     REQUIRE(prefab.has_value());
@@ -48,17 +50,69 @@ TEST_CASE("the vox parser reads a prefab out of a stream", "[serial]") {
     REQUIRE(prefab->entities.size() == 2);
 
     const auto& root = prefab->entities.front();
-    REQUIRE(root.has_transform);
-    REQUIRE(root.model.empty());
+    REQUIRE(root.value_of("transform") == "0 0 0\t-0 -0 -0\t1 1 1");
+    REQUIRE(root.find("model") == nullptr);
 
     const auto& hand = prefab->entities.back();
     REQUIRE(hand.parent_name == "root");
-    REQUIRE(hand.position == vec3f{10.0F, 2.0F, 0.0F});
-    REQUIRE(hand.model == asset::asset_ref{"models/m_human/hand_right.voxm"});
-    REQUIRE(hand.animation_target_name == "hand_right");
-    REQUIRE(hand.has_sockets);
-    REQUIRE(hand.sockets.size() == 1);
-    REQUIRE(hand.sockets.front().name == "hand_right");
+    REQUIRE(hand.value_of("transform") == "10 2 0\t1.5707963 -0 -0\t1 1 1");
+    REQUIRE(hand.value_of("model") == "models/m_human/hand_right.voxm");
+    REQUIRE(hand.value_of("anim_target") == "hand_right");
+
+    const auto* socket = hand.find("socket");
+    REQUIRE(socket != nullptr);
+    REQUIRE(socket->value == "hand_right");
+    REQUIRE(socket->prop("pos") == "0 0 0");
+    REQUIRE(socket->prop("scale") == "0.99 0.99 0.99");
+}
+
+// Тег, которого не знает никто, обязан дойти до записи целым: иначе открыть
+// префаб сборкой без нужного компонента и сохранить — значит потерять его.
+TEST_CASE("an unknown tag is carried through untouched", "[serial]") {
+    const auto first = parse_vox(
+        "root body\n"
+        "entity body\n"
+        "\tlight point\n"
+        "\t\tcolor 255 200 120\n"
+        "\t\trange 12\n"
+    );
+
+    REQUIRE(first.has_value());
+
+    std::ostringstream written;
+    asset::vox_writer_plain writer;
+    REQUIRE(writer.write(written, *first).has_value());
+
+    const auto second = parse_vox(written.str());
+    REQUIRE(second.has_value());
+    REQUIRE(*second == *first);
+
+    const auto* light = second->entities.front().find("light");
+    REQUIRE(light != nullptr);
+    REQUIRE(light->value == "point");
+    REQUIRE(light->prop("range") == "12");
+}
+
+// Повтор тега — это список, и порядок в нём значим: сокеты обязаны вернуться
+// теми же и в том же порядке.
+TEST_CASE("a repeated tag is a list", "[serial]") {
+    const auto prefab = parse_vox(
+        "root body\n"
+        "entity body\n"
+        "\tsocket hand_right\n"
+        "\t\tpos 1 0 0\n"
+        "\tsocket hand_left\n"
+        "\t\tpos -1 0 0\n"
+    );
+
+    REQUIRE(prefab.has_value());
+
+    const auto& tags = prefab->entities.front().tags;
+    REQUIRE(tags.size() == 2);
+    REQUIRE(tags.front().value == "hand_right");
+    REQUIRE(tags.front().prop("pos") == "1 0 0");
+    REQUIRE(tags.back().value == "hand_left");
+    REQUIRE(tags.back().prop("pos") == "-1 0 0");
 }
 
 // Разбор идёт построчно, и незнакомая команда — не повод бросать файл: так
@@ -75,16 +129,34 @@ TEST_CASE("an unknown vox command is skipped, not fatal", "[serial]") {
 }
 
 // Обрезанная строка — то, что приносит и оборванная запись, и правка руками.
-// Ответ обязан быть ошибкой разбора, а не догадкой о недостающих числах.
-TEST_CASE("a truncated vox transform is a parse error", "[serial]") {
+// Ошибкой разбора осталась только поломанная структура: свойство без тега
+// повисает в воздухе, и догадываться, к чему оно относится, разборщик не станет.
+TEST_CASE("a property without a tag is a parse error", "[serial]") {
+    const auto prefab = parse_vox(
+        "root body\n"
+        "entity body\n"
+        "\t\tcolor 1 2 3\n"
+    );
+
+    REQUIRE_FALSE(prefab.has_value());
+    REQUIRE(prefab.error() == asset::vox_parser::error_type::parse_error);
+}
+
+// Усечённый трансформ разборщика больше не касается: сколько чисел полагается
+// тегу, знает читатель. Строка доезжает до него как есть, и это его дело —
+// понять, что чисел мало.
+TEST_CASE("a truncated transform is not a parse error", "[serial]") {
     const auto prefab = parse_vox(
         "root body\n"
         "entity body\n"
         "\ttransform 1 2\n"
     );
 
-    REQUIRE_FALSE(prefab.has_value());
-    REQUIRE(prefab.error() == asset::vox_parser::error_type::parse_error);
+    REQUIRE(prefab.has_value());
+    REQUIRE(prefab->entities.front().value_of("transform") == "1 2");
+
+    std::array<float32, 9> values{};
+    REQUIRE_FALSE(asset::parse_floats("1 2", values));
 }
 
 TEST_CASE("an empty vox stream yields an empty prefab", "[serial]") {
@@ -92,6 +164,57 @@ TEST_CASE("an empty vox stream yields an empty prefab", "[serial]") {
 
     REQUIRE(prefab.has_value());
     REQUIRE(prefab->entities.empty());
+}
+
+// Разбор и запись — две половины одного формата, и держатся они только тем, что
+// лежат рядом. Поле, которое читается, но не пишется, не даёт ни ошибки, ни
+// лога: оно просто исчезает при следующем сохранении.
+TEST_CASE("a prefab survives a write and a read", "[serial]") {
+    constexpr std::string_view source =
+        "# Vox File Version 4.0\n"
+        "rig humanoid\n"
+        "root root\n"
+        "entity root\n"
+        "\ttransform 0 0 0\t-0 -0 -0\t1 1 1\n"
+        "entity hand_right\n"
+        "\tparent root\n"
+        "\ttransform 10 2 0\t1.5707963 -0 -0\t1 1 1\n"
+        "\tmodel models/m_human/hand_right.voxm\n"
+        "\tanim_target hand_right\n"
+        "\tsocket hand_right\n"
+        "\t\tpos 0 0 0\n"
+        "\t\trot -1.570796 -0 -0\n"
+        "\t\tscale 0.99 0.99 0.99\n";
+
+    const auto first = parse_vox(source);
+    REQUIRE(first.has_value());
+
+    std::ostringstream written;
+    asset::vox_writer_plain writer;
+    REQUIRE(writer.write(written, *first).has_value());
+
+    const auto second = parse_vox(written.str());
+    REQUIRE(second.has_value());
+    REQUIRE(*second == *first);
+}
+
+// Узел без единого тега — тоже узел: пустые поля не должны превращаться в
+// строки, которые разбор потом прочтёт как настоящие.
+TEST_CASE("a bare node survives a write and a read", "[serial]") {
+    const auto first = parse_vox(
+        "# Vox File Version 4.0\n"
+        "root root\n"
+        "entity root\n"
+    );
+    REQUIRE(first.has_value());
+
+    std::ostringstream written;
+    asset::vox_writer_plain writer;
+    REQUIRE(writer.write(written, *first).has_value());
+
+    const auto second = parse_vox(written.str());
+    REQUIRE(second.has_value());
+    REQUIRE(*second == *first);
 }
 
 TEST_CASE("the voxa parser reads a clip out of a stream", "[serial]") {
@@ -152,12 +275,12 @@ TEST_CASE("a vox file of an unsupported major version is rejected", "[serial]") 
     REQUIRE(prefab.error() == asset::vox_parser::error_type::unsupported_version);
 }
 
-// Файл 2.0 нёс воксели прямо в дереве и другие теги узла. Читать его больше
-// нечем, и молчать об этом нельзя: без проверки версии каждая его строка ушла бы
-// в «неизвестную команду», а документ открылся бы пустым.
-TEST_CASE("a vox 2.0 file is rejected by version", "[serial]") {
+// Файл 3.1 нёс сокеты плоской строкой с позиционными числами. Читать его больше
+// нечем, и молчать об этом нельзя: без проверки версии сокет ушёл бы в тег с
+// девятью числами в значении, а префаб открылся бы наполовину.
+TEST_CASE("a vox 3.1 file is rejected by version", "[serial]") {
     const auto prefab = parse_vox(
-        "# Vox File Version 2.0\n"
+        "# Vox File Version 3.1\n"
         "root body\n"
         "entity body\n"
     );
@@ -168,7 +291,7 @@ TEST_CASE("a vox 2.0 file is rejected by version", "[serial]") {
 
 TEST_CASE("a vox file of the current version parses", "[serial]") {
     const auto prefab = parse_vox(
-        "# Vox File Version 3.0\n"
+        "# Vox File Version 4.0\n"
         "root body\n"
         "entity body\n"
     );
@@ -181,7 +304,7 @@ TEST_CASE("a vox file of the current version parses", "[serial]") {
 // и так переживает: ронять из-за неё файл значило бы запретить формату расти.
 TEST_CASE("a vox file of a newer minor version parses", "[serial]") {
     const auto prefab = parse_vox(
-        "# Vox File Version 3.7\n"
+        "# Vox File Version 4.7\n"
         "root body\n"
         "entity body\n"
     );

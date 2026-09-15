@@ -6,7 +6,6 @@ import vw.core;
 import vw.asset;
 import vw.ecs;
 import :components;
-import :scene.writer;
 
 export namespace vw::ecs {
 
@@ -15,14 +14,14 @@ class world;
 class vox_serializer final {
 public:
     using entity_names_type = std::unordered_map<entity, std::string>;
-    using error_type        = vox_writer::error_type;
+    using error_type        = asset::vox_writer::error_type;
 
     struct options {
         std::optional<entity_names_type> entity_names;
         std::unordered_set<entity> excluded;
     };
 
-    vox_serializer(world& world, vox_writer& writer, entity root, options opts = {});
+    vox_serializer(world& world, asset::vox_writer& writer, entity root, options opts = {});
 
     auto serialize(const std::filesystem::path& filepath) -> std::expected<void, error_type>;
 
@@ -33,7 +32,7 @@ private:
     [[nodiscard]] auto extract_entity_(entity ent) const -> asset::vox_entity_data;
 
     world* world_;
-    vox_writer* writer_;
+    asset::vox_writer* writer_;
     entity root_;
     entity_names_type entity_names_;
     std::unordered_set<entity> excluded_;
@@ -69,6 +68,7 @@ public:
 private:
     auto create_entity_(const asset::vox_entity_data& data, result& res) -> void;
     auto apply_entity_(const asset::vox_entity_data& data, result& res, const options& opts) -> void;
+    auto attach_sockets_(const asset::vox_entity_data& data, entity ent) -> void;
     auto attach_model_(const asset::vox_entity_data& data, entity ent) -> void;
     auto attach_rig_(const asset::vox_prefab_data& prefab, const result& res) -> void;
 

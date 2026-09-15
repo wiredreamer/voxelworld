@@ -62,7 +62,7 @@ auto file_service::write_(
     assign_missing_refs_(prefab_ref);
     write_dirty_models_();
 
-    ecs::vox_writer_plain writer;
+    asset::vox_writer_plain writer;
     ecs::vox_serializer serializer{
         engine_->get_world(),
         writer,

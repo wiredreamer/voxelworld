@@ -1,6 +1,5 @@
 export module vw.world:scene;
 
-// Сцена — это ассеты, разложенные по сущностям: чтение и запись .vox поверх
-// реестра.
-export import :scene.writer;
+// Сцена — это ассеты, разложенные по сущностям: дерево .vox поверх реестра.
+// Сам формат читает и пишет vw.asset.
 export import :scene.serial;

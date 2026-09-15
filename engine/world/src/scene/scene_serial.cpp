@@ -10,10 +10,46 @@ namespace vw::ecs {
 
 namespace detail {
 constexpr log::log_category vox_deserializer_lc{"vox_deserializer"};
+
+// Значение тега — строка, и сколько в ней чисел, знает только читающий. Здесь
+// эти две стороны и живут: формат хранит текст, смысл ему придаёт vw.world.
+inline auto write_vec3f(const vec3f& value) -> std::string {
+    return std::format("{} {} {}", value.x, value.y, value.z);
+}
+
+inline auto read_vec3f(std::string_view text, vec3f fallback) -> vec3f {
+    std::array<float32, 3> values{};
+    return asset::parse_floats(text, values) ? vec3f{values[0], values[1], values[2]} : fallback;
+}
+
+// Трансформ узла — девять чисел одной строкой: позиция, эйлеры, масштаб.
+struct node_transform {
+    vec3f position;
+    vec3f rotation;
+    vec3f scale{1.0F, 1.0F, 1.0F};
+};
+
+inline auto read_transform(const asset::vox_entity_data& data) -> std::optional<node_transform> {
+    const auto* tag = data.find("transform");
+    if (tag == nullptr) {
+        return std::nullopt;
+    }
+
+    std::array<float32, 9> values{};
+    if (!asset::parse_floats(tag->value, values)) {
+        return std::nullopt;
+    }
+
+    return node_transform{
+        .position = {values[0], values[1], values[2]},
+        .rotation = {values[3], values[4], values[5]},
+        .scale    = {values[6], values[7], values[8]},
+    };
+}
 }  // namespace detail
 
 vox_serializer::vox_serializer(
-    world& world, vox_writer& writer, entity root, options opts
+    world& world, asset::vox_writer& writer, entity root, options opts
 ) : world_(&world), writer_(&writer), root_(root), excluded_(std::move(opts.excluded)) {
     if (opts.entity_names.has_value()) {
         entity_names_ = std::move(opts.entity_names.value());
@@ -109,30 +145,40 @@ auto vox_serializer::extract_entity_(entity ent) const -> asset::vox_entity_data
         data.parent_name = entity_names_.at(parent);
     }
 
-    data.position = transform_comp.get_position();
-    data.rotation = transform_comp.get_rotation_euler();
-    data.scale = transform_comp.get_scale();
-    data.has_transform = true;
+    const auto position = transform_comp.get_position();
+    const auto rotation = transform_comp.get_rotation_euler();
+    const auto scale    = transform_comp.get_scale();
 
-    if (world_->has<animation_target_component>(ent)) {
-        auto& target = world_->get<animation_target_component>(ent);
-        data.animation_target_name = target.get_name();
-    }
-
-    if (world_->has<socket_component>(ent)) {
-        auto& socket_comp = world_->get<socket_component>(ent);
-        data.has_sockets = true;
-        for (const auto& sp : socket_comp.get_sockets()) {
-            auto rot_euler = math::quat_to_euler(sp.rotation);
-            data.sockets.push_back({sp.name, sp.position, rot_euler, sp.scale});
-        }
-    }
+    data.add(
+        "transform",
+        std::format(
+            "{} {} {}\t{} {} {}\t{} {} {}", position.x, position.y, position.z, rotation.x,
+            rotation.y, rotation.z, scale.x, scale.y, scale.z
+        )
+    );
 
     // Воксели в дереве больше не лежат: узел называет .voxm, а сам объём пишет
     // тот, кто владеет библиотекой. Узел без ссылки законен — её раздаёт первая
     // запись, и до неё он просто ни на что не ссылается.
     if (world_->has<model_component>(ent)) {
-        data.model = world_->get<model_component>(ent).get_source();
+        const auto& source = world_->get<model_component>(ent).get_source();
+        if (!source.empty()) {
+            data.add("model", source.str());
+        }
+    }
+
+    if (world_->has<animation_target_component>(ent)) {
+        data.add("anim_target", world_->get<animation_target_component>(ent).get_name());
+    }
+
+    if (world_->has<socket_component>(ent)) {
+        for (const auto& sp : world_->get<socket_component>(ent).get_sockets()) {
+            const auto rot = math::quat_to_euler(sp.rotation);
+            data.add("socket", sp.name)
+                .set_prop("pos", detail::write_vec3f(sp.position))
+                .set_prop("rot", detail::write_vec3f(rot))
+                .set_prop("scale", detail::write_vec3f(sp.scale));
+        }
     }
 
     return data;
@@ -238,59 +284,83 @@ auto vox_deserializer::apply_entity_(
         }
     }
 
-    if (data.has_transform) {
-        auto& transform_sys = world_->system<transform_system>();
-        transform_sys.modify(ent)
-            .set_position(data.position)
-            .set_rotation_euler(data.rotation)
-            .set_scale(data.scale);
+    // Трансформ читается первым и запоминается: позу покоя цель анимации берёт
+    // из него. Порядок этот содержательный, и на этапе 4 он станет явной фазой,
+    // а не соседством строк.
+    const auto node = detail::read_transform(data);
+    if (node.has_value()) {
+        world_->system<transform_system>()
+            .modify(ent)
+            .set_position(node->position)
+            .set_rotation_euler(node->rotation)
+            .set_scale(node->scale);
     }
 
-    if (data.animation_target_name.has_value() && !opts.skip_targets) {
+    if (const auto* target = data.find("anim_target"); target != nullptr && !opts.skip_targets) {
         world_->modify(ent).with<animation_target_component>();
-        auto& anim_sys = world_->system<animation_system>();
-        auto target_mod = anim_sys.modify_target(ent);
-        target_mod.set_target_name(*data.animation_target_name);
-        if (data.has_transform) {
+        auto target_mod = world_->system<animation_system>().modify_target(ent);
+        target_mod.set_target_name(target->value);
+
+        if (node.has_value()) {
             transform rest;
-            rest.set_position(data.position);
-            rest.set_rotation_euler(data.rotation);
-            rest.set_scale(data.scale);
+            rest.set_position(node->position);
+            rest.set_rotation_euler(node->rotation);
+            rest.set_scale(node->scale);
             target_mod.set_rest_transform(rest);
         }
     }
 
-    if (data.has_sockets && !opts.skip_sockets) {
-        world_->modify(ent).with<socket_component>();
-        auto& socket_sys = world_->system<socket_system>();
-        for (const auto& sp : data.sockets) {
-            socket_sys.modify(ent).add_socket(
-                sp.name, sp.position, math::euler_to_quat(sp.rotation), sp.scale
-            );
-        }
+    if (!opts.skip_sockets) {
+        attach_sockets_(data, ent);
     }
 
     attach_model_(data, ent);
 }
 
+auto vox_deserializer::attach_sockets_(const asset::vox_entity_data& data, entity ent) -> void {
+    // Повтор тега — это список: сокеты идут подряд, и компонент заводится по
+    // первому из них.
+    bool attached = false;
+
+    for (const auto& tag : data.tags) {
+        if (tag.name != "socket") {
+            continue;
+        }
+
+        if (!attached) {
+            world_->modify(ent).with<socket_component>();
+            attached = true;
+        }
+
+        world_->system<socket_system>().modify(ent).add_socket(
+            tag.value, detail::read_vec3f(tag.prop("pos"), vec3f{}),
+            math::euler_to_quat(detail::read_vec3f(tag.prop("rot"), vec3f{})),
+            detail::read_vec3f(tag.prop("scale"), vec3f{1.0F, 1.0F, 1.0F})
+        );
+    }
+}
+
 auto vox_deserializer::attach_model_(const asset::vox_entity_data& data, entity ent) -> void {
-    if (data.model.empty()) {
+    const auto source = data.value_of("model");
+    if (source.empty()) {
         return;
     }
 
+    const auto ref = asset::asset_ref{source};
+
     // Битая ссылка не повод ронять загрузку: узел встаёт без объёма, о чём
     // сказано в логе, и остальной префаб открывается целиком.
-    auto loaded = library_->load(data.model);
+    auto loaded = library_->load(ref);
     if (!loaded.has_value()) {
         log::warn(
             detail::vox_deserializer_lc, "entity '{}' refers to a missing model '{}'", data.name,
-            data.model.str()
+            ref.str()
         );
         return;
     }
 
     world_->modify(ent).with<model_component>();
-    world_->system<model_system>().modify(ent).set_model(*loaded, data.model);
+    world_->system<model_system>().modify(ent).set_model(*loaded, ref);
 }
 
 }  // namespace vw::ecs

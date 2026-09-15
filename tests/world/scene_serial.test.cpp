@@ -14,11 +14,20 @@ using Catch::Approx;
 
 namespace {
 
+constexpr std::string_view identity_transform = "0 0 0\t0 0 0\t1 1 1";
+
 auto make_node(std::string name, std::string parent) -> asset::vox_entity_data {
     asset::vox_entity_data data;
     data.name        = std::move(name);
     data.parent_name = std::move(parent);
     return data;
+}
+
+auto transform_value(const vec3f& position, const vec3f& rotation) -> std::string {
+    return std::format(
+        "{} {} {}\t{} {} {}\t1 1 1", position.x, position.y, position.z, rotation.x, rotation.y,
+        rotation.z
+    );
 }
 
 // Разборщик и библиотека живут дольше десериализатора, поэтому собраны в одно
@@ -120,18 +129,19 @@ TEST_CASE("the pivot of a parent does not move its child", "[scene]") {
     prefab.root_name = "root";
 
     asset::vox_entity_data root;
-    root.name          = "root";
-    root.has_transform = true;
-    root.model         = root_ref;
+    root.name = "root";
+    root.add("transform", std::string{identity_transform});
+    root.add("model", root_ref.str());
     prefab.entities.push_back(root);
 
+    constexpr auto hand_position = vec3f{10.0F, 2.0F, 0.0F};
+    constexpr auto hand_rotation = vec3f{1.5707963F, 0.0F, 0.0F};
+
     asset::vox_entity_data hand;
-    hand.name          = "hand_right";
-    hand.parent_name   = "root";
-    hand.has_transform = true;
-    hand.position      = vec3f{10.0F, 2.0F, 0.0F};
-    hand.rotation      = vec3f{1.5707963F, 0.0F, 0.0F};
-    hand.model         = hand_ref;
+    hand.name        = "hand_right";
+    hand.parent_name = "root";
+    hand.add("transform", transform_value(hand_position, hand_rotation));
+    hand.add("model", hand_ref.str());
     prefab.entities.push_back(hand);
 
     auto deserializer = fx.deserializer();
@@ -145,7 +155,7 @@ TEST_CASE("the pivot of a parent does not move its child", "[scene]") {
         model_matrix(w.get<transform_component>(ent), w.get<model_component>(ent));
 
     const auto expected =
-        math::transform_matrix(hand.position, hand.rotation, vec3f{1.0F, 1.0F, 1.0F}) *
+        math::transform_matrix(hand_position, hand_rotation, vec3f{1.0F, 1.0F, 1.0F}) *
         math::translation_matrix(-hand_volume->pivot());
 
     REQUIRE(math::approx_equal(volume_matrix, expected));
@@ -164,8 +174,8 @@ TEST_CASE("a rig name survives a round trip through the world", "[scene]") {
     prefab.rig       = "humanoid";
 
     asset::vox_entity_data root;
-    root.name          = "root";
-    root.has_transform = true;
+    root.name = "root";
+    root.add("transform", std::string{identity_transform});
     prefab.entities.push_back(root);
 
     auto deserializer = fx.deserializer();
@@ -176,7 +186,7 @@ TEST_CASE("a rig name survives a round trip through the world", "[scene]") {
     REQUIRE(w.has<rig_component>(root_ent));
     REQUIRE(w.get<rig_component>(root_ent).get_name() == "humanoid");
 
-    vox_writer_plain writer;
+    asset::vox_writer_plain writer;
     vox_serializer serializer{w, writer, root_ent, {.entity_names = res.entity_to_name}};
 
     REQUIRE(serializer.extract().rig == "humanoid");
@@ -209,18 +219,19 @@ TEST_CASE("a model ref survives a round trip through the world", "[scene]") {
     asset::vox_prefab_data prefab;
     prefab.root_name = "body";
 
+    constexpr auto body_position = vec3f{1.0F, 2.0F, 3.0F};
+
     asset::vox_entity_data body;
-    body.name          = "body";
-    body.has_transform = true;
-    body.position      = vec3f{1.0F, 2.0F, 3.0F};
-    body.model         = ref;
+    body.name = "body";
+    body.add("transform", transform_value(body_position, vec3f{}));
+    body.add("model", ref.str());
     prefab.entities.push_back(body);
 
     auto deserializer = fx.deserializer();
     const auto res    = deserializer.instantiate(prefab, {});
     w.update(0.016F);
 
-    vox_writer_plain writer;
+    asset::vox_writer_plain writer;
     vox_serializer serializer{
         w, writer, res.name_to_entity.at("body"), {.entity_names = res.entity_to_name}
     };
@@ -228,8 +239,13 @@ TEST_CASE("a model ref survives a round trip through the world", "[scene]") {
     const auto written = serializer.extract();
 
     REQUIRE(written.entities.size() == 1);
-    REQUIRE(written.entities.front().model == ref);
-    REQUIRE(written.entities.front().position == body.position);
+    REQUIRE(written.entities.front().value_of("model") == ref.str());
+
+    // Сверяются числа, а не их написание: поворот едет в мир кватернионом и
+    // возвращается эйлерами, у которых ноль бывает со знаком.
+    std::array<float32, 9> values{};
+    REQUIRE(asset::parse_floats(written.entities.front().value_of("transform"), values));
+    REQUIRE(vec3f{values[0], values[1], values[2]} == body_position);
 }
 
 // Битая ссылка не повод ронять загрузку: узел встаёт без модели, о чём сказано
@@ -243,9 +259,9 @@ TEST_CASE("a node with a missing model still loads", "[scene]") {
     prefab.root_name = "body";
 
     asset::vox_entity_data body;
-    body.name          = "body";
-    body.has_transform = true;
-    body.model         = asset::asset_ref{"models/nothing.voxm"};
+    body.name = "body";
+    body.add("transform", std::string{identity_transform});
+    body.add("model", "models/nothing.voxm");
     prefab.entities.push_back(body);
 
     const auto res = deserializer.instantiate(prefab, {});

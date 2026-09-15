@@ -11,6 +11,15 @@ import vw.gfx;
 
 namespace vw::arena {
 
+namespace {
+
+auto read_vec3f(std::string_view text, vec3f fallback) -> vec3f {
+    std::array<float32, 3> values{};
+    return asset::parse_floats(text, values) ? vec3f{values[0], values[1], values[2]} : fallback;
+}
+
+}  // namespace
+
 player::player(
     gfx::engine& engine, asset::asset_storage& assets
 )
@@ -207,8 +216,9 @@ auto player::create_body_part(
         .with<ecs::model_component>()
         .with<ecs::animation_target_component>();
 
-    const auto& ent_data = assets_.get_entity(prefab_name, part_name);
-    if (ent_data.has_sockets) {
+    const auto& ent_data   = assets_.get_entity(prefab_name, part_name);
+    const bool has_sockets = ent_data.find("socket") != nullptr;
+    if (has_sockets) {
         modifier.with<ecs::socket_component>();
     }
 
@@ -216,10 +226,16 @@ auto player::create_body_part(
 
     hierarchy_sys.modify(ent).set_parent(root_);
 
+    // Узел в .vox — открытый список тегов, и значения в них текстовые: сколько
+    // чисел в строке, знает читатель. На этапе 4 это чтение уедет в реестр
+    // компонентов и перестанет повторять vox_deserializer.
+    std::array<float32, 9> values{};
     transform rest;
-    rest.set_position(ent_data.position);
-    rest.set_rotation_euler(ent_data.rotation);
-    rest.set_scale(ent_data.scale);
+    if (asset::parse_floats(ent_data.value_of("transform"), values)) {
+        rest.set_position(vec3f{values[0], values[1], values[2]});
+        rest.set_rotation_euler(vec3f{values[3], values[4], values[5]});
+        rest.set_scale(vec3f{values[6], values[7], values[8]});
+    }
 
     transform_sys.modify(ent).set_transform(rest);
 
@@ -230,11 +246,17 @@ auto player::create_body_part(
     target_mod.set_target_name(ent_data.name);
     target_mod.set_rest_transform(rest);
 
-    if (ent_data.has_sockets) {
+    if (has_sockets) {
         auto& socket_sys = world.system<ecs::socket_system>();
-        for (const auto& sp : ent_data.sockets) {
+        for (const auto& tag : ent_data.tags) {
+            if (tag.name != "socket") {
+                continue;
+            }
+
             socket_sys.modify(ent).add_socket(
-                sp.name, sp.position, math::euler_to_quat(sp.rotation), sp.scale
+                tag.value, read_vec3f(tag.prop("pos"), vec3f{}),
+                math::euler_to_quat(read_vec3f(tag.prop("rot"), vec3f{})),
+                read_vec3f(tag.prop("scale"), vec3f{1.0F, 1.0F, 1.0F})
             );
         }
     }

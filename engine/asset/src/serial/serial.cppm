@@ -1,6 +1,6 @@
 export module vw.asset:serial;
 
-// Собирает форматы ассетов: ссылку на ассет, разбор .vox, чтение и запись .voxm
+// Собирает форматы ассетов: ссылку на ассет, чтение и запись .vox, .voxm
 // и .voxa, библиотеку объёмов и хранилище ассетов.
 export import :serial.ref;
 export import :serial.vox;

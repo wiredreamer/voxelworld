@@ -12,12 +12,14 @@ using namespace vw::ecs;
 
 namespace {
 
+constexpr std::string_view identity_transform = "0 0 0\t0 0 0\t1 1 1";
+
 auto make_target(std::string name, std::string parent) -> asset::vox_entity_data {
     asset::vox_entity_data data;
-    data.name                  = name;
-    data.parent_name           = std::move(parent);
-    data.has_transform         = true;
-    data.animation_target_name = std::move(name);
+    data.name        = name;
+    data.parent_name = std::move(parent);
+    data.add("transform", std::string{identity_transform});
+    data.add("anim_target", std::move(name));
     return data;
 }
 
@@ -38,8 +40,8 @@ struct rig_fixture final {
         prefab.rig       = rig;
 
         asset::vox_entity_data root;
-        root.name          = "root";
-        root.has_transform = true;
+        root.name = "root";
+        root.add("transform", std::string{identity_transform});
         prefab.entities.push_back(root);
         prefab.entities.push_back(make_target("body", "root"));
         prefab.entities.push_back(make_target("head", "root"));
