@@ -36,6 +36,8 @@ private:
     auto handle_animation_actions_() -> void;
     auto collect_dirty_models_() -> void;
     auto prune_contexts_() -> void;
+    auto refresh_volume_bounds_() -> void;
+    auto render_volume_overlay_() -> void;
     auto update_title_() -> void;
     static auto init_asset_dirs_() -> void;
 

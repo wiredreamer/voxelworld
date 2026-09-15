@@ -242,8 +242,9 @@ auto entity_properties_panel::render_model_(
 
     // Занятый объём показывается, только когда он меньше габарита: совпали —
     // говорить не о чем, а разошлись — это и есть ответ на вопрос, почему модель
-    // болтается внутри себя и что срежет Trim.
-    const auto& bounds  = occupied_bounds_(model.get());
+    // болтается внутри себя и что срежет Trim. Считает его app раз на смену
+    // модели — тем же числом рисуется рамка в сцене.
+    const auto& bounds  = state_->volume.occupied;
     const bool can_trim = bounds.has_value() && bounds->size() != model_size;
     if (!bounds.has_value()) {
         field_label("Occupied");
@@ -284,26 +285,6 @@ auto entity_properties_panel::render_model_(
             state_->ctx.enter(edit_context::model(name));
         }
     }
-}
-
-auto entity_properties_panel::occupied_bounds_(
-    const asset::model* model
-) const -> const std::optional<asset::voxel_bounds>& {
-    if (model == nullptr) {
-        cached_bounds_id_ = asset::invalid_model_identity;
-        cached_bounds_.reset();
-        return cached_bounds_;
-    }
-
-    // Обход всего объёма ради строки в панели — только когда модель менялась: у
-    // 64-куба это четверть миллиона проверок, и каждый кадр их делать не за что.
-    const auto id = model->get_identity();
-    if (id != cached_bounds_id_) {
-        cached_bounds_id_ = id;
-        cached_bounds_    = asset::occupied_bounds(*model);
-    }
-
-    return cached_bounds_;
 }
 
 auto entity_properties_panel::render_sockets_(

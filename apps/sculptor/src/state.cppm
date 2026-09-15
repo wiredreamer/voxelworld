@@ -155,6 +155,14 @@ struct scene_state {
     auto clear_entities(world_type& world) -> void;
 };
 
+// Занятый объём модели, о которой сейчас идёт речь. Считается один раз на смену
+// модели и читается и панелью, и рамкой в сцене: обход 64-куба — четверть
+// миллиона проверок, и каждый кадр их делать не за что.
+struct volume_state {
+    asset::model_identity source = asset::invalid_model_identity;
+    std::optional<asset::voxel_bounds> occupied;
+};
+
 struct tool_state {
     tools selected_tool     = tools::add_voxel;
     block_id selected_block = blocks::creature::cloth_white[2];
@@ -259,6 +267,7 @@ struct app_state {
     file_state file;
     context_state ctx;
     scene_state scene;
+    volume_state volume;
     tool_state tool;
     animation_state anim;
     socket_state sockets;

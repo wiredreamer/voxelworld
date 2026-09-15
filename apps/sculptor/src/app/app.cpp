@@ -105,6 +105,7 @@ auto app::render(
 ) -> void {
     collect_dirty_models_();
     prune_contexts_();
+    refresh_volume_bounds_();
 
     // Правило одно и живёт в контексте, поэтому и горячие клавиши, и панель
     // подчиняются ему здесь: выбранный инструмент, которому в этом контексте
@@ -124,6 +125,8 @@ auto app::render(
     renderer.draw_line(vec3f{0, 0, 0}, vec3f{100, 0, 0}, colors::blue_4);
     renderer.draw_line(vec3f{0, 0, 0}, vec3f{0, 100, 0}, colors::green_4);
     renderer.draw_line(vec3f{0, 0, 0}, vec3f{0, 0, 100}, colors::red_4);
+
+    render_volume_overlay_();
 
     state_.ui.left_top_voffset    = 0.f;
     state_.ui.left_bottom_voffset = 0.f;
@@ -413,6 +416,84 @@ auto app::prune_contexts_() -> void {
     if (it != stack.end()) {
         stack.erase(it, stack.end());
     }
+}
+
+auto app::refresh_volume_bounds_() -> void {
+    auto& world = get_engine().get_world();
+
+    const asset::model* model = nullptr;
+    const auto it             = state_.scene.name_to_entity.find(state_.edited_node());
+    if (it != state_.scene.name_to_entity.end() && world.has<ecs::model_component>(it->second)) {
+        model = world.get<ecs::model_component>(it->second).get_model().get();
+    }
+
+    if (model == nullptr) {
+        state_.volume.source = asset::invalid_model_identity;
+        state_.volume.occupied.reset();
+        return;
+    }
+
+    const auto id = model->get_identity();
+    if (id == state_.volume.source) {
+        return;
+    }
+
+    state_.volume.source   = id;
+    state_.volume.occupied = asset::occupied_bounds(*model);
+}
+
+auto app::render_volume_overlay_() -> void {
+    if (state_.ctx.kind() != edit_kind::model) {
+        return;
+    }
+
+    auto& world   = get_engine().get_world();
+    const auto it = state_.scene.name_to_entity.find(state_.edited_node());
+    if (it == state_.scene.name_to_entity.end()) {
+        return;
+    }
+
+    const auto ent = it->second;
+    if (!world.has<ecs::model_component>(ent) || !world.has<ecs::transform_component>(ent)) {
+        return;
+    }
+
+    const auto& model_comp     = world.get<ecs::model_component>(ent);
+    const auto& transform_comp = world.get<ecs::transform_component>(ent);
+    auto& renderer             = get_engine().get_renderer();
+
+    // Рамка по непустым вокселям: после расширения модель часто болтается внутри
+    // собственного габарита, и по одному габариту не видно, что резать есть что.
+    if (state_.volume.occupied) {
+        const auto& bounds = *state_.volume.occupied;
+        const auto size    = bounds.size();
+
+        const auto corner = vec3f{
+            static_cast<float32>(bounds.min.x),
+            static_cast<float32>(bounds.min.y),
+            static_cast<float32>(bounds.min.z),
+        };
+
+        renderer.draw_box(
+            ecs::model_matrix(transform_comp, model_comp) * math::translation_matrix(corner),
+            vec3f{
+                static_cast<float32>(size.x),
+                static_cast<float32>(size.y),
+                static_cast<float32>(size.z),
+            },
+            colors::amber_4
+        );
+    }
+
+    // Точка вращения — само начало координат узла: объём стоит сдвинутым на
+    // -pivot, поэтому сюда она и приходится. Крест по осям узла, а не по осям
+    // мира: повёрнутый узел иначе не отличить от неповёрнутого.
+    const auto node       = transform_comp.get_world_matrix();
+    constexpr float32 arm = 1.5f;
+
+    renderer.draw_line(node * vec3f{-arm, 0.f, 0.f}, node * vec3f{arm, 0.f, 0.f}, colors::purple_4);
+    renderer.draw_line(node * vec3f{0.f, -arm, 0.f}, node * vec3f{0.f, arm, 0.f}, colors::purple_4);
+    renderer.draw_line(node * vec3f{0.f, 0.f, -arm}, node * vec3f{0.f, 0.f, arm}, colors::purple_4);
 }
 
 auto app::collect_dirty_models_() -> void {
