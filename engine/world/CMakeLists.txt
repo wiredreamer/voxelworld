@@ -16,6 +16,7 @@ target_sources(vw_world
             src/components/socket_component.cppm
             src/components/animation_components.cppm
             src/components/variant_component.cppm
+            src/components/structure_components.cppm
             src/components/world_view_component.cppm
             src/light/light.cppm
             src/light/light_column.cppm
@@ -43,6 +44,7 @@ target_sources(vw_world
             src/systems/animation_system.cppm
             src/systems/animation_fsm_system.cppm
             src/systems/variant_system.cppm
+            src/systems/structure_system.cppm
             src/systems/world_grid_system.cppm
     PRIVATE
         src/world.cpp
@@ -55,6 +57,7 @@ target_sources(vw_world
         src/grid/world_grid.cpp
         src/systems/animation_fsm_system.cpp
         src/systems/variant_system.cpp
+        src/systems/structure_system.cpp
         src/systems/animation_system.cpp
         src/systems/character_controller_system.cpp
         src/systems/hierarchy_system.cpp

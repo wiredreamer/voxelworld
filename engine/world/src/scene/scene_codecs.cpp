@@ -185,6 +185,153 @@ auto register_variant(component_registry& codecs) -> void {
     codecs.register_for<variant_slot_component>(std::move(codec));
 }
 
+auto split_words(std::string_view text) -> std::vector<std::string> {
+    std::vector<std::string> words;
+
+    std::size_t pos = 0;
+    while (pos < text.size()) {
+        const auto start = text.find_first_not_of(' ', pos);
+        if (start == std::string_view::npos) {
+            break;
+        }
+
+        const auto end = text.find(' ', start);
+        words.emplace_back(text.substr(
+            start, end == std::string_view::npos ? std::string_view::npos : end - start
+        ));
+        pos = end == std::string_view::npos ? text.size() : end;
+    }
+
+    return words;
+}
+
+auto size_to_text(structure_size size) -> std::string_view {
+    switch (size) {
+        case structure_size::small: return "S";
+        case structure_size::medium: return "M";
+        case structure_size::large: return "L";
+        case structure_size::extra_large: return "XL";
+        case structure_size::unspecified: break;
+    }
+
+    return {};
+}
+
+auto size_from_text(std::string_view text) -> structure_size {
+    if (text == "S") {
+        return structure_size::small;
+    }
+    if (text == "M") {
+        return structure_size::medium;
+    }
+    if (text == "L") {
+        return structure_size::large;
+    }
+    if (text == "XL") {
+        return structure_size::extra_large;
+    }
+
+    return structure_size::unspecified;
+}
+
+// Метаданные генератора: тег на корне со своим блоком. Кодек тот же, что у всех
+// прочих, и в этом весь Architect — тип документа и несколько компонентов.
+auto register_structure(component_registry& codecs) -> void {
+    component_codec codec;
+    codec.tag = "structure";
+
+    codec.read = [](const component_read& in) {
+        in.target.modify(in.ent).with<structure_component>();
+
+        const auto* tag = in.tags.front();
+        auto structure  = in.target.system<structure_system>().modify(in.ent);
+
+        structure.set_type(tag->prop("type"));
+        structure.set_races(split_words(tag->prop("race")));
+        structure.set_size(size_from_text(tag->prop("size")));
+
+        const auto tier = tag->prop("tier");
+        uint32 value    = 0;
+        if (std::from_chars(tier.data(), tier.data() + tier.size(), value).ec == std::errc{}) {
+            structure.set_tier(static_cast<uint8>(value));
+        }
+    };
+
+    codec.write = [](const component_write& out) {
+        const auto& structure = out.source.get<structure_component>(out.ent);
+
+        auto& tag = out.out.add("structure");
+
+        if (!structure.get_type().empty()) {
+            tag.set_prop("type", structure.get_type());
+        }
+
+        // Расы одной строкой: список короткий, а повтор тега здесь читался бы
+        // как несколько структур в одном узле.
+        if (!structure.get_races().empty()) {
+            std::string races;
+            for (const auto& race : structure.get_races()) {
+                if (!races.empty()) {
+                    races += ' ';
+                }
+                races += race;
+            }
+            tag.set_prop("race", std::move(races));
+        }
+
+        if (structure.get_tier() != 0) {
+            tag.set_prop("tier", std::format("{}", structure.get_tier()));
+        }
+
+        const auto size = size_to_text(structure.get_size());
+        if (!size.empty()) {
+            tag.set_prop("size", std::string{size});
+        }
+    };
+
+    codecs.register_for<structure_component>(std::move(codec));
+}
+
+auto register_furniture(component_registry& codecs) -> void {
+    component_codec codec;
+    codec.tag = "furniture";
+
+    codec.read = [](const component_read& in) {
+        in.target.modify(in.ent).with<furniture_point_component>();
+        in.target.system<structure_system>().set_furniture_category(
+            in.ent, in.tags.front()->value
+        );
+    };
+
+    codec.write = [](const component_write& out) {
+        out.out.add(
+            "furniture", out.source.get<furniture_point_component>(out.ent).get_category()
+        );
+    };
+
+    codecs.register_for<furniture_point_component>(std::move(codec));
+}
+
+auto register_connection(component_registry& codecs) -> void {
+    component_codec codec;
+    codec.tag = "connection";
+
+    codec.read = [](const component_read& in) {
+        in.target.modify(in.ent).with<connection_point_component>();
+        in.target.system<structure_system>().set_connection_profile(
+            in.ent, in.tags.front()->value
+        );
+    };
+
+    codec.write = [](const component_write& out) {
+        out.out.add(
+            "connection", out.source.get<connection_point_component>(out.ent).get_profile()
+        );
+    };
+
+    codecs.register_for<connection_point_component>(std::move(codec));
+}
+
 auto register_socket(component_registry& codecs) -> void {
     component_codec codec;
     codec.tag = "socket";
@@ -226,6 +373,9 @@ component_registry::component_registry() {
     register_anim_target(*this);
     register_socket(*this);
     register_variant(*this);
+    register_structure(*this);
+    register_furniture(*this);
+    register_connection(*this);
 }
 
 auto component_registry::find(

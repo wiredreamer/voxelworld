@@ -15,3 +15,4 @@ export import :systems.animation;
 export import :systems.animation_fsm;
 export import :systems.variant;
 export import :systems.world_grid;
+export import :systems.structure;

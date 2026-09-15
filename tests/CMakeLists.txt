@@ -105,6 +105,7 @@ add_executable(world_tests
     world/cave_culling.test.cpp
     world/scene_serial.test.cpp
     world/component_codec.test.cpp
+    world/structure.test.cpp
     world/variant.test.cpp
     world/variant_subtree.test.cpp
     world/rig.test.cpp
