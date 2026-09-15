@@ -52,7 +52,11 @@ public:
 
         auto set_name(std::string name) const -> void;
         auto add_candidate(asset::asset_ref ref) const -> void;
-        auto set_candidates(std::vector<asset::asset_ref> candidates) const -> void;
+        // Выбор держится за ссылку, а не за номер: номер — это позиция в
+        // списке, и удаление соседа сверху молча перевело бы выбор на другого
+        // кандидата. Отвечает, пришлось ли выбор переставить: если пришлось, в
+        // сцене стоит кандидат, которого в списке больше нет.
+        auto set_candidates(std::vector<asset::asset_ref> candidates) const -> bool;
         auto set_required_targets(std::vector<std::string> targets) const -> void;
         auto set_required_sockets(std::vector<std::string> sockets) const -> void;
 

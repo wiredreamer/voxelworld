@@ -32,8 +32,25 @@ auto variant_system::variant_modifier::add_candidate(
 
 auto variant_system::variant_modifier::set_candidates(
     std::vector<asset::asset_ref> candidates
-) const -> void {
+) const -> bool {
+    const auto chosen = component_->selected_ref();
+
     component_->candidates_ = std::move(candidates);
+
+    const auto it = std::ranges::find(component_->candidates_, chosen);
+    if (it != component_->candidates_.end()) {
+        component_->selected_ =
+            static_cast<std::size_t>(std::ranges::distance(component_->candidates_.begin(), it));
+        return false;
+    }
+
+    // Выбранного в новом списке нет. Место занимает сосед — тот, кто оказался на
+    // его номере, а если список кончился, последний.
+    component_->selected_ = component_->candidates_.empty() ?
+        0 :
+        std::min(component_->selected_, component_->candidates_.size() - 1);
+
+    return true;
 }
 
 auto variant_system::variant_modifier::set_required_targets(

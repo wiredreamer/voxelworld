@@ -128,6 +128,44 @@ TEST_CASE("switching a variant leaves the node and its subtree in place", "[vari
     ));
 }
 
+// Номер выбранного — это позиция, и список под ним двигается: выбор обязан
+// держаться за ссылку, иначе удаление соседа сверху молча переводит слот на
+// другого кандидата.
+TEST_CASE("the selection follows its candidate, not its number", "[variant]") {
+    variant_fixture fx;
+
+    const auto res  = fx.instantiate(make_prefab());
+    const auto head = res.name_to_entity.at("head");
+
+    auto& variants = fx.w.system<variant_system>();
+    REQUIRE(variants.apply(head, fx.library, 1).has_value());
+
+    // Убираем кандидата, стоявшего выше выбранного.
+    const bool moved = variants.modify(head).set_candidates({big_ref});
+
+    REQUIRE_FALSE(moved);
+    REQUIRE(fx.w.get<variant_slot_component>(head).get_selected() == 0);
+    REQUIRE(fx.w.get<variant_slot_component>(head).selected_ref() == big_ref);
+}
+
+// А вот если убрали самого выбранного, слот обязан сказать об этом: в сцене
+// остался кандидат, которого в списке больше нет.
+TEST_CASE("dropping the chosen candidate is reported", "[variant]") {
+    variant_fixture fx;
+
+    const auto res  = fx.instantiate(make_prefab());
+    const auto head = res.name_to_entity.at("head");
+
+    auto& variants = fx.w.system<variant_system>();
+    REQUIRE(variants.apply(head, fx.library, 1).has_value());
+
+    const bool moved = variants.modify(head).set_candidates({small_ref});
+
+    REQUIRE(moved);
+    REQUIRE(fx.w.get<variant_slot_component>(head).get_selected() == 0);
+    REQUIRE(fx.w.get<variant_slot_component>(head).selected_ref() == small_ref);
+}
+
 TEST_CASE("a candidate outside the list is refused", "[variant]") {
     variant_fixture fx;
 
