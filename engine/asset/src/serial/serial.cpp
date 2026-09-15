@@ -26,19 +26,6 @@ auto vox_parser_plain::parse(const std::filesystem::path& filepath)
     return result;
 }
 
-namespace {
-
-auto trim(std::string_view text) -> std::string_view {
-    const auto first = text.find_first_not_of(" \t\r\n");
-    if (first == std::string_view::npos) {
-        return {};
-    }
-
-    return text.substr(first, text.find_last_not_of(" \t\r\n") - first + 1);
-}
-
-}  // namespace
-
 auto parse_floats(
     std::string_view text, std::span<float32> out
 ) -> bool {
@@ -79,32 +66,22 @@ auto vox_parser_plain::parse(std::istream& input)
 auto vox_parser_plain::process_line_(
     std::string_view line
 ) -> void {
+    const auto parsed = detail::split_line(line);
+    if (!parsed.has_value()) {
+        return;
+    }
+
+    if (parsed->name == "#") {
+        process_version_(parsed->value);
+        return;
+    }
+
     // Вся структура файла — в отступе: ноль табуляций это шапка и узлы, одна —
     // тег узла, две и глубже — свойство тега.
-    std::size_t depth = 0;
-    while (depth < line.size() && line[depth] == '\t') {
-        ++depth;
-    }
-
-    const auto body = trim(line.substr(depth));
-    if (body.empty()) {
-        return;
-    }
-
-    if (body.front() == '#') {
-        process_version_(body);
-        return;
-    }
-
-    const auto space = body.find_first_of(" \t");
-    const auto name  = body.substr(0, space);
-    const auto value =
-        space == std::string_view::npos ? std::string_view{} : trim(body.substr(space + 1));
-
-    switch (depth) {
-        case 0: process_top_(name, value); return;
-        case 1: process_tag_(name, value); return;
-        default: process_prop_(name, value); return;
+    switch (parsed->depth) {
+        case 0: process_top_(parsed->name, parsed->value); return;
+        case 1: process_tag_(parsed->name, parsed->value); return;
+        default: process_prop_(parsed->name, parsed->value); return;
     }
 }
 
@@ -349,7 +326,7 @@ auto voxa_serializer::write_keyframes_vec3f_(
         file << std::format(
             "    k {:.6g} {:.6g} {:.6g} {:.6g} {} {:.6g} {:.6g}\n",
             kf.time, kf.value.x, kf.value.y, kf.value.z,
-            interp_to_string_(kf.interp), kf.tangent_in, kf.tangent_out
+            detail::interp_to_text(kf.interp), kf.tangent_in, kf.tangent_out
         );
     }
 }
@@ -361,22 +338,8 @@ auto voxa_serializer::write_keyframes_quat_(
         file << std::format(
             "    k {:.6g} {:.6g} {:.6g} {:.6g} {:.6g} {} {:.6g} {:.6g}\n",
             kf.time, kf.value.x, kf.value.y, kf.value.z, kf.value.w,
-            interp_to_string_(kf.interp), kf.tangent_in, kf.tangent_out
+            detail::interp_to_text(kf.interp), kf.tangent_in, kf.tangent_out
         );
-    }
-}
-
-auto voxa_serializer::interp_to_string_(
-    math::interpolation_type interp
-) -> std::string_view {
-    switch (interp) {
-        case math::interpolation_type::linear: return "linear";
-        case math::interpolation_type::step: return "step";
-        case math::interpolation_type::ease_in: return "ease_in";
-        case math::interpolation_type::ease_out: return "ease_out";
-        case math::interpolation_type::ease_in_out: return "ease_in_out";
-        case math::interpolation_type::cubic_bezier: return "cubic_bezier";
-        default: return "linear";
     }
 }
 
@@ -556,7 +519,7 @@ auto voxa_deserializer::process_keyframe_(std::istringstream& iss) -> void {
             error_ = error_type::parse_error;
             return;
         }
-        kf.interp = string_to_interp_(interp_str);
+        kf.interp = detail::interp_from_text(interp_str);
         quat_keyframes_.push_back(kf);
     } else {
         keyframe<vec3f> kf;
@@ -568,7 +531,7 @@ auto voxa_deserializer::process_keyframe_(std::istringstream& iss) -> void {
             error_ = error_type::parse_error;
             return;
         }
-        kf.interp = string_to_interp_(interp_str);
+        kf.interp = detail::interp_from_text(interp_str);
         vec3f_keyframes_.push_back(kf);
     }
 }
@@ -608,17 +571,6 @@ auto voxa_deserializer::finalize_track_() -> void {
 
     clip_->add_track(std::move(*current_track_));
     current_track_ = nullptr;
-}
-
-auto voxa_deserializer::string_to_interp_(
-    const std::string& s
-) -> math::interpolation_type {
-    if (s == "step") return math::interpolation_type::step;
-    if (s == "ease_in") return math::interpolation_type::ease_in;
-    if (s == "ease_out") return math::interpolation_type::ease_out;
-    if (s == "ease_in_out") return math::interpolation_type::ease_in_out;
-    if (s == "cubic_bezier") return math::interpolation_type::cubic_bezier;
-    return math::interpolation_type::linear;
 }
 
 }  // namespace vw::asset

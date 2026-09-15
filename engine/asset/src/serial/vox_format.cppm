@@ -7,6 +7,7 @@ import :model;
 import :anim;
 import :serial.ref;
 import :serial.version;
+import :serial.text;
 
 export namespace vw::asset {
 

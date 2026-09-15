@@ -6,6 +6,7 @@ import vw.core;
 import :model;
 import :anim;
 import :serial.vox;
+import :serial.text;
 
 export namespace vw::asset {
 
@@ -23,8 +24,6 @@ private:
     auto write_channel_(std::ofstream& file, const animation_channel_variant& channel) -> void;
     auto write_keyframes_vec3f_(std::ofstream& file, const animation_channel<vec3f>& ch) -> void;
     auto write_keyframes_quat_(std::ofstream& file, const animation_channel<quat>& ch) -> void;
-
-    static auto interp_to_string_(math::interpolation_type interp) -> std::string_view;
 
     const animation_clip* clip_;
 };
@@ -50,8 +49,6 @@ private:
     auto process_keyframe_(std::istringstream& iss) -> void;
     auto finalize_channel_() -> void;
     auto finalize_track_() -> void;
-
-    static auto string_to_interp_(const std::string& s) -> math::interpolation_type;
 
     std::shared_ptr<animation_clip> clip_;
     std::optional<error_type> error_;
