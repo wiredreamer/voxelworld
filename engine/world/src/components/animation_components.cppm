@@ -25,6 +25,22 @@ class world_grid_system;
 // animation_target_component, и сверка по ним остаётся настоящей проверкой.
 // Имя лежит на корне префаба и отвечает на вопрос, который по узлам не задашь:
 // «этот клип вообще про это существо?».
+// Автоматы префаба, по одному на слой. Живут на корне рядом с ригом: в файле
+// это шапка, а не тег узла, и узла у них нет. Порядок — это номера слоёв.
+//
+// Здесь ссылки, а не сами автоматы: редактору хватает ссылок, а игре автомат
+// собирает хранилище, у которого есть клипы.
+struct animation_machines_component final {
+    [[nodiscard]] auto get_sources() const -> std::span<const asset::asset_ref> {
+        return sources_;
+    }
+
+private:
+    friend class animation_fsm_system;
+
+    std::vector<asset::asset_ref> sources_;
+};
+
 struct rig_component final {
     [[nodiscard]] auto get_name() const -> const std::string& {
         return rig_name_;

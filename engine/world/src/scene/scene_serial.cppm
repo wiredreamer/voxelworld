@@ -84,6 +84,7 @@ private:
     auto create_entity_(const asset::vox_entity_data& data, result& res) -> void;
     auto link_parent_(const asset::vox_entity_data& data, result& res) -> void;
     auto attach_rig_(const asset::vox_prefab_data& prefab, const result& res) -> void;
+    auto attach_machines_(const asset::vox_prefab_data& prefab, const result& res) -> void;
 
     world* world_;
     asset::vox_parser* parser_;

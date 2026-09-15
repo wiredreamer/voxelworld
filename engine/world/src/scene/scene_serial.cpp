@@ -41,6 +41,13 @@ auto vox_serializer::extract() const -> asset::vox_prefab_data {
         prefab.rig = world_->get<rig_component>(root_).get_name();
     }
 
+    // Автоматы лежат там же, на корне, и по той же причине. Без этого редактор
+    // открыл бы префаб с автоматами и сохранил без них.
+    if (world_->has<animation_machines_component>(root_)) {
+        const auto sources = world_->get<animation_machines_component>(root_).get_sources();
+        prefab.fsm_refs.assign(sources.begin(), sources.end());
+    }
+
     std::deque<entity> to_process;
     to_process.push_back(root_);
 
@@ -175,6 +182,7 @@ auto vox_deserializer::instantiate(
     }
 
     attach_rig_(prefab, res);
+    attach_machines_(prefab, res);
 
     return res;
 }
@@ -267,6 +275,22 @@ auto vox_deserializer::attach_rig_(
 
     world_->modify(root_it->second).with<rig_component>();
     world_->system<animation_system>().modify_rig(root_it->second).set_name(prefab.rig);
+}
+
+auto vox_deserializer::attach_machines_(
+    const asset::vox_prefab_data& prefab, const result& res
+) -> void {
+    if (prefab.fsm_refs.empty()) {
+        return;
+    }
+
+    const auto root_it = res.name_to_entity.find(prefab.root_name);
+    if (root_it == res.name_to_entity.end()) {
+        return;
+    }
+
+    world_->modify(root_it->second).with<animation_machines_component>();
+    world_->system<animation_fsm_system>().modify_machines(root_it->second).set(prefab.fsm_refs);
 }
 
 auto vox_deserializer::create_entity_(const asset::vox_entity_data& data, result& res) -> void {

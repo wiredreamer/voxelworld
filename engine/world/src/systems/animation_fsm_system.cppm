@@ -45,6 +45,25 @@ public:
 
     auto modify(entity ent) -> modifier;
 
+    class sources_modifier {
+    public:
+        auto set(std::vector<asset::asset_ref> refs) const -> void;
+        auto add(asset::asset_ref ref) const -> void;
+        auto remove(std::size_t index) const -> void;
+
+        // Порядок ссылок — это номера слоёв, поэтому перестановка здесь и есть
+        // «этот автомат теперь ведёт тело, а тот накладывается поверх».
+        auto move(std::size_t from, std::size_t to) const -> void;
+
+    private:
+        friend class animation_fsm_system;
+        explicit sources_modifier(animation_machines_component* component);
+
+        animation_machines_component* component_;
+    };
+
+    auto modify_machines(entity ent) -> sources_modifier;
+
 private:
     // Встроенные параметры заполняются здесь, а не тем, кто собирает автомат: их
     // источник — компоненты мира, и файлу про это знать незачем.

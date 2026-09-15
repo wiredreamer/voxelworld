@@ -116,6 +116,51 @@ auto animation_fsm_system::modifier::declare_parameters(
     asset::apply_defaults(data, component_->board_);
 }
 
+animation_fsm_system::sources_modifier::sources_modifier(
+    animation_machines_component* component
+)
+    : component_(component) {}
+
+auto animation_fsm_system::sources_modifier::set(
+    std::vector<asset::asset_ref> refs
+) const -> void {
+    component_->sources_ = std::move(refs);
+}
+
+auto animation_fsm_system::sources_modifier::add(
+    asset::asset_ref ref
+) const -> void {
+    component_->sources_.push_back(std::move(ref));
+}
+
+auto animation_fsm_system::sources_modifier::remove(
+    std::size_t index
+) const -> void {
+    if (index < component_->sources_.size()) {
+        component_->sources_.erase(component_->sources_.begin() + static_cast<std::ptrdiff_t>(index));
+    }
+}
+
+auto animation_fsm_system::sources_modifier::move(
+    std::size_t from, std::size_t to
+) const -> void {
+    auto& sources = component_->sources_;
+    if (from >= sources.size() || to >= sources.size() || from == to) {
+        return;
+    }
+
+    auto ref = std::move(sources[from]);
+    sources.erase(sources.begin() + static_cast<std::ptrdiff_t>(from));
+    sources.insert(sources.begin() + static_cast<std::ptrdiff_t>(to), std::move(ref));
+}
+
+auto animation_fsm_system::modify_machines(
+    entity ent
+) -> sources_modifier {
+    auto& comp = world_->registry().get<animation_machines_component>(ent);
+    return sources_modifier(&comp);
+}
+
 auto animation_fsm_system::modify(
     entity ent
 ) -> modifier {

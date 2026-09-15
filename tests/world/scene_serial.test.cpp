@@ -192,6 +192,42 @@ TEST_CASE("a rig name survives a round trip through the world", "[scene]") {
     REQUIRE(serializer.extract().rig == "humanoid");
 }
 
+// Автоматы стоят в шапке, а не в узле, поэтому в мир они попадают на корень —
+// иначе редактор открыл бы префаб с автоматами и сохранил его без них.
+TEST_CASE("a prefab keeps the machines it names through a round trip", "[scene]") {
+    scene_fixture fx;
+    auto& w = fx.w;
+
+    asset::vox_prefab_data prefab;
+    prefab.root_name = "root";
+    prefab.fsm_refs  = {
+        asset::asset_ref{"fsm/humanoid_locomotion.voxf"},
+        asset::asset_ref{"fsm/humanoid_action.voxf"},
+    };
+
+    asset::vox_entity_data root;
+    root.name = "root";
+    root.add("transform", std::string{identity_transform});
+    prefab.entities.push_back(root);
+
+    auto deserializer = fx.deserializer();
+    const auto res    = deserializer.instantiate(prefab, {});
+    w.update(0.016F);
+
+    const auto root_ent = res.name_to_entity.at("root");
+    REQUIRE(w.has<animation_machines_component>(root_ent));
+
+    // Порядок — это номера слоёв, и он обязан пережить и мир, и запись.
+    const auto sources = w.get<animation_machines_component>(root_ent).get_sources();
+    REQUIRE(sources.size() == 2);
+    REQUIRE(sources[0] == asset::asset_ref{"fsm/humanoid_locomotion.voxf"});
+
+    asset::vox_writer_plain writer;
+    vox_serializer serializer{w, writer, root_ent, {.entity_names = res.entity_to_name}};
+
+    REQUIRE(serializer.extract().fsm_refs == prefab.fsm_refs);
+}
+
 // Риг необязателен: у меча и стрелы его нет, и заводить компонент ради пустой
 // строки незачем — иначе в шапку поедет «rig » без имени.
 TEST_CASE("a prefab without a rig gets no rig component", "[scene]") {
