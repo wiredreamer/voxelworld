@@ -69,6 +69,10 @@ struct vox_prefab_data {
     // клип вообще про это существо?» — и отвечает, не читая узлов.
     std::string rig;
 
+    // Автоматы существа, по одному на слой: порядок ссылок — это и есть номера
+    // слоёв, поэтому повтор тега здесь не просто список, а список упорядоченный.
+    std::vector<asset_ref> fsm_refs;
+
     std::vector<vox_entity_data> entities;
 
     [[nodiscard]] auto operator==(const vox_prefab_data& other) const -> bool = default;

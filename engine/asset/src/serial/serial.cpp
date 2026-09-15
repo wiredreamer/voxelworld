@@ -107,7 +107,7 @@ auto vox_parser_plain::process_version_(
 auto vox_parser_plain::process_top_(
     std::string_view name, std::string_view value
 ) -> void {
-    if (name != "entity" && name != "root" && name != "rig") {
+    if (name != "entity" && name != "root" && name != "rig" && name != "fsm") {
         log::warn(detail::vox_parser_plain_lc, "unknown top-level command: {}", name);
         return;
     }
@@ -124,6 +124,11 @@ auto vox_parser_plain::process_top_(
 
     if (name == "rig") {
         prefab_.rig = std::string{value};
+        return;
+    }
+
+    if (name == "fsm") {
+        prefab_.fsm_refs.emplace_back(value);
         return;
     }
 
@@ -217,6 +222,9 @@ auto vox_writer_plain::write_header_(
     output << std::format("# Vox File Version {}\n", vox_file_version);
     if (!prefab.rig.empty()) {
         output << std::format("rig {}\n", prefab.rig);
+    }
+    for (const auto& ref : prefab.fsm_refs) {
+        output << std::format("fsm {}\n", ref.str());
     }
     output << std::format("root {}\n", prefab.root_name);
 }
@@ -603,20 +611,68 @@ auto asset_storage::load_prefab(
         }
     }
 
+    for (const auto& fsm_ref : result->fsm_refs) {
+        load_fsm(fsm_ref);
+    }
+
     prefabs_[std::string(name)] = std::move(*result);
 }
 
+auto asset_storage::get_prefab(std::string_view name) const -> const vox_prefab_data* {
+    const auto it = prefabs_.find(std::string(name));
+    return it != prefabs_.end() ? &it->second : nullptr;
+}
+
 auto asset_storage::load_clip(
-    std::string_view name, const std::filesystem::path& filepath
-) -> void {
+    const asset_ref& ref
+) -> std::shared_ptr<animation_clip> {
+    const auto it = clips_.find(ref);
+    if (it != clips_.end()) {
+        return it->second;
+    }
+
     voxa_deserializer deserializer;
-    auto result = deserializer.deserialize(filepath);
+    auto result = deserializer.deserialize(library_->path_of(ref));
     if (!result.has_value()) {
-        log::warn(detail::asset_storage_lc, "failed to load clip '{}': {}", name, filepath.string());
+        log::warn(detail::asset_storage_lc, "failed to load clip: {}", ref.str());
+        return nullptr;
+    }
+
+    return clips_.emplace(ref, std::move(*result)).first->second;
+}
+
+auto asset_storage::load_fsm(
+    const asset_ref& ref
+) -> void {
+    if (machines_.contains(ref)) {
         return;
     }
 
-    clips_[std::string(name)] = std::move(*result);
+    voxf_deserializer deserializer;
+    auto result = deserializer.deserialize(library_->path_of(ref));
+    if (!result.has_value()) {
+        log::warn(detail::asset_storage_lc, "failed to load fsm: {}", ref.str());
+        return;
+    }
+
+    // Клипы автомата — тоже его ссылки, и грузятся они здесь же: иначе первый
+    // переход в состояние нашёл бы пустой слой.
+    for (const auto& state : result->states) {
+        if (!state.clip.empty()) {
+            static_cast<void>(load_clip(state.clip));
+        }
+    }
+
+    machines_.emplace(ref, std::move(*result));
+}
+
+auto asset_storage::get_fsm(const asset_ref& ref) const -> const voxf_data* {
+    const auto it = machines_.find(ref);
+    return it != machines_.end() ? &it->second : nullptr;
+}
+
+auto asset_storage::make_fsm(const voxf_data& data) const -> animation_fsm {
+    return build_fsm(data, [this](const asset_ref& ref) { return get_clip(ref); });
 }
 
 auto asset_storage::get_entity(
@@ -649,17 +705,9 @@ auto asset_storage::get_model(
     return nullptr;
 }
 
-auto asset_storage::get_clip(std::string_view name) const
-    -> std::shared_ptr<animation_clip> {
-    auto it = clips_.find(std::string(name));
-    if (it != clips_.end()) {
-        return it->second;
-    }
-    return nullptr;
-}
-
-auto asset_storage::has_clip(std::string_view name) const -> bool {
-    return clips_.find(std::string(name)) != clips_.end();
+auto asset_storage::get_clip(const asset_ref& ref) const -> std::shared_ptr<animation_clip> {
+    const auto it = clips_.find(ref);
+    return it != clips_.end() ? it->second : nullptr;
 }
 
 }  // namespace vw::asset

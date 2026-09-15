@@ -110,6 +110,12 @@ auto animation_fsm_system::modifier::set_parameter(
     component_->board_.set(name, value);
 }
 
+auto animation_fsm_system::modifier::declare_parameters(
+    const asset::voxf_data& data
+) const -> void {
+    asset::apply_defaults(data, component_->board_);
+}
+
 auto animation_fsm_system::modify(
     entity ent
 ) -> modifier {

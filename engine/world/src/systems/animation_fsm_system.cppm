@@ -32,6 +32,10 @@ public:
         // в мире нет — счётчик прыжков, выбранное оружие, — приходит отсюда.
         auto set_parameter(std::string_view name, float32 value) const -> void;
 
+        // Объявленные в файле параметры — на доску: объявленный виден в отладке
+        // с первого кадра, а не с того, в котором игра впервые его записала.
+        auto declare_parameters(const asset::voxf_data& data) const -> void;
+
     private:
         friend class animation_fsm_system;
         explicit modifier(animation_fsm_component* component);

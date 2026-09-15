@@ -198,6 +198,32 @@ TEST_CASE("a prefab survives a write and a read", "[serial]") {
     REQUIRE(*second == *first);
 }
 
+// Порядок ссылок на автоматы — это номера слоёв, поэтому повтор тега здесь не
+// просто список, а список упорядоченный, и запись обязана его сохранить.
+TEST_CASE("a prefab names its state machines in layer order", "[serial]") {
+    constexpr std::string_view source =
+        "# Vox File Version 4.0\n"
+        "rig humanoid\n"
+        "fsm fsm/humanoid_locomotion.voxf\n"
+        "fsm fsm/humanoid_action.voxf\n"
+        "root root\n"
+        "entity root\n";
+
+    const auto first = parse_vox(source);
+    REQUIRE(first.has_value());
+    REQUIRE(first->fsm_refs.size() == 2);
+    REQUIRE(first->fsm_refs[0] == asset::asset_ref{"fsm/humanoid_locomotion.voxf"});
+    REQUIRE(first->fsm_refs[1] == asset::asset_ref{"fsm/humanoid_action.voxf"});
+
+    std::ostringstream written;
+    asset::vox_writer_plain writer;
+    REQUIRE(writer.write(written, *first).has_value());
+
+    const auto second = parse_vox(written.str());
+    REQUIRE(second.has_value());
+    REQUIRE(second->fsm_refs == first->fsm_refs);
+}
+
 // Узел без единого тега — тоже узел: пустые поля не должны превращаться в
 // строки, которые разбор потом прочтёт как настоящие.
 TEST_CASE("a bare node survives a write and a read", "[serial]") {
