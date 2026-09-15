@@ -44,6 +44,9 @@ struct ui_state {
     // умеет — объёму нужны размер и набор блоков.
     std::string need_add_model_for;
 
+    // Узел, чьему слоту просят выбрать кандидата: список файлов — тоже диалог.
+    std::string need_add_candidate_for;
+
     bool need_create_clip_modal = false;
     bool need_save_clip         = false;
     bool need_load_clip_modal   = false;

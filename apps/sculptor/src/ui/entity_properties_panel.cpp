@@ -22,7 +22,8 @@ entity_properties_panel::entity_properties_panel(
     , state_(&st)
     , op_manager_(&op_manager)
     , library_(&library)
-    , components_modal_(eng, st, op_manager, library) {}
+    , components_modal_(eng, st, op_manager, library)
+    , candidate_modal_(eng, st, op_manager, library) {}
 
 auto entity_properties_panel::render(
     float /*delta_time*/
@@ -96,6 +97,7 @@ auto entity_properties_panel::render(
     state_->ui.right_top_voffset += ImGui::GetWindowHeight() + 10.0f;
 
     components_modal_.render();
+    candidate_modal_.render();
 
     ImGui::End();
 }

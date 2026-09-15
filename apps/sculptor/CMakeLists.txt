@@ -50,7 +50,10 @@ target_sources(${PROJECT_NAME}
         src/operations/set_socket_transform_operation.cpp
         src/operations/set_pivot_operation.cpp
         src/operations/set_rig_operation.cpp
+        src/operations/add_variant_slot_operation.cpp
+        src/operations/remove_variant_slot_operation.cpp
         src/operations/select_variant_operation.cpp
+        src/operations/set_variant_candidates_operation.cpp
         src/operations/set_transform_operation.cpp
         src/operations/trim_model_operation.cpp
         src/services/clip_service.cpp
@@ -64,6 +67,7 @@ target_sources(${PROJECT_NAME}
         src/tools/remove_voxel_tool.cpp
         src/tools/gizmo.cpp
         src/tools/select_entity_tool.cpp
+        src/ui/add_candidate_modal.cpp
         src/ui/add_model_component_modal.cpp
         src/ui/clip_manager_panel.cpp
         src/ui/block_palette_panel.cpp

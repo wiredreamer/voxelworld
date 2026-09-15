@@ -380,6 +380,102 @@ private:
 
 }  // namespace vw::sculptor
 
+// ---- from src/operations/add_variant_slot_operation.h
+export namespace vw::sculptor {
+
+struct add_variant_slot_params {
+    std::string name;
+};
+
+class add_variant_slot_operation final : public base_operation {
+public:
+    using engine_type = gfx::engine;
+
+    add_variant_slot_operation(
+        engine_type& eng, app_state& st, const add_variant_slot_params& params
+    );
+
+    auto execute() -> void override;
+    auto undo() -> void override;
+
+private:
+    engine_type* engine_;
+    app_state* state_;
+    add_variant_slot_params params_;
+};
+
+}  // namespace vw::sculptor
+
+// ---- from src/operations/remove_variant_slot_operation.h
+export namespace vw::sculptor {
+
+struct remove_variant_slot_params {
+    std::string name;
+};
+
+class remove_variant_slot_operation final : public base_operation {
+public:
+    using engine_type = gfx::engine;
+
+    remove_variant_slot_operation(
+        engine_type& eng, app_state& st, asset::model_library& library,
+        const remove_variant_slot_params& params
+    );
+
+    auto execute() -> void override;
+    auto undo() -> void override;
+
+private:
+    engine_type* engine_;
+    app_state* state_;
+    asset::model_library* library_;
+    remove_variant_slot_params params_;
+
+    std::string saved_name_;
+    std::vector<asset::asset_ref> saved_;
+    std::size_t saved_index_ = 0;
+    std::vector<std::string> saved_targets_;
+    std::vector<std::string> saved_sockets_;
+};
+
+}  // namespace vw::sculptor
+
+// ---- from src/operations/set_variant_candidates_operation.h
+export namespace vw::sculptor {
+
+struct set_variant_candidates_params {
+    std::string name;
+    std::vector<asset::asset_ref> candidates;
+};
+
+// Одна операция и на добавление, и на удаление кандидата: обе меняют один
+// список, и отмена у них одна — вернуть прежний.
+class set_variant_candidates_operation final : public base_operation {
+public:
+    using engine_type = gfx::engine;
+
+    set_variant_candidates_operation(
+        engine_type& eng, app_state& st, asset::model_library& library,
+        const set_variant_candidates_params& params
+    );
+
+    auto execute() -> void override;
+    auto undo() -> void override;
+
+private:
+    auto apply_(ecs::entity ent, std::size_t index) const -> void;
+
+    engine_type* engine_;
+    app_state* state_;
+    asset::model_library* library_;
+    set_variant_candidates_params params_;
+
+    std::vector<asset::asset_ref> previous_;
+    std::size_t previous_index_ = 0;
+};
+
+}  // namespace vw::sculptor
+
 // ---- from src/operations/select_variant_operation.h
 export namespace vw::sculptor {
 

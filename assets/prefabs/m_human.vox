@@ -13,6 +13,8 @@ entity head
 	transform 0 11 0	-0 -0 -0	1 1 1
 	model models/m_human/head.voxm
 	anim_target head
+	variant head
+		selected 0
 entity hand_right
 	parent root
 	transform 10 2 0	1.5707963 -0 -0	1 1 1

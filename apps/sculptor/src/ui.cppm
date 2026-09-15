@@ -41,6 +41,39 @@ private:
 
 }  // namespace vw::sculptor
 
+// ---- from src/ui/add_candidate_modal.h
+export namespace vw::sculptor {
+
+// Выбор кандидата для слота: объёмы и префабы одним списком, потому что
+// кандидат — ссылка без поля типа, и чем он окажется, скажет расширение.
+class add_candidate_modal final {
+public:
+    using engine_type = gfx::engine;
+
+    add_candidate_modal(
+        engine_type& eng, app_state& st, operation_manager& op_manager,
+        asset::model_library& library
+    );
+
+    auto open(const std::string& entity_name) -> void;
+    auto render() -> void;
+
+private:
+    auto confirm_() -> void;
+
+    engine_type* engine_;
+    app_state* state_;
+    operation_manager* op_manager_;
+    asset::model_library* library_;
+
+    bool need_open_ = false;
+    std::string entity_name_;
+    std::string selected_;
+    std::vector<asset::asset_ref> files_;
+};
+
+}  // namespace vw::sculptor
+
 // ---- from src/ui/create_clip_modal.h
 export namespace vw::sculptor {
 
@@ -443,6 +476,7 @@ private:
     asset::model_library* library_;
 
     edit_components_modal components_modal_;
+    add_candidate_modal candidate_modal_;
 };
 
 }  // namespace vw::sculptor

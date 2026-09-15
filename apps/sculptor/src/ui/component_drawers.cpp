@@ -297,11 +297,6 @@ auto register_variant(component_drawer_registry& drawers) -> void {
         ImGui::TextDisabled("%s", slot.get_name().c_str());
 
         const auto& candidates = slot.get_candidates();
-        if (candidates.empty()) {
-            field_label("Candidates");
-            ImGui::TextDisabled("none");
-            return;
-        }
 
         // Кандидаты подписаны именами файлов: путь у них общий и длинный, а
         // различаются они последним куском.
@@ -309,22 +304,47 @@ auto register_variant(component_drawer_registry& drawers) -> void {
             return std::format("{}{}", candidates[index].stem(), candidates[index].extension());
         };
 
-        const auto current = slot.get_selected();
         std::optional<std::size_t> picked;
+        std::optional<std::size_t> dropped;
 
-        field_label("Current");
-        ImGui::SetNextItemWidth(150.f);
-        if (ImGui::BeginCombo("##variant", label_of(current).c_str())) {
-            for (std::size_t i = 0; i < candidates.size(); ++i) {
-                if (ImGui::Selectable(label_of(i).c_str(), i == current) && i != current) {
-                    picked = i;
+        // Пустой список ничего про себя не пишет: под ним стоит кнопка, и она
+        // говорит то же самое короче.
+        if (!candidates.empty()) {
+            const auto current = slot.get_selected();
+
+            field_label("Current");
+            ImGui::SetNextItemWidth(150.f);
+            if (ImGui::BeginCombo("##variant", label_of(current).c_str())) {
+                for (std::size_t i = 0; i < candidates.size(); ++i) {
+                    if (ImGui::Selectable(label_of(i).c_str(), i == current) && i != current) {
+                        picked = i;
+                    }
                 }
+                ImGui::EndCombo();
             }
-            ImGui::EndCombo();
+
+            for (std::size_t i = 0; i < candidates.size(); ++i) {
+                ImGui::PushID(static_cast<int>(i));
+
+                field_label("");
+                ImGui::TextDisabled("%s", label_of(i).c_str());
+                ImGui::SameLine(label_column + 120.f);
+                if (ImGui::SmallButton("x")) {
+                    dropped = i;
+                }
+
+                ImGui::PopID();
+            }
         }
 
-        // Операция идёт после того, как список закрыт: она меняет объём узла, а
-        // ссылка на слот взята до неё.
+        // Кнопка стоит вне ветки: со списком она нужна ровно так же, как без
+        // него, а спрятанная за «пусто» она даёт добавить только первого.
+        if (ImGui::Button("Add candidate...")) {
+            in.state.ui.need_add_candidate_for = in.node_name;
+        }
+
+        // Операции идут после того, как виджеты закрыты: они меняют и список, и
+        // объём узла, а ссылка на слот взята до них.
         if (picked.has_value()) {
             in.ops.execute(
                 std::make_unique<select_variant_operation>(
@@ -333,11 +353,40 @@ auto register_variant(component_drawer_registry& drawers) -> void {
                 )
             );
         }
+
+        if (dropped.has_value()) {
+            auto next = candidates;
+            next.erase(next.begin() + static_cast<std::ptrdiff_t>(*dropped));
+
+            in.ops.execute(
+                std::make_unique<set_variant_candidates_operation>(
+                    in.engine, in.state, in.library,
+                    set_variant_candidates_params{.name = in.node_name, .candidates = std::move(next)}
+                )
+            );
+        }
     };
 
     drawer.summary = [](const component_drawer_context& in) {
         const auto& slot = in.engine.get_world().get<ecs::variant_slot_component>(in.ent);
         return std::format("{} of {}", slot.get_selected() + 1, slot.get_candidates().size());
+    };
+
+    drawer.add = [](const component_drawer_context& in) {
+        in.ops.execute(
+            std::make_unique<add_variant_slot_operation>(
+                in.engine, in.state, add_variant_slot_params{.name = in.node_name}
+            )
+        );
+    };
+
+    drawer.remove = [](const component_drawer_context& in) {
+        in.ops.execute(
+            std::make_unique<remove_variant_slot_operation>(
+                in.engine, in.state, in.library,
+                remove_variant_slot_params{.name = in.node_name}
+            )
+        );
     };
 
     drawers.register_for<ecs::variant_slot_component>(std::move(drawer));
