@@ -75,16 +75,16 @@ TEST_CASE("trim moves the pivot by what it cut", "[trim]") {
 
 TEST_CASE("trim keeps the block set of the source", "[trim]") {
     asset::model_registry registry;
-    auto m = registry.create_unnamed(blocks::creature::category, vec3i{side, side, side});
+    auto m = registry.create_unnamed(blocks::palette::category, vec3i{side, side, side});
     {
         asset::model_writer writer{*m};
-        writer.set(1, 1, 1, voxel{blocks::creature::cloth_white[0]});
+        writer.set(1, 1, 1, voxel{blocks::palette::gray[7]});
     }
 
     const auto cut = asset::trimmed(*m, registry);
 
     REQUIRE(cut != nullptr);
-    REQUIRE(cut->category() == blocks::creature::category);
+    REQUIRE(cut->category() == blocks::palette::category);
     REQUIRE(cut->size() == vec3i{1, 1, 1});
 }
 

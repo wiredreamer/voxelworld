@@ -204,7 +204,7 @@ struct volume_state {
 
 struct tool_state {
     tools selected_tool     = tools::add_voxel;
-    block_id selected_block = blocks::creature::cloth_white[2];
+    block_id selected_block = blocks::palette::gray[9];
 
     // Кисть помнится на набор: модель несёт ровно один набор, и переход к
     // модели другого не должен стоить заново выбранного цвета. Плоский массив
@@ -371,9 +371,10 @@ struct app_state {
     auto reset(world_type& world) -> void;
 
     // Тип документа выбирает набор блоков, которым откроется первый объём:
-    // структура строится из terrain, всё прочее — из creature. Дальше набор
-    // помнит сам объём, и панель идёт за ним.
-    auto apply_kind_defaults() -> void;
+    // структуру строят из вещества мира, всё прочее красят палитрой. Набор ищется
+    // по виду, а не по имени: каталог вправе звать свои наборы как угодно. Дальше
+    // набор помнит сам объём, и панель идёт за ним.
+    auto apply_kind_defaults(const block_registry& blocks) -> void;
 };
 
 }  // namespace vw::sculptor

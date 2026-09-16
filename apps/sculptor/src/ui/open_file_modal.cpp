@@ -123,7 +123,7 @@ auto open_file_modal::open_file_() -> bool {
     state_->scene.entity_to_name = std::move(result->entity_to_name);
     state_->scene.entities       = std::move(result->entities);
 
-    state_->apply_kind_defaults();
+    state_->apply_kind_defaults(engine_->get_block_registry());
 
     return true;
 }

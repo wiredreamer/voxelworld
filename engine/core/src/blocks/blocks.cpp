@@ -50,6 +50,13 @@ auto block_registry::set_of(
     return it == sets_.end() ? nullptr : &*it;
 }
 
+auto block_registry::first_set(
+    block_set_kind kind
+) const -> const block_set* {
+    const auto it = std::ranges::find(sets_, kind, &block_set::kind);
+    return it == sets_.end() ? nullptr : &*it;
+}
+
 auto block_registry::add_(
     const block_desc& desc
 ) -> void {

@@ -68,7 +68,11 @@ auto tool_state::brush_for(
     block_category category, const block_registry& registry
 ) const -> block_id {
     const block_id remembered = brush_of_set[category.value];
-    if (remembered.category() == category && registry.slot_of(remembered) != missing_block_slot) {
+
+    // Воздух — законный номер любого набора, и в палитре он лежит нулевым. Кистью
+    // ему быть нельзя: непочатый набор иначе открылся бы стиралкой вместо цвета.
+    if (remembered != blocks::air && remembered.category() == category &&
+        registry.slot_of(remembered) != missing_block_slot) {
         return remembered;
     }
 
@@ -88,9 +92,15 @@ auto app_state::reset(
     *this = app_state{};
 }
 
-auto app_state::apply_kind_defaults() -> void {
-    tool.selected_block = file.kind == asset::kinds::structure ? blocks::terrain::stone[0]
-                                                      : blocks::creature::cloth_white[2];
+auto app_state::apply_kind_defaults(
+    const block_registry& blocks
+) -> void {
+    const auto kind = file.kind == asset::kinds::structure ? block_set_kind::materials
+                                                           : block_set_kind::palette;
+
+    if (const block_set* set = blocks.first_set(kind); set != nullptr) {
+        tool.selected_block = tool.brush_for(set->category, blocks);
+    }
 }
 
 auto animation_state::has_unsaved_clip(

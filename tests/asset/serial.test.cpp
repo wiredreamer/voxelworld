@@ -434,12 +434,12 @@ auto write_voxm(const asset::model& model) -> std::string {
 TEST_CASE("a voxm volume survives a round trip", "[serial]") {
     asset::model_registry registry;
 
-    const auto source = registry.create_unnamed(blocks::creature::category, vec3i{6, 4, 3});
+    const auto source = registry.create_unnamed(blocks::palette::category, vec3i{6, 4, 3});
     source->set_pivot(vec3f{2.5F, 1.5F, 0.5F});
-    source->set_voxel(vec3i{0, 0, 0}, voxel{blocks::creature::cloth_white[0]});
-    source->set_voxel(vec3i{1, 0, 0}, voxel{blocks::creature::cloth_white[0]});
-    source->set_voxel(vec3i{2, 0, 0}, voxel{blocks::creature::cloth_white[1]});
-    source->set_voxel(vec3i{5, 3, 2}, voxel{blocks::creature::cloth_white[2]});
+    source->set_voxel(vec3i{0, 0, 0}, voxel{blocks::palette::gray[7]});
+    source->set_voxel(vec3i{1, 0, 0}, voxel{blocks::palette::gray[7]});
+    source->set_voxel(vec3i{2, 0, 0}, voxel{blocks::palette::gray[8]});
+    source->set_voxel(vec3i{5, 3, 2}, voxel{blocks::palette::gray[9]});
 
     const auto restored = parse_voxm(registry, write_voxm(*source));
 
@@ -487,7 +487,7 @@ TEST_CASE("a voxm run collapses a row of one block", "[serial]") {
 TEST_CASE("an empty voxm volume is a valid file", "[serial]") {
     asset::model_registry registry;
 
-    const auto source   = registry.create_unnamed(blocks::creature::category, vec3i{4, 4, 4});
+    const auto source   = registry.create_unnamed(blocks::palette::category, vec3i{4, 4, 4});
     const auto restored = parse_voxm(registry, write_voxm(*source));
 
     REQUIRE(restored.has_value());

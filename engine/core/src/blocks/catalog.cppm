@@ -8,6 +8,45 @@ import :blocks;
 
 export namespace vw::blocks {
 
+namespace palette {
+inline constexpr auto category = block_category{0};
+
+// Номера повторяют порядок colors::all — рампа за рампой, шаг за шагом. Это не
+// совпадение, а инвариант: он проверяется ниже и он же делает набор палитрой.
+// Цвет здесь и есть личность блока, больше за номером не стоит ничего.
+inline constexpr auto blue   = block_span{category,  1, 6};
+inline constexpr auto green  = block_span{category,  7, 6};
+inline constexpr auto brown  = block_span{category, 13, 6};
+inline constexpr auto amber  = block_span{category, 19, 6};
+inline constexpr auto red    = block_span{category, 25, 6};
+inline constexpr auto purple = block_span{category, 31, 6};
+inline constexpr auto gray   = block_span{category, 37, 10};
+inline constexpr auto white  = block_id{category, 47};
+inline constexpr auto black  = block_id{category, 48};
+
+// Хвост свечения: цвет тот же, что в рампе, но блок рисует себя сам. Соседям он
+// света не даёт — заливка комнаты остаётся делом ландшафта, где за ней стоит
+// поведение, а не вид.
+inline constexpr auto glow_blue   = block_id{category, 49};
+inline constexpr auto glow_green  = block_id{category, 50};
+inline constexpr auto glow_amber  = block_id{category, 51};
+inline constexpr auto glow_red    = block_id{category, 52};
+inline constexpr auto glow_purple = block_id{category, 53};
+inline constexpr auto glow_white  = block_id{category, 54};
+
+inline constexpr std::array groups = {
+    block_group{"blue",   blue[0],    6},
+    block_group{"green",  green[0],   6},
+    block_group{"brown",  brown[0],   6},
+    block_group{"amber",  amber[0],   6},
+    block_group{"red",    red[0],     6},
+    block_group{"purple", purple[0],  6},
+    block_group{"gray",   gray[0],   10},
+    block_group{"mono",   white,      2},
+    block_group{"glow",   glow_blue,  6},
+};
+}  // namespace palette
+
 namespace terrain {
 inline constexpr auto category = block_category{1};
 
@@ -50,57 +89,6 @@ inline constexpr std::array groups = {
 };
 }  // namespace terrain
 
-namespace creature {
-inline constexpr auto category = block_category{2};
-
-inline constexpr auto skin_light      = block_span{category,   1, 3};
-inline constexpr auto skin_tan        = block_span{category,   4, 3};
-inline constexpr auto skin_dark       = block_span{category,   7, 3};
-inline constexpr auto skin_gray       = block_span{category,  10, 3};
-inline constexpr auto hair_black      = block_span{category,  13, 3};
-inline constexpr auto hair_brown      = block_span{category,  16, 3};
-inline constexpr auto hair_blond      = block_span{category,  19, 3};
-inline constexpr auto hair_red        = block_span{category,  22, 3};
-inline constexpr auto hair_gray       = block_span{category,  25, 3};
-inline constexpr auto hair_blue       = block_span{category,  28, 3};
-inline constexpr auto hair_green      = block_span{category,  31, 3};
-inline constexpr auto hair_purple     = block_span{category,  34, 3};
-inline constexpr auto eye_pupil       = block_id{category,  37};
-inline constexpr auto eye_white       = block_id{category,  38};
-inline constexpr auto eye_iris_blue   = block_id{category,  39};
-inline constexpr auto eye_iris_green  = block_id{category,  40};
-inline constexpr auto eye_iris_brown  = block_id{category,  41};
-inline constexpr auto eye_iris_amber  = block_id{category,  42};
-inline constexpr auto eye_iris_red    = block_id{category,  43};
-inline constexpr auto eye_iris_violet = block_id{category,  44};
-inline constexpr auto cloth_red       = block_span{category,  45, 3};
-inline constexpr auto cloth_blue      = block_span{category,  48, 3};
-inline constexpr auto cloth_green     = block_span{category,  51, 3};
-inline constexpr auto cloth_purple    = block_span{category,  54, 3};
-inline constexpr auto cloth_yellow    = block_span{category,  57, 3};
-inline constexpr auto cloth_white     = block_span{category,  60, 3};
-inline constexpr auto cloth_cream     = block_span{category,  63, 3};
-inline constexpr auto cloth_dark      = block_span{category,  66, 3};
-inline constexpr auto leather         = block_span{category,  69, 3};
-inline constexpr auto metal           = block_span{category,  72, 3};
-inline constexpr auto metal_bright    = block_span{category,  75, 3};
-inline constexpr auto gold            = block_span{category,  78, 3};
-inline constexpr auto wood            = block_span{category,  81, 3};
-inline constexpr auto ember           = block_span{category,  84, 3};
-inline constexpr auto magic           = block_span{category,  87, 3};
-
-inline constexpr std::array groups = {
-    block_group{"skin",    skin_light[0],    12},
-    block_group{"hair",    hair_black[0],    24},
-    block_group{"eyes",    eye_pupil,         8},
-    block_group{"cloth",   cloth_red[0],     24},
-    block_group{"leather", leather[0],        3},
-    block_group{"metal",   metal[0],          9},
-    block_group{"wood",    wood[0],           3},
-    block_group{"light",   ember[0],          6},
-};
-}  // namespace creature
-
 }  // namespace vw::blocks
 
 export namespace vw {
@@ -108,23 +96,85 @@ export namespace vw {
 // Наборы, о которых знает встроенный каталог. Отсюда интерфейс берёт и список
 // для выбора при создании модели, и разбиение палитры на разделы.
 inline constexpr std::array default_block_sets = {
-    block_set{blocks::terrain::category, "terrain", blocks::terrain::groups},
-    block_set{blocks::creature::category, "creature", blocks::creature::groups},
+    block_set{
+        blocks::palette::category, "palette", block_set_kind::palette, blocks::palette::groups
+    },
+    block_set{
+        blocks::terrain::category, "terrain", block_set_kind::materials, blocks::terrain::groups
+    },
 };
 
 // Каталог по умолчанию. Порядок записей задаёт слоты, поэтому наборы идут
-// подряд: панель блоков группирует их одним проходом, не сортируя.
+// подряд: панель блоков группирует их одним проходом, не сортируя. Палитра идёт
+// первой и занимает нулевую категорию как набор по умолчанию: модель, созданная
+// ни о чём не спросив, оказывается в ней.
 //
 // Нумерация внутри набора начинается с единицы: ноль означает пустоту в любом
 // наборе, потому что страница хранит только номер, а набор берётся у модели.
 // Нулевой байт обязан читаться как воздух — на этом стоят и таблица страниц, и
-// битовые проходы по вокселям.
+// битовые проходы по вокселям. Для палитры это тот же ноль, что и для прочих:
+// воздух — её пустой номер, а не отдельный набор.
 //
 // Цвета намеренно повторяются между материалами: лёд и кристалл — одни и те же
 // три шага голубой рампы, и различает их только свечение. Ради этого разведение
-// личности блока и его цвета и затевалось.
+// личности блока и его цвета и затевалось. В палитре наоборот: там цвет и есть
+// личность, и повторяться ему нечего ради.
 inline constexpr std::array default_block_catalog = {
     block_desc{blocks::air, "air", {}, block_surface::invisible},
+    block_desc{blocks::palette::blue[0], "palette.blue_0", {colors::blue_0}},
+    block_desc{blocks::palette::blue[1], "palette.blue_1", {colors::blue_1}},
+    block_desc{blocks::palette::blue[2], "palette.blue_2", {colors::blue_2}},
+    block_desc{blocks::palette::blue[3], "palette.blue_3", {colors::blue_3}},
+    block_desc{blocks::palette::blue[4], "palette.blue_4", {colors::blue_4}},
+    block_desc{blocks::palette::blue[5], "palette.blue_5", {colors::blue_5}},
+    block_desc{blocks::palette::green[0], "palette.green_0", {colors::green_0}},
+    block_desc{blocks::palette::green[1], "palette.green_1", {colors::green_1}},
+    block_desc{blocks::palette::green[2], "palette.green_2", {colors::green_2}},
+    block_desc{blocks::palette::green[3], "palette.green_3", {colors::green_3}},
+    block_desc{blocks::palette::green[4], "palette.green_4", {colors::green_4}},
+    block_desc{blocks::palette::green[5], "palette.green_5", {colors::green_5}},
+    block_desc{blocks::palette::brown[0], "palette.brown_0", {colors::brown_0}},
+    block_desc{blocks::palette::brown[1], "palette.brown_1", {colors::brown_1}},
+    block_desc{blocks::palette::brown[2], "palette.brown_2", {colors::brown_2}},
+    block_desc{blocks::palette::brown[3], "palette.brown_3", {colors::brown_3}},
+    block_desc{blocks::palette::brown[4], "palette.brown_4", {colors::brown_4}},
+    block_desc{blocks::palette::brown[5], "palette.brown_5", {colors::brown_5}},
+    block_desc{blocks::palette::amber[0], "palette.amber_0", {colors::amber_0}},
+    block_desc{blocks::palette::amber[1], "palette.amber_1", {colors::amber_1}},
+    block_desc{blocks::palette::amber[2], "palette.amber_2", {colors::amber_2}},
+    block_desc{blocks::palette::amber[3], "palette.amber_3", {colors::amber_3}},
+    block_desc{blocks::palette::amber[4], "palette.amber_4", {colors::amber_4}},
+    block_desc{blocks::palette::amber[5], "palette.amber_5", {colors::amber_5}},
+    block_desc{blocks::palette::red[0], "palette.red_0", {colors::red_0}},
+    block_desc{blocks::palette::red[1], "palette.red_1", {colors::red_1}},
+    block_desc{blocks::palette::red[2], "palette.red_2", {colors::red_2}},
+    block_desc{blocks::palette::red[3], "palette.red_3", {colors::red_3}},
+    block_desc{blocks::palette::red[4], "palette.red_4", {colors::red_4}},
+    block_desc{blocks::palette::red[5], "palette.red_5", {colors::red_5}},
+    block_desc{blocks::palette::purple[0], "palette.purple_0", {colors::purple_0}},
+    block_desc{blocks::palette::purple[1], "palette.purple_1", {colors::purple_1}},
+    block_desc{blocks::palette::purple[2], "palette.purple_2", {colors::purple_2}},
+    block_desc{blocks::palette::purple[3], "palette.purple_3", {colors::purple_3}},
+    block_desc{blocks::palette::purple[4], "palette.purple_4", {colors::purple_4}},
+    block_desc{blocks::palette::purple[5], "palette.purple_5", {colors::purple_5}},
+    block_desc{blocks::palette::gray[0], "palette.gray_0", {colors::gray_0}},
+    block_desc{blocks::palette::gray[1], "palette.gray_1", {colors::gray_1}},
+    block_desc{blocks::palette::gray[2], "palette.gray_2", {colors::gray_2}},
+    block_desc{blocks::palette::gray[3], "palette.gray_3", {colors::gray_3}},
+    block_desc{blocks::palette::gray[4], "palette.gray_4", {colors::gray_4}},
+    block_desc{blocks::palette::gray[5], "palette.gray_5", {colors::gray_5}},
+    block_desc{blocks::palette::gray[6], "palette.gray_6", {colors::gray_6}},
+    block_desc{blocks::palette::gray[7], "palette.gray_7", {colors::gray_7}},
+    block_desc{blocks::palette::gray[8], "palette.gray_8", {colors::gray_8}},
+    block_desc{blocks::palette::gray[9], "palette.gray_9", {colors::gray_9}},
+    block_desc{blocks::palette::white, "palette.white", {colors::white}},
+    block_desc{blocks::palette::black, "palette.black", {colors::black}},
+    block_desc{blocks::palette::glow_blue, "palette.glow_blue", {colors::blue_4, 0, 200}},
+    block_desc{blocks::palette::glow_green, "palette.glow_green", {colors::green_4, 0, 200}},
+    block_desc{blocks::palette::glow_amber, "palette.glow_amber", {colors::amber_5, 0, 200}},
+    block_desc{blocks::palette::glow_red, "palette.glow_red", {colors::red_4, 0, 200}},
+    block_desc{blocks::palette::glow_purple, "palette.glow_purple", {colors::purple_4, 0, 200}},
+    block_desc{blocks::palette::glow_white, "palette.glow_white", {colors::white, 0, 200}},
     block_desc{blocks::terrain::grass[0], "terrain.grass_0", {colors::green_2}},
     block_desc{blocks::terrain::grass[1], "terrain.grass_1", {colors::green_3}},
     block_desc{blocks::terrain::grass[2], "terrain.grass_2", {colors::green_4}},
@@ -181,95 +231,6 @@ inline constexpr std::array default_block_catalog = {
     block_desc{blocks::terrain::lava, "terrain.lava", {colors::red_5, 15, 255}},
     block_desc{blocks::terrain::magma, "terrain.magma", {colors::amber_2, 8, 120}},
     block_desc{blocks::terrain::glowstone, "terrain.glowstone", {colors::amber_5, 14, 200}},
-    block_desc{blocks::creature::skin_light[0], "creature.skin_light_0", {colors::amber_3}},
-    block_desc{blocks::creature::skin_light[1], "creature.skin_light_1", {colors::amber_4}},
-    block_desc{blocks::creature::skin_light[2], "creature.skin_light_2", {colors::amber_5}},
-    block_desc{blocks::creature::skin_tan[0], "creature.skin_tan_0", {colors::amber_1}},
-    block_desc{blocks::creature::skin_tan[1], "creature.skin_tan_1", {colors::amber_2}},
-    block_desc{blocks::creature::skin_tan[2], "creature.skin_tan_2", {colors::amber_3}},
-    block_desc{blocks::creature::skin_dark[0], "creature.skin_dark_0", {colors::amber_0}},
-    block_desc{blocks::creature::skin_dark[1], "creature.skin_dark_1", {colors::amber_1}},
-    block_desc{blocks::creature::skin_dark[2], "creature.skin_dark_2", {colors::amber_2}},
-    block_desc{blocks::creature::skin_gray[0], "creature.skin_gray_0", {colors::gray_5}},
-    block_desc{blocks::creature::skin_gray[1], "creature.skin_gray_1", {colors::gray_6}},
-    block_desc{blocks::creature::skin_gray[2], "creature.skin_gray_2", {colors::gray_7}},
-    block_desc{blocks::creature::hair_black[0], "creature.hair_black_0", {colors::gray_0}},
-    block_desc{blocks::creature::hair_black[1], "creature.hair_black_1", {colors::gray_1}},
-    block_desc{blocks::creature::hair_black[2], "creature.hair_black_2", {colors::gray_2}},
-    block_desc{blocks::creature::hair_brown[0], "creature.hair_brown_0", {colors::brown_0}},
-    block_desc{blocks::creature::hair_brown[1], "creature.hair_brown_1", {colors::brown_1}},
-    block_desc{blocks::creature::hair_brown[2], "creature.hair_brown_2", {colors::brown_2}},
-    block_desc{blocks::creature::hair_blond[0], "creature.hair_blond_0", {colors::brown_3}},
-    block_desc{blocks::creature::hair_blond[1], "creature.hair_blond_1", {colors::brown_4}},
-    block_desc{blocks::creature::hair_blond[2], "creature.hair_blond_2", {colors::brown_5}},
-    block_desc{blocks::creature::hair_red[0], "creature.hair_red_0", {colors::red_2}},
-    block_desc{blocks::creature::hair_red[1], "creature.hair_red_1", {colors::red_3}},
-    block_desc{blocks::creature::hair_red[2], "creature.hair_red_2", {colors::red_4}},
-    block_desc{blocks::creature::hair_gray[0], "creature.hair_gray_0", {colors::gray_7}},
-    block_desc{blocks::creature::hair_gray[1], "creature.hair_gray_1", {colors::gray_8}},
-    block_desc{blocks::creature::hair_gray[2], "creature.hair_gray_2", {colors::gray_9}},
-    block_desc{blocks::creature::hair_blue[0], "creature.hair_blue_0", {colors::blue_2}},
-    block_desc{blocks::creature::hair_blue[1], "creature.hair_blue_1", {colors::blue_3}},
-    block_desc{blocks::creature::hair_blue[2], "creature.hair_blue_2", {colors::blue_4}},
-    block_desc{blocks::creature::hair_green[0], "creature.hair_green_0", {colors::green_2}},
-    block_desc{blocks::creature::hair_green[1], "creature.hair_green_1", {colors::green_3}},
-    block_desc{blocks::creature::hair_green[2], "creature.hair_green_2", {colors::green_4}},
-    block_desc{blocks::creature::hair_purple[0], "creature.hair_purple_0", {colors::purple_2}},
-    block_desc{blocks::creature::hair_purple[1], "creature.hair_purple_1", {colors::purple_3}},
-    block_desc{blocks::creature::hair_purple[2], "creature.hair_purple_2", {colors::purple_4}},
-    block_desc{blocks::creature::eye_pupil, "creature.eye_pupil", {colors::gray_0}},
-    block_desc{blocks::creature::eye_white, "creature.eye_white", {colors::white}},
-    block_desc{blocks::creature::eye_iris_blue, "creature.eye_iris_blue", {colors::blue_3}},
-    block_desc{blocks::creature::eye_iris_green, "creature.eye_iris_green", {colors::green_3}},
-    block_desc{blocks::creature::eye_iris_brown, "creature.eye_iris_brown", {colors::brown_2}},
-    block_desc{blocks::creature::eye_iris_amber, "creature.eye_iris_amber", {colors::amber_4}},
-    block_desc{blocks::creature::eye_iris_red, "creature.eye_iris_red", {colors::red_3}},
-    block_desc{blocks::creature::eye_iris_violet, "creature.eye_iris_violet", {colors::purple_3}},
-    block_desc{blocks::creature::cloth_red[0], "creature.cloth_red_0", {colors::red_2}},
-    block_desc{blocks::creature::cloth_red[1], "creature.cloth_red_1", {colors::red_3}},
-    block_desc{blocks::creature::cloth_red[2], "creature.cloth_red_2", {colors::red_4}},
-    block_desc{blocks::creature::cloth_blue[0], "creature.cloth_blue_0", {colors::blue_0}},
-    block_desc{blocks::creature::cloth_blue[1], "creature.cloth_blue_1", {colors::blue_1}},
-    block_desc{blocks::creature::cloth_blue[2], "creature.cloth_blue_2", {colors::blue_2}},
-    block_desc{blocks::creature::cloth_green[0], "creature.cloth_green_0", {colors::green_1}},
-    block_desc{blocks::creature::cloth_green[1], "creature.cloth_green_1", {colors::green_2}},
-    block_desc{blocks::creature::cloth_green[2], "creature.cloth_green_2", {colors::green_3}},
-    block_desc{blocks::creature::cloth_purple[0], "creature.cloth_purple_0", {colors::purple_1}},
-    block_desc{blocks::creature::cloth_purple[1], "creature.cloth_purple_1", {colors::purple_2}},
-    block_desc{blocks::creature::cloth_purple[2], "creature.cloth_purple_2", {colors::purple_3}},
-    block_desc{blocks::creature::cloth_yellow[0], "creature.cloth_yellow_0", {colors::amber_3}},
-    block_desc{blocks::creature::cloth_yellow[1], "creature.cloth_yellow_1", {colors::amber_4}},
-    block_desc{blocks::creature::cloth_yellow[2], "creature.cloth_yellow_2", {colors::amber_5}},
-    block_desc{blocks::creature::cloth_white[0], "creature.cloth_white_0", {colors::gray_7}},
-    block_desc{blocks::creature::cloth_white[1], "creature.cloth_white_1", {colors::gray_8}},
-    block_desc{blocks::creature::cloth_white[2], "creature.cloth_white_2", {colors::gray_9}},
-    block_desc{blocks::creature::cloth_cream[0], "creature.cloth_cream_0", {colors::brown_3}},
-    block_desc{blocks::creature::cloth_cream[1], "creature.cloth_cream_1", {colors::brown_4}},
-    block_desc{blocks::creature::cloth_cream[2], "creature.cloth_cream_2", {colors::brown_5}},
-    block_desc{blocks::creature::cloth_dark[0], "creature.cloth_dark_0", {colors::gray_1}},
-    block_desc{blocks::creature::cloth_dark[1], "creature.cloth_dark_1", {colors::gray_2}},
-    block_desc{blocks::creature::cloth_dark[2], "creature.cloth_dark_2", {colors::gray_3}},
-    block_desc{blocks::creature::leather[0], "creature.leather_0", {colors::brown_0}},
-    block_desc{blocks::creature::leather[1], "creature.leather_1", {colors::brown_1}},
-    block_desc{blocks::creature::leather[2], "creature.leather_2", {colors::brown_2}},
-    block_desc{blocks::creature::metal[0], "creature.metal_0", {colors::gray_4}},
-    block_desc{blocks::creature::metal[1], "creature.metal_1", {colors::gray_5}},
-    block_desc{blocks::creature::metal[2], "creature.metal_2", {colors::gray_6}},
-    block_desc{blocks::creature::metal_bright[0], "creature.metal_bright_0", {colors::gray_7}},
-    block_desc{blocks::creature::metal_bright[1], "creature.metal_bright_1", {colors::gray_8}},
-    block_desc{blocks::creature::metal_bright[2], "creature.metal_bright_2", {colors::gray_9}},
-    block_desc{blocks::creature::gold[0], "creature.gold_0", {colors::amber_3}},
-    block_desc{blocks::creature::gold[1], "creature.gold_1", {colors::amber_4}},
-    block_desc{blocks::creature::gold[2], "creature.gold_2", {colors::amber_5}},
-    block_desc{blocks::creature::wood[0], "creature.wood_0", {colors::amber_0}},
-    block_desc{blocks::creature::wood[1], "creature.wood_1", {colors::amber_1}},
-    block_desc{blocks::creature::wood[2], "creature.wood_2", {colors::amber_2}},
-    block_desc{blocks::creature::ember[0], "creature.ember_0", {colors::red_2, 6, 220}},
-    block_desc{blocks::creature::ember[1], "creature.ember_1", {colors::red_3, 6, 220}},
-    block_desc{blocks::creature::ember[2], "creature.ember_2", {colors::red_4, 6, 220}},
-    block_desc{blocks::creature::magic[0], "creature.magic_0", {colors::purple_3, 0, 180}},
-    block_desc{blocks::creature::magic[1], "creature.magic_1", {colors::purple_4, 0, 180}},
-    block_desc{blocks::creature::magic[2], "creature.magic_2", {colors::purple_5, 0, 180}},
 };
 
 namespace detail {
@@ -310,11 +271,83 @@ namespace detail {
     return true;
 }
 
+// Цвет любой записи обязан быть цветом палитры. Иначе в мире заведётся оттенок,
+// которого художнику не выдать, и ландшафт начнёт спорить по тону с тем, что
+// стоит на нём.
+[[nodiscard]] consteval auto catalog_colours_are_palette() -> bool {
+    for (const block_desc& desc : default_block_catalog) {
+        if (desc.material.clr == colors::empty) {
+            continue;
+        }
+        if (std::ranges::find(colors::all, desc.material.clr) == colors::all.end()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+// Палитра обязана держать всю палитру: недостающий цвет художнику взять неоткуда,
+// а понять, что его нет, можно только не найдя его в панели.
+[[nodiscard]] consteval auto palette_covers_colours() -> bool {
+    for (const block_set& set : default_block_sets) {
+        if (set.kind != block_set_kind::palette) {
+            continue;
+        }
+
+        for (const color& clr : colors::all) {
+            bool found = false;
+            for (const block_desc& desc : default_block_catalog) {
+                if (desc.id.category() == set.category && desc.material.clr == clr) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+// И держать каждый ровно один раз. Два номера с одним материалом — это выбор, в
+// котором художнику нечего выбирать, зато мешер их не сольёт и разведёт соседние
+// грани по разным квадам. Свечение входит в материал, поэтому хвост glow-вариантов
+// проверке не мешает: их цвет повторяется, а материал — нет.
+[[nodiscard]] consteval auto palette_materials_unique() -> bool {
+    for (const block_set& set : default_block_sets) {
+        if (set.kind != block_set_kind::palette) {
+            continue;
+        }
+
+        for (std::size_t i = 0; i < default_block_catalog.size(); ++i) {
+            const block_desc& left = default_block_catalog[i];
+            if (left.id.category() != set.category || left.id == blocks::air) {
+                continue;
+            }
+
+            for (std::size_t j = i + 1; j < default_block_catalog.size(); ++j) {
+                const block_desc& right = default_block_catalog[j];
+                if (right.id.category() != set.category || right.id == blocks::air) {
+                    continue;
+                }
+                if (left.material == right.material) {
+                    return false;
+                }
+            }
+        }
+    }
+    return true;
+}
+
 }  // namespace detail
 
 static_assert(default_block_catalog.size() <= block_slot_capacity,
               "каталог не влезает в десять бит слота в кваде");
 static_assert(detail::catalog_ids_unique(), "в каталоге повторяется идентификатор");
 static_assert(detail::groups_tile_sets(), "разделы не покрывают набор подряд и без дыр");
+static_assert(detail::catalog_colours_are_palette(), "в каталоге цвет мимо палитры");
+static_assert(detail::palette_covers_colours(), "палитра не покрывает палитру целиком");
+static_assert(detail::palette_materials_unique(), "в палитре повторяется материал");
 
 }  // namespace vw

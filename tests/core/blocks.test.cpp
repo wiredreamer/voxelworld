@@ -112,12 +112,12 @@ TEST_CASE("a block outside the catalog reads as the missing slot", "[blocks]") {
 
 TEST_CASE("a category is independent of every other", "[blocks]") {
     REQUIRE(blocks::terrain::grass[0].category() == blocks::terrain::category);
-    REQUIRE(blocks::creature::skin_light[0].category() == blocks::creature::category);
-    REQUIRE(blocks::terrain::category != blocks::creature::category);
+    REQUIRE(blocks::palette::blue[0].category() == blocks::palette::category);
+    REQUIRE(blocks::terrain::category != blocks::palette::category);
 
     // Same index in two categories, two different blocks.
-    REQUIRE(blocks::terrain::grass[0].index() == blocks::creature::skin_light[0].index());
-    REQUIRE(blocks::terrain::grass[0] != blocks::creature::skin_light[0]);
+    REQUIRE(blocks::terrain::grass[0].index() == blocks::palette::blue[0].index());
+    REQUIRE(blocks::terrain::grass[0] != blocks::palette::blue[0]);
 }
 
 TEST_CASE("a material's variants sit next to each other", "[blocks]") {
@@ -130,7 +130,7 @@ TEST_CASE("a material's variants sit next to each other", "[blocks]") {
     REQUIRE(grass.contains(grass[0]));
     REQUIRE(grass.contains(grass[2]));
     REQUIRE_FALSE(grass.contains(blocks::terrain::dirt[0]));
-    REQUIRE_FALSE(grass.contains(blocks::creature::skin_light[0]));
+    REQUIRE_FALSE(grass.contains(blocks::palette::blue[0]));
 }
 
 // The generator picks a variant out of a noise value, so the value is whatever
@@ -195,7 +195,40 @@ TEST_CASE("the registry names the sets it knows", "[blocks]") {
     REQUIRE(terrain->name == "terrain");
     REQUIRE_FALSE(terrain->groups.empty());
 
-    REQUIRE(registry.set_of(blocks::creature::category)->name == "creature");
+    REQUIRE(terrain->kind == block_set_kind::materials);
+
+    const block_set* palette = registry.set_of(blocks::palette::category);
+    REQUIRE(palette != nullptr);
+    REQUIRE(palette->name == "palette");
+    REQUIRE(palette->kind == block_set_kind::palette);
+}
+
+// Whoever opens a document picks the set by what it is for -- a structure is
+// built out of matter, everything else is painted -- and the names of the sets
+// are the catalog's business, not theirs.
+TEST_CASE("the registry finds a set by its kind", "[blocks]") {
+    const block_registry registry;
+
+    REQUIRE(registry.first_set(block_set_kind::palette)->category == blocks::palette::category);
+    REQUIRE(registry.first_set(block_set_kind::materials)->category == blocks::terrain::category);
+}
+
+// The palette is an alphabet of colours: a colour missing from it is a colour
+// the artist cannot reach, and a colour in it twice is a choice with nothing to
+// choose between -- which the mesher then refuses to merge into one quad.
+TEST_CASE("the palette holds every colour exactly once", "[blocks]") {
+    const block_registry registry;
+
+    const block_set* palette = registry.first_set(block_set_kind::palette);
+    REQUIRE(palette != nullptr);
+
+    for (const color& clr : colors::all) {
+        const auto matte = std::ranges::count_if(registry.all(), [&](const block_type& block) {
+            return block.id.category() == palette->category && block.material.clr == clr &&
+                   block.material.glow == 0;
+        });
+        REQUIRE(matte == 1);
+    }
 }
 
 // An extension may add blocks in a category of its own without adding a set for
@@ -236,9 +269,9 @@ TEST_CASE("the groups of a set cover it once each", "[blocks]") {
 }
 
 TEST_CASE("a group hands out the blocks it spans", "[blocks]") {
-    constexpr auto group = block_group{"skin", blocks::creature::skin_light[0], 12};
+    constexpr auto group = block_group{"cool", blocks::palette::blue[0], 12};
 
-    REQUIRE(group.at(0) == blocks::creature::skin_light[0]);
-    REQUIRE(group.at(3) == blocks::creature::skin_tan[0]);
-    REQUIRE(group.at(8) == blocks::creature::skin_dark[2]);
+    REQUIRE(group.at(0) == blocks::palette::blue[0]);
+    REQUIRE(group.at(5) == blocks::palette::blue[5]);
+    REQUIRE(group.at(6) == blocks::palette::green[0]);
 }

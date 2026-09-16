@@ -143,7 +143,7 @@ auto new_file_modal::create_file_() -> bool {
 
     state_->file.filename = filepath.filename().string();
     state_->file.kind     = kind_;
-    state_->apply_kind_defaults();
+    state_->apply_kind_defaults(engine_->get_block_registry());
 
     return true;
 }
