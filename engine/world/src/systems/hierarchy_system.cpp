@@ -75,7 +75,7 @@ auto hierarchy_system::get_hierarchy_depth(
     return depth;
 }
 
-auto hierarchy_system::hierarchy_modifier::set_parent(entity parent)
+auto hierarchy_system::hierarchy_modifier::set_parent(entity parent, std::size_t index)
     -> hierarchy_modifier& {
     if (!parent.is_valid()) {
         throw std::invalid_argument("parent is not valid");
@@ -95,9 +95,19 @@ auto hierarchy_system::hierarchy_modifier::set_parent(entity parent)
 
     auto& reg = system_->world_->registry();
 
+    // Прежний родитель отпускает узел: иначе перенос оставил бы его в двух
+    // списках детей сразу, и обход дерева проходил бы его дважды.
+    if (reg.has<hierarchy_component>(entity_)) {
+        const auto previous = reg.get<hierarchy_component>(entity_).parent_;
+        if (previous.is_valid() && reg.has<hierarchy_component>(previous)) {
+            std::erase(reg.get<hierarchy_component>(previous).children_, entity_);
+        }
+    }
+
     if (reg.has<hierarchy_component>(parent)) {
-        auto& parent_component = reg.get<hierarchy_component>(parent);
-        parent_component.children_.push_back(entity_);
+        auto& children  = reg.get<hierarchy_component>(parent).children_;
+        const auto slot = std::min(index, children.size());
+        children.insert(children.begin() + static_cast<std::ptrdiff_t>(slot), entity_);
     }
 
     if (reg.has<hierarchy_component>(entity_)) {
