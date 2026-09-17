@@ -1,0 +1,178 @@
+---
+name: sculptor
+description: Редактор вокселей Sculptor — apps/sculptor, модуль vw.sculptor с партициями :state, :shortcuts, :operations, :services, :tools, :ui, :app. Рецепты нового инструмента (base_tool, регистрация, кнопка, горячая клавиша) и операции с undo/redo (base_operation, composite_operation, operation_manager); сервисы и панели ImGui; ловушки записи .voxm и общих объёмов, контекста правки после undo, кисти чужого набора, ключей анимации и правок посреди обхода ImGui. Читай перед правкой apps/sculptor.
+---
+
+# Sculptor
+
+## Где что лежит
+
+| Партиция | Интерфейс | Тела | Что внутри |
+|---|---|---|---|
+| `:state` | `state.cppm` | `app/app_state.cpp` | `app_state`: документ, контекст правки, сцена, кисть, анимация; `enum class tools`, `panels` |
+| `:shortcuts` | `shortcuts.cppm` | `shortcuts/shortcuts.cpp` | `enum class command`, таблица `shortcuts`, `tool_of`, `command_for_tool` |
+| `:operations` | `operations.cppm` | `operations/*.cpp` | `base_operation`, `composite_operation`, `operation_manager`, все операции |
+| `:services` | `services.cppm` | `services/*.cpp` | `file_service`, `clip_service`, `keyframe_service`, `playback_service`, `fsm_service` |
+| `:tools` | `tools.cppm` | `tools/*.cpp` | `base_tool`, инструменты, `gizmo` |
+| `:ui` | `ui.cppm` | `ui/*.cpp` | панели, модальные окна, `component_drawer` |
+| `:app` | `app.cppm` | `app/app.cpp` | `app`: владеет всем перечисленным, кадр, ввод |
+
+Партиция — один `.cppm` без подпартиций: новый класс дописывается в него
+отдельным блоком `export namespace vw::sculptor { … }`, список `.cppm` в CMake
+не меняется. Тело — `.cpp` с `module vw.sculptor;`, строкой в `PRIVATE` в
+`apps/sculptor/CMakeLists.txt`. Проверка — `cmake --build build/release --target
+sculptor`; тестов у приложения нет.
+
+## Новый инструмент
+
+1. `state.cppm`: значение в `enum class tools` и ветка в
+   `context_state::allows_tool`. Без ветки `app::render` каждый кадр сбрасывает
+   выбор на `default_tool()`, и инструмент молча не включается. Основной
+   инструмент контекста — ещё и в `default_tool`.
+2. `tools.cppm`: `class <name>_tool final : public base_tool` с конструктором
+   `(engine_type& eng, app_state& st, operation_manager& op_manager)` и всеми
+   шестью переопределениями: `render`, `on_key_press`, `on_mouse_move`,
+   `on_mouse_press`, `on_mouse_release`, `on_activate`. Тело —
+   `tools/<name>_tool.cpp`. Образец — `paint_tool`.
+3. Конструктор `app::app` (`app/app.cpp`):
+   `tools_[tools::<name>] = std::make_unique<<name>_tool>(eng, state_, op_manager_);`.
+   Без этой строки `tools_[active_tool_]` вернёт пустой указатель, и приложение
+   упадёт при первом выборе инструмента.
+4. Кнопка — `render_tool_button(tools::<name>, "Label")` в `tool_panel::render`
+   (`ui/tool_panel.cpp`). Панель видна только в контексте объёма.
+5. Клавиша:
+   - значение в `enum class command` и строка в `shortcuts` (`shortcuts.cppm`)
+     рядом с остальными из группы `"Tools"`: окно подсказок рисует заголовок
+     при каждой смене `group`;
+   - ветки в `tool_of` и `command_for_tool` (`shortcuts/shortcuts.cpp`);
+   - `case command::<…>:` в хвост `switch` в `app::run_command_`: `switch` там
+     без `default`.
+
+   Подпись у кнопки и окно подсказок берут клавишу из таблицы сами.
+
+Инструмент меняет документ только операцией через `op_manager_->execute`, а
+узел берёт через `state_->edited_node()` (см. «Контекст правки и undo»).
+
+## Новая операция (undo/redo)
+
+1. `operations.cppm`: `struct <name>_params` и
+   `class <name>_operation final : public base_operation` отдельным блоком.
+   Конструктор — `(engine_type& engine, app_state& state, const <name>_params& params)`,
+   а если операция грузит объём по ссылке — ещё `asset::model_library&`. Поля:
+   `engine_type* engine_`, `app_state* state_`, `<name>_params params_` и всё,
+   что нужно для отката.
+2. Тело — `operations/<name>_operation.cpp`. Родственные операции могут делить
+   файл (`fsm_operations.cpp`, `structure_operations.cpp`).
+3. Конструктор ничего не меняет. `execute()` применяет правку: менеджер зовёт
+   его и при первом исполнении, и при каждом redo. Прежнее значение снимай
+   внутри `execute()`, `undo()` возвращает ровно его (образец —
+   `set_pivot_operation`).
+4. Узел ищи по имени, `state_->scene.name_to_entity[params_.name]`, заново в
+   каждом `execute()` и `undo()`. `ecs::entity` не храни: undo удаления заводит
+   узлу новую сущность.
+5. Отмечай несохранённое и в `execute()`, и в `undo()`:
+   - документ — `state_->file.has_unsaved_changes = true`;
+   - клип — `state_->anim.unsaved_clips[clip] = true`; для ключей ещё
+     `track->mark_dirty()` и `state_->anim.need_apply_pose = true`;
+   - машина состояний — `state_->fsm.has_unsaved_changes = true`;
+   - объём, изменённый мимо флага `changed<model_component>`, — ещё и
+     `dirty_models` (см. «Запись документа»).
+6. Исполняй только `op_manager.execute(std::make_unique<<name>_operation>(…))`,
+   а не `op->execute()`: менеджер запоминает контекст правки и очищает redo.
+   Несколько шагов одним undo — неисполненные части в
+   `std::vector<std::unique_ptr<base_operation>>`, обёрнутые в
+   `composite_operation`. Части исполняются по порядку, а откатываются в
+   обратном (образец — `keyframe_service::move_keyframe`).
+
+## Запись документа
+
+**Записывается только помеченный объём.** `file_service` пишет .voxm лишь для
+сущностей из `state.file.dirty_models`. Туда их кладёт
+`app::collect_dirty_models_` по `world.changed<ecs::model_component>()`, а этот
+флаг ставят только `model_system::modify(ent).set_model`, `set_voxel` и `fill`.
+`set_pivot` заявляет изменение трансформа, а `set_source` не заявляет ничего,
+поэтому такую правку клади в `state_->file.dirty_models.insert(ent)` сам — иначе
+сохранение молча оставит старый .voxm.
+
+**Флаг доходит не сразу.** `changed` выставляет обновление мира, поэтому правка
+попадает в `dirty_models` лишь в начале ближайшего после него `app::render`.
+Сохранение, которое пришло раньше (`Ctrl+S` из опроса событий, вызов сразу за
+операцией), правку не увидит. Код, который сохраняет сразу после операции,
+сначала сам кладёт сущность в `dirty_models`.
+
+**Новый объект модели под старой ссылкой нужно отдать библиотеке через `adopt`.**
+Расширение и обрезка ставят узлу новый `asset::model`, а `source` не меняют;
+после записи `file_service::write_dirty_models_` делает
+`library_->adopt(ref, model)`. Если пишешь объём мимо `file_service`, зови
+`adopt` сам. Иначе в кеше `model_library` останется старый объект, и узел,
+подключённый по той же ссылке, получит устаревший объём.
+
+**На одну ссылку — один экземпляр объёма.** Объём по `asset_ref` бери только у
+общей `asset::model_library` (`app::model_library_`, она приходит ссылкой в
+конструктор) через `load`, `find` или `adopt`. Узлы и варианты грузи через
+`ecs::vox_deserializer{world, parser, library}`. Вторая `model_library` или
+прямой `voxm_deserializer` заведут копию, и правка одного узла разойдётся с
+другими, которые ссылаются на тот же файл.
+
+**Объём правят только изнутри него.** Один .voxm делят все узлы и префабы,
+которые на него ссылаются, поэтому точка вращения, обрезка и воксели меняются
+только в контексте `edit_kind::model`. Виджет правки закрывай проверкой
+`state.ctx.allows_volume_edit()`, а инструмент — веткой в `allows_tool`. Иначе
+правка из префаба молча изменит чужие модели.
+
+## Контекст правки и undo
+
+**Узел правки — `state.edited_node()`, а не `scene.selected_name`.**
+`operation_manager` запоминает `ctx.stack` при исполнении и возвращает его при
+undo и redo, а выделение не трогает. Вход и выход (`ctx.enter`, `leave_to`) в
+историю не попадают. Поэтому после undo крошки могут указывать на
+невыделенный объём. `edited_node()` берёт имя из контекста и возвращает
+выделение, только когда контекст узла не называет (префаб, клип, машина).
+`selected_name` читай лишь там, где речь именно о выделении: выбор в префабе,
+сокеты, ключи клипа.
+
+## Кисть и наборы
+
+**Воксель чужого набора роняет движок.** Если категория вокселя не совпадает с
+`model::category()`, `model::to_index_` зовёт `std::terminate`. Инструменты
+категорию не проверяют: `tool.selected_voxel` переводит в набор модели
+`voxel_palette_panel::render` через `tool_state::brush_for`. Он делает это
+каждый кадр, но только в контексте объёма, где видна панель. Код, который
+кладёт в модель воксель не из этой кисти или вне контекста объёма, сверяет
+`voxel.category()` с `model->category()` сам.
+
+Сама панель берёт набор через `selected_model_category` по `scene.selected_name`.
+После undo, вернувшего объём другого набора при прежнем выделении, кисть
+подстроится не под ту модель. Правя панель, бери набор модели `edited_node()`.
+
+## Анимация
+
+**На одно мгновение — один ключ.** `animation_channel::add` и `replace`
+сортируют ключи нестабильным `std::sort`, и `evaluate` при равном времени берёт
+любой. Единственность в пределах `key_epsilon` (`1e-3`,
+`services/keyframe_service.cpp`) держит только редактор:
+- `record_pose` переписывает ключ на том же времени через
+  `modify_keyframe_operation`;
+- `move_keyframe` убирает ключ, занявший место, через
+  `remove_keyframe_operation` в одной `composite_operation` с переносом.
+
+Новый путь, который добавляет ключ или меняет его время, идёт через
+`keyframe_service` и делает так же. Сейчас правило нарушают
+`create_keyframe_modal::create_keyframe` и поле Time в
+`keyframe_properties_panel`.
+
+## UI и ImGui
+
+**Структурную операцию исполняй после обхода.** Внутри цикла по виджетам только
+запоминай намерение, а `op_manager.execute` зови после цикла. Образцы:
+`entity_tree_panel::pending_move_`, `picked`/`dropped` в drawer варианта
+(`ui/component_drawers.cpp`), `socket_to_remove` в `socket_panel`. Перенос узла
+переписывает списки детей `hierarchy_component`, по которым идёт
+`render_entity_node`. Операции варианта меняют список кандидатов и объём узла,
+и ссылка на компонент, взятая до `execute`, после него висит.
+
+**Действие чужой панели запрашивай флагом.** Модальное окно или переход,
+которыми владеет другая панель или `app`, не открывай напрямую: ставь
+`state.ui.need_*` или `state.anim.need_*`. Флаг разбирает владелец в своём
+`render` (`need_add_model_for` → `edit_components_modal`, `need_enter_machine` →
+`app::render`).
