@@ -22,6 +22,47 @@ def code_only(text: str) -> str:
     return COMMENT_OR_STRING.sub(" ", text)
 
 
+# A namespace opening (exported or not, named or anonymous), an export block, a
+# lone export keyword, or any other brace.
+SCOPE_TOKEN = re.compile(r"\b(export\s+)?namespace\s*([\w:]*)\s*\{|\bexport\s*\{|\bexport\b|[{}]")
+
+
+def exported_details(text: str):
+    """Lines where a detail namespace reaches importers.
+
+    Hiding is export's job, not the namespace's: a detail that exported templates
+    call is declared outside the export block, and one the interface never needs
+    lives in the .cpp. So a detail namespace opened inside an export, exported
+    itself, or exporting something from within is a leak.
+    """
+    # Comments and strings blanked with their newlines kept, so lines still count.
+    code = COMMENT_OR_STRING.sub(lambda m: re.sub(r"[^\n]", " ", m.group(0)), text)
+    leaks = []
+    stack = []  # (exported, inside detail) per open brace
+    for m in SCOPE_TOKEN.finditer(code):
+        exported, in_detail = stack[-1] if stack else (False, False)
+        token = m.group(0)
+        line = code.count("\n", 0, m.start()) + 1
+        if token == "}":
+            if stack:
+                stack.pop()
+        elif token == "{":
+            stack.append((exported, in_detail))
+        elif "namespace" in token:
+            exported = exported or m.group(1) is not None
+            is_detail = re.search(r"(?:^|::)detail(?:::|$)", m.group(2)) is not None
+            if (is_detail and exported) or (in_detail and m.group(1)):
+                leaks.append(line)
+            stack.append((exported, in_detail or is_detail))
+        elif token.endswith("{"):
+            if in_detail:
+                leaks.append(line)
+            stack.append((True, in_detail))
+        elif in_detail:
+            leaks.append(line)
+    return leaks
+
+
 def sources():
     for top in SOURCES:
         for path in (ROOT / top).rglob("*"):
@@ -82,6 +123,12 @@ def main() -> int:
         #    elsewhere is fine -- a using-directive, as vw.gfx does for vw::ecs.
         elif re.search(r"^\s*(?:export )?namespace vw::asset\b", text, re.M):
             problems.append("%s: opens namespace vw::asset outside vw.asset" % name)
+
+        # 9. a detail namespace in an interface stays behind export
+        if path.suffix == ".cppm":
+            for line in exported_details(raw):
+                problems.append("%s:%d: detail is exported -- declare it outside the export block"
+                                % (name, line))
 
     for p in sorted(problems):
         print(p)

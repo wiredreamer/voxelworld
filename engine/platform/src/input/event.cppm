@@ -99,7 +99,9 @@ struct event_sub {
     uint32 value = 0;
 };
 
-namespace detail {
+}  // namespace vw::plat
+
+namespace vw::plat::detail {
 
 auto next_event_id() -> uint32;
 
@@ -112,7 +114,9 @@ struct event_sink_base {
     auto operator=(event_sink_base&&) -> event_sink_base&          = delete;
 };
 
-}  // namespace detail
+}  // namespace vw::plat::detail
+
+export namespace vw::plat {
 
 // Идентификатор типа события выдаётся лениво, при первой подписке или отправке.
 template <event_type E>

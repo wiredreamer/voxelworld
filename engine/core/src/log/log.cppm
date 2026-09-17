@@ -40,7 +40,9 @@ struct log_category {
     constexpr explicit log_category(const char* cat) : value(cat) {}
 };
 
-namespace detail {
+}  // namespace vw::log
+
+namespace vw::log::detail {
 
 template <level Lvl, typename... Args>
 auto emit(std::string_view category, std::format_string<Args...> fmt, Args&&... args) -> void {
@@ -51,7 +53,9 @@ auto emit(std::string_view category, std::format_string<Args...> fmt, Args&&... 
     }
 }
 
-}  // namespace detail
+}  // namespace vw::log::detail
+
+export namespace vw::log {
 
 template <typename... Args>
 auto trace(std::format_string<Args...> fmt, Args&&... args) -> void {

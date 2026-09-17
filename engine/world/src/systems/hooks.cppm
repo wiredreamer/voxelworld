@@ -23,7 +23,9 @@ concept has_on_remove = requires(S& s, entity e) { s.template on_remove<C>(e); }
 template <typename S>
 concept has_shutdown = requires(S& s) { s.shutdown(); };
 
-namespace detail {
+}  // namespace vw::ecs
+
+namespace vw::ecs::detail {
 
 template <typename C, typename S>
 auto invoke_on_add(S& system, entity ent) -> void {
@@ -46,5 +48,4 @@ auto invoke_shutdown(S& system) -> void {
     }
 }
 
-}  // namespace detail
-}  // namespace vw::ecs
+}  // namespace vw::ecs::detail
