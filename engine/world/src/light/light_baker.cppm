@@ -60,7 +60,7 @@ struct light_stats {
 // сгенерировавший её, о них ничего не знает.
 class light_baker {
 public:
-    explicit light_baker(const block_registry& blocks, uint32 workers = 0);
+    explicit light_baker(const voxel_registry& voxel_types, uint32 workers = 0);
     ~light_baker();
 
     light_baker(const light_baker&)                    = delete;
@@ -102,7 +102,7 @@ private:
 
     // Снимается с реестра, который дал мир. Раньше запекатель строил себе свой
     // и был вторым источником истины: расширенный каталог до него бы не доехал, и
-    // светились бы не те блоки.
+    // светились бы не те воксели.
     asset::emission_table emission_;
 };
 

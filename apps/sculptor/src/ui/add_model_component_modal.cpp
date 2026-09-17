@@ -44,7 +44,7 @@ auto add_model_component_modal::render() -> void {
         ImGui::Text("Entity: %s", entity_name_.c_str());
         ImGui::Separator();
 
-        imgui_block_set_combo("Blocks", engine_->get_block_registry(), category_);
+        imgui_voxel_set_combo("Voxels", engine_->get_voxel_registry(), category_);
         imgui_input_int_left("Size X", &size_.x);
         imgui_input_int_left("Size Y", &size_.y);
         imgui_input_int_left("Size Z", &size_.z);

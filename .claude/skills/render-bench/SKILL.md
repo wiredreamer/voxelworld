@@ -173,7 +173,7 @@ cd build/release/apps/testbed
 | `--bodies=N` | 50 у толпы, 8 у пятен | тел в `animated-crowd` и в `blob-shadows` |
 | `--voxels-per-frame=N` | 1 | правок за кадр в `voxel-edits` |
 | `--lamps-per-frame=N` | 1 | ламп за кадр в `lamp-edits` |
-| `--inert` | выкл | контрольный прогон `lamp-edits`: тот же блок, но не светящий |
+| `--inert` | выкл | контрольный прогон `lamp-edits`: тот же воксель, но не светящий |
 | `--emitters=N` | 400 | стоящих эмиттеров в световых сценах |
 | `--moving-lights=N` | 64 | движущихся источников там же |
 | `--emitters-per-frame=N` | 1 | эмиттеров за кадр, пока световая сцена расставляется |

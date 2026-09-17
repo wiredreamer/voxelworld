@@ -17,20 +17,20 @@ const asset::asset_ref big_ref{"models/m_human/head_big.voxm"};
 
 struct variant_fixture final {
     world w;
-    block_registry blocks;
+    voxel_registry voxel_types;
     asset::vox_parser_plain parser;
-    asset::model_library library{w.resource<asset::model_registry>(), blocks, "."};
+    asset::model_library library{w.resource<asset::model_registry>(), voxel_types, "."};
 
     variant_fixture() {
         auto& models = w.resource<asset::model_registry>();
 
         // Две головы разного размера и с разными точками вращения: подмена
         // обязана быть видна, а узел — остаться на месте.
-        auto small = models.create_unnamed(blocks::palette::category, vec3i{4, 4, 4});
+        auto small = models.create_unnamed(voxels::palette::category, vec3i{4, 4, 4});
         small->set_pivot(vec3f{2.0F, 2.0F, 2.0F});
         library.adopt(small_ref, small);
 
-        auto big = models.create_unnamed(blocks::palette::category, vec3i{8, 10, 8});
+        auto big = models.create_unnamed(voxels::palette::category, vec3i{8, 10, 8});
         big->set_pivot(vec3f{4.0F, 5.0F, 4.0F});
         library.adopt(big_ref, big);
     }

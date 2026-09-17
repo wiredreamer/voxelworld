@@ -22,7 +22,7 @@ public:
         vulkan_context& context,
         vk::DescriptorPool descriptor_pool,
         vk::DescriptorSetLayout descriptor_set_layout,
-        const block_registry& registry
+        const voxel_registry& registry
     );
     ~palette_buffer();
 

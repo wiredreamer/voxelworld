@@ -32,12 +32,13 @@ public:
             -> void;
         auto set_pivot(const vec3f& pivot) -> void;
         auto set_source(const asset::asset_ref& source) -> void;
+        auto set_visible(bool visible) -> void;
 
         // Ставит и чанк, и его модель разом: у сущности чанка они всегда пара.
         auto set_chunk(std::shared_ptr<asset::chunk_volume> volume) -> void;
-        auto set_voxel(int32 x, int32 y, int32 z, const voxel& v) -> void;
-        auto set_voxel(vec3i pos, const voxel& v) -> void;
-        auto fill(const voxel& v) -> void;
+        auto set_voxel(int32 x, int32 y, int32 z, voxel v) -> void;
+        auto set_voxel(vec3i pos, voxel v) -> void;
+        auto fill(voxel v) -> void;
 
     private:
         model_system* system_;
@@ -51,6 +52,12 @@ public:
     template <typename C>
         requires std::same_as<C, model_component>
     auto on_add(entity e) -> void;
+
+    // Снятая модель — тоже изменение модели: иначе буфер рендера не узнаёт, что
+    // экземпляр пора освободить, и объём остаётся висеть там, где его сняли.
+    template <typename C>
+        requires std::same_as<C, model_component>
+    auto on_remove(entity e) -> void;
 
 private:
     world* world_;

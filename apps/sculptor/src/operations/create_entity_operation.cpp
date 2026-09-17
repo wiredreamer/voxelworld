@@ -17,39 +17,14 @@ create_entity_operation::create_entity_operation(
     : base_operation(), engine_(&engine), state_(&state), params_(params) {}
 
 auto create_entity_operation::execute() -> void {
-    auto& world            = engine_->get_world();
+    auto& world         = engine_->get_world();
     auto& hierarchy_sys = world.system<ecs::hierarchy_system>();
-    auto& model_reg = world.resource<asset::model_registry>();
-    auto& model_sys = world.system<ecs::model_system>();
 
-    auto modifier = world.create()
-        .with<ecs::hierarchy_component>()
-        .with<ecs::transform_component>()
-        .with<ecs::spatial_component>();
-
-    std::shared_ptr<asset::model> model = nullptr;
-    if (params_.with_model) {
-        modifier.with<ecs::model_component>();
-
-        const block_id fill = state_->tool.brush_for(
-            params_.category, engine_->get_block_registry()
-        );
-        model = model_reg.create(params_.name, params_.category, params_.size);
-        model->fill(voxel{fill});
-    }
-
-    if (params_.with_socket) {
-        modifier.with<ecs::socket_component>();
-    }
-
-    const auto ent = modifier.get_entity();
-
-    if (model) {
-        model->set_pivot(
-            vec3f{params_.size.x / 2.f, params_.size.y / 2.f, params_.size.z / 2.f}
-        );
-        model_sys.modify(ent).set_model(model);
-    }
+    const auto ent = world.create()
+                         .with<ecs::hierarchy_component>()
+                         .with<ecs::transform_component>()
+                         .with<ecs::spatial_component>()
+                         .get_entity();
 
     if (!params_.parent_name.empty() && state_->scene.name_to_entity.contains(params_.parent_name)) {
         auto parent_ent = state_->scene.name_to_entity[params_.parent_name];

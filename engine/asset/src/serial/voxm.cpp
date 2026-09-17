@@ -54,7 +54,7 @@ auto voxm_serializer::serialize(
     output << std::format("pivot {} {} {}\n", pivot.x, pivot.y, pivot.z);
 
     // Пробегами по X: набор у модели один, поэтому в записи стоит только номер
-    // в наборе. Строка вокселей одного блока — обычное дело даже у персонажа, и
+    // в наборе. Строка одинаковых вокселей — обычное дело даже у персонажа, и
     // построчная запись короче повоксельной в разы.
     for (int32 z = 0; z < size.z; ++z) {
         for (int32 y = 0; y < size.y; ++y) {
@@ -79,9 +79,9 @@ auto voxm_serializer::serialize(
 }
 
 voxm_deserializer::voxm_deserializer(
-    model_registry& registry, const block_registry& blocks
+    model_registry& registry, const voxel_registry& voxel_types
 )
-    : registry_(&registry), blocks_(&blocks) {}
+    : registry_(&registry), voxel_types_(&voxel_types) {}
 
 auto voxm_deserializer::deserialize(
     const std::filesystem::path& filepath
@@ -107,7 +107,7 @@ auto voxm_deserializer::deserialize(
     has_category_ = false;
     has_size_     = false;
     pivot_        = vec3f{};
-    unknown_blocks_.clear();
+    unknown_voxels_.clear();
 
     std::string line;
     while (std::getline(input, line)) {
@@ -192,7 +192,7 @@ auto voxm_deserializer::process_category_(std::istringstream& iss) -> void {
         return;
     }
 
-    category_     = block_category{static_cast<uint8>(value)};
+    category_     = voxel_category{static_cast<uint8>(value)};
     has_category_ = true;
 }
 
@@ -240,21 +240,21 @@ auto voxm_deserializer::process_run_(std::istringstream& iss) -> void {
         return;
     }
 
-    const auto id = block_id{category_, static_cast<uint8>(index)};
+    const auto id = voxel{category_, static_cast<uint8>(index)};
 
     // Блок вне каталога — не повод потерять пробег: он нарисуется заглушкой, и
     // это видно сразу, а половина модели из-за одного номера пропасть не может.
-    if (id != blocks::air && blocks_->slot_of(id) == missing_block_slot &&
-        unknown_blocks_.insert(id.value).second) {
+    if (id != voxels::air && voxel_types_->slot_of(id) == missing_voxel_slot &&
+        unknown_voxels_.insert(id.value).second) {
         log::warn(
-            detail::voxm_lc, "block {}:{} is not in the catalog and will draw as the missing block",
+            detail::voxm_lc, "voxel {}:{} is not in the catalog and will draw as the missing voxel",
             category_.value, index
         );
     }
 
     model_writer writer{*model_};
     for (int32 i = 0; i < count; ++i) {
-        writer.set(vec3i{at.x + i, at.y, at.z}, voxel{id});
+        writer.set(vec3i{at.x + i, at.y, at.z}, id);
     }
 }
 

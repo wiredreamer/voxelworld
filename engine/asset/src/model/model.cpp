@@ -134,7 +134,7 @@ auto page_pool::ensure_capacity_(uint32 index) -> void {
     }
 }
 
-model::model(model_identity_pool& identity_pool, page_pool& pool, block_category category,
+model::model(model_identity_pool& identity_pool, page_pool& pool, voxel_category category,
              int32 width, int32 height, int32 depth, int32 voxel_scale)
     : identity_pool_(&identity_pool)
     , pool_ptr_(&pool)
@@ -211,13 +211,13 @@ auto model::operator=(model&& other) noexcept -> model& {
     return *this;
 }
 
-auto model::set_voxel(int32 x, int32 y, int32 z, const voxel& v) -> void {
+auto model::set_voxel(int32 x, int32 y, int32 z, voxel v) -> void {
     set_voxel_raw_(x, y, z, v);
     increment_generation_();
 }
 
-auto model::set_voxel_raw_(int32 x, int32 y, int32 z, const voxel& v) -> void {
-    const block_index index = to_index_(v);
+auto model::set_voxel_raw_(int32 x, int32 y, int32 z, voxel v) -> void {
+    const voxel_index index = to_index_(v);
 
     fill_known_    = false;
     const int32 px = x / page_size;
@@ -314,7 +314,7 @@ auto model::build_x_rows(
     constexpr int32 ps   = page_size;
     constexpr int32 side = chunk_occupancy::side;
 
-    static_assert(sizeof(block_index) == 1);
+    static_assert(sizeof(voxel_index) == 1);
 
     if (width_ != side || height_ != side || depth_ != side) {
         return false;
@@ -368,15 +368,15 @@ auto model::build_x_rows(
 }
 
 auto build_emission_table(
-    const block_registry& registry
+    const voxel_registry& registry
 ) -> emission_table {
     emission_table table;
 
     // Только излучающие: строка заводится на категорию, в которой есть хоть один,
     // а таких категорий заметно меньше, чем всех.
-    for (const block_type& block : registry.all()) {
-        if (block.material.emission != 0) {
-            table.set(block.id, block.material.emission);
+    for (const voxel_type& type : registry.all()) {
+        if (type.material.emission != 0) {
+            table.set(type.id, type.material.emission);
         }
     }
 
@@ -601,9 +601,9 @@ auto model::compact_pages() -> uint32 {
 
         const uint32 idx        = entry.pool_index();
         const auto& page        = pool_ptr_->get(idx);
-        const block_index first = page[0];
+        const voxel_index first = page[0];
 
-        const bool uniform = std::ranges::all_of(page, [first](block_index index) -> bool {
+        const bool uniform = std::ranges::all_of(page, [first](voxel_index index) -> bool {
             return index == first;
         });
         if (!uniform) {
@@ -736,7 +736,7 @@ auto model::invalidate() -> void {
     increment_generation_();
 }
 
-auto model::fill(const voxel& v) -> void {
+auto model::fill(voxel v) -> void {
     if (!owned_pages_.empty()) {
         pool_ptr_->free_batch(owned_pages_);
         owned_pages_.clear();
@@ -753,7 +753,7 @@ auto model::fill(const voxel& v) -> void {
     increment_generation_();
 }
 
-auto model::fill_page_raw_(int32 px, int32 py, int32 pz, const voxel& v) -> void {
+auto model::fill_page_raw_(int32 px, int32 py, int32 pz, voxel v) -> void {
     fill_known_ = false;
     auto& entry = pages_[page_index(px, py, pz)];
 
@@ -814,31 +814,31 @@ auto model::promote_to_sparse(int32 px, int32 py, int32 pz) -> page_type& {
     auto& entry      = pages_[page_index(px, py, pz)];
     const uint32 idx = alloc_sparse_page();
     auto& page       = pool_ptr_->get(idx);
-    page.fill(entry.mode() == page_mode::uniform ? entry.fill_index() : block_index{});
+    page.fill(entry.mode() == page_mode::uniform ? entry.fill_index() : voxel_index{});
     entry = page_entry::make_sparse(idx);
     return page;
 }
 
-// Модель несёт ровно один набор, поэтому блок чужого набора в неё не ложится
+// Модель несёт ровно один набор, поэтому воксель чужого набора в неё не ложится
 // никак: страница хранит только номер. Это инвариант, а не ошибка ввода —
-// проверять его обязан тот, кто выбирает блок, а сюда он доходить не должен.
-auto model::to_index_(const voxel& v) const -> block_index {
+// проверять его обязан тот, кто выбирает воксель, а сюда он доходить не должен.
+auto model::to_index_(voxel v) const -> voxel_index {
     if (v.is_empty()) {
-        return block_index{};
+        return voxel_index{};
     }
 
-    if (v.id.category() != category_) {
+    if (v.category() != category_) {
         log::critical(
             lc_pool_,
-            "block {}:{} does not belong to this model's set {}",
-            v.id.category().value,
-            v.id.index(),
+            "voxel {}:{} does not belong to this model's set {}",
+            v.category().value,
+            v.index(),
             category_.value
         );
         std::terminate();
     }
 
-    return block_index{v.id.index()};
+    return voxel_index{v.index()};
 }
 
 auto model::increment_generation_() -> void {
@@ -854,7 +854,7 @@ auto model_registry::get(std::string_view name) const -> std::shared_ptr<model> 
     return iter != models_.end() ? iter->second : nullptr;
 }
 
-auto model_registry::create(std::string_view name, block_category category, int32 width,
+auto model_registry::create(std::string_view name, voxel_category category, int32 width,
                             int32 height, int32 depth) -> std::shared_ptr<model> {
     auto new_model =
         std::make_shared<model>(identity_pool_, page_pool_, category, width, height, depth);
@@ -872,17 +872,17 @@ auto model_registry::create(std::string_view name, block_category category, int3
     return new_model;
 }
 
-auto model_registry::create(std::string_view name, block_category category, vec3i size)
+auto model_registry::create(std::string_view name, voxel_category category, vec3i size)
     -> std::shared_ptr<model> {
     return create(name, category, size.x, size.y, size.z);
 }
 
-auto model_registry::create_unnamed(block_category category, int32 width, int32 height,
+auto model_registry::create_unnamed(voxel_category category, int32 width, int32 height,
                                     int32 depth) -> std::shared_ptr<model> {
     return std::make_shared<model>(identity_pool_, page_pool_, category, width, height, depth);
 }
 
-auto model_registry::create_unnamed(block_category category, vec3i size)
+auto model_registry::create_unnamed(voxel_category category, vec3i size)
     -> std::shared_ptr<model> {
     return create_unnamed(category, size.x, size.y, size.z);
 }

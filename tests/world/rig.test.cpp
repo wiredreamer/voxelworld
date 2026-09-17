@@ -28,9 +28,9 @@ auto make_target(std::string name, std::string parent) -> asset::vox_entity_data
 // берутся из узлов, а не из списка рядом.
 struct rig_fixture final {
     world w;
-    block_registry blocks;
+    voxel_registry voxel_types;
     asset::vox_parser_plain parser;
-    asset::model_library library{w.resource<asset::model_registry>(), blocks, "."};
+    asset::model_library library{w.resource<asset::model_registry>(), voxel_types, "."};
 
     vox_deserializer::result res;
 

@@ -44,19 +44,7 @@ auto keyframe_properties_panel::render(
         return;
     }
 
-    const ImGuiViewport* viewport = ImGui::GetMainViewport();
-    const auto window_pos         = ImVec2(
-        viewport->WorkPos.x + viewport->WorkSize.x - 10,
-        viewport->WorkPos.y + state_->ui.right_top_voffset + 10
-    );
-    ImGui::SetNextWindowPos(window_pos, ImGuiCond_Always, ImVec2(1.0f, 0.0f));
-
-    constexpr ImGuiWindowFlags window_flags =  //
-        ImGuiWindowFlags_NoSavedSettings |     //
-        ImGuiWindowFlags_NoMove |              //
-        ImGuiWindowFlags_AlwaysAutoResize;
-
-    ImGui::Begin("Keyframe Properties", nullptr, window_flags);
+    begin_panel(*state_, panel_slot::right, "Keyframe Properties");
 
     const char* prop_names[] = {"Position", "Rotation", "Scale", "Origin"};
     const int prop_idx       = static_cast<int>(state_->anim.selected_property);
@@ -169,7 +157,7 @@ auto keyframe_properties_panel::render(
 
                 ImGui::Spacing();
 
-                if (ImGui::Button("Delete Keyframe")) {
+                if (ImGui::Button("Delete")) {
                     remove_keyframe_params rm_params;
                     rm_params.clip_name  = state_->anim.selected_clip_name;
                     rm_params.track_name = state_->anim.selected_track_name;
@@ -188,9 +176,7 @@ auto keyframe_properties_panel::render(
 
     ImGui::Dummy({200.0f, 0.0f});
 
-    state_->ui.right_top_voffset += ImGui::GetWindowHeight() + 10.0f;
-
-    ImGui::End();
+    end_panel(*state_, panel_slot::right);
 }
 
 

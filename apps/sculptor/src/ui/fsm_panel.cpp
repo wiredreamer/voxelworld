@@ -107,20 +107,10 @@ auto fsm_panel::render(
         return;
     }
 
-    const ImGuiViewport* viewport = ImGui::GetMainViewport();
-    const auto window_pos         = ImVec2(
-        viewport->WorkPos.x + viewport->WorkSize.x - 10,
-        viewport->WorkPos.y + state_->ui.right_top_voffset + 10
-    );
-    ImGui::SetNextWindowPos(window_pos, ImGuiCond_Always, ImVec2(1.0f, 0.0f));
+    // Ширина задана, высота по содержимому: список состояний растёт правкой, а
+    // прыгающая от неё ширина колонок читалась бы как дрожь.
     ImGui::SetNextWindowSize(ImVec2(440.0f, 0.0f), ImGuiCond_Always);
-
-    constexpr ImGuiWindowFlags window_flags =  //
-        ImGuiWindowFlags_NoSavedSettings |     //
-        ImGuiWindowFlags_NoMove |              //
-        ImGuiWindowFlags_AlwaysAutoResize;
-
-    ImGui::Begin("State Machine", nullptr, window_flags);
+    begin_panel(*state_, panel_slot::right, "State Machine");
 
     render_header_();
     render_params_();
@@ -129,9 +119,7 @@ auto fsm_panel::render(
     ImGui::SeparatorText("From any");
     render_rules_(state_->fsm.data.any_transitions, "any");
 
-    state_->ui.right_top_voffset += ImGui::GetWindowHeight() + 10.0f;
-
-    ImGui::End();
+    end_panel(*state_, panel_slot::right);
 }
 
 auto fsm_panel::render_header_() -> void {
@@ -231,7 +219,7 @@ auto fsm_panel::render_params_() -> void {
         commit_edit_();
     }
 
-    if (ImGui::SmallButton("Add parameter")) {
+    if (ImGui::SmallButton("Add##param")) {
         begin_edit_();
         data.params.push_back(asset::voxf_param{.name = "parameter"});
         commit_edit_();
@@ -267,7 +255,7 @@ auto fsm_panel::render_states_() -> void {
         render_state_(i);
     }
 
-    if (ImGui::SmallButton("Add state")) {
+    if (ImGui::SmallButton("Add##state")) {
         begin_edit_();
         data.states.push_back(asset::voxf_state{.name = std::format("state_{}", data.states.size())});
         commit_edit_();
@@ -367,7 +355,7 @@ auto fsm_panel::render_state_(
         render_rules_(state.transitions, "out");
         render_incoming_(state.name);
 
-        if (ImGui::SmallButton("Delete state")) {
+        if (ImGui::SmallButton("Delete")) {
             begin_edit_();
             data.states.erase(data.states.begin() + static_cast<std::ptrdiff_t>(index));
             commit_edit_();
@@ -511,7 +499,7 @@ auto fsm_panel::render_rule_(
         }
 
         ImGui::SameLine();
-        const bool remove_rule = ImGui::SmallButton("Delete transition");
+        const bool remove_rule = ImGui::SmallButton("Delete");
 
         ImGui::TreePop();
 

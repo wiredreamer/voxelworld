@@ -542,7 +542,7 @@ auto perlin_terrain_generator::carve_caves_(
                         for (int32 x = cx * stride; x < x_end; ++x) {
                             const float32 tx = static_cast<float32>(x - (cx * stride)) * inv;
                             if (std::lerp(z0v, z1v, tx) > 0.0F) {
-                                writer.set(x, y, z, voxel{blocks::air});
+                                writer.set(x, y, z, voxels::air);
                             }
                         }
                     }
@@ -671,40 +671,40 @@ auto perlin_terrain_generator::soil_depth_at(
     return static_cast<int32>((t * static_cast<float32>(params_.soil_depth_max)) + 0.5F);
 }
 
-auto perlin_terrain_generator::rock_block_at(
+auto perlin_terrain_generator::rock_voxel_at(
     int32 wy
-) const -> block_id {
+) const -> voxel {
     if (wy < (params_.world_bottom_y + params_.bedrock_thickness)) {
-        return blocks::terrain::bedrock;
+        return voxels::world::bedrock;
     }
     if (wy < params_.rock_bottom_y) {
-        return blocks::terrain::stone_deep[0];
+        return voxels::world::stone_deep[0];
     }
     if (wy < params_.rock_deep_y) {
-        return blocks::terrain::stone_deep[1];
+        return voxels::world::stone_deep[1];
     }
-    return blocks::terrain::stone_deep[2];
+    return voxels::world::stone_deep[2];
 }
 
-auto perlin_terrain_generator::block_at(
+auto perlin_terrain_generator::voxel_at(
     int32 wy, int32 stone_top, int32 surface_top
-) const -> block_id {
+) const -> voxel {
     // По одному варианту на материал, хотя у травы и почвы их по три: разбивать
     // поверхность вариантами имеет смысл вместе с биомами, и только связными
     // пятнами — белый шум по вокселю разнёс бы жадное слияние верхних граней.
     if (wy > stone_top) {
-        return wy == surface_top ? blocks::terrain::grass[0] : blocks::terrain::dirt[0];
+        return wy == surface_top ? voxels::world::grass[0] : voxels::world::dirt[0];
     }
 
     // Открытая порода выветривается, а достаточно высоко на ней лежит снег.
     if (wy == stone_top && surface_top == stone_top) {
-        return wy > params_.snow_line ? blocks::terrain::snow[1] : blocks::terrain::stone[1];
+        return wy > params_.snow_line ? voxels::world::snow[1] : voxels::world::stone[1];
     }
     if ((stone_top - wy) < params_.rock_skin) {
-        return blocks::terrain::stone[0];
+        return voxels::world::stone[0];
     }
 
-    return rock_block_at(wy);
+    return rock_voxel_at(wy);
 }
 
 auto perlin_terrain_generator::surface_height_at(
@@ -794,7 +794,7 @@ auto perlin_terrain_generator::generate_chunk(
     constexpr int32 s = 64;
 
     auto mdl = std::make_shared<vw::asset::model>(
-        *identity_pool_, *page_pool_, vw::blocks::terrain::category, s, s, s,
+        *identity_pool_, *page_pool_, vw::voxels::world::category, s, s, s,
         params_.voxel_scale
     );
 
@@ -819,7 +819,7 @@ auto perlin_terrain_generator::generate_chunk(
         }
 
         const bool one_rock = y0 >= params_.world_bottom_y &&
-            rock_block_at(y0) == rock_block_at(y1);
+            rock_voxel_at(y0) == rock_voxel_at(y1);
 
         for (int32 px = 0; px < pn; ++px) {
             for (int32 pz = 0; pz < pn; ++pz) {
@@ -830,7 +830,7 @@ auto perlin_terrain_generator::generate_chunk(
                 }
 
                 if (one_rock && y1 < (profile.page_min_stone[page] - params_.rock_skin)) {
-                    writer.fill_page(px, py, pz, voxel{rock_block_at(y0)});
+                    writer.fill_page(px, py, pz, rock_voxel_at(y0));
                     continue;
                 }
 
@@ -847,7 +847,7 @@ auto perlin_terrain_generator::generate_chunk(
                         const int32 bottom = std::max(y0, params_.world_bottom_y);
 
                         for (int32 wy = bottom; wy <= top; ++wy) {
-                            writer.set(x, wy - base_y, z, voxel{block_at(wy, stone, surface)});
+                            writer.set(x, wy - base_y, z, voxel_at(wy, stone, surface));
                         }
                     }
                 }

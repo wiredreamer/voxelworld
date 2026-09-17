@@ -35,20 +35,8 @@ auto socket_panel::render(
         return;
     }
 
-    const ImGuiViewport* viewport = ImGui::GetMainViewport();
-    const auto window_pos         = ImVec2(
-        viewport->WorkPos.x + viewport->WorkSize.x - 10,
-        viewport->WorkPos.y + state_->ui.right_top_voffset + 10
-    );
-    ImGui::SetNextWindowPos(window_pos, ImGuiCond_Always, ImVec2(1.0f, 0.0f));
-
-    constexpr ImGuiWindowFlags window_flags =  //
-        ImGuiWindowFlags_NoSavedSettings |     //
-        ImGuiWindowFlags_NoMove |              //
-        ImGuiWindowFlags_AlwaysAutoResize;
-
     bool still_open = true;
-    ImGui::Begin("Sockets", &still_open, window_flags);
+    begin_panel(*state_, panel_slot::right, "Sockets", &still_open);
     if (!still_open) {
         state_->ui.show_sockets = false;
     }
@@ -111,11 +99,9 @@ auto socket_panel::render(
 
     ImGui::Dummy({220.0f, 0.0f});
 
-    state_->ui.right_top_voffset += ImGui::GetWindowHeight() + 10.0f;
-
     render_add_socket_modal_();
 
-    ImGui::End();
+    end_panel(*state_, panel_slot::right);
 
     render_preview_file_list_();
 }
@@ -210,7 +196,7 @@ auto socket_panel::render_socket_(
 
         ImGui::Spacing();
 
-        if (ImGui::SmallButton("Remove Socket")) {
+        if (ImGui::SmallButton("Remove")) {
             socket_to_remove = sp.name;
         }
 
@@ -219,7 +205,7 @@ auto socket_panel::render_socket_(
 }
 
 auto socket_panel::render_add_socket_() -> void {
-    if (ImGui::Button("Add Socket")) {
+    if (ImGui::Button("Add")) {
         need_add_socket_modal_ = true;
         new_socket_name_.clear();
         add_socket_error_.clear();

@@ -198,34 +198,6 @@ TEST_CASE("a prefab survives a write and a read", "[serial]") {
     REQUIRE(*second == *first);
 }
 
-// Тип документа строкой, а не перечислением: из шести префабов пять предметы, и
-// меч не character и не structure.
-TEST_CASE("a prefab carries the kind of document it is", "[serial]") {
-    const auto first = parse_vox(
-        "# Vox File Version 4.0\nkind structure\nroot root\nentity root\n"
-    );
-
-    REQUIRE(first.has_value());
-    REQUIRE(first->kind == "structure");
-
-    std::ostringstream written;
-    asset::vox_writer_plain writer;
-    REQUIRE(writer.write(written, *first).has_value());
-
-    const auto second = parse_vox(written.str());
-    REQUIRE(second.has_value());
-    REQUIRE(second->kind == "structure");
-
-    // Не сказано — не пишется: пустая строка «kind » была бы ответом, которого
-    // автор не давал.
-    const auto item = parse_vox("# Vox File Version 4.0\nroot root\nentity root\n");
-    REQUIRE(item.has_value());
-
-    std::ostringstream item_written;
-    REQUIRE(writer.write(item_written, *item).has_value());
-    REQUIRE_FALSE(item_written.str().contains("kind"));
-}
-
 // Порядок ссылок на автоматы — это номера слоёв, поэтому повтор тега здесь не
 // просто список, а список упорядоченный, и запись обязана его сохранить.
 TEST_CASE("a prefab names its state machines in layer order", "[serial]") {
@@ -416,10 +388,10 @@ TEST_CASE("a voxa file without a rig parses as one without a rig", "[serial]") {
 namespace {
 
 auto parse_voxm(asset::model_registry& registry, std::string_view text) {
-    static const block_registry blocks;
+    static const voxel_registry voxel_types;
 
     std::istringstream input{std::string{text}};
-    asset::voxm_deserializer deserializer{registry, blocks};
+    asset::voxm_deserializer deserializer{registry, voxel_types};
     return deserializer.deserialize(input);
 }
 
@@ -434,12 +406,12 @@ auto write_voxm(const asset::model& model) -> std::string {
 TEST_CASE("a voxm volume survives a round trip", "[serial]") {
     asset::model_registry registry;
 
-    const auto source = registry.create_unnamed(blocks::palette::category, vec3i{6, 4, 3});
+    const auto source = registry.create_unnamed(voxels::palette::category, vec3i{6, 4, 3});
     source->set_pivot(vec3f{2.5F, 1.5F, 0.5F});
-    source->set_voxel(vec3i{0, 0, 0}, voxel{blocks::palette::gray[7]});
-    source->set_voxel(vec3i{1, 0, 0}, voxel{blocks::palette::gray[7]});
-    source->set_voxel(vec3i{2, 0, 0}, voxel{blocks::palette::gray[8]});
-    source->set_voxel(vec3i{5, 3, 2}, voxel{blocks::palette::gray[9]});
+    source->set_voxel(vec3i{0, 0, 0}, voxels::palette::gray[7]);
+    source->set_voxel(vec3i{1, 0, 0}, voxels::palette::gray[7]);
+    source->set_voxel(vec3i{2, 0, 0}, voxels::palette::gray[8]);
+    source->set_voxel(vec3i{5, 3, 2}, voxels::palette::gray[9]);
 
     const auto restored = parse_voxm(registry, write_voxm(*source));
 
@@ -453,20 +425,20 @@ TEST_CASE("a voxm volume survives a round trip", "[serial]") {
     for (int32 z = 0; z < model.depth(); ++z) {
         for (int32 y = 0; y < model.height(); ++y) {
             for (int32 x = 0; x < model.width(); ++x) {
-                REQUIRE(model.get_voxel(x, y, z).id == source->get_voxel(x, y, z).id);
+                REQUIRE(model.get_voxel(x, y, z) == source->get_voxel(x, y, z));
             }
         }
     }
 }
 
-// Пробег — единственная форма записи вокселя, и строка из одного блока обязана
+// Пробег — единственная форма записи вокселя, и строка одинаковых вокселей обязана
 // стать одной строкой файла, иначе разделение форматов не окупается.
-TEST_CASE("a voxm run collapses a row of one block", "[serial]") {
+TEST_CASE("a voxm run collapses a row of equal voxels", "[serial]") {
     asset::model_registry registry;
 
-    const auto source = registry.create_unnamed(blocks::terrain::category, vec3i{8, 1, 1});
+    const auto source = registry.create_unnamed(voxels::world::category, vec3i{8, 1, 1});
     for (int32 x = 0; x < 8; ++x) {
-        source->set_voxel(vec3i{x, 0, 0}, voxel{blocks::terrain::grass[0]});
+        source->set_voxel(vec3i{x, 0, 0}, voxels::world::grass[0]);
     }
 
     const auto text = write_voxm(*source);
@@ -487,7 +459,7 @@ TEST_CASE("a voxm run collapses a row of one block", "[serial]") {
 TEST_CASE("an empty voxm volume is a valid file", "[serial]") {
     asset::model_registry registry;
 
-    const auto source   = registry.create_unnamed(blocks::palette::category, vec3i{4, 4, 4});
+    const auto source   = registry.create_unnamed(voxels::palette::category, vec3i{4, 4, 4});
     const auto restored = parse_voxm(registry, write_voxm(*source));
 
     REQUIRE(restored.has_value());
@@ -533,7 +505,7 @@ TEST_CASE("a voxm file without a size is a parse error", "[serial]") {
 
 // Блок вне каталога рвать чтение не должен: он нарисуется заглушкой, и это
 // видно сразу, а половина модели из-за одного номера пропасть не может.
-TEST_CASE("a voxm block outside the catalog still parses", "[serial]") {
+TEST_CASE("a voxm voxel outside the catalog still parses", "[serial]") {
     asset::model_registry registry;
 
     const auto restored = parse_voxm(
@@ -544,5 +516,5 @@ TEST_CASE("a voxm block outside the catalog still parses", "[serial]") {
     );
 
     REQUIRE(restored.has_value());
-    REQUIRE((*restored)->get_voxel(0, 0, 0).id == block_id{block_category{200}, 7});
+    REQUIRE((*restored)->get_voxel(0, 0, 0) == voxel{voxel_category{200}, 7});
 }

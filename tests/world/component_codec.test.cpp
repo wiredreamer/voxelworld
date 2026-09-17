@@ -46,9 +46,9 @@ auto make_probe_codec() -> component_codec {
 
 struct codec_fixture final {
     world w;
-    block_registry blocks;
+    voxel_registry voxel_types;
     asset::vox_parser_plain parser;
-    asset::model_library library{w.resource<asset::model_registry>(), blocks, "."};
+    asset::model_library library{w.resource<asset::model_registry>(), voxel_types, "."};
     component_registry codecs;
 
     [[nodiscard]] auto instantiate(const asset::vox_prefab_data& prefab)

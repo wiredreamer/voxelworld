@@ -9,6 +9,7 @@ import vw.world;
 import vw.platform;
 import vw.gfx;
 import :state;
+import :shortcuts;
 import :operations;
 import :services;
 import :tools;
@@ -35,7 +36,7 @@ private:
     bool need_open_ = false;
     std::string entity_name_;
     vec3i size_{8, 8, 8};
-    block_category category_;
+    voxel_category category_;
     std::string error_;
 };
 
@@ -156,40 +157,37 @@ private:
 
 }  // namespace vw::sculptor
 
-// ---- from src/ui/clip_manager_panel.h
+// ---- from src/ui/open_clip_modal.h
 export namespace vw::sculptor {
 
-class clip_manager_panel final {
+// Открытие клипа живёт вне анимационного режима: им в этот режим и входят, а
+// таймлайна, пока клип не выбран, ещё нет.
+class open_clip_modal final {
 public:
     using engine_type = gfx::engine;
 
-    clip_manager_panel(engine_type& eng, app_state& st, operation_manager& op_manager,
-                       clip_service& clip_svc);
+    open_clip_modal(engine_type& eng, app_state& st, clip_service& clip_svc);
 
-    auto render(float delta_time) -> void;
+    auto open() -> void;
+    auto render() -> void;
 
 private:
-    auto render_close_confirm_popup_() const -> void;
-    auto render_load_popup_() -> void;
-    auto load_voxa_filenames_() -> void;
+    auto load_filenames_() -> void;
 
     [[nodiscard]] static auto describe_rig_report_(const ecs::rig_report& report) -> std::string;
 
     engine_type* engine_;
     app_state* state_;
-    operation_manager* op_manager_;
     clip_service* clip_service_;
 
-    create_clip_modal create_modal_;
-    layer_blend_modal layer_blend_modal_;
-    save_clip_as_modal save_clip_as_modal_;
+    bool need_open_ = false;
+    std::vector<std::string> filenames_;
+    std::string selected_;
 
-    bool need_load_popup_          = false;
-    bool need_close_confirm_popup_ = false;
-    std::vector<std::string> voxa_filenames_;
-    std::string selected_load_filename_;
+    std::string error_;
 
-    std::string load_error_;
+    // Чужой риг не отвергается насовсем: второй раз кнопка открывает всё равно,
+    // и отдельный флаг помнит, что предупреждение уже показали.
     bool rig_mismatch_seen_ = false;
 };
 
@@ -198,7 +196,29 @@ private:
 // ---- from src/ui/ui_utils.h
 export namespace vw::sculptor {
 
-auto imgui_input_text_string(std::string_view label, std::string& value) -> void;
+// К какому краю прижата панель. Стопка вдоль края набирается сама, поэтому
+// панели не знают ни про viewport, ни про соседей: место занимает та, которая
+// в этом контексте рисуется, а остальные не оставляют пустого места.
+enum class panel_slot : uint8 {
+    left,     // сверху вниз по левому краю
+    bottom,   // снизу вверх по левому краю
+    right,    // сверху вниз по правому краю
+    footer,   // во всю ширину внизу, фиксированной высоты
+};
+
+// Закрывающий крестик даётся панели, которую можно убрать с глаз: `open`
+// выставляется в false ровно в том кадре, когда его нажали.
+auto begin_panel(
+    app_state& state, panel_slot slot, std::string_view title, bool* open = nullptr,
+    bool title_bar = true
+) -> void;
+
+auto end_panel(app_state& state, panel_slot slot) -> void;
+
+// Колонка — отступ поля от начала строки, чтобы поля диалога встали в один
+// столбец; ноль ставит поле сразу за подписью.
+auto imgui_input_text_string(std::string_view label, std::string& value, float32 label_column = 0.f)
+    -> void;
 
 auto imgui_input_int_left(std::string_view label, int* value) -> bool;
 
@@ -206,30 +226,35 @@ auto imgui_clamp_window_pos_to_viewport() -> void;
 
 auto imgui_drag_vec3f(std::string_view label, vec3f& vec, float label_offset = 60.f) -> bool;
 
-// Набор блоков выбранной модели. Им открываются и палитра, и диалоги создания:
+// Набор вокселей выбранной модели. Им открываются и палитра, и диалоги создания:
 // набор задаётся конструктором модели и потом не меняется, так что дальше по
 // сцене работают, не переключаясь.
 [[nodiscard]] auto selected_model_category(gfx::engine& eng, const app_state& state)
-    -> block_category;
+    -> voxel_category;
 
-auto imgui_block_set_combo(std::string_view label, const block_registry& registry,
-                           block_category& category) -> void;
+auto imgui_voxel_set_combo(std::string_view label, const voxel_registry& registry,
+                           voxel_category& category, float32 label_column = 0.f) -> void;
+
+// Файлы с расширением под каталогом — ссылками от корня ассетов, как они
+// записываются в документы.
+[[nodiscard]] auto collect_asset_refs(const std::filesystem::path& dir, std::string_view extension)
+    -> std::vector<asset::asset_ref>;
 
 }  // namespace vw::sculptor
 
-// ---- from src/ui/block_palette_panel.h
+// ---- from src/ui/voxel_palette_panel.h
 export namespace vw::sculptor {
 
-class block_palette_panel final {
+class voxel_palette_panel final {
 public:
     using engine_type = gfx::engine;
 
-    block_palette_panel(engine_type& eng, app_state& st);
+    voxel_palette_panel(engine_type& eng, app_state& st);
 
     auto render(float delta_time) -> void;
 
 private:
-    auto swatch_(const block_type& block, int32 index_in_row) -> void;
+    auto swatch_(const voxel_type& type, int32 index_in_row) -> void;
 
     engine_type* engine_;
     app_state* state_;
@@ -240,30 +265,64 @@ private:
 // ---- from src/ui/create_entity_modal.h
 export namespace vw::sculptor {
 
+// Узел создаётся одним шагом истории вместе со всем, что на нём будет: роль
+// ставит главный компонент и открывает его поля, остальное добирается списком
+// из реестра компонентов.
 class create_entity_modal final {
 public:
     using engine_type = gfx::engine;
 
-    create_entity_modal(engine_type& eng, app_state& state, operation_manager& op_manager);
+    create_entity_modal(
+        engine_type& eng, app_state& state, operation_manager& op_manager,
+        asset::model_library& library
+    );
 
     auto open() -> void;
 
     auto render(float delta_time) -> void;
 
 private:
-    auto create_entity() -> bool;
+    enum class entity_role : uint8 { model, socket, point, empty };
+    enum class volume_source : uint8 { blank, file };
+
+    auto render_parent_() -> void;
+    auto render_parent_option_(ecs::entity ent, std::size_t depth) -> void;
+    auto render_role_() -> void;
+    auto render_model_fields_() -> void;
+    auto render_point_fields_() -> void;
+    auto render_extras_() -> void;
+    auto pick_model_file_(const asset::asset_ref& ref) -> void;
+
+    // Компонент, который уже ставит роль: в списке остального он лишний.
+    [[nodiscard]] auto covered_by_role_(uint32 component) const -> bool;
+    [[nodiscard]] auto create_entity_() -> bool;
 
     engine_type* engine_;
     app_state* state_;
     operation_manager* op_manager_;
+    asset::model_library* library_;
 
     bool need_open_ = false;
 
     std::string name_;
-    bool with_model_  = false;
-    bool with_socket_ = false;
-    vec3i size_{12, 12, 12};
-    block_category category_;
+    std::string parent_name_;
+
+    // Всё ниже переживает закрытие окна: узлы создают сериями одного вида —
+    // ноги, пальцы, факелы, — и выбор заново на каждый был бы лишним.
+    entity_role role_     = entity_role::model;
+    volume_source source_ = volume_source::blank;
+    vec3i size_{8, 8, 8};
+    voxel_category category_;
+
+    std::vector<asset::asset_ref> model_files_;
+    asset::asset_ref model_file_;
+    std::string model_file_info_;
+
+    point_kind point_kind_ = point_kind::furniture;
+    std::string point_tag_;
+
+    // Теги компонентов из реестра, отмеченные в списке остального.
+    std::set<std::string> extras_;
 
     std::string error_;
 };
@@ -366,9 +425,9 @@ struct component_drawer_context {
     const std::string& node_name;
 };
 
-// Что должно быть открыто, чтобы секцию можно было править. Объём правится и
-// изнутри себя: провалившись в .voxm, правят именно его, и точка вращения с
-// обрезкой обязаны быть под рукой там же, где воксели.
+// Что должно быть открыто, чтобы секцию можно было править. Секция объёма видна
+// и из префаба — оттуда в объём входят, — но сам объём правится только изнутри:
+// какие поля в ней доступны, она решает по контексту сама.
 enum class drawer_scope : uint8 { prefab, volume };
 
 // Как компонент выглядит в редакторе. Тег тот же, что у кодека записи: одно имя
@@ -390,6 +449,14 @@ struct component_drawer {
     std::function<std::string(const component_drawer_context&)> summary;
     std::function<void(const component_drawer_context&)> add;
     std::function<void(const component_drawer_context&)> remove;
+
+    // Операция, ставящая компонент узлу по имени, — у тех, кому хватает одного
+    // нажатия; `add` у них просто исполняет её. Окно создания складывает такие
+    // операции с созданием узла в один шаг истории. Компонент с параметрами её
+    // не даёт: у него свой диалог.
+    std::function<
+        std::unique_ptr<base_operation>(gfx::engine&, app_state&, const std::string& node_name)>
+        make_add;
 };
 
 class component_drawer_registry final {
@@ -468,7 +535,7 @@ public:
     auto render(float delta_time) -> void;
 
 private:
-    auto render_header_(ecs::entity ent) const -> void;
+    auto render_header_(ecs::entity ent, const std::string& name, bool composable) -> void;
 
     engine_type* engine_;
     app_state* state_;
@@ -488,11 +555,17 @@ class entity_tree_panel final {
 public:
     using engine_type = gfx::engine;
 
-    entity_tree_panel(engine_type& eng, app_state& st, operation_manager& op_manager);
+    entity_tree_panel(
+        engine_type& eng, app_state& st, operation_manager& op_manager,
+        asset::model_library& library
+    );
 
     auto render(float delta_time) -> void;
 
 private:
+    // Куда бросили узел: на середину строки — внутрь, на кромку — соседом.
+    enum class drop_place : uint8 { before, inside, after };
+
     engine_type* engine_;
     app_state* state_;
     operation_manager* op_manager_;
@@ -500,11 +573,23 @@ private:
     create_entity_modal creation_modal_;
     delete_entity_modal deletion_modal_;
 
+    // Перенос выполняется после обхода дерева: он меняет списки детей, по которым
+    // обход в этот момент идёт.
+    std::optional<move_entity_params> pending_move_;
+
     auto select_(const std::string& name) const -> void;
 
     auto render_entity_node(
-        const std::string& name, const std::unordered_set<ecs::entity>& preview_entities
+        const std::string& name, const std::unordered_set<ecs::entity>& preview_entities,
+        bool parent_hidden
     ) -> void;
+
+    auto render_visibility_toggle_(const std::string& name) -> void;
+    auto render_drag_and_drop_(const std::string& name) -> void;
+
+    [[nodiscard]] auto plan_move_(
+        const std::string& dragged, const std::string& target, drop_place place
+    ) const -> std::optional<move_entity_params>;
 };
 
 }  // namespace vw::sculptor
@@ -564,10 +649,6 @@ private:
     auto render_overwrite_confirmation() -> void;
     auto render_create_form() -> void;
 
-    // Тип документа: он решает, каким набором блоков откроется первый объём, и
-    // уезжает в шапку файла. Пустой — предмет, которому ни то ни другое слово не
-    // подходит.
-    std::string kind_;
     auto create_file_() -> bool;
 
     engine_type* engine_;
@@ -667,32 +748,6 @@ private:
 
 }  // namespace vw::sculptor
 
-// ---- from src/ui/rig_panel.h
-export namespace vw::sculptor {
-
-// Риг документа: имя контракта плюс плоский список целей. Список нигде не
-// хранится — он и есть дерево, поэтому панель собирает его заново.
-class rig_panel final {
-public:
-    using engine_type = gfx::engine;
-
-    rig_panel(engine_type& eng, app_state& st, operation_manager& op_manager);
-
-    auto render(float delta_time) -> void;
-
-private:
-    auto render_name_(ecs::entity root) -> void;
-    auto render_targets_(ecs::entity root) -> void;
-
-    engine_type* engine_;
-    app_state* state_;
-    operation_manager* op_manager_;
-
-    std::string rig_input_;
-};
-
-}  // namespace vw::sculptor
-
 // ---- from src/ui/socket_panel.h
 export namespace vw::sculptor {
 
@@ -769,14 +824,34 @@ public:
     auto render(float delta_time) -> void;
 
 private:
+    // Строка списка слева. Цель рига без дорожки — тоже строка: иначе узел,
+    // которого ещё не анимировали, в таймлайне не выбрать, а дорожка заводится
+    // только для выбранного.
+    struct row {
+        std::string name;
+        const asset::animation_track* track = nullptr;
+        bool is_target                      = false;
+    };
+
+    [[nodiscard]] auto collect_rows_() const -> std::vector<row>;
+
     auto render_toolbar(float clip_duration) -> void;
+    auto render_clip_controls_() -> void;
+    auto render_record_controls_() -> void;
+    auto render_target_hint_() -> void;
+    auto render_close_confirm_popup_() const -> void;
     auto render_tracks() -> void;
     auto render_track_row(
-        const asset::animation_track& track,
+        const row& entry,
         float track_area_width,
         float clip_duration,
         float scroll_offset
     ) -> void;
+    auto render_target_row_(const row& entry, float track_area_width) -> void;
+
+    // Перетаскивание ключа по времени. Само перемещение уезжает в историю один
+    // раз — на отпускании: иначе каждый кадр жеста стал бы шагом отмены.
+    auto update_key_drag_(float clip_duration) -> void;
     auto render_time_ruler(
         vec2f ruler_start,
         float ruler_width,
@@ -809,6 +884,11 @@ private:
         float scroll_offset
     ) const -> void;
 
+    // Меню ключа — одно на панель и рисуется вне дорожек: маркеры обходят по
+    // три канала на дорожку, и открывать оттуда попап значит открывать его
+    // десяток раз за кадр под одним именем.
+    auto render_keyframe_context_menu_() -> void;
+
     auto render_playback_controls(const std::shared_ptr<asset::animation_clip>& clip) -> void;
     auto render_clip_blend_controls_() const -> void;
     auto handle_play(ecs::entity root, const std::shared_ptr<asset::animation_clip>& clip) const -> void;
@@ -827,6 +907,14 @@ private:
 
     create_keyframe_modal create_kf_modal_;
     delete_track_modal delete_track_modal_;
+    save_clip_as_modal save_clip_as_modal_;
+    layer_blend_modal layer_blend_modal_;
+
+    bool need_close_confirm_popup_ = false;
+
+    // Слоёв ровно столько, сколько кнопок: пятого хватает на «поза + верх тела +
+    // лицо + два эффекта», а неограниченный список нечем показать в шапке.
+    static constexpr std::size_t layer_count = 5;
 
     float zoom_percent_  = 100.f;
     float scroll_offset_ = 0.f;
@@ -837,6 +925,20 @@ private:
 
     float prev_cursor_time_     = -1.f;
     bool keyframe_clicked_      = false;
+    bool need_keyframe_menu_    = false;
+
+    // Где на экране лежит нулевое время дорожек и сколько в секунде пикселей:
+    // считается при отрисовке и читается жестом, которому нужен обратный
+    // перевод — из точки курсора во время.
+    float32 track_origin_x_ = 0.f;
+    float32 track_scale_    = 0.f;
+
+    bool key_drag_        = false;
+    bool key_drag_moved_  = false;
+    uint32 drag_key_id_   = asset::invalid_keyframe_id;
+    float32 drag_key_time_ = 0.f;
+    std::string drag_key_track_;
+    asset::animation_property drag_key_property_ = asset::animation_property::position;
     std::string prev_clip_name_;
 };
 
@@ -854,7 +956,45 @@ public:
 private:
     app_state* state_;
 
-    auto render_tool_button(tools tool, std::string_view label, std::string_view shortcut) const -> void;
+    auto render_tool_button(tools tool, std::string_view label) const -> void;
+};
+
+}  // namespace vw::sculptor
+
+// ---- from src/ui/gizmo_panel.h
+export namespace vw::sculptor {
+
+// Режим манипулятора: кнопками, потому что клавиши E/R/T ниоткуда не видны, а
+// понять, что сейчас сделает ручка, нужно до того, как её потянули.
+class gizmo_panel final {
+public:
+    explicit gizmo_panel(app_state& st);
+
+    auto render(float delta_time) const -> void;
+
+private:
+    auto mode_button_(gizmo_mode mode, std::string_view label, command cmd) const -> void;
+
+    app_state* state_;
+};
+
+}  // namespace vw::sculptor
+
+// ---- from src/ui/shortcuts_modal.h
+export namespace vw::sculptor {
+
+// Справка по раскладке: читает ту же таблицу, по которой работают клавиши, и
+// потому не может от неё отстать.
+class shortcuts_modal final {
+public:
+    explicit shortcuts_modal(app_state& st);
+
+    auto open() -> void;
+    auto render() -> void;
+
+private:
+    app_state* state_;
+    bool need_open_ = false;
 };
 
 }  // namespace vw::sculptor

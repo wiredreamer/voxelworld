@@ -131,7 +131,7 @@ auto add_voxel_tool::on_mouse_press(
         add_voxel_params params;
         params.name      = state_->edited_node();
         params.position  = hovered_voxel_;
-        params.new_block = state_->tool.selected_block;
+        params.new_voxel = state_->tool.selected_voxel;
 
         auto op = std::make_unique<add_voxel_operation>(*engine_, *state_, params);
         op_manager_->execute(std::move(op));

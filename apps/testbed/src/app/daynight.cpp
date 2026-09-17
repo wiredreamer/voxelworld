@@ -136,7 +136,7 @@ auto testbed_app::tick_torch_(const vec3f& at) -> void {
     world.system<ecs::transform_system>().modify(torch_).set_position(at);
 
     // Colour and strength re-read every frame rather than set once, so the
-    // lamp sliders move the carried torch and the placed block together.
+    // lamp sliders move the carried torch and the placed voxel together.
     // Two lights that are meant to be the same light must not have two
     // places to be set from.
     const auto& lamp = get_engine().get_renderer().get_block_light_settings();

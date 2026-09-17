@@ -66,7 +66,7 @@ struct mesh_gen_stats {
 
 class mesh_pool final {
 public:
-    explicit mesh_pool(vulkan_context& context, const block_registry& registry,
+    explicit mesh_pool(vulkan_context& context, const voxel_registry& registry,
                        uint32 workers = 0);
     ~mesh_pool();
 
@@ -96,7 +96,7 @@ private:
     auto merge_worker_stats_(mesh_gen_worker_stats& worker) -> void;
 
     vulkan_context* context_;
-    const block_registry* registry_;
+    const voxel_registry* registry_;
     std::unordered_map<vw::asset::model_identity, std::shared_ptr<mesh>> meshes_;
     std::unordered_map<vw::asset::model_identity, std::weak_ptr<vw::asset::model>> model_refs_;
     std::unordered_map<vw::asset::model_identity, std::weak_ptr<vw::asset::chunk_volume>>

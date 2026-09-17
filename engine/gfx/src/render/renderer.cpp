@@ -17,12 +17,12 @@ import :vk;
 namespace vw::gfx {
 
 renderer::renderer(
-    vulkan_context& context, window& window, const block_registry& registry, uint32 mesh_workers
+    vulkan_context& context, window& window, const voxel_registry& registry, uint32 mesh_workers
 )
     : context_(&context)
     , window_(&window)
     , mesh_pool_(context, registry, mesh_workers)
-    , block_registry_(&registry) {
+    , voxel_registry_(&registry) {
     vertex_shader_ =
         std::make_unique<shader>(*context_, "shaders/voxel.vert.spv", shader_type::VERTEX);
     fragment_shader_ =
@@ -97,7 +97,7 @@ renderer::renderer(
     );
 
     palette_buffer_ = std::make_unique<palette_buffer>(
-        *context_, descriptor_pool_, palette_descriptor_set_layout_, *block_registry_
+        *context_, descriptor_pool_, palette_descriptor_set_layout_, *voxel_registry_
     );
 }
 

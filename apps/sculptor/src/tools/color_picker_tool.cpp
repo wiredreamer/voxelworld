@@ -92,7 +92,7 @@ auto color_picker_tool::on_mouse_press(
         return;
     }
 
-    state_->tool.selected_block = model_comp.get_voxel(hovered_voxel_).id;
+    state_->tool.selected_voxel = model_comp.get_voxel(hovered_voxel_);
 }
 
 auto color_picker_tool::on_mouse_release(

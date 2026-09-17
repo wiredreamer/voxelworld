@@ -24,7 +24,7 @@ public:
     auto operator=(world_grid&&) -> world_grid&      = delete;
 
     [[nodiscard]] auto get_voxel(vec3i world_pos) const -> voxel;
-    auto set_voxel(vec3i world_pos, const voxel& v) -> void;
+    auto set_voxel(vec3i world_pos, voxel v) -> void;
 
     [[nodiscard]] auto has_chunk(vec3i chunk_coord) const -> bool;
     [[nodiscard]] auto get_chunk(vec3i chunk_coord) -> chunk*;

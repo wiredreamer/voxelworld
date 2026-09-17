@@ -27,6 +27,12 @@ auto field_label(std::string_view label) -> void {
     ImGui::SameLine(label_column);
 }
 
+auto add_by_operation(component_drawer& drawer) -> void {
+    drawer.add = [make = drawer.make_add](const component_drawer_context& in) {
+        in.ops.execute(make(in.engine, in.state, in.node_name));
+    };
+}
+
 // Углы показываются в градусах, а живут кватернионом, и обратный перевод не
 // однозначен: пока крутят поле, оно обязано показывать набранное, а не то, что
 // получилось после двух преобразований. Отсюда память между кадрами — на один
@@ -125,8 +131,8 @@ auto register_model(component_drawer_registry& drawers) -> void {
         // Набор — только на чтение: он задан конструктором модели и не меняется,
         // а видеть его надо, иначе о том, чем модель красится, сказать нечего.
         const auto model     = model_comp.get_model();
-        const block_set* set = model ?
-            in.engine.get_block_registry().set_of(model->category()) :
+        const voxel_set* set = model ?
+            in.engine.get_voxel_registry().set_of(model->category()) :
             nullptr;
         const std::string_view set_name = set != nullptr ? set->name : "unknown";
 
@@ -152,8 +158,13 @@ auto register_model(component_drawer_registry& drawers) -> void {
         }
 
         // Точка вращения объёма: узел садится на неё, а поддерево её не видит.
+        // Правится она только изнутри .voxm — она часть файла объёма, — а из
+        // префаба видна, чтобы было понятно, вокруг чего узел крутится.
         vec3f pivot = model_comp.get_pivot();
-        if (imgui_drag_vec3f("Pivot", pivot, label_column)) {
+        if (!in.state.ctx.allows_volume_edit()) {
+            field_label("Pivot");
+            ImGui::TextDisabled("%.1f %.1f %.1f", pivot.x, pivot.y, pivot.z);
+        } else if (imgui_drag_vec3f("Pivot", pivot, label_column)) {
             in.ops.execute(
                 std::make_unique<set_pivot_operation>(
                     in.engine, in.state,
@@ -162,7 +173,7 @@ auto register_model(component_drawer_registry& drawers) -> void {
             );
         }
 
-        if (can_trim && ImGui::Button("Trim")) {
+        if (in.state.ctx.allows_volume_edit() && can_trim && ImGui::Button("Trim")) {
             in.ops.execute(
                 std::make_unique<trim_model_operation>(
                     in.engine, in.state, trim_model_params{.name = in.node_name}
@@ -170,13 +181,8 @@ auto register_model(component_drawer_registry& drawers) -> void {
             );
         }
 
-        if (in.state.ctx.in_prefab()) {
-            if (can_trim) {
-                ImGui::SameLine();
-            }
-            if (ImGui::Button("Edit voxels")) {
-                in.state.ctx.enter(edit_context::model(in.node_name));
-            }
+        if (in.state.ctx.in_prefab() && ImGui::Button("Edit")) {
+            in.state.ctx.enter(edit_context::model(in.node_name));
         }
     };
 
@@ -185,7 +191,7 @@ auto register_model(component_drawer_registry& drawers) -> void {
         return std::format("{}x{}x{}", size.x, size.y, size.z);
     };
 
-    // Объёму нужны размер и набор блоков, поэтому строка передаёт работу своему
+    // Объёму нужны размер и набор вокселей, поэтому строка передаёт работу своему
     // диалогу, а не заводит компонент на месте.
     drawer.add = [](const component_drawer_context& in) {
         in.state.ui.need_add_model_for = in.node_name;
@@ -216,7 +222,7 @@ auto register_sockets(component_drawer_registry& drawers) -> void {
 
         // Сами точки правит своя панель: здесь их список занял бы больше места,
         // чем всё остальное вместе.
-        if (!in.state.ui.show_sockets && ImGui::Button("Show sockets")) {
+        if (!in.state.ui.show_sockets && ImGui::Button("Show")) {
             in.state.ui.show_sockets = true;
         }
     };
@@ -227,13 +233,12 @@ auto register_sockets(component_drawer_registry& drawers) -> void {
         return std::format("{} point(s)", count);
     };
 
-    drawer.add = [](const component_drawer_context& in) {
-        in.ops.execute(
-            std::make_unique<add_socket_component_operation>(
-                in.engine, in.state, add_socket_component_params{.name = in.node_name}
-            )
+    drawer.make_add = [](gfx::engine& eng, app_state& st, const std::string& node_name) {
+        return std::make_unique<add_socket_component_operation>(
+            eng, st, add_socket_component_params{.name = node_name}
         );
     };
+    add_by_operation(drawer);
 
     drawer.remove = [](const component_drawer_context& in) {
         in.ops.execute(
@@ -263,16 +268,12 @@ auto register_anim_target(component_drawer_registry& drawers) -> void {
         return in.engine.get_world().get<ecs::animation_target_component>(in.ent).get_name();
     };
 
-    drawer.add = [](const component_drawer_context& in) {
-        in.ops.execute(
-            std::make_unique<add_animation_target_operation>(
-                in.engine, in.state,
-                add_animation_target_params{
-                    .entity_name = in.node_name, .target_name = in.node_name
-                }
-            )
+    drawer.make_add = [](gfx::engine& eng, app_state& st, const std::string& node_name) {
+        return std::make_unique<add_animation_target_operation>(
+            eng, st, add_animation_target_params{.entity_name = node_name, .target_name = node_name}
         );
     };
+    add_by_operation(drawer);
 
     drawer.remove = [](const component_drawer_context& in) {
         in.ops.execute(
@@ -339,7 +340,7 @@ auto register_variant(component_drawer_registry& drawers) -> void {
 
         // Кнопка стоит вне ветки: со списком она нужна ровно так же, как без
         // него, а спрятанная за «пусто» она даёт добавить только первого.
-        if (ImGui::Button("Add candidate...")) {
+        if (ImGui::Button("Add")) {
             in.state.ui.need_add_candidate_for = in.node_name;
         }
 
@@ -372,13 +373,12 @@ auto register_variant(component_drawer_registry& drawers) -> void {
         return std::format("{} of {}", slot.get_selected() + 1, slot.get_candidates().size());
     };
 
-    drawer.add = [](const component_drawer_context& in) {
-        in.ops.execute(
-            std::make_unique<add_variant_slot_operation>(
-                in.engine, in.state, add_variant_slot_params{.name = in.node_name}
-            )
+    drawer.make_add = [](gfx::engine& eng, app_state& st, const std::string& node_name) {
+        return std::make_unique<add_variant_slot_operation>(
+            eng, st, add_variant_slot_params{.name = node_name}
         );
     };
+    add_by_operation(drawer);
 
     drawer.remove = [](const component_drawer_context& in) {
         in.ops.execute(
@@ -437,7 +437,7 @@ auto register_machines(component_drawer_registry& drawers) -> void {
             ImGui::PopID();
         }
 
-        if (ImGui::Button("Add machine...")) {
+        if (ImGui::Button("Add")) {
             in.state.ui.need_add_machine_modal = true;
         }
 
@@ -478,16 +478,49 @@ auto register_rig(component_drawer_registry& drawers) -> void {
     drawer.tag   = "rig";
     drawer.title = "Rig";
 
-    // Ни add, ни remove: риг заводит и переименовывает своя панель, а в составе
-    // узла ему делать нечего — он свойство префаба целиком.
+    // Ни add, ни remove: риг — свойство префаба целиком, и в составе узла ему
+    // делать нечего. Живёт он на корне, так что и секция видна при выбранном
+    // корне — своей панели у него больше нет.
     drawer.draw = [](const component_drawer_context& in) {
-        const auto& rig_name = in.engine.get_world().get<ecs::rig_component>(in.ent).get_name();
+        auto& world          = in.engine.get_world();
+        const auto& rig_name = world.get<ecs::rig_component>(in.ent).get_name();
 
-        field_label("Name");
-        ImGui::TextDisabled("%s", rig_name.empty() ? "unnamed" : rig_name.c_str());
+        // Буфер на один документ: риг у префаба один, и правят всегда его.
+        static std::string input;
 
-        if (!in.state.ui.show_rig && ImGui::Button("Show rig")) {
-            in.state.ui.show_rig = true;
+        imgui_input_text_string("Name", input);
+
+        // Имя уезжает в операцию по окончании правки, а не по каждой букве:
+        // иначе стек undo забьётся посимвольной историей набора.
+        if (ImGui::IsItemDeactivatedAfterEdit()) {
+            if (input != rig_name) {
+                in.ops.execute(
+                    std::make_unique<set_rig_operation>(
+                        in.engine, in.state, set_rig_params{.rig_name = input}
+                    )
+                );
+            }
+        } else if (!ImGui::IsItemActive()) {
+            input = rig_name;
+        }
+
+        if (rig_name.empty()) {
+            ImGui::TextDisabled("no rig: clips are not checked");
+        }
+
+        // Список целей нигде не хранится — он и есть дерево, поэтому собирается
+        // заново на каждый показ.
+        const auto targets = world.system<ecs::animation_system>().collect_targets(in.ent);
+
+        const auto header = std::format("Targets: {}", targets.size());
+        if (ImGui::TreeNode(header.c_str())) {
+            if (targets.empty()) {
+                ImGui::TextDisabled("none: no node carries an animation target");
+            }
+            for (const auto& name : targets) {
+                ImGui::BulletText("%s", name.c_str());
+            }
+            ImGui::TreePop();
         }
     };
 
@@ -605,11 +638,12 @@ auto register_structure(component_drawer_registry& drawers) -> void {
         return structure.get_type().empty() ? std::string{"untyped"} : structure.get_type();
     };
 
-    drawer.add = [](const component_drawer_context& in) {
-        in.ops.execute(std::make_unique<set_structure_operation>(
-            in.engine, in.state, set_structure_params{.name = in.node_name}
-        ));
+    drawer.make_add = [](gfx::engine& eng, app_state& st, const std::string& node_name) {
+        return std::make_unique<set_structure_operation>(
+            eng, st, set_structure_params{.name = node_name}
+        );
     };
+    add_by_operation(drawer);
 
     drawer.remove = [](const component_drawer_context& in) {
         in.engine.get_world()
@@ -658,11 +692,12 @@ auto register_point(
         return value.empty() ? std::string{"unnamed"} : value;
     };
 
-    drawer.add = [kind](const component_drawer_context& in) {
-        in.ops.execute(std::make_unique<set_point_operation>(
-            in.engine, in.state, set_point_params{.name = in.node_name, .kind = kind}
-        ));
+    drawer.make_add = [kind](gfx::engine& eng, app_state& st, const std::string& node_name) {
+        return std::make_unique<set_point_operation>(
+            eng, st, set_point_params{.name = node_name, .kind = kind}
+        );
     };
+    add_by_operation(drawer);
 
     drawer.remove = [kind](const component_drawer_context& in) {
         in.ops.execute(std::make_unique<set_point_operation>(

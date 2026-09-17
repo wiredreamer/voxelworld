@@ -10,9 +10,9 @@ constexpr log::log_category lc_library{"model_library"};
 }  // namespace
 
 model_library::model_library(
-    model_registry& registry, const block_registry& blocks, std::filesystem::path root
+    model_registry& registry, const voxel_registry& voxel_types, std::filesystem::path root
 )
-    : registry_(&registry), blocks_(&blocks), root_(std::move(root)) {}
+    : registry_(&registry), voxel_types_(&voxel_types), root_(std::move(root)) {}
 
 auto model_library::load(
     const asset_ref& ref
@@ -25,7 +25,7 @@ auto model_library::load(
         return it->second;
     }
 
-    voxm_deserializer deserializer{*registry_, *blocks_};
+    voxm_deserializer deserializer{*registry_, *voxel_types_};
     auto result = deserializer.deserialize(path_of(ref));
     if (!result.has_value()) {
         log::warn(lc_library, "failed to load model '{}'", ref.str());

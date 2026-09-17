@@ -15,11 +15,11 @@ import :scene;
 
 export namespace vw::testbed {
 
-// Несомый источник круглый там, где лужа поставленного блока — ромб, поэтому
+// Несомый источник круглый там, где лужа поставленного вокселя — ромб, поэтому
 // одна и та же досягаемость у них накрывает разный пол. Сечение ромба по свету
 // — квадрат площади 2r^2, шара — круг pi*r^2, и сходятся они на r * sqrt(2/pi).
 // Излучение четырнадцать поэтому несёт одиннадцать вокселей, а не четырнадцать,
-// и лужа на земле выходит того размера, какой дал бы блок.
+// и лужа на земле выходит того размера, какой дал бы воксель.
 inline constexpr float32 round_reach = 0.8f;
 
 // Что делает левая кнопка при захваченном курсоре. По умолчанию ничего: это
@@ -31,23 +31,23 @@ enum class edit_tool : int32 {
     remove,
 };
 
-struct block_choice {
+struct voxel_choice {
     const char* name;
-    block_id id;
+    voxel id;
 };
 
 // Короткое меню, а не все сорок восемь цветов палитры. Два светящих идут
 // первыми, потому что ради них всё и затевалось; остального хватает, чтобы
 // построить что-нибудь, на что этот свет упадёт.
-constexpr std::array<block_choice, 8> block_menu{{
-    {"glowstone (emits 14)", blocks::terrain::glowstone},
-    {"lava (emits 15)", blocks::terrain::lava},
-    {"stone", blocks::terrain::stone[1]},
-    {"dark stone", blocks::terrain::stone_deep[1]},
-    {"grass", blocks::terrain::grass_dry[2]},
-    {"dirt", blocks::terrain::dirt[2]},
-    {"sand", blocks::terrain::sand[1]},
-    {"white", blocks::terrain::snow[2]},
+constexpr std::array<voxel_choice, 8> voxel_menu{{
+    {"glowstone (emits 14)", voxels::world::glowstone},
+    {"lava (emits 15)", voxels::world::lava},
+    {"stone", voxels::world::stone[1]},
+    {"dark stone", voxels::world::stone_deep[1]},
+    {"grass", voxels::world::grass_dry[2]},
+    {"dirt", voxels::world::dirt[2]},
+    {"sand", voxels::world::sand[1]},
+    {"white", voxels::world::snow[2]},
 }};
 
 // Воксель под прицелом и пустой перед ним, в воксельных координатах, а не в
@@ -136,9 +136,9 @@ public:
         return benching_;
     }
 
-    // Куб светящих блоков, вкопанный в землю под камерой: сцены ставят им своё
+    // Куб светящих вокселей, вкопанный в землю под камерой: сцены ставят им своё
     // содержимое, а UI — по кнопке.
-    auto drop_emitter(block_id id, int32 radius) -> void;
+    auto drop_emitter(voxel id, int32 radius) -> void;
 
 private:
     auto setup_world_grid() -> void;

@@ -84,6 +84,7 @@ const std::vector<std::unique_ptr<combined_buffer>>& combined_buffer_pool::get_b
 
 auto combined_buffer_pool::process_destroyed_(world_type& world) -> void {
     for (auto ent : world.destroyed()) {
+        hidden_entities_.erase(ent);
         if (entity_buffer_infos_.contains(ent)) {
             auto& info = entity_buffer_infos_[ent];
             touched_bounds_.push_back(info.bounds);
@@ -242,6 +243,10 @@ auto combined_buffer_pool::update_meshes_(
         const bool has_transform = world.has<transform_component>(ent);
 
         if (!has_model || !has_transform) {
+            // Флаг скрытия принадлежал снятой модели. Вернувшаяся модель видима, и
+            // ветка трансформа его не перечитает, пока трансформ не тронут.
+            hidden_entities_.erase(ent);
+
             if (entity_buffer_infos_.contains(ent)) {
                 auto& buffer_info = entity_buffer_infos_[ent];
                 auto swapped = buffers_[buffer_info.buffer_index]->free(ent);
@@ -402,6 +407,23 @@ auto combined_buffer_pool::evict_uploaded_(
     }
 }
 
+// Скрытые объёмы гасятся тем же флагом, что и отсечённые чанки: геометрия остаётся
+// в буфере, и вернуть объём — значит лишь снова поднять флаг, а не заказывать меш,
+// копия которого на CPU давно отпущена. Обходится только список скрытых, а не все
+// модели: в мире их — каждый чанк.
+auto combined_buffer_pool::hide_marked_() -> void {
+    for (const auto ent : hidden_entities_) {
+        const auto it = entity_buffer_infos_.find(ent);
+        if (it == entity_buffer_infos_.end()) {
+            continue;
+        }
+
+        const auto buffer = it->second.buffer_index;
+        const auto slot   = buffers_[buffer]->get_entity_allocation(ent).instance_index;
+        visibility_flags_[buffer][slot] = 0U;
+    }
+}
+
 auto combined_buffer_pool::update_chunk_visibility_(
     world_type& world, const vec3f& camera_pos
 ) -> void {
@@ -411,6 +433,8 @@ auto combined_buffer_pool::update_chunk_visibility_(
     for (std::size_t i = 0; i < buffers_.size(); ++i) {
         visibility_flags_[i].assign(buffers_[i]->get_stats().instance_capacity, 1U);
     }
+
+    hide_marked_();
 
     stats_.chunk_cull = chunk_cull_stats{};
 
@@ -611,6 +635,14 @@ auto combined_buffer_pool::update_transforms_(
 
     for (std::size_t i = 0; i < entities_to_process_.size(); ++i) {
         entity ent = entities_to_process_[i];
+
+        // До проверки буфера: скрыть можно и то, что ещё не загружено, и флаг
+        // обязан дождаться его появления.
+        if (world.has<model_component>(ent) && !world.get<model_component>(ent).is_visible()) {
+            hidden_entities_.insert(ent);
+        } else {
+            hidden_entities_.erase(ent);
+        }
 
         if (!entity_buffer_infos_.contains(ent)) {
             continue;

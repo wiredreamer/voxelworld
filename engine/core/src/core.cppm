@@ -9,5 +9,5 @@ export import :transform;
 export import :color;
 export import :math;
 export import :spatial;
-export import :blocks;
-export import :blocks.catalog;
+export import :voxels;
+export import :voxels.catalog;

@@ -7,16 +7,98 @@ module vw.sculptor;
 import std;
 
 import vw.core;
+import vw.asset;
 import vw.ecs;
 import vw.world;
 import vw.platform;
 import vw.gfx;
 
 namespace vw::sculptor {
+namespace {
 
+constexpr float32 panel_margin = 10.f;
+
+auto slot_offset(app_state& state, panel_slot slot) -> float32& {
+    switch (slot) {
+        case panel_slot::left: return state.ui.left_offset;
+        case panel_slot::right: return state.ui.right_offset;
+        case panel_slot::bottom:
+        case panel_slot::footer: break;
+    }
+    return state.ui.bottom_offset;
+}
+
+}  // namespace
+
+auto begin_panel(
+    app_state& state, panel_slot slot, std::string_view title, bool* open, bool title_bar
+) -> void {
+    const ImGuiViewport* viewport = ImGui::GetMainViewport();
+    const float32 offset          = slot_offset(state, slot);
+
+    ImVec2 pos;
+    ImVec2 pivot;
+
+    switch (slot) {
+        case panel_slot::left:
+            pos   = {viewport->WorkPos.x + panel_margin, viewport->WorkPos.y + offset + panel_margin};
+            pivot = {0.f, 0.f};
+            break;
+        case panel_slot::right:
+            pos = {
+                viewport->WorkPos.x + viewport->WorkSize.x - panel_margin,
+                viewport->WorkPos.y + offset + panel_margin
+            };
+            pivot = {1.f, 0.f};
+            break;
+        case panel_slot::bottom:
+        case panel_slot::footer:
+            pos = {
+                viewport->WorkPos.x + panel_margin,
+                viewport->WorkPos.y + viewport->WorkSize.y - offset - panel_margin
+            };
+            pivot = {0.f, 1.f};
+            break;
+    }
+
+    ImGui::SetNextWindowPos(pos, ImGuiCond_Always, pivot);
+
+    ImGuiWindowFlags flags =                //
+        ImGuiWindowFlags_NoCollapse |       //
+        ImGuiWindowFlags_NoSavedSettings |  //
+        ImGuiWindowFlags_NoMove;
+
+    if (!title_bar) {
+        flags |= ImGuiWindowFlags_NoTitleBar;
+    }
+
+    // Подвал держит ширину окна и высоту, заданную пользователем: содержимое
+    // таймлайна от кадра к кадру меняется, и авторазмер дёргал бы его по высоте.
+    if (slot == panel_slot::footer) {
+        ImGui::SetNextWindowSize(
+            ImVec2{
+                viewport->WorkSize.x - panel_margin * 2.f,
+                state.ui.bottom_panel_height - panel_margin
+            },
+            ImGuiCond_Always
+        );
+        flags |= ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoBringToFrontOnFocus;
+    } else {
+        flags |= ImGuiWindowFlags_AlwaysAutoResize;
+    }
+
+    ImGui::Begin(title.data(), open, flags);
+}
+
+auto end_panel(
+    app_state& state, panel_slot slot
+) -> void {
+    slot_offset(state, slot) += ImGui::GetWindowHeight() + panel_margin;
+    ImGui::End();
+}
 
 auto imgui_input_text_string(
-    std::string_view label, std::string& value
+    std::string_view label, std::string& value, float32 label_column
 ) -> void {
     constexpr std::size_t max_length = 64;
     std::array<char, max_length> buffer{};
@@ -29,7 +111,7 @@ auto imgui_input_text_string(
 
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted(label.data(), label.data() + label.size());
-    ImGui::SameLine();
+    ImGui::SameLine(label_column);
 
     const auto hidden_label = std::format("##{}", label);
     if (ImGui::InputText(hidden_label.c_str(), buffer.data(), max_length)) {
@@ -101,37 +183,67 @@ auto imgui_drag_vec3f(std::string_view label, vec3f& vec, float label_offset) ->
 
 auto selected_model_category(
     gfx::engine& eng, const app_state& state
-) -> block_category {
+) -> voxel_category {
     const auto it = state.scene.name_to_entity.find(state.scene.selected_name);
     if (it == state.scene.name_to_entity.end()) {
-        return state.tool.selected_block.category();
+        return state.tool.selected_voxel.category();
     }
 
     const auto& world = eng.get_world();
     if (!world.has<ecs::model_component>(it->second)) {
-        return state.tool.selected_block.category();
+        return state.tool.selected_voxel.category();
     }
 
     const auto model = world.get<ecs::model_component>(it->second).get_model();
-    return model ? model->category() : state.tool.selected_block.category();
+    return model ? model->category() : state.tool.selected_voxel.category();
 }
 
-auto imgui_block_set_combo(
-    std::string_view label, const block_registry& registry, block_category& category
+auto collect_asset_refs(
+    const std::filesystem::path& dir, std::string_view extension
+) -> std::vector<asset::asset_ref> {
+    namespace fs = std::filesystem;
+
+    std::vector<asset::asset_ref> refs;
+
+    std::error_code ec;
+    if (!fs::exists(dir, ec)) {
+        return refs;
+    }
+
+    for (const auto& entry : fs::recursive_directory_iterator(dir, ec)) {
+        if (!entry.is_regular_file() || entry.path().extension() != extension) {
+            continue;
+        }
+
+        // Ссылка отсчитывается от корня ассетов, а не от каталога, в котором
+        // нашли файл: в файле документа лежит именно она.
+        const auto relative =
+            fs::relative(entry.path(), fs::path{app_state::asset_root_name}, ec);
+        refs.emplace_back(
+            ec ? entry.path().filename().generic_string() : relative.generic_string()
+        );
+    }
+
+    return refs;
+}
+
+auto imgui_voxel_set_combo(
+    std::string_view label, const voxel_registry& registry, voxel_category& category,
+    float32 label_column
 ) -> void {
-    const block_set* current = registry.set_of(category);
+    const voxel_set* current = registry.set_of(category);
     const std::string_view preview = current != nullptr ? current->name : "unknown";
 
     ImGui::AlignTextToFramePadding();
     ImGui::TextUnformatted(label.data(), label.data() + label.size());
-    ImGui::SameLine();
+    ImGui::SameLine(label_column);
 
     const auto hidden_label = std::format("##{}", label);
     if (!ImGui::BeginCombo(hidden_label.c_str(), std::string{preview}.c_str())) {
         return;
     }
 
-    for (const block_set& set : registry.sets()) {
+    for (const voxel_set& set : registry.sets()) {
         const bool selected = set.category == category;
         if (ImGui::Selectable(std::string{set.name}.c_str(), selected)) {
             category = set.category;

@@ -135,6 +135,7 @@ private:
     auto update_meshes_(world_type& world, const vec3f& camera_pos, mesh_pool& pool) -> void;
     auto update_transforms_(world_type& world) -> void;
     auto update_chunk_visibility_(world_type& world, const vec3f& camera_pos) -> void;
+    auto hide_marked_() -> void;
     auto evict_uploaded_(world_type& world, mesh_pool& pool) -> void;
 
     vulkan_context* context_;
@@ -168,6 +169,11 @@ private:
 
     bool chunk_cull_enabled_ = false;
     std::vector<std::vector<uint32>> visibility_flags_;
+
+    // Сущности, чья модель скрыта. Ведётся по смене трансформа — по тому каналу
+    // флаг и заявляется, — чтобы флаги видимости не обходили каждый кадр все
+    // модели мира ради пары скрытых.
+    std::unordered_set<entity> hidden_entities_;
 
     // Связность каждого смешенного чанка, включая те, у которых геометрии нет
     // вовсе. Сплошная порода даёт пустой меш и до буфера не доходит, но именно об

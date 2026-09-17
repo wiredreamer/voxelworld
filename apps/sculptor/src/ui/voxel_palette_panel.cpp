@@ -29,13 +29,13 @@ constexpr int32 swatches_per_row = 6;
 }  // namespace
 
 
-block_palette_panel::block_palette_panel(
+voxel_palette_panel::voxel_palette_panel(
     engine_type& eng, app_state& st
 )
     : engine_(&eng), state_(&st) {}
 
-auto block_palette_panel::swatch_(
-    const block_type& block, int32 index_in_row
+auto voxel_palette_panel::swatch_(
+    const voxel_type& type, int32 index_in_row
 ) -> void {
     // Перенос ставится перед образцом, а не после: иначе последний в ряду
     // утащил бы на свою строку то, что идёт за палитрой.
@@ -43,7 +43,7 @@ auto block_palette_panel::swatch_(
         ImGui::SameLine(0, 0);
     }
 
-    ImGui::PushID(static_cast<int>(block.slot.value));
+    ImGui::PushID(static_cast<int>(type.slot.value));
 
     constexpr ImGuiColorEditFlags btn_flags =  //
         ImGuiColorEditFlags_NoAlpha |          //
@@ -51,51 +51,37 @@ auto block_palette_panel::swatch_(
         ImGuiColorEditFlags_NoBorder;
 
     if (ImGui::ColorButton(
-            "##block", to_imvec4(block.material.clr), btn_flags, ImVec2(30.0f, 30.0f)
+            "##voxel", to_imvec4(type.material.clr), btn_flags, ImVec2(30.0f, 30.0f)
         )) {
-        state_->tool.selected_block = block.id;
+        state_->tool.selected_voxel = type.id;
     }
-    ImGui::SetItemTooltip("%.*s", static_cast<int>(block.name.size()), block.name.data());
+    ImGui::SetItemTooltip("%.*s", static_cast<int>(type.name.size()), type.name.data());
 
     ImGui::PopID();
 }
 
-auto block_palette_panel::render(
+auto voxel_palette_panel::render(
     [[maybe_unused]] float delta_time
 ) -> void {
-    const block_registry& registry = engine_->get_block_registry();
-    const block_category shown     = selected_model_category(*engine_, *state_);
+    const voxel_registry& registry = engine_->get_voxel_registry();
+    const voxel_category shown     = selected_model_category(*engine_, *state_);
 
     // Кисть помнится на набор, и пишется она каждый кадр: так запоминается
     // последний выбор, чем бы он ни был сделан — панелью, пипеткой или
     // открытием файла.
-    state_->tool.brush_of_set[state_->tool.selected_block.category().value] =
-        state_->tool.selected_block;
+    state_->tool.brush_of_set[state_->tool.selected_voxel.category().value] =
+        state_->tool.selected_voxel;
 
     // Кисть, оставшаяся от модели другого набора, в текущую не ложится вовсе —
     // и уронила бы движок на первом же мазке. Поэтому она переезжает вместе с
     // панелью, а не проверяется на каждом инструменте по отдельности.
-    if (state_->tool.selected_block.category() != shown) {
-        state_->tool.selected_block = state_->tool.brush_for(shown, registry);
+    if (state_->tool.selected_voxel.category() != shown) {
+        state_->tool.selected_voxel = state_->tool.brush_for(shown, registry);
     }
 
-    ImGuiViewport* viewport = ImGui::GetMainViewport();
-    ImVec2 window_pos       = ImVec2(
-        viewport->WorkPos.x + 10,
-        viewport->WorkPos.y + viewport->WorkSize.y  //
-            - state_->ui.left_bottom_voffset        //
-            - 10
-    );
-    ImGui::SetNextWindowPos(window_pos, ImGuiCond_Always, ImVec2(0.0f, 1.0f));
+    begin_panel(*state_, panel_slot::bottom, "Voxel Palette");
 
-    ImGuiWindowFlags window_flags =         //
-        ImGuiWindowFlags_NoSavedSettings |  //
-        ImGuiWindowFlags_NoMove |           //
-        ImGuiWindowFlags_AlwaysAutoResize;
-
-    ImGui::Begin("Block Palette", nullptr, window_flags);
-
-    const block_type& selected = registry.get(state_->tool.selected_block);
+    const voxel_type& selected = registry.get(state_->tool.selected_voxel);
     const color selected_color = selected.material.clr;
 
     ImGui::ColorButton(
@@ -124,10 +110,10 @@ auto block_palette_panel::render(
     ImGui::Separator();
     ImGui::Spacing();
 
-    const block_set* set = registry.set_of(shown);
+    const voxel_set* set = registry.set_of(shown);
 
     if (set != nullptr) {
-        for (const block_group& group : set->groups) {
+        for (const voxel_group& group : set->groups) {
             ImGui::SeparatorText(std::string{group.name}.c_str());
 
             // Нулевой отступ только вокруг образцов: рампа обязана читаться
@@ -135,11 +121,11 @@ auto block_palette_panel::render(
             ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
             int32 in_row = 0;
             for (uint8 offset = 0; offset < group.count; ++offset) {
-                const block_type& block = registry.get(group.at(offset));
-                if (block.slot == missing_block_slot) {
+                const voxel_type& type = registry.get(group.at(offset));
+                if (type.slot == missing_voxel_slot) {
                     continue;
                 }
-                swatch_(block, in_row);
+                swatch_(type, in_row);
                 ++in_row;
             }
             ImGui::PopStyleVar();
@@ -147,22 +133,20 @@ auto block_palette_panel::render(
     } else {
         // Набор, о разделах которого каталог не знает: показать всё равно есть
         // что — списком, — а придумывать за него разбиение панель не станет.
-        ImGui::SeparatorText("blocks");
+        ImGui::SeparatorText("voxels");
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
         int32 in_row = 0;
-        for (const block_type& block : registry.all()) {
-            if (block.id == blocks::air || block.id.category() != shown) {
+        for (const voxel_type& type : registry.all()) {
+            if (type.id == voxels::air || type.id.category() != shown) {
                 continue;
             }
-            swatch_(block, in_row);
+            swatch_(type, in_row);
             ++in_row;
         }
         ImGui::PopStyleVar();
     }
 
-    state_->ui.left_bottom_voffset += ImGui::GetWindowHeight() + 10.f;
-
-    ImGui::End();
+    end_panel(*state_, panel_slot::bottom);
 }
 
 

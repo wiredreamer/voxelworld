@@ -89,16 +89,16 @@ auto paint_tool::on_mouse_press(
 
         const auto& model_comp = world.get<ecs::model_component>(ent);
         const bool has_model   = model_comp.has_model();
-        const bool is_same_block =
-            has_model && model_comp.get_voxel(hovered_voxel_).id == state_->tool.selected_block;
-        if (is_same_block) {
+        const bool is_same_voxel =
+            has_model && model_comp.get_voxel(hovered_voxel_) == state_->tool.selected_voxel;
+        if (is_same_voxel) {
             return;
         }
 
         paint_voxel_params params;
         params.name      = state_->edited_node();
         params.position  = hovered_voxel_;
-        params.new_block = state_->tool.selected_block;
+        params.new_voxel = state_->tool.selected_voxel;
 
         auto op = std::make_unique<paint_voxel_operation>(*engine_, *state_, params);
         op_manager_->execute(std::move(op));

@@ -27,7 +27,6 @@ auto new_file_modal::render(
         state_->ui.need_new_file_modal = false;
 
         filename_.clear();
-        kind_.clear();
         error_.clear();
         need_overwrite_confirmation_ = false;
         has_overwrite_confirmation_  = false;
@@ -71,22 +70,6 @@ auto new_file_modal::render_create_form() -> void {
 
     imgui_input_text_string("Filename", filename_);
 
-    constexpr std::array<std::string_view, 3> kinds{
-        std::string_view{}, asset::kinds::character, asset::kinds::structure
-    };
-
-    const auto label = kind_.empty() ? "item" : kind_.c_str();
-
-    if (ImGui::BeginCombo("Kind", label)) {
-        for (const auto kind : kinds) {
-            const bool selected = kind == kind_;
-            if (ImGui::Selectable(kind.empty() ? "item" : std::string{kind}.c_str(), selected)) {
-                kind_ = std::string{kind};
-            }
-        }
-        ImGui::EndCombo();
-    }
-
     ImGui::Spacing();
 
     if (filename_.empty()) {
@@ -128,12 +111,7 @@ auto new_file_modal::create_file_() -> bool {
         return false;
     }
 
-    // Шапка пишется сразу: документ без единого узла всё равно уже знает, чем он
-    // будет, и переоткрытие не должно об этом забыть.
     file << std::format("# Vox File Version {}\n", asset::vox_file_version);
-    if (!kind_.empty()) {
-        file << std::format("kind {}\n", kind_);
-    }
     file.close();
 
     state_->reset(engine_->get_world());
@@ -142,8 +120,6 @@ auto new_file_modal::create_file_() -> bool {
     state_->ui.need_startup_modal = false;
 
     state_->file.filename = filepath.filename().string();
-    state_->file.kind     = kind_;
-    state_->apply_kind_defaults(engine_->get_block_registry());
 
     return true;
 }

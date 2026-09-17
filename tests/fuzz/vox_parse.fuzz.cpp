@@ -22,7 +22,7 @@ volatile vw::uint32 sink = 0;
 extern "C" auto LLVMFuzzerTestOneInput(const vw::uint8* data, std::size_t size) -> int {
     // Реестр строится один раз на процесс: он неизменен, а его конструктор
     // заметно дороже самого разбора.
-    static const vw::block_registry registry;
+    static const vw::voxel_registry registry;
 
     // Лог гасится там же, разом на весь прогон: почти каждый вход для
     // разборщика — неизвестная команда, и запись о ней стоит дороже самого

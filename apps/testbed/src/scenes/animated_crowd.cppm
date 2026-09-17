@@ -77,22 +77,22 @@ private:
         std::string_view model;
         vec3i size;
         vec3f rest;
-        block_id fill;
+        voxel fill;
         float32 lift;
         float32 peak;
     };
 
     static constexpr std::array<body_part, 4> parts{{
         {.target = "body", .model = "crowd_body", .size = {6, 12, 4},
-         .rest = {-3.0f, 0.0f, -2.0f}, .fill = blocks::palette::blue[2], .lift = 1.0f, .peak = 0.30f},
+         .rest = {-3.0f, 0.0f, -2.0f}, .fill = voxels::palette::blue[2], .lift = 1.0f, .peak = 0.30f},
         {.target = "head", .model = "crowd_head", .size = {6, 6, 6},
-         .rest = {-3.0f, 13.0f, -3.0f}, .fill = blocks::terrain::dirt[2], .lift = 2.0f, .peak = 0.45f},
+         .rest = {-3.0f, 13.0f, -3.0f}, .fill = voxels::world::dirt[2], .lift = 2.0f, .peak = 0.45f},
         // Обе ладони делят одну модель: их две штуки на тело, и вторая копия
         // тех же двухсот вокселей ничего не показывает.
         {.target = "hand_left", .model = "crowd_hand", .size = {3, 8, 3},
-         .rest = {-7.0f, 2.0f, -1.5f}, .fill = blocks::terrain::grass[2], .lift = 6.0f, .peak = 0.15f},
+         .rest = {-7.0f, 2.0f, -1.5f}, .fill = voxels::world::grass[2], .lift = 6.0f, .peak = 0.15f},
         {.target = "hand_right", .model = "crowd_hand", .size = {3, 8, 3},
-         .rest = {4.0f, 2.0f, -1.5f}, .fill = blocks::terrain::grass[2], .lift = 6.0f, .peak = 0.60f},
+         .rest = {4.0f, 2.0f, -1.5f}, .fill = voxels::world::grass[2], .lift = 6.0f, .peak = 0.60f},
     }};
 
     // Тело и место, куда его уронили. Тела здесь должны стоять, поэтому снос от

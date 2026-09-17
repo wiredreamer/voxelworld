@@ -173,8 +173,8 @@ private:
     [[nodiscard]] auto stone_height_at(int32 wx, int32 wz) const -> int32;
     [[nodiscard]] auto soil_depth_at(int32 wx, int32 wz, int32 stone, float32 slope) const -> int32;
 
-    [[nodiscard]] auto rock_block_at(int32 wy) const -> block_id;
-    [[nodiscard]] auto block_at(int32 wy, int32 stone_top, int32 surface_top) const -> block_id;
+    [[nodiscard]] auto rock_voxel_at(int32 wy) const -> voxel;
+    [[nodiscard]] auto voxel_at(int32 wy, int32 stone_top, int32 surface_top) const -> voxel;
 
     // stone_height_at — это примерно двадцать вызовов noise2d, и одни и те же
     // (x, z) раньше пересчитывались по разу на каждый чанк колонки. Здесь они

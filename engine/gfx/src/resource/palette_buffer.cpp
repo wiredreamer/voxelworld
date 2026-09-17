@@ -44,30 +44,30 @@ palette_buffer::palette_buffer(
     vulkan_context& context,
     vk::DescriptorPool descriptor_pool,
     vk::DescriptorSetLayout descriptor_set_layout,
-    const block_registry& registry
+    const voxel_registry& registry
 )
     : context_(&context)
     , descriptor_pool_(descriptor_pool)
     , descriptor_set_layout_(descriptor_set_layout) {
-    // Ровно по числу блоков в реестре, а не по всему, что влезает в слот: записи
+    // Ровно по числу вокселей в реестре, а не по всему, что влезает в слот: записи
     // разложены по слотам, слот квада приходит оттуда же, и за конец списка
-    // обратиться неоткуда. Нулевая запись — заглушка для блока вне каталога, и
+    // обратиться неоткуда. Нулевая запись — заглушка для вокселя вне каталога, и
     // она кричаще-розовая намеренно.
     //
-    // Альфа несёт то, насколько ярко блок рисует сам себя. Раньше там стояла
+    // Альфа несёт то, насколько ярко воксель рисует сам себя. Раньше там стояла
     // константная единица, которую никто не читал, поэтому слагаемое собственного
     // свечения не стоит ни второго буфера, ни второго обращения, ни лишнего байта:
     // вершинный шейдер и так выбирает этот vec4 и выбрасывал четвёртую составляющую.
-    const std::span<const block_type> blocks = registry.all();
+    const std::span<const voxel_type> types = registry.all();
 
     std::vector<vec4f> palette_data;
-    palette_data.reserve(blocks.size());
-    for (const block_type& block : blocks) {
-        const color clr = block.material.clr;
+    palette_data.reserve(types.size());
+    for (const voxel_type& type : types) {
+        const color clr = type.material.clr;
 
         palette_data.push_back(vec4f{
             decode(clr.r()), decode(clr.g()), decode(clr.b()),
-            static_cast<float32>(block.material.glow) / 255.0f
+            static_cast<float32>(type.material.glow) / 255.0f
         });
     }
 

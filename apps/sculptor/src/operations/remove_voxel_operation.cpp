@@ -22,9 +22,9 @@ auto remove_voxel_operation::execute() -> void {
     auto& model_sys = world.system<ecs::model_system>();
 
     auto& model_comp = world.get<ecs::model_component>(ent);
-    previous_block_  = model_comp.get_voxel(params_.position).id;
+    previous_voxel_  = model_comp.get_voxel(params_.position);
 
-    model_sys.modify(ent).set_voxel(params_.position, empty_voxel);
+    model_sys.modify(ent).set_voxel(params_.position, voxels::air);
     state_->file.has_unsaved_changes = true;
 }
 
@@ -34,7 +34,7 @@ auto remove_voxel_operation::undo() -> void {
     auto& world        = engine_->get_world();
     auto& model_sys = world.system<ecs::model_system>();
 
-    model_sys.modify(ent).set_voxel(params_.position, voxel{previous_block_});
+    model_sys.modify(ent).set_voxel(params_.position, previous_voxel_);
     state_->file.has_unsaved_changes = true;
 }
 

@@ -30,7 +30,7 @@ public:
     using combined_buffer_pool_type = combined_buffer_pool;
     using light_buffer_type         = light_buffer;
 
-    renderer(vulkan_context& context, window& window, const block_registry& registry,
+    renderer(vulkan_context& context, window& window, const voxel_registry& registry,
              uint32 mesh_workers = 0);
     ~renderer();
 
@@ -342,8 +342,8 @@ private:
     std::unique_ptr<light_grid> light_grid_;
     std::unique_ptr<blob_buffer> blob_buffer_;
 
-    // Palette buffer для block colors
-    const block_registry* block_registry_;
+    // Palette buffer для цветов вокселей
+    const voxel_registry* voxel_registry_;
     std::unique_ptr<palette_buffer> palette_buffer_;
 
     // Отсев по фрустуму на GPU

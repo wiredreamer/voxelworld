@@ -16,9 +16,9 @@ constexpr std::string_view identity_transform = "0 0 0\t0 0 0\t1 1 1";
 
 struct structure_fixture final {
     world w;
-    block_registry blocks;
+    voxel_registry voxel_types;
     asset::vox_parser_plain parser;
-    asset::model_library library{w.resource<asset::model_registry>(), blocks, "."};
+    asset::model_library library{w.resource<asset::model_registry>(), voxel_types, "."};
 
     [[nodiscard]] auto instantiate(const asset::vox_prefab_data& prefab)
         -> vox_deserializer::result {
@@ -55,7 +55,6 @@ TEST_CASE("structure metadata survives a round trip", "[structure]") {
 
     asset::vox_prefab_data prefab;
     prefab.root_name = "root";
-    prefab.kind      = std::string{asset::kinds::structure};
 
     auto root = make_node("root", "");
     root.add("structure")
@@ -147,30 +146,4 @@ TEST_CASE("furniture and connection points are ordinary nodes", "[structure]") {
                             )->find("furniture");
     REQUIRE(table_tag != nullptr);
     REQUIRE(table_tag->value == "table");
-}
-
-// kind в мир не едет: от него не меняется ни один компонент, поэтому писателю он
-// приходит параметром — как имена сущностей.
-TEST_CASE("the document kind is a header field, not a component", "[structure]") {
-    structure_fixture fx;
-
-    asset::vox_prefab_data prefab;
-    prefab.root_name = "root";
-    prefab.kind      = std::string{asset::kinds::structure};
-    prefab.entities.push_back(make_node("root", ""));
-
-    const auto res = fx.instantiate(prefab);
-    REQUIRE(res.kind == asset::kinds::structure);
-
-    asset::vox_writer_plain writer;
-    vox_serializer plain{
-        fx.w, writer, res.name_to_entity.at("root"), {.entity_names = res.entity_to_name}
-    };
-    REQUIRE(plain.extract().kind.empty());
-
-    vox_serializer told{
-        fx.w, writer, res.name_to_entity.at("root"),
-        {.entity_names = res.entity_to_name, .kind = std::string{asset::kinds::structure}}
-    };
-    REQUIRE(told.extract().kind == asset::kinds::structure);
 }

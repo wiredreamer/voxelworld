@@ -61,13 +61,13 @@ constexpr std::string_view bare_head =
 struct subtree_fixture final {
     temp_assets assets;
     world w;
-    block_registry blocks;
+    voxel_registry voxel_types;
     asset::vox_parser_plain parser;
     asset::model_library library;
 
     explicit subtree_fixture(std::string_view name)
         : assets(name)
-        , library(w.resource<asset::model_registry>(), blocks, assets.root.string()) {
+        , library(w.resource<asset::model_registry>(), voxel_types, assets.root.string()) {
         assets.write("prefabs/head_orc.vox", orc_head);
         assets.write("prefabs/head_bare.vox", bare_head);
     }

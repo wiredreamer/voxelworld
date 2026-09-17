@@ -67,7 +67,7 @@ auto file_service::write_(
         engine_->get_world(),
         writer,
         state_->scene.name_to_entity.at(state_->scene.root_name),
-        {.entity_names = state_->scene.entity_to_name, .kind = state_->file.kind}
+        {.entity_names = state_->scene.entity_to_name}
     };
 
     if (!serializer.serialize(library_->path_of(prefab_ref))) {

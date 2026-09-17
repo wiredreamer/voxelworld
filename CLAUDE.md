@@ -9,7 +9,7 @@
 `vw.sculptor` и `vw.arena`. Заголовков движка не существует, только `import`.
 
 - **vw.core** (`engine/core/src/`, таргет `vw_core`) — типы, math, transform,
-  лог, блоки, геометрия `vw::spatial`; каталоги `types/ math/ utils/ spatial/ blocks/ log/`
+  лог, воксели, геометрия `vw::spatial`; каталоги `types/ math/ utils/ spatial/ voxels/ log/`
 - **vw.asset** (`engine/asset/src/`, таргет `vw_asset`) — модели, анимации,
   форматы `.vox`/`.voxa`, хранилище ассетов. Зависит только от `vw.core` и
   ничего не знает про ECS; каталоги `model/ anim/ serial/`
@@ -25,7 +25,7 @@
   каталоги `camera/ resource/ render/ debug/ engine/`
 
 - **Apps** — `apps/sculptor/` (модуль `vw.sculptor`, партиции `:state`,
-  `:operations`, `:services`, `:tools`, `:ui`, `:app`), `apps/testbed/`
+  `:shortcuts`, `:operations`, `:services`, `:tools`, `:ui`, `:app`), `apps/testbed/`
   (`vw.testbed`: стенд `:app`, сцена на партицию в `:scenes.*`, пути камеры
   `:cameras`, приборы `:probes.*`), `apps/arena/` (`vw.arena`)
 - **Shaders** — GLSL → SPIR-V (`shaders/`)

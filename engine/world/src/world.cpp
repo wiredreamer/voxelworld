@@ -14,9 +14,9 @@ auto make_systems(world& w, std::index_sequence<Is...> /*unused*/) -> Tuple {
 }  // namespace
 
 world::world(
-    const block_registry& blocks
+    const voxel_registry& voxel_types
 )
-    : blocks_{&blocks}
+    : voxel_types_{&voxel_types}
     , systems_{make_systems<systems>(
           *this, std::make_index_sequence<std::tuple_size_v<systems>>{})} {
     const uint32 transform_id = component_id_of<transform_component>();

@@ -15,38 +15,6 @@ import vw.gfx;
 
 namespace vw::sculptor {
 
-namespace fs = std::filesystem;
-
-namespace {
-
-// Ссылка отсчитывается от корня ассетов, а не от каталога, в котором нашли файл:
-// в файле префаба лежит именно она.
-auto ref_of(const fs::path& file) -> asset::asset_ref {
-    std::error_code ec;
-    const auto relative = fs::relative(file, fs::path{app_state::asset_root_name}, ec);
-    if (ec) {
-        return asset::asset_ref{file.filename().generic_string()};
-    }
-
-    return asset::asset_ref{relative.generic_string()};
-}
-
-auto collect(const fs::path& dir, std::string_view extension, std::vector<asset::asset_ref>& out)
-    -> void {
-    std::error_code ec;
-    if (!fs::exists(dir, ec)) {
-        return;
-    }
-
-    for (const auto& entry : fs::recursive_directory_iterator(dir, ec)) {
-        if (entry.is_regular_file() && entry.path().extension() == extension) {
-            out.push_back(ref_of(entry.path()));
-        }
-    }
-}
-
-}  // namespace
-
 add_candidate_modal::add_candidate_modal(
     engine_type& eng, app_state& st, operation_manager& op_manager, asset::model_library& library
 )
@@ -61,9 +29,8 @@ auto add_candidate_modal::open(
 
     // Объёмы и префабы в одном списке: кандидат — ссылка без поля типа, и
     // выбирают его одинаково, а чем он окажется, скажет расширение.
-    files_.clear();
-    collect(app_state::model_dir(), ".voxm", files_);
-    collect(app_state::prefab_dir(), ".vox", files_);
+    files_ = collect_asset_refs(app_state::model_dir(), ".voxm");
+    files_.append_range(collect_asset_refs(app_state::prefab_dir(), ".vox"));
 }
 
 auto add_candidate_modal::render() -> void {

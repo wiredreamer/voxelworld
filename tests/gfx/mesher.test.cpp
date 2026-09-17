@@ -53,7 +53,7 @@ auto unpack_normal(const gfx::quad& q) -> uint8 {
     return static_cast<uint8>((q.data0 >> 21) & 0x7U);
 }
 
-// Слот палитры, а не идентификатор блока: в кваде едет плотный номер, который
+// Слот палитры, а не идентификатор вокселя: в кваде едет плотный номер, который
 // раздал реестр, и занимает он десять бит.
 auto unpack_slot(const gfx::quad& q) -> uint16 {
     return static_cast<uint16>((q.data1 >> 14) & 0x3FFU);
@@ -366,7 +366,7 @@ auto hash_mesh(const gfx::mesh& m) -> uint64 {
 class model_fixture {
 public:
     explicit model_fixture(int32 size) : size_{size} {
-        model_ = std::make_shared<asset::model>(identity_pool_, pages_, blocks::terrain::category, size, size, size);
+        model_ = std::make_shared<asset::model>(identity_pool_, pages_, voxels::world::category, size, size, size);
         chunk_ = std::make_shared<asset::chunk_volume>(model_);
     }
 
@@ -399,7 +399,7 @@ private:
     int32 size_;
     asset::model_identity_pool identity_pool_;
     asset::page_pool pages_;
-    block_registry registry_;
+    voxel_registry registry_;
     std::shared_ptr<asset::model> model_;
     std::shared_ptr<asset::chunk_volume> chunk_;
 };
@@ -414,7 +414,7 @@ TEST_CASE("greedy meshing agrees with per-voxel meshing", "[mesh]") {
 
     SECTION("single voxel") {
         model_fixture fixture{16};
-        fixture.get()->set_voxel(4, 5, 6, voxel{blocks::terrain::clay[1]});
+        fixture.get()->set_voxel(4, 5, 6, voxels::world::clay[1]);
 
         const auto greedy = fixture.greedy();
         REQUIRE(greedy.quads.size() == 6);
@@ -423,13 +423,13 @@ TEST_CASE("greedy meshing agrees with per-voxel meshing", "[mesh]") {
 
     SECTION("voxel in the corner") {
         model_fixture fixture{16};
-        fixture.get()->set_voxel(0, 0, 0, voxel{blocks::terrain::stone[1]});
+        fixture.get()->set_voxel(0, 0, 0, voxels::world::stone[1]);
         REQUIRE(to_face_cells(fixture.greedy()) == to_face_cells(fixture.simple()));
     }
 
     SECTION("solid block merges into six quads") {
         model_fixture fixture{16};
-        fixture.get()->fill(voxel{blocks::terrain::grass[0]});
+        fixture.get()->fill(voxels::world::grass[0]);
 
         const auto greedy = fixture.greedy();
         REQUIRE(greedy.quads.size() == 6);
@@ -442,7 +442,7 @@ TEST_CASE("greedy meshing agrees with per-voxel meshing", "[mesh]") {
             for (int32 y = 0; y < fixture.size(); ++y) {
                 for (int32 z = 0; z < fixture.size(); ++z) {
                     if (((x + y + z) % 2) == 0) {
-                        fixture.get()->set_voxel(x, y, z, voxel{blocks::terrain::ice[1]});
+                        fixture.get()->set_voxel(x, y, z, voxels::world::ice[1]);
                     }
                 }
             }
@@ -455,8 +455,8 @@ TEST_CASE("greedy meshing agrees with per-voxel meshing", "[mesh]") {
         for (int32 x = 0; x < fixture.size(); ++x) {
             for (int32 y = 0; y < 4; ++y) {
                 for (int32 z = 0; z < fixture.size(); ++z) {
-                    const auto block = (x < 8) ? blocks::terrain::dirt[2] : blocks::terrain::stone_deep[1];
-                    fixture.get()->set_voxel(x, y, z, voxel{block});
+                    const voxel id = (x < 8) ? voxels::world::dirt[2] : voxels::world::stone_deep[1];
+                    fixture.get()->set_voxel(x, y, z, id);
                 }
             }
         }
@@ -473,7 +473,7 @@ TEST_CASE("greedy meshing agrees with per-voxel meshing", "[mesh]") {
                 state = (state * 1664525U) + 1013904223U;
                 const int32 height = 8 + static_cast<int32>((state >> 26) % 24);
                 for (int32 y = 0; y < height; ++y) {
-                    fixture.get()->set_voxel(x, y, z, voxel{blocks::terrain::sand[0]});
+                    fixture.get()->set_voxel(x, y, z, voxels::world::sand[0]);
                 }
             }
         }
@@ -489,7 +489,7 @@ TEST_CASE("greedy meshing agrees with per-voxel meshing", "[mesh]") {
                     state = (state * 1664525U) + 1013904223U;
                     if ((state >> 29) == 0) {
                         fixture.get()->set_voxel(
-                            x, y, z, voxel{block_id{blocks::terrain::category, static_cast<uint8>(state % 40)}}
+                            x, y, z, voxel{voxels::world::category, static_cast<uint8>(state % 40)}
                         );
                     }
                 }
@@ -500,7 +500,7 @@ TEST_CASE("greedy meshing agrees with per-voxel meshing", "[mesh]") {
 
     SECTION("full-size chunk, solid") {
         model_fixture fixture{64};
-        fixture.get()->fill(voxel{blocks::terrain::stone[2]});
+        fixture.get()->fill(voxels::world::stone[2]);
 
         const auto greedy = fixture.greedy();
         REQUIRE(greedy.quads.size() == 6);
@@ -515,7 +515,7 @@ TEST_CASE("greedy meshing agrees with per-voxel meshing", "[mesh]") {
                 for (int32 z = 0; z < fixture.size(); ++z) {
                     state = (state * 1664525U) + 1013904223U;
                     if ((state >> 28) < 6) {
-                        fixture.get()->set_voxel(x, y, z, voxel{block_id{blocks::terrain::category, static_cast<uint8>(state % 40)}});
+                        fixture.get()->set_voxel(x, y, z, voxel{voxels::world::category, static_cast<uint8>(state % 40)});
                     }
                 }
             }
@@ -527,16 +527,16 @@ TEST_CASE("greedy meshing agrees with per-voxel meshing", "[mesh]") {
 TEST_CASE("boundary faces close the seam between chunks", "[mesh]") {
     asset::model_identity_pool identity_pool;
     asset::page_pool pages;
-    block_registry registry;
+    voxel_registry registry;
 
     // 64 so the bit path is the one under test: the +-X faces gather the
     // neighbour plane bit by bit, which the other four directions never do.
     constexpr int32 size = 64;
-    auto left  = std::make_shared<asset::model>(identity_pool, pages, blocks::terrain::category, size, size, size);
-    auto right = std::make_shared<asset::model>(identity_pool, pages, blocks::terrain::category, size, size, size);
+    auto left  = std::make_shared<asset::model>(identity_pool, pages, voxels::world::category, size, size, size);
+    auto right = std::make_shared<asset::model>(identity_pool, pages, voxels::world::category, size, size, size);
 
-    left->fill(voxel{blocks::terrain::stone[0]});
-    right->fill(voxel{blocks::terrain::stone[0]});
+    left->fill(voxels::world::stone[0]);
+    right->fill(voxels::world::stone[0]);
 
     asset::chunk_volume left_chunk{left};
 
@@ -568,7 +568,7 @@ TEST_CASE("boundary faces close the seam between chunks", "[mesh]") {
 
 // The sampler grades occlusion from nothing to shut in, and the packing has to
 // carry that grading through. It did not: the last step compared the value
-// against zero, so a corner brushed by one diagonal block came out identical to
+// against zero, so a corner brushed by one diagonal voxel came out identical to
 // the inside of a right angle, and the shading read as an outline rather than
 // as depth. A digest would not have caught it -- it was stable and wrong.
 TEST_CASE("ambient occlusion keeps all four levels", "[mesh]") {
@@ -576,7 +576,7 @@ TEST_CASE("ambient occlusion keeps all four levels", "[mesh]") {
 
     for (int32 x = 0; x < 8; ++x) {
         for (int32 z = 0; z < 8; ++z) {
-            fixture.get()->set_voxel(x, 4, z, voxel{blocks::terrain::stone[1]});
+            fixture.get()->set_voxel(x, 4, z, voxels::world::stone[1]);
         }
     }
 
@@ -584,13 +584,13 @@ TEST_CASE("ambient occlusion keeps all four levels", "[mesh]") {
         REQUIRE(ao_levels(fixture.simple(), 2) == std::set<uint8>{0});
     }
 
-    SECTION("three blocks are enough to produce every level") {
+    SECTION("three voxels are enough to produce every level") {
         // Against the floor cell at (1, 4, 2) these are, in turn, a diagonal on
         // its own, an edge, and a second edge at right angles to the first --
         // which is one corner of each kind, plus the untouched ones.
-        fixture.get()->set_voxel(2, 5, 1, voxel{blocks::terrain::clay[1]});
-        fixture.get()->set_voxel(2, 5, 2, voxel{blocks::terrain::clay[1]});
-        fixture.get()->set_voxel(1, 5, 3, voxel{blocks::terrain::clay[1]});
+        fixture.get()->set_voxel(2, 5, 1, voxels::world::clay[1]);
+        fixture.get()->set_voxel(2, 5, 2, voxels::world::clay[1]);
+        fixture.get()->set_voxel(1, 5, 3, voxels::world::clay[1]);
 
         REQUIRE(ao_levels(fixture.simple(), 2) == std::set<uint8>{0, 1, 2, 3});
         REQUIRE(ao_levels(fixture.greedy(), 2) == std::set<uint8>{0, 1, 2, 3});
@@ -611,7 +611,7 @@ TEST_CASE("a bent trench has no point lighter than its surroundings", "[mesh]") 
     for (int32 x = 0; x < 32; ++x) {
         for (int32 z = 0; z < 32; ++z) {
             for (int32 y = 0; y < 10; ++y) {
-                fixture.get()->set_voxel(x, y, z, voxel{blocks::terrain::stone[1]});
+                fixture.get()->set_voxel(x, y, z, voxels::world::stone[1]);
             }
         }
     }
@@ -628,7 +628,7 @@ TEST_CASE("a bent trench has no point lighter than its surroundings", "[mesh]") 
                 continue;
             }
             for (int32 y = 6; y < 10; ++y) {
-                fixture.get()->set_voxel(x, y, z, voxel{});
+                fixture.get()->set_voxel(x, y, z, voxels::air);
             }
         }
     }
@@ -691,14 +691,14 @@ TEST_CASE("occlusion reaches exactly one cell from a wall", "[mesh]") {
 
     for (int32 x = 0; x < 16; ++x) {
         for (int32 z = 0; z < 16; ++z) {
-            fixture.get()->set_voxel(x, 4, z, voxel{blocks::terrain::stone[1]});
+            fixture.get()->set_voxel(x, 4, z, voxels::world::stone[1]);
         }
     }
 
     // One voxel tall, running the length of the floor: everything the up-faces
     // sample lies in the plane just above them.
     for (int32 z = 0; z < 16; ++z) {
-        fixture.get()->set_voxel(4, 5, z, voxel{blocks::terrain::clay[1]});
+        fixture.get()->set_voxel(4, 5, z, voxels::world::clay[1]);
     }
 
     // Every up-face corner, gathered by how far along x its lattice point sits.
@@ -747,7 +747,7 @@ TEST_CASE("packed occlusion matches the model at every corner", "[mesh]") {
             for (int32 z = 2; z < 14; ++z) {
                 state = (state * 1664525U) + 1013904223U;
                 if (((state >> 28) & 7U) < 4U) {
-                    fixture.get()->set_voxel(x, y, z, voxel{blocks::terrain::stone[1]});
+                    fixture.get()->set_voxel(x, y, z, voxels::world::stone[1]);
                 }
             }
         }
@@ -808,21 +808,21 @@ TEST_CASE("packed sky light matches the field at every corner", "[mesh]") {
     for (int32 y = 0; y < 40; ++y) {
         for (int32 z = 0; z < 64; ++z) {
             for (int32 x = 0; x < 64; ++x) {
-                writer.set(x, y, z, voxel{blocks::terrain::stone[1]});
+                writer.set(x, y, z, voxels::world::stone[1]);
             }
         }
     }
     for (int32 y = 10; y < 40; ++y) {
         for (int32 z = 30; z < 34; ++z) {
             for (int32 x = 30; x < 34; ++x) {
-                writer.set(x, y, z, voxel{});
+                writer.set(x, y, z, voxels::air);
             }
         }
     }
     for (int32 y = 10; y < 14; ++y) {
         for (int32 z = 30; z < 34; ++z) {
             for (int32 x = 8; x < 34; ++x) {
-                writer.set(x, y, z, voxel{});
+                writer.set(x, y, z, voxels::air);
             }
         }
     }
@@ -834,7 +834,7 @@ TEST_CASE("packed sky light matches the field at every corner", "[mesh]") {
     for (int32 y = 40; y < 64; ++y) {
         for (int32 z = 50; z < 54; ++z) {
             for (int32 x = 50; x < 54; ++x) {
-                writer.set(x, y, z, voxel{blocks::terrain::stone[1]});
+                writer.set(x, y, z, voxels::world::stone[1]);
             }
         }
     }
@@ -921,7 +921,7 @@ TEST_CASE("packed block light matches the field at every corner", "[mesh]") {
     for (int32 y = 0; y < 64; ++y) {
         for (int32 z = 0; z < 64; ++z) {
             for (int32 x = 0; x < 64; ++x) {
-                writer.set(x, y, z, voxel{blocks::terrain::stone[1]});
+                writer.set(x, y, z, voxels::world::stone[1]);
             }
         }
     }
@@ -932,20 +932,20 @@ TEST_CASE("packed block light matches the field at every corner", "[mesh]") {
     for (int32 y = 20; y < 28; ++y) {
         for (int32 z = 20; z < 28; ++z) {
             for (int32 x = 20; x < 28; ++x) {
-                writer.set(x, y, z, voxel{});
+                writer.set(x, y, z, voxels::air);
             }
         }
     }
     for (int32 y = 20; y < 24; ++y) {
         for (int32 z = 23; z < 25; ++z) {
             for (int32 x = 28; x < 50; ++x) {
-                writer.set(x, y, z, voxel{});
+                writer.set(x, y, z, voxels::air);
             }
         }
     }
 
-    writer.set(24, 20, 24, voxel{blocks::terrain::glowstone});
-    writer.set(21, 26, 21, voxel{blocks::terrain::lava});
+    writer.set(24, 20, 24, voxels::world::glowstone);
+    writer.set(21, 26, 21, voxels::world::lava);
 
     asset::chunk_occupancy occupancy;
     REQUIRE(mdl.build_occupancy(occupancy));
@@ -960,7 +960,7 @@ TEST_CASE("packed block light matches the field at every corner", "[mesh]") {
     };
 
     const ecs::light_column column{
-        around, asset::build_emission_table(block_registry{}), {}
+        around, asset::build_emission_table(voxel_registry{}), {}
     };
 
     fixture.chunk().set_sky_light(column.bake(0, asset::light_channel::sky));
@@ -1036,13 +1036,13 @@ TEST_CASE("ambient occlusion reads across the chunk seam", "[mesh]") {
 
     for (int32 x = 0; x < 64; ++x) {
         for (int32 z = 0; z < 64; ++z) {
-            left.get()->set_voxel(x, 4, z, voxel{blocks::terrain::stone[1]});
+            left.get()->set_voxel(x, 4, z, voxels::world::stone[1]);
         }
     }
 
     // Just over the seam and one above the floor: from the last floor cell of
     // `left` this is the neighbour along +x, in the plane its up-face samples.
-    right.get()->set_voxel(0, 5, 8, voxel{blocks::terrain::clay[1]});
+    right.get()->set_voxel(0, 5, 8, voxels::world::clay[1]);
 
     // The up-face of the last floor cell. Found rather than assumed: a lookup
     // that silently misses would return four zeroes, which is exactly the value
@@ -1089,7 +1089,7 @@ TEST_CASE("greedy meshing output is stable", "[mesh]") {
             state = (state * 1664525U) + 1013904223U;
             const int32 height = 4 + static_cast<int32>((state >> 27) % 8);
             for (int32 y = 0; y < height; ++y) {
-                fixture.get()->set_voxel(x, y, z, voxel{blocks::terrain::grass[1]});
+                fixture.get()->set_voxel(x, y, z, voxels::world::grass[1]);
             }
         }
     }
@@ -1100,7 +1100,7 @@ TEST_CASE("greedy meshing output is stable", "[mesh]") {
     const auto digest = hash_mesh(mesh);
     INFO("mesh digest: " << digest << ", quads: " << mesh.quads.size());
     REQUIRE(mesh.quads.size() == 5490);
-    REQUIRE(digest == 3212416632622423288ULL);
+    REQUIRE(digest == 12075451168598608980ULL);
 }
 
 // The 32-cube above never reaches the bit path, so ambient occlusion out of
@@ -1115,7 +1115,7 @@ TEST_CASE("full-size greedy meshing output is stable", "[mesh]") {
             state = (state * 1664525U) + 1013904223U;
             const int32 height = 6 + static_cast<int32>((state >> 26) % 20);
             for (int32 y = 0; y < height; ++y) {
-                fixture.get()->set_voxel(x, y, z, voxel{blocks::terrain::grass[1]});
+                fixture.get()->set_voxel(x, y, z, voxels::world::grass[1]);
             }
         }
     }
@@ -1124,7 +1124,7 @@ TEST_CASE("full-size greedy meshing output is stable", "[mesh]") {
     const auto digest = hash_mesh(mesh);
     INFO("full-size digest: " << digest << ", quads: " << mesh.quads.size());
     REQUIRE(mesh.quads.size() == 29276);
-    REQUIRE(digest == 5005360969942537598ULL);
+    REQUIRE(digest == 2663632752096612250ULL);
 }
 
 
@@ -1146,7 +1146,7 @@ TEST_CASE("packed convexity matches the model at every corner", "[mesh]") {
             state = (state * 1664525U) + 1013904223U;
             const int32 height = 3 + static_cast<int32>((state >> 28) % 6);
             for (int32 y = 2; y < 2 + height; ++y) {
-                fixture.get()->set_voxel(x, y, z, voxel{blocks::terrain::stone[1]});
+                fixture.get()->set_voxel(x, y, z, voxels::world::stone[1]);
             }
         }
     }
@@ -1203,7 +1203,7 @@ TEST_CASE("a model without neighbours has no rim", "[mesh]") {
     for (int32 x = 0; x < 16; ++x) {
         for (int32 z = 0; z < 16; ++z) {
             for (int32 y = 0; y < 8; ++y) {
-                fixture.get()->set_voxel(x, y, z, voxel{blocks::terrain::stone[1]});
+                fixture.get()->set_voxel(x, y, z, voxels::world::stone[1]);
             }
         }
     }

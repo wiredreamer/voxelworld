@@ -375,7 +375,7 @@ TEST_CASE("digging a seam tells both sides", "[world][grid]") {
     const auto world_pos =
         grid.chunk_to_world_coord(*target) + (local * scale);
 
-    grid.set_voxel(world_pos, empty_voxel);
+    grid.set_voxel(world_pos, voxels::air);
 
     REQUIRE(grid.get_voxel(world_pos).is_empty());
 
@@ -483,7 +483,7 @@ TEST_CASE("digging to the sky relights the shaft", "[world][grid]") {
     const auto columns_before = gs.get_stats().relit_columns;
 
     for (vec3i at : shaft) {
-        grid.set_voxel(at, empty_voxel);
+        grid.set_voxel(at, voxels::air);
     }
 
     // The frame the spade lands on has the geometry and not the light: the
@@ -542,7 +542,7 @@ TEST_CASE("digging in the dark relights nothing", "[world][grid]") {
         grid.chunk_to_world_coord(*target) + (vec3i{32, 32, 32} * grid.voxel_scale());
 
     REQUIRE_FALSE(grid.get_voxel(at).is_empty());
-    grid.set_voxel(at, empty_voxel);
+    grid.set_voxel(at, voxels::air);
 
     settled.settle();
 

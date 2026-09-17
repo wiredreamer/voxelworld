@@ -71,11 +71,11 @@ auto testbed_app::render_ui() -> void {
         }
 
         if (tool_ == edit_tool::place) {
-            std::array<const char*, block_menu.size()> names{};
-            for (std::size_t i = 0; i < block_menu.size(); ++i) {
-                names[i] = block_menu[i].name;
+            std::array<const char*, voxel_menu.size()> names{};
+            for (std::size_t i = 0; i < voxel_menu.size(); ++i) {
+                names[i] = voxel_menu[i].name;
             }
-            ImGui::Combo("Block", &place_choice_, names.data(), static_cast<int32>(names.size()));
+            ImGui::Combo("Voxel", &place_choice_, names.data(), static_cast<int32>(names.size()));
         }
 
         ImGui::SliderInt("Reach (voxels)", &reach_voxels_, 2, 32);
@@ -120,11 +120,11 @@ auto testbed_app::render_ui() -> void {
         // окно World.
         if (world_grid_ != nullptr) {
             if (ImGui::Button("Drop lamp")) {
-                drop_emitter(blocks::terrain::glowstone, 1);
+                drop_emitter(voxels::world::glowstone, 1);
             }
             ImGui::SameLine();
             if (ImGui::Button("Pour lava")) {
-                drop_emitter(blocks::terrain::lava, 3);
+                drop_emitter(voxels::world::lava, 3);
             }
 
             // Кнопка, которая ничего не делает и ничего не говорит, — худшее из

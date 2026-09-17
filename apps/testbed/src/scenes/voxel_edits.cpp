@@ -63,7 +63,7 @@ auto voxel_edits_scene::tick(float32 /*delta_time*/) -> void {
             continue;
         }
 
-        stand().grid().set_voxel(at, voxel{});
+        stand().grid().set_voxel(at, voxels::air);
         ++edits_;
         ++done;
     }

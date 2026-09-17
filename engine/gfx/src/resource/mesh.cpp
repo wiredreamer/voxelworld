@@ -26,7 +26,7 @@ auto quad::pack(
     vec3i min_pos,
     vec3i max_pos,
     uint8 normal_id,
-    block_slot slot,
+    voxel_slot slot,
     uint8 corners_ao,
     uint8 corners_convex,
     uint16 corners_sky,
@@ -115,6 +115,98 @@ static constexpr std::array<vec3i, 6> ao_tangent_v = {
 
 
 namespace detail {
+
+struct face_axis_mapping {
+    int32 width, height, depth;
+    int32 face_direction;
+    int32 voxel_scale;
+
+    face_axis_mapping(mesh_source src, int32 face_dir);
+
+    [[nodiscard]] auto to_model_coords(int32 u, int32 v, int32 layer) const
+        -> std::tuple<int32, int32, int32>;
+
+    [[nodiscard]] auto to_local_min_max(int32 u, int32 v, int32 w, int32 h, int32 layer) const
+        -> std::pair<vec3i, vec3i>;
+};
+
+[[nodiscard]] auto compute_corner_darkness(mesh_source src, int32 x, int32 y, int32 z,
+                                           int32 face) -> uint8;
+[[nodiscard]] auto compute_corner_convexity(mesh_source src, int32 x, int32 y, int32 z,
+                                            int32 face) -> uint8;
+[[nodiscard]] auto compute_corner_light(mesh_source src, int32 x, int32 y, int32 z,
+                                        int32 face) -> corner_light;
+
+// Единственная грань, для которой считается выпуклость. Боковая грань и так
+// читает свою форму по нормали, а нижняя никогда не та поверхность, по которой
+// смотрят, — остальные пять платили бы ключом слияния и ничего не показывали.
+inline constexpr int32 convex_face = 2;
+
+[[nodiscard]] auto is_face_visible(mesh_source src, int32 x, int32 y, int32 z,
+                                   int32 face_direction) -> bool;
+
+auto build_face_mask(
+    mesh_generation_storage& storage,
+    mesh_source src,
+    const face_axis_mapping& axes,
+    int32 face_direction,
+    int32 layer,
+    mesh_options opts
+) -> void;
+
+auto add_quad(
+    std::vector<quad>& quads,
+    int32 face_direction,
+    vec3i min_pos,
+    vec3i max_pos,
+    voxel_slot slot,
+    uint8 corner_ao,
+    uint8 corner_convex,
+    corner_light light
+) -> void;
+
+// Один слой, сведённый к битовым строкам: что видно и что стоит перед гранью —
+// это и есть плоскость, по которой берётся затенение. Пустой слой означает, что
+// граней в нём нет вовсе, и это заменяет линейный проход по всей маске.
+struct layer_rows {
+    std::array<uint64, 64> visible{};
+    std::array<uint64, 64> front{};
+
+    // Слой, в котором стоят сами грани. Выпуклость выбирает его так же, как
+    // затенение выбирает плоскость перед гранью, и он всё равно уже читался ради
+    // видимости — просто не сохранялся.
+    std::array<uint64, 64> own{};
+
+    // Плоскость перед гранью лежит вне чанка, поэтому каждая выборка затенения
+    // вокруг неё уходит за чанк по двум осям и читается как пустая.
+    bool front_outside = false;
+};
+
+[[nodiscard]] auto light_from_rows(mesh_source src, const layer_rows& rows,
+                                   int32 u_at, int32 v_at, int32 x, int32 y, int32 z,
+                                   int32 face) -> corner_light;
+
+[[nodiscard]] auto build_layer_rows(
+    mesh_source src,
+    const vw::asset::chunk_occupancy& occupancy,
+    const face_axis_mapping& axes,
+    int32 face_direction,
+    int32 layer,
+    layer_rows& out
+) -> bool;
+
+auto emit_rect(
+    mesh_generation_storage& storage,
+    const face_axis_mapping& axes,
+    int32 face_direction,
+    int32 layer,
+    int32 u_start,
+    int32 v_start,
+    int32 w,
+    int32 h,
+    const face_mask_cell& cell,
+    const std::array<uint16, 256>& slots
+) -> void;
 
 face_axis_mapping::face_axis_mapping(
     mesh_source src, int face_dir
@@ -538,7 +630,7 @@ auto build_face_mask(
         return (static_cast<std::size_t>(u) * static_cast<std::size_t>(axes.height)) + static_cast<std::size_t>(v);
     };
 
-    constexpr face_mask_cell empty_cell{block_index{}, 0};
+    constexpr face_mask_cell empty_cell{voxel_index{}, 0};
 
     for (int u_block = 0; u_block < axes.width; u_block += ps) {
         int u_end = std::min(u_block + ps, axes.width);
@@ -606,7 +698,7 @@ auto add_quad(
     int face_direction,
     vec3i min_pos,
     vec3i max_pos,
-    block_slot slot,
+    voxel_slot slot,
     uint8 corner_ao,
     uint8 corner_convex,
     corner_light light
@@ -635,7 +727,7 @@ auto add_quad(
     };
 
     // Двумя битами насквозь, а не сравнением с нулём. Выборка различает угол,
-    // задетый одним диагональным блоком, и угол, закрытый двумя гранями, и вся
+    // задетый одним диагональным вокселем, и угол, закрытый двумя гранями, и вся
     // разница между тенью как глубиной и тенью как контуром — именно в этом.
     uint8 ao_winding     = 0;
     uint8 convex_winding = 0;
@@ -815,7 +907,7 @@ auto emit_rect(
         face_direction,
         min_pos,
         max_pos,
-        block_slot{slots[cell.index.value]},
+        voxel_slot{slots[cell.index.value]},
         cell.corner_ao,
         cell.corner_convex,
         cell.light
@@ -826,7 +918,7 @@ auto emit_rect(
 
 
 auto simple_mesh_generator::generate_mesh_data(
-    mesh_source src, const block_registry& registry, mesh_options opts
+    mesh_source src, const voxel_registry& registry, mesh_options opts
 ) -> mesh {
     std::vector<quad> quads;
     std::array<uint32, 6> face_counts{};
@@ -840,11 +932,11 @@ auto simple_mesh_generator::generate_mesh_data(
         for (int x = 0; x < src.voxels.width(); x++) {
             for (int y = 0; y < src.voxels.height(); y++) {
                 for (int z = 0; z < src.voxels.depth(); z++) {
-                    if (voxel voxel_obj = src.voxels.get_voxel(x, y, z);
-                        !voxel_obj.is_empty()) {
+                    if (const voxel id = src.voxels.get_voxel(x, y, z);
+                        !id.is_empty()) {
                         if (is_face_visible(src, x, y, z, face)) {
                             add_cube_face(
-                                quads, src, x, y, z, face, voxel_obj.id, registry, opts
+                                quads, src, x, y, z, face, id, registry, opts
                             );
                         }
                     }
@@ -865,8 +957,8 @@ auto simple_mesh_generator::add_cube_face(
     int y,
     int z,
     int face_direction,
-    block_id voxel_id,
-    const block_registry& registry,
+    voxel voxel_id,
+    const voxel_registry& registry,
     [[maybe_unused]] mesh_options opts
 ) -> void {
     detail::add_quad(
@@ -904,7 +996,7 @@ auto simple_mesh_generator::is_face_visible(
 auto strip_mesh_generator::generate_mesh_data(
     mesh_generation_storage& storage,
     mesh_source src,
-    const block_registry& registry,
+    const voxel_registry& registry,
     mesh_options opts
 ) -> mesh {
     storage.clear();
@@ -938,7 +1030,7 @@ auto strip_mesh_generator::merge_and_emit_strips(
     const detail::face_axis_mapping& axes,
     int face_direction,
     int layer,
-    const block_registry& registry,
+    const voxel_registry& registry,
     [[maybe_unused]] mesh_options opts
 ) -> void {
     const auto& slots = registry.slot_row(src.voxels.category());
@@ -974,7 +1066,7 @@ auto strip_mesh_generator::generate_face_quads(
     mesh_generation_storage& storage,
     mesh_source src,
     int face_direction,
-    const block_registry& registry,
+    const voxel_registry& registry,
     mesh_options opts
 ) -> void {
     detail::face_axis_mapping axes(src, face_direction);
@@ -1023,7 +1115,7 @@ auto strip_mesh_generator::generate_face_quads(
 auto greedy_mesh_generator::generate_mesh_data(
     mesh_generation_storage& storage,
     mesh_source src,
-    const block_registry& registry,
+    const voxel_registry& registry,
     mesh_options opts
 ) -> mesh {
     storage.clear();
@@ -1136,7 +1228,7 @@ auto greedy_mesh_generator::merge_and_emit_rects(
     const detail::face_axis_mapping& axes,
     int face_direction,
     int layer,
-    const block_registry& registry,
+    const voxel_registry& registry,
     [[maybe_unused]] mesh_options opts
 ) -> void {
     const auto& slots = registry.slot_row(src.voxels.category());
@@ -1145,7 +1237,7 @@ auto greedy_mesh_generator::merge_and_emit_rects(
         return static_cast<std::size_t>(u) * static_cast<std::size_t>(axes.height) + static_cast<std::size_t>(v);
     };
 
-    face_mask_cell empty_cell{block_index{}, 0};
+    face_mask_cell empty_cell{voxel_index{}, 0};
 
     for (int v = 0; v < axes.height; v++) {
         for (int u = 0; u < axes.width; u++) {
@@ -1187,7 +1279,7 @@ auto greedy_mesh_generator::generate_face_quads(
     mesh_generation_storage& storage,
     mesh_source src,
     int face_direction,
-    const block_registry& registry,
+    const voxel_registry& registry,
     mesh_options opts
 ) -> void {
     // Строка слотов снимается один раз на грань: набор у модели один, и таблица

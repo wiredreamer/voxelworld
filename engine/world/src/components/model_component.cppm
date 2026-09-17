@@ -86,12 +86,21 @@ struct model_component final {
         return source_;
     }
 
+    // Скрытый объём не рисуется ни в одном проходе, включая тени, и луч выбора
+    // проходит сквозь него. Геометрия при этом остаётся в буферах, а в файл флаг
+    // не пишется: это вопрос того, на что сейчас смотрят, а не того, из чего
+    // сцена состоит.
+    [[nodiscard]] auto is_visible() const -> bool {
+        return visible_;
+    }
+
 private:
     friend class model_system;
 
     std::shared_ptr<asset::model> model_;
     std::shared_ptr<asset::chunk_volume> chunk_;
     asset::asset_ref source_;
+    bool visible_ = true;
 };
 
 // Матрица, в которой лежит сам воксельный объём: матрица узла плюс сдвиг на

@@ -22,36 +22,24 @@ tool_panel::tool_panel(
 auto tool_panel::render(
     float /*delta_time*/
 ) const -> void {
-    const ImGuiViewport* viewport = ImGui::GetMainViewport();
-    const auto window_pos =
-        ImVec2(viewport->WorkPos.x + 10, viewport->WorkPos.y + state_->ui.left_top_voffset + 10);
-    ImGui::SetNextWindowPos(window_pos, ImGuiCond_Always);
-
-    constexpr ImGuiWindowFlags window_flags =  //
-        ImGuiWindowFlags_NoCollapse |          //
-        ImGuiWindowFlags_NoSavedSettings |     //
-        ImGuiWindowFlags_AlwaysAutoResize;
-
-    ImGui::Begin("Tools", nullptr, window_flags);
+    begin_panel(*state_, panel_slot::left, "Tools");
 
     ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(0.0f, 0.5f));
 
-    render_tool_button(tools::select_entity, "Select entity", "(0)");
-    render_tool_button(tools::add_voxel, "Add voxel", "(1)");
-    render_tool_button(tools::remove_voxel, "Remove voxel", "(2)");
-    render_tool_button(tools::paint_voxel, "Paint voxel", "(3)");
-    render_tool_button(tools::color_picker, "Color picker", "(4)");
-    render_tool_button(tools::move_pivot, "Move pivot", "(5)");
+    render_tool_button(tools::select_entity, "Select entity");
+    render_tool_button(tools::add_voxel, "Add voxel");
+    render_tool_button(tools::remove_voxel, "Remove voxel");
+    render_tool_button(tools::paint_voxel, "Paint voxel");
+    render_tool_button(tools::color_picker, "Color picker");
+    render_tool_button(tools::move_pivot, "Move pivot");
 
     ImGui::PopStyleVar(1);
 
-    state_->ui.left_top_voffset += ImGui::GetWindowHeight() + 10.f;
-
-    ImGui::End();
+    end_panel(*state_, panel_slot::left);
 }
 
 auto tool_panel::render_tool_button(
-    tools tool, std::string_view label, std::string_view shortcut
+    tools tool, std::string_view label
 ) const -> void {
     if (!state_->ctx.allows_tool(tool)) {
         return;
@@ -69,8 +57,11 @@ auto tool_panel::render_tool_button(
     }
     ImGui::PopStyleColor(2);
 
+    // Подпись клавиши берётся из общей таблицы: разойтись с тем, что клавиша
+    // делает, она таким образом не может.
+    const auto keys = keys_of(command_for_tool(tool));
     ImGui::SameLine();
-    ImGui::TextDisabled("%s", shortcut.data());
+    ImGui::TextDisabled("%.*s", static_cast<int>(keys.size()), keys.data());
     ImGui::Spacing();
 }
 

@@ -101,7 +101,7 @@ auto standing_lights_scene::place_emitters_() -> void {
             const vec2i at = site(at_site);
             if (const auto surface = stand().grid().get_surface_y(at.x, at.y)) {
                 stand().grid().set_voxel(
-                    {at.x * scale, (*surface + 1) * scale, at.y * scale}, voxel{blocks::terrain::glowstone}
+                    {at.x * scale, (*surface + 1) * scale, at.y * scale}, voxels::world::glowstone
                 );
 
                 ++placed_;
@@ -181,7 +181,7 @@ auto standing_lights_scene::drive_lights_(float32 delta_time) -> void {
         // нигде. Сам источник стоит там, куда его привела орбита: свет на целых
         // вокселях прыгает на целый воксель за раз, и его затухание каждый кадр
         // ложится на границы вокселей, отчего земля под ним читается кольцами
-        // ровно освещённых блоков, а не лужей света.
+        // ровно освещённых вокселей, а не лужей света.
         const auto vx = static_cast<int32>(std::lround(at_x));
         const auto vz = static_cast<int32>(std::lround(at_z));
 

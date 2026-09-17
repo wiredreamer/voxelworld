@@ -16,6 +16,7 @@ target_sources(${PROJECT_NAME}
         FILE_SET CXX_MODULES BASE_DIRS src FILES
             src/sculptor.cppm
             src/state.cppm
+            src/shortcuts.cppm
             src/operations.cppm
             src/services.cppm
             src/tools.cppm
@@ -28,16 +29,19 @@ target_sources(${PROJECT_NAME}
         src/operations/add_animation_target_operation.cpp
         src/operations/add_keyframe_operation.cpp
         src/operations/add_model_component_operation.cpp
+        src/operations/attach_model_operation.cpp
         src/operations/add_socket_component_operation.cpp
         src/operations/add_socket_operation.cpp
         src/operations/add_track_operation.cpp
         src/operations/add_voxel_operation.cpp
         src/operations/close_clip_operation.cpp
+        src/operations/composite_operation.cpp
         src/operations/create_clip_operation.cpp
         src/operations/create_entity_operation.cpp
         src/operations/delete_entity_operation.cpp
         src/operations/expand_model_operation.cpp
         src/operations/modify_keyframe_operation.cpp
+        src/operations/move_entity_operation.cpp
         src/operations/operation_manager.cpp
         src/operations/paint_voxel_operation.cpp
         src/operations/remove_animation_target_operation.cpp
@@ -63,17 +67,19 @@ target_sources(${PROJECT_NAME}
         src/services/fsm_service.cpp
         src/services/keyframe_service.cpp
         src/services/playback_service.cpp
+        src/shortcuts/shortcuts.cpp
         src/tools/add_voxel_tool.cpp
         src/tools/color_picker_tool.cpp
         src/tools/move_pivot_tool.cpp
         src/tools/paint_tool.cpp
+        src/tools/pose_tool.cpp
         src/tools/remove_voxel_tool.cpp
         src/tools/gizmo.cpp
         src/tools/select_entity_tool.cpp
         src/ui/add_candidate_modal.cpp
         src/ui/add_model_component_modal.cpp
-        src/ui/clip_manager_panel.cpp
-        src/ui/block_palette_panel.cpp
+        src/ui/open_clip_modal.cpp
+        src/ui/voxel_palette_panel.cpp
         src/ui/breadcrumb_bar.cpp
         src/ui/create_clip_modal.cpp
         src/ui/create_entity_modal.cpp
@@ -90,9 +96,10 @@ target_sources(${PROJECT_NAME}
         src/ui/new_file_modal.cpp
         src/ui/open_file_modal.cpp
         src/ui/save_as_modal.cpp
-        src/ui/rig_panel.cpp
         src/ui/add_machine_modal.cpp
         src/ui/fsm_panel.cpp
+        src/ui/gizmo_panel.cpp
+        src/ui/shortcuts_modal.cpp
         src/ui/save_clip_as_modal.cpp
         src/ui/socket_panel.cpp
         src/ui/startup_modal.cpp

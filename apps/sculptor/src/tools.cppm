@@ -178,13 +178,16 @@ private:
 // ---- from src/tools/gizmo.h
 export namespace vw::sculptor {
 
-enum class gizmo_mode : uint8 { translate, rotate, scale };
-
 // Что двигает манипулятор: сам узел или точку вращения его объёма. Точка живёт
 // в вокселях объёма, поэтому ходит по осям самого узла и шагает полвокселя.
 enum class gizmo_target : uint8 { node, pivot };
 
 enum class gizmo_axis : uint8 { none, x, y, z };
+
+// Куда уходит законченный жест: в историю правок документа или никуда. В клипе
+// поза — это превью кадра, в файл её кладёт запись ключа, и «сохранять» её в
+// историю префаба значит помечать документ изменённым за то, чего в нём нет.
+enum class gizmo_commit : uint8 { history, preview };
 
 // Манипулятор выбранной сущности. Не инструмент: он живёт поверх выбора и
 // обязан работать и там, где инструменты запрещены, — в анимационном режиме
@@ -195,7 +198,8 @@ public:
 
     gizmo(
         engine_type& eng, app_state& st, operation_manager& op_manager,
-        gizmo_target target = gizmo_target::node
+        gizmo_target target = gizmo_target::node,
+        gizmo_commit commit = gizmo_commit::history
     );
 
     auto render(ecs::entity ent) -> void;
@@ -212,13 +216,11 @@ public:
         return dragging_;
     }
 
-    [[nodiscard]] auto get_mode() const -> gizmo_mode {
-        return mode_;
-    }
-
-    auto set_mode(gizmo_mode mode) -> void;
-
 private:
+    // Точка вращения только ездит: поворачивать и растягивать её нечего, и общий
+    // режим узла на неё не распространяется.
+    [[nodiscard]] auto mode_() const -> gizmo_mode;
+
     // Оси, вдоль которых ходит ручка, и точка, вокруг которой всё вращается.
     // Оси берутся у родителя: позиция и поворот узла заданы относительно него,
     // и дельта по мировой оси легла бы в них криво.
@@ -246,8 +248,8 @@ private:
     operation_manager* op_manager_;
 
     gizmo_target target_;
+    gizmo_commit commit_;
 
-    gizmo_mode mode_    = gizmo_mode::translate;
     gizmo_axis hovered_ = gizmo_axis::none;
     gizmo_axis active_  = gizmo_axis::none;
 
@@ -264,6 +266,7 @@ private:
     // узел, она сама уезжает вслед за ним, и следующий кадр меряет смещение уже
     // от нового места — узел начинает дёргаться.
     frame drag_frame_{};
+    gizmo_mode drag_mode_ = gizmo_mode::translate;
 };
 
 }  // namespace vw::sculptor
@@ -293,6 +296,37 @@ private:
     engine_type* engine_;
     app_state* state_;
 
+    gizmo gizmo_;
+};
+
+}  // namespace vw::sculptor
+
+// ---- from src/tools/pose_tool.h
+export namespace vw::sculptor {
+
+// Правка позы в клипе. Выбор узла здесь ведёт не к его свойствам, а к дорожке,
+// и подсветки наведения нет намеренно: в анимации по сцене не ходят выбирая, в
+// ней возят один узел за другим, и мигающая рамка под курсором только мешает.
+class pose_tool final : public base_tool {
+public:
+    using engine_type = gfx::engine;
+
+    pose_tool(engine_type& eng, app_state& st, operation_manager& op_manager);
+
+    auto render(float delta_time) -> void override;
+    auto on_key_press(const plat::key_press_event& ev) -> void override;
+    auto on_mouse_move(const plat::mouse_move_event& ev) -> void override;
+    auto on_mouse_press(const plat::mouse_press_event& ev) -> void override;
+    auto on_mouse_release(const plat::mouse_release_event& ev) -> void override;
+    auto on_activate() -> void override;
+
+private:
+    auto draw_entity_box_(ecs::entity ent, color col) -> void;
+
+    engine_type* engine_;
+    app_state* state_;
+
+    std::vector<ecs::entity> ray_cast_entities_;
     gizmo gizmo_;
 };
 

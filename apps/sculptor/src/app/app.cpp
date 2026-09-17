@@ -25,7 +25,7 @@ app::app(
     // Корень ассетов у редактора — его рабочий каталог: ссылки в префабе
     // начинаются с папки моделей, а не с имени файла.
     , model_library_(
-          eng.get_world().resource<asset::model_registry>(), eng.get_block_registry(),
+          eng.get_world().resource<asset::model_registry>(), eng.get_voxel_registry(),
           app_state::asset_root_name
       )
     , file_service_(eng, state_, model_library_)
@@ -37,20 +37,22 @@ app::app(
     , menu_bar_(eng, state_, op_manager_, file_service_)
     , breadcrumb_bar_(eng, state_, clip_service_)
     , tool_panel_(state_)
-    , block_palette_panel_(eng, state_)
+    , gizmo_panel_(state_)
+    , voxel_palette_panel_(eng, state_)
     , entity_properties_panel_(eng, state_, op_manager_, model_library_)
-    , rig_panel_(eng, state_, op_manager_)
     , socket_panel_(eng, state_, op_manager_, model_library_)
     , keyframe_properties_panel_(eng, state_, op_manager_)
-    , entity_tree_panel_(eng, state_, op_manager_)
-    , clip_manager_panel_(eng, state_, op_manager_, clip_service_)
+    , entity_tree_panel_(eng, state_, op_manager_, model_library_)
     , timeline_panel_(eng, state_, op_manager_, clip_service_, keyframe_service_)
     , fsm_panel_(state_, op_manager_, fsm_service_)
     , startup_modal_(eng, state_)
     , new_file_modal_(eng, state_, op_manager_)
     , open_file_modal_(eng, state_, model_library_, op_manager_)
     , save_as_modal_(eng, state_, file_service_)
-    , add_machine_modal_(eng, state_, op_manager_, fsm_service_) {
+    , add_machine_modal_(eng, state_, op_manager_, fsm_service_)
+    , shortcuts_modal_(state_)
+    , create_clip_modal_(eng, state_, op_manager_)
+    , open_clip_modal_(eng, state_, clip_service_) {
     init_asset_dirs_();
 
     auto& window   = eng.get_window();
@@ -63,6 +65,7 @@ app::app(
     tools_[tools::paint_voxel]   = std::make_unique<paint_tool>(eng, state_, op_manager_);
     tools_[tools::color_picker]  = std::make_unique<color_picker_tool>(eng, state_, op_manager_);
     tools_[tools::move_pivot]    = std::make_unique<move_pivot_tool>(eng, state_, op_manager_);
+    tools_[tools::pose]          = std::make_unique<pose_tool>(eng, state_, op_manager_);
 
     camera_controller_.setup(window, camera);
     camera_controller_.set_camera_speed(20.f);
@@ -110,6 +113,7 @@ auto app::render(
     collect_dirty_models_();
     prune_contexts_();
     refresh_volume_bounds_();
+    sync_visibility_();
 
     // Правило одно и живёт в контексте, поэтому и горячие клавиши, и панель
     // подчиняются ему здесь: выбранный инструмент, которому в этом контексте
@@ -132,45 +136,21 @@ auto app::render(
 
     render_volume_overlay_();
 
-    state_.ui.left_top_voffset    = 0.f;
-    state_.ui.left_bottom_voffset = 0.f;
-    state_.ui.right_top_voffset   = 0.f;
+    state_.ui.left_offset   = 0.f;
+    state_.ui.bottom_offset = 0.f;
+    state_.ui.right_offset  = 0.f;
 
     if (state_.ui.need_enter_machine.has_value()) {
         static_cast<void>(fsm_service_.enter(*state_.ui.need_enter_machine));
         state_.ui.need_enter_machine.reset();
     }
 
+    update_animation_context_();
+
     menu_bar_.render(delta_time);
     breadcrumb_bar_.render(delta_time);
 
-    // left side
-    tool_panel_.render(delta_time);
-
-    if (state_.ui.show_timeline) {
-        timeline_panel_.render(delta_time);
-    }
-    block_palette_panel_.render(delta_time);
-
-    // right side
-    entity_properties_panel_.render(delta_time);
-    entity_tree_panel_.render(delta_time);
-    if (state_.ui.show_rig) {
-        rig_panel_.render(delta_time);
-    }
-    if (state_.ui.show_sockets) {
-        socket_panel_.render(delta_time);
-    }
-    if (state_.ui.need_create_clip_modal || state_.ui.need_load_clip_modal) {
-        state_.ui.show_clip_manager = true;
-    }
-    if (state_.ui.show_clip_manager) {
-        clip_manager_panel_.render(delta_time);
-    } else if (state_.ctx.in_clip()) {
-        clip_service_.force_exit_animation_mode();
-    }
-    fsm_panel_.render(delta_time);
-    keyframe_properties_panel_.render(delta_time);
+    render_panels_(delta_time);
 
     // modals
     startup_modal_.render(delta_time);
@@ -178,6 +158,24 @@ auto app::render(
     open_file_modal_.render(delta_time);
     save_as_modal_.render(delta_time);
     add_machine_modal_.render();
+
+    if (state_.ui.need_create_clip_modal) {
+        state_.ui.need_create_clip_modal = false;
+        create_clip_modal_.open();
+    }
+    create_clip_modal_.render(delta_time);
+
+    if (state_.ui.need_load_clip_modal) {
+        state_.ui.need_load_clip_modal = false;
+        open_clip_modal_.open();
+    }
+    open_clip_modal_.render();
+
+    if (state_.ui.need_shortcuts_modal) {
+        state_.ui.need_shortcuts_modal = false;
+        shortcuts_modal_.open();
+    }
+    shortcuts_modal_.render();
 
     handle_animation_actions_();
 
@@ -219,6 +217,43 @@ auto app::render(
 #endif
 }
 
+// Один список на все панели: какая из них уместна, решает контекст, а не флажок
+// в каждом вызове. Порядок вызовов и есть порядок панелей вдоль края.
+auto app::render_panels_(
+    float delta_time
+) -> void {
+    if (state_.ctx.shows(panels::gizmo)) {
+        gizmo_panel_.render(delta_time);
+    }
+    if (state_.ctx.shows(panels::tools)) {
+        tool_panel_.render(delta_time);
+    }
+
+    if (state_.ctx.shows(panels::timeline) && state_.ui.show_timeline) {
+        timeline_panel_.render(delta_time);
+    }
+    if (state_.ctx.shows(panels::palette)) {
+        voxel_palette_panel_.render(delta_time);
+    }
+
+    if (state_.ctx.shows(panels::properties)) {
+        entity_properties_panel_.render(delta_time);
+    }
+    if (state_.ctx.shows(panels::entity_tree)) {
+        entity_tree_panel_.render(delta_time);
+    }
+    if (state_.ctx.shows(panels::sockets) && state_.ui.show_sockets) {
+        socket_panel_.render(delta_time);
+    }
+
+    if (state_.ctx.shows(panels::fsm)) {
+        fsm_panel_.render(delta_time);
+    }
+    if (state_.ctx.shows(panels::keyframe)) {
+        keyframe_properties_panel_.render(delta_time);
+    }
+}
+
 auto app::handle_key_press(
     const plat::key_press_event& ev
 ) -> void {
@@ -230,80 +265,69 @@ auto app::handle_key_press(
         return;
     }
 
-    using keys = plat::keyboard::keys;
-    using mods = plat::keyboard::mods;
-
-    if (ev.key == keys::Z && ev.with(mods::CTRL) && !ev.with(mods::SHIFT)) {
-        op_manager_.undo();
-    }
-    if (ev.key == keys::Z && ev.with(mods::CTRL) && ev.with(mods::SHIFT)) {
-        op_manager_.redo();
-    }
-
-    if (ev.key == keys::KEY_0) {
-        state_.tool.selected_tool = tools::select_entity;
-    }
-    if (ev.key == keys::KEY_1) {
-        state_.tool.selected_tool = tools::add_voxel;
-    }
-    if (ev.key == keys::KEY_2) {
-        state_.tool.selected_tool = tools::remove_voxel;
-    }
-    if (ev.key == keys::KEY_3) {
-        state_.tool.selected_tool = tools::paint_voxel;
-    }
-    if (ev.key == keys::KEY_4) {
-        state_.tool.selected_tool = tools::color_picker;
-    }
-    if (ev.key == keys::KEY_5) {
-        state_.tool.selected_tool = tools::move_pivot;
+    // Раскладка одна на весь редактор и разбирается здесь: инструмент получает
+    // событие только затем, чтобы вести собственный жест, а не толковать клавиши.
+    if (const auto cmd = match(ev)) {
+        run_command_(*cmd);
     }
 
     tools_[active_tool_]->on_key_press(ev);
-
-    if (ev.key == keys::S && ev.with(mods::ALT)) {
-        state_.ui.show_sockets ^= true;
-    }
-    if (ev.key == keys::A && ev.with(mods::ALT)) {
-        state_.ui.show_clip_manager ^= true;
-    }
-    if (ev.key == keys::T && ev.with(mods::ALT)) {
-        state_.ui.show_timeline ^= true;
-    }
-    if (ev.key == keys::SPACE && !ev.with(mods::CTRL)) {
-        state_.anim.need_toggle_playback = true;
-    }
-    if (ev.key == keys::LEFT && !ev.with(mods::CTRL) && state_.ui.show_timeline) {
-        state_.anim.need_step_backward = true;
-    }
-    if (ev.key == keys::RIGHT && !ev.with(mods::CTRL) && state_.ui.show_timeline) {
-        state_.anim.need_step_forward = true;
-    }
-
-    handle_file_shortcuts(ev);
 }
 
-auto app::handle_file_shortcuts(
-    const plat::key_press_event& ev
+auto app::run_command_(
+    command cmd
 ) -> void {
-    using keys = plat::keyboard::keys;
-    using mods = plat::keyboard::mods;
+    if (!is_available(cmd, state_)) {
+        return;
+    }
 
-    if (ev.key == keys::N && ev.with(mods::CTRL)) {
-        state_.ui.need_new_file_modal = true;
+    if (const auto tool = tool_of(cmd); tool != tools::invalid) {
+        state_.tool.selected_tool = tool;
+        return;
     }
-    if (ev.key == keys::O && ev.with(mods::CTRL)) {
-        state_.ui.need_open_file_modal = true;
-    }
-    if (ev.key == keys::S && ev.with(mods::CTRL) && !ev.with(mods::SHIFT)) {
-        if (state_.ctx.in_clip() && !state_.anim.selected_clip_name.empty()) {
-            state_.ui.need_save_clip = true;
-        } else {
-            file_service_.save();
-        }
-    }
-    if (ev.key == keys::S && ev.with(mods::CTRL) && ev.with(mods::SHIFT)) {
-        state_.ui.need_save_as_modal = true;
+
+    switch (cmd) {
+        case command::undo: op_manager_.undo(); break;
+        case command::redo: op_manager_.redo(); break;
+
+        case command::file_new: state_.ui.need_new_file_modal = true; break;
+        case command::file_open: state_.ui.need_open_file_modal = true; break;
+
+        // Открытый клип сохраняется вместо документа: Ctrl+S в анимации — про
+        // то, что правится сейчас, а префаб от правки позы не менялся.
+        case command::file_save:
+            if (state_.ctx.in_clip() && !state_.anim.selected_clip_name.empty()) {
+                state_.ui.need_save_clip = true;
+            } else {
+                static_cast<void>(file_service_.save());
+            }
+            break;
+
+        case command::file_save_as: state_.ui.need_save_as_modal = true; break;
+
+        case command::gizmo_move: state_.tool.gizmo = gizmo_mode::translate; break;
+        case command::gizmo_rotate: state_.tool.gizmo = gizmo_mode::rotate; break;
+        case command::gizmo_scale: state_.tool.gizmo = gizmo_mode::scale; break;
+
+        case command::toggle_sockets: state_.ui.show_sockets ^= true; break;
+        case command::enter_animation: state_.ui.need_enter_animation = true; break;
+        case command::toggle_timeline: state_.ui.show_timeline ^= true; break;
+
+        case command::play_pause: state_.anim.need_toggle_playback = true; break;
+        case command::step_back: state_.anim.need_step_backward = true; break;
+        case command::step_forward: state_.anim.need_step_forward = true; break;
+
+        case command::record_key: keyframe_service_.record_pose(false); break;
+        case command::record_key_all: keyframe_service_.record_pose(true); break;
+        case command::prev_key: keyframe_service_.step_to_key(false); break;
+        case command::next_key: keyframe_service_.step_to_key(true); break;
+
+        case command::tool_select:
+        case command::tool_add_voxel:
+        case command::tool_remove_voxel:
+        case command::tool_paint:
+        case command::tool_color_picker:
+        case command::tool_move_pivot: break;
     }
 }
 
@@ -367,6 +391,32 @@ auto app::handle_mouse_release(
     }
 }
 
+// В анимацию входят фактом открытого клипа, а не открытой панелью: клип создают
+// и открывают из меню, а панели, которая только тем и занималась, что включала
+// режим своим появлением, больше нет.
+auto app::update_animation_context_() -> void {
+    if (state_.ui.need_save_clip) {
+        state_.ui.need_save_clip = false;
+        if (!state_.anim.selected_clip_name.empty()) {
+            static_cast<void>(clip_service_.save_clip(state_.anim.selected_clip_name));
+        }
+    }
+
+    if (state_.ui.need_enter_animation) {
+        state_.ui.need_enter_animation = false;
+        if (!state_.anim.selected_clip_name.empty()) {
+            clip_service_.enter_animation_mode();
+            state_.ui.show_timeline = true;
+        }
+    }
+
+    // Клип закрыли — править в этом режиме нечего, и держать его значит оставить
+    // редактор без инструментов.
+    if (state_.ctx.in_clip() && state_.anim.selected_clip_name.empty()) {
+        clip_service_.force_exit_animation_mode();
+    }
+}
+
 auto app::handle_animation_actions_() -> void {
     if (state_.anim.need_toggle_playback) {
         state_.anim.need_toggle_playback = false;
@@ -378,9 +428,14 @@ auto app::handle_animation_actions_() -> void {
         playback_service_.stop_playback();
     }
 
-    if (state_.anim.need_add_keyframe) {
-        state_.anim.need_add_keyframe = false;
-        keyframe_service_.add_keyframe();
+    if (state_.anim.need_record_key) {
+        state_.anim.need_record_key = false;
+        keyframe_service_.record_pose(false);
+    }
+
+    if (state_.anim.need_record_key_all) {
+        state_.anim.need_record_key_all = false;
+        keyframe_service_.record_pose(true);
     }
 
     if (state_.anim.need_delete_keyframe) {
@@ -434,6 +489,60 @@ auto app::prune_contexts_() -> void {
     const auto it = std::ranges::find_if(stack, gone);
     if (it != stack.end()) {
         stack.erase(it, stack.end());
+    }
+}
+
+// Дерево хранит, что выключено глазом, а здесь это становится флагом модели:
+// узел скрыт, если скрыт он сам или кто-то выше. Объём, в который провалились,
+// не скрывается никогда — прятать то, что правят, значит остаться и без
+// картинки, и без кисти. Его дети при этом следуют за предками как обычно.
+auto app::sync_visibility_() -> void {
+    auto& scene = state_.scene;
+
+    // Имя удалённого узла забывается: иначе новый узел с тем же именем родился
+    // бы скрытым без видимой причины.
+    std::erase_if(scene.hidden_nodes, [&scene](const std::string& name) {
+        return !scene.name_to_entity.contains(name);
+    });
+
+    const auto root = scene.name_to_entity.find(scene.root_name);
+    if (root == scene.name_to_entity.end()) {
+        return;
+    }
+
+    auto& world     = get_engine().get_world();
+    auto& model_sys = world.system<ecs::model_system>();
+
+    const auto edited = state_.ctx.kind() == edit_kind::model ? state_.ctx.node_name()
+                                                              : std::string_view{};
+
+    std::vector<std::pair<ecs::entity, bool>> pending{{root->second, false}};
+
+    while (!pending.empty()) {
+        const auto [ent, inherited] = pending.back();
+        pending.pop_back();
+
+        bool hidden      = inherited;
+        bool is_edited   = false;
+        const auto named = scene.entity_to_name.find(ent);
+        if (named != scene.entity_to_name.end()) {
+            hidden    = hidden || scene.hidden_nodes.contains(named->second);
+            is_edited = !edited.empty() && named->second == edited;
+        }
+
+        // Безымянные дети — превью сокетов и поддеревья вариантов — идут за
+        // своим узлом: иначе скрытая рука оставляла бы в воздухе меч.
+        const bool shown = !hidden || is_edited;
+        if (world.has<ecs::model_component>(ent) &&
+            world.get<ecs::model_component>(ent).is_visible() != shown) {
+            model_sys.modify(ent).set_visible(shown);
+        }
+
+        if (world.has<ecs::hierarchy_component>(ent)) {
+            for (const auto child : world.get<ecs::hierarchy_component>(ent).get_children()) {
+                pending.emplace_back(child, hidden);
+            }
+        }
     }
 }
 

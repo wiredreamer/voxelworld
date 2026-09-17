@@ -18,7 +18,7 @@ public:
     using save_error = voxm_serializer::error_type;
 
     model_library(
-        model_registry& registry, const block_registry& blocks, std::filesystem::path root
+        model_registry& registry, const voxel_registry& voxel_types, std::filesystem::path root
     );
 
     [[nodiscard]] auto load(const asset_ref& ref)
@@ -47,7 +47,7 @@ public:
 
 private:
     model_registry* registry_;
-    const block_registry* blocks_;
+    const voxel_registry* voxel_types_;
     std::filesystem::path root_;
     std::unordered_map<asset_ref, std::shared_ptr<model>> loaded_;
 };

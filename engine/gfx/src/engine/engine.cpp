@@ -44,10 +44,10 @@ engine::engine(
     window_         = std::make_unique<window>(width, height, title);
     vulkan_context_ = std::make_unique<vulkan_context>(*window_);
     renderer_       = std::make_unique<renderer_type>(
-        *vulkan_context_, *window_, block_registry_, bench_.mesh_workers);
+        *vulkan_context_, *window_, voxel_registry_, bench_.mesh_workers);
     camera_ =
         std::make_unique<camera>(45.0f, static_cast<float>(width) / static_cast<float>(height));
-    world_      = std::make_unique<world_type>(block_registry_);
+    world_      = std::make_unique<world_type>(voxel_registry_);
     debug_tool_ = std::make_unique<debug_window_type>(*this);
 
     // Пустое приложение по умолчанию — чтобы не проверять на null
@@ -109,8 +109,8 @@ auto engine::get_world() const -> world_type& {
     return *world_;
 }
 
-auto engine::get_block_registry() const -> const block_registry& {
-    return block_registry_;
+auto engine::get_voxel_registry() const -> const voxel_registry& {
+    return voxel_registry_;
 }
 
 auto engine::get_debug_tool() const -> debug_window_type& {

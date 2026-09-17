@@ -18,7 +18,7 @@ arena_app::arena_app(
     // Корень ассетов у игры — папка assets рядом с исполняемым файлом: ссылки
     // внутри префабов те же, что у редактора, а корень у каждого свой.
     , model_library_(
-          eng.get_world().resource<asset::model_registry>(), eng.get_block_registry(), "assets"
+          eng.get_world().resource<asset::model_registry>(), eng.get_voxel_registry(), "assets"
       )
     , assets_(parser_, model_library_)
     , input_controller_(get_engine().get_window())

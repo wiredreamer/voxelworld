@@ -63,14 +63,14 @@ struct chunk_link_scratch {
 
 [[nodiscard]] auto build_chunk_links(const chunk_occupancy& occupancy) -> chunk_links;
 
-// Уровень излучения по идентификатору блока, 0..15. Отдельная таблица, а не сам
-// реестр: проходу нужен байт на воксель, а block_type занимает три десятка —
+// Уровень излучения по идентификатору вокселя, 0..15. Отдельная таблица, а не сам
+// реестр: проходу нужен байт на воксель, а voxel_type занимает три десятка —
 // чтение на месте протаскивает через кэш килобайты ради байта ответа.
 //
-// Это копия, а не второй источник истины: излучение блока записано в реестре, а
+// Это копия, а не второй источник истины: излучение вокселя записано в реестре, а
 // отсюда строится один раз и передаётся дальше.
-using emission_table = block_table<uint8>;
+using emission_table = voxel_table<uint8>;
 
-[[nodiscard]] auto build_emission_table(const block_registry& registry) -> emission_table;
+[[nodiscard]] auto build_emission_table(const voxel_registry& registry) -> emission_table;
 
 }  // namespace vw::asset

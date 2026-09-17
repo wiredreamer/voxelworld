@@ -46,21 +46,21 @@ public:
         return max_y_;
     }
 
-    [[nodiscard]] auto id_at(int32 x, int32 wy, int32 z) const -> block_id {
+    [[nodiscard]] auto id_at(int32 x, int32 wy, int32 z) const -> voxel {
         const int32 cy = wy >= 0 ? wy / chunk : ((wy - chunk) + 1) / chunk;
 
         const auto it = models_.find(cy);
         if (it == models_.end()) {
-            return blocks::air;
+            return voxels::air;
         }
-        return it->second->get_voxel(x, wy - (cy * chunk), z).id;
+        return it->second->get_voxel(x, wy - (cy * chunk), z);
     }
 
     // The highest voxel that is not air, or bottom() - 1 when the column is
     // empty all the way down.
     [[nodiscard]] auto surface_of(int32 x, int32 z) const -> int32 {
         for (int32 wy = max_y_; wy >= min_y_; --wy) {
-            if (id_at(x, wy, z) != blocks::air) {
+            if (id_at(x, wy, z) != voxels::air) {
                 return wy;
             }
         }
@@ -82,7 +82,7 @@ auto settled_params() -> perlin_terrain_generator::params {
 }
 
 auto column_has_turf(const sampled_column& column, int32 x, int32 z) -> bool {
-    return column.id_at(x, column.surface_of(x, z), z) == blocks::terrain::grass[0];
+    return column.id_at(x, column.surface_of(x, z), z) == voxels::world::grass[0];
 }
 
 }  // namespace
@@ -109,37 +109,37 @@ TEST_CASE("ground is layers, not paint", "[world][surface]") {
 
             // Nothing above the surface, and no holes under it: with caves off
             // the rock is unbroken from the floor up.
-            REQUIRE(column.id_at(x, surface + 1, z) == blocks::air);
+            REQUIRE(column.id_at(x, surface + 1, z) == voxels::air);
 
             bool unbroken = true;
             for (int32 wy = p.world_bottom_y; wy <= surface; ++wy) {
-                unbroken = unbroken && (column.id_at(x, wy, z) != blocks::air);
+                unbroken = unbroken && (column.id_at(x, wy, z) != voxels::air);
             }
             REQUIRE(unbroken);
 
             const auto crown = column.id_at(x, surface, z);
 
-            if (crown == blocks::terrain::grass[0]) {
+            if (crown == voxels::world::grass[0]) {
                 ++with_soil;
 
                 // Exactly one voxel of turf, and soil under it -- or, where the
                 // soil is a single voxel deep, weathered rock straight away.
-                REQUIRE(column.id_at(x, surface - 1, z) != blocks::terrain::grass[0]);
+                REQUIRE(column.id_at(x, surface - 1, z) != voxels::world::grass[0]);
                 const auto under = column.id_at(x, surface - 1, z);
-                REQUIRE((under == blocks::terrain::dirt[0] || under == blocks::terrain::stone[0]));
+                REQUIRE((under == voxels::world::dirt[0] || under == voxels::world::stone[0]));
                 continue;
             }
 
             // Rock in the open: soil slid off or the altitude is too high for
             // it. Snow only above the line.
-            REQUIRE((crown == blocks::terrain::stone[1] || crown == blocks::terrain::snow[1]));
-            if (crown == blocks::terrain::snow[1]) {
+            REQUIRE((crown == voxels::world::stone[1] || crown == voxels::world::snow[1]));
+            if (crown == voxels::world::snow[1]) {
                 REQUIRE(surface > p.snow_line);
             }
             ++bare_rock;
 
             // No soil hiding under bare rock.
-            REQUIRE(column.id_at(x, surface - 1, z) != blocks::terrain::dirt[0]);
+            REQUIRE(column.id_at(x, surface - 1, z) != voxels::world::dirt[0]);
         }
     }
 
@@ -161,19 +161,19 @@ TEST_CASE("rock changes with absolute depth", "[world][surface]") {
 
     struct probe {
         int32 wy;
-        block_id expected;
+        voxel expected;
     };
 
     // Read at heights that cannot be anywhere near the surface, so only the
     // depth rule decides.
     for (const auto& [wy, expected] : {
-             probe{p.world_bottom_y, blocks::terrain::bedrock},
-             probe{p.world_bottom_y + p.bedrock_thickness - 1, blocks::terrain::bedrock},
-             probe{p.world_bottom_y + p.bedrock_thickness, blocks::terrain::stone_deep[0]},
-             probe{p.rock_bottom_y - 1, blocks::terrain::stone_deep[0]},
-             probe{p.rock_bottom_y, blocks::terrain::stone_deep[1]},
-             probe{p.rock_deep_y - 1, blocks::terrain::stone_deep[1]},
-             probe{p.rock_deep_y, blocks::terrain::stone_deep[2]},
+             probe{p.world_bottom_y, voxels::world::bedrock},
+             probe{p.world_bottom_y + p.bedrock_thickness - 1, voxels::world::bedrock},
+             probe{p.world_bottom_y + p.bedrock_thickness, voxels::world::stone_deep[0]},
+             probe{p.rock_bottom_y - 1, voxels::world::stone_deep[0]},
+             probe{p.rock_bottom_y, voxels::world::stone_deep[1]},
+             probe{p.rock_deep_y - 1, voxels::world::stone_deep[1]},
+             probe{p.rock_deep_y, voxels::world::stone_deep[2]},
          }) {
         INFO("at height " << wy);
         REQUIRE(column.id_at(0, wy, 0) == expected);

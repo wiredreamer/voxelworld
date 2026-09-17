@@ -28,11 +28,16 @@ auto add_model_component_operation::execute() -> void {
 
     world.modify(ent).with<ecs::model_component>();
 
-    const block_id fill =
-        state_->tool.brush_for(params_.category, engine_->get_block_registry());
+    const voxel fill =
+        state_->tool.brush_for(params_.category, engine_->get_voxel_registry());
 
     const auto model = model_reg.create(params_.name, params_.category, params_.size);
-    model->fill(voxel{fill});
+    model->fill(fill);
+
+    // Вращать новый объём удобнее вокруг середины, чем вокруг угла.
+    model->set_pivot(
+        vec3f{params_.size.x / 2.f, params_.size.y / 2.f, params_.size.z / 2.f}
+    );
 
     model_sys.modify(ent).set_model(model);
     state_->file.has_unsaved_changes = true;

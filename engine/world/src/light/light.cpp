@@ -257,7 +257,7 @@ auto light_column::seed_block_(
     // Оба обхода покрывают одни и те же страницы, и ни один не читает вокселей
     // страницы, которая ничего не излучает: пустая страница — это одна проверка, а
     // однородная — один просмотр таблицы сразу на все свои 512 вокселей. Мир без
-    // светящихся блоков платит обходом таблицы страниц и ни байтом больше, и мир
+    // светящихся вокселей платит обходом таблицы страниц и ни байтом больше, и мир
     // из лавы платит тем же обходом: дорог здесь разрозненный случай, а не
     // плотный.
     const auto each_page = [&](auto&& body) {
@@ -709,9 +709,9 @@ static_assert(skirt_pages * light_page >= ecs::light_column::apron);
 }  // namespace
 
 light_baker::light_baker(
-    const block_registry& blocks, uint32 workers
+    const voxel_registry& voxel_types, uint32 workers
 )
-    : emission_{asset::build_emission_table(blocks)} {
+    : emission_{asset::build_emission_table(voxel_types)} {
     auto count = workers != 0 ? workers : std::min(std::thread::hardware_concurrency(), 4U);
     if (count == 0) {
         count = 1;

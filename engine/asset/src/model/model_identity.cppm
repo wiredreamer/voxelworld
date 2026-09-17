@@ -56,7 +56,7 @@ private:
 // сами страницы лежат в блоках, которые никогда не переезжают.
 class page_pool final {
 public:
-    using page_type                    = std::array<block_index, 512>;
+    using page_type                    = std::array<voxel_index, 512>;
     static constexpr uint32 block_size = 4096;
     static constexpr uint32 max_blocks = 256;
 
@@ -106,8 +106,8 @@ struct page_entry {
         return static_cast<page_mode>(data & 0x3U);
     }
 
-    [[nodiscard]] auto fill_index() const -> block_index {
-        return block_index{static_cast<uint8>((data >> 2) & 0xFFU)};
+    [[nodiscard]] auto fill_index() const -> voxel_index {
+        return voxel_index{static_cast<uint8>((data >> 2) & 0xFFU)};
     }
 
     [[nodiscard]] auto pool_index() const -> uint32 {
@@ -118,7 +118,7 @@ struct page_entry {
         return {0U};
     }
 
-    [[nodiscard]] static auto make_uniform(block_index index) -> page_entry {
+    [[nodiscard]] static auto make_uniform(voxel_index index) -> page_entry {
         return {1U | (static_cast<uint32>(index.value) << 2)};
     }
 

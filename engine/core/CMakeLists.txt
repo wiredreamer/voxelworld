@@ -16,14 +16,15 @@ target_sources(vw_core
             src/math/transform.cppm
             src/math/math.cppm
             src/spatial/spatial.cppm
-            src/blocks/blocks.cppm
-            src/blocks/catalog.cppm
+            src/voxels/voxels.cppm
+            src/voxels/catalog.cppm
             src/log/log.cppm
     PRIVATE
         src/math/math.cpp
         src/math/transform.cpp
         src/spatial/spatial.cpp
-        src/blocks/blocks.cpp
+        src/voxels/voxels.cpp
+        src/voxels/catalog.cpp
         src/log/log.cpp
 )
 

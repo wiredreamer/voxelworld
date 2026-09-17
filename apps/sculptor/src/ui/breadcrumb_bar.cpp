@@ -27,18 +27,7 @@ auto breadcrumb_bar::render(
         return;
     }
 
-    const ImGuiViewport* viewport = ImGui::GetMainViewport();
-    const auto window_pos =
-        ImVec2(viewport->WorkPos.x + 10, viewport->WorkPos.y + state_->ui.left_top_voffset + 10);
-    ImGui::SetNextWindowPos(window_pos, ImGuiCond_Always);
-
-    constexpr ImGuiWindowFlags window_flags =  //
-        ImGuiWindowFlags_NoCollapse |          //
-        ImGuiWindowFlags_NoTitleBar |          //
-        ImGuiWindowFlags_NoSavedSettings |     //
-        ImGuiWindowFlags_AlwaysAutoResize;
-
-    ImGui::Begin("Breadcrumbs", nullptr, window_flags);
+    begin_panel(*state_, panel_slot::left, "Breadcrumbs", nullptr, false);
 
     const auto& stack = state_->ctx.stack;
 
@@ -62,9 +51,7 @@ auto breadcrumb_bar::render(
         }
     }
 
-    state_->ui.left_top_voffset += ImGui::GetWindowHeight() + 10.f;
-
-    ImGui::End();
+    end_panel(*state_, panel_slot::left);
 }
 
 auto breadcrumb_bar::leave_to_(
@@ -77,13 +64,12 @@ auto breadcrumb_bar::leave_to_(
         drops_clip = drops_clip || stack[i].kind == edit_kind::clip;
     }
 
-    // Клип закрывается ровно как из своей панели: слои останавливаются, поза
-    // возвращается. Снять один контекст мало — панель осталась бы открытой и
-    // на следующем кадре вернула бы его обратно.
+    // Выход из клипа — это не только снятие контекста: слои останавливаются, а
+    // поза возвращается к той, что лежит в префабе. Сам клип при этом остаётся
+    // открытым, и вернуться к нему можно из меню.
     if (drops_clip) {
         clip_service_->exit_animation_mode();
-        state_->ui.show_clip_manager = false;
-        state_->ui.show_timeline     = false;
+        state_->ui.show_timeline = false;
         return;
     }
 

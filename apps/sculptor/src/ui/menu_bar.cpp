@@ -112,14 +112,15 @@ auto menu_bar::render(
         if (ImGui::MenuItem("Sockets", "Alt+S", state_->ui.show_sockets)) {
             state_->ui.show_sockets ^= true;
         }
-        if (ImGui::MenuItem("Rig", nullptr, state_->ui.show_rig)) {
-            state_->ui.show_rig ^= true;
-        }
-        if (ImGui::MenuItem("Animation Clips", "Alt+A", state_->ui.show_clip_manager)) {
-            state_->ui.show_clip_manager ^= true;
-        }
         if (ImGui::MenuItem("Animation Timeline", "Alt+T", state_->ui.show_timeline)) {
             state_->ui.show_timeline ^= true;
+        }
+        ImGui::EndMenu();
+    }
+
+    if (ImGui::BeginMenu("Help")) {
+        if (ImGui::MenuItem("Keyboard Shortcuts")) {
+            state_->ui.need_shortcuts_modal = true;
         }
         ImGui::EndMenu();
     }
@@ -131,6 +132,9 @@ auto menu_bar::render(
         }
         if (ImGui::MenuItem("Open Clip")) {
             state_->ui.need_load_clip_modal = true;
+        }
+        if (ImGui::MenuItem("Animate", "Alt+A", false, has_clip && !state_->ctx.in_clip())) {
+            state_->ui.need_enter_animation = true;
         }
         if (ImGui::MenuItem("Save Clip", nullptr, false, has_clip)) {
             state_->ui.need_save_clip = true;
@@ -146,8 +150,11 @@ auto menu_bar::render(
             state_->anim.need_stop_playback = true;
         }
         ImGui::Separator();
-        if (ImGui::MenuItem("Add Keyframe", nullptr, false, has_clip)) {
-            state_->anim.need_add_keyframe = true;
+        if (ImGui::MenuItem("Key Current Channel", "K", false, state_->ctx.in_clip())) {
+            state_->anim.need_record_key = true;
+        }
+        if (ImGui::MenuItem("Key All Channels", "Shift+K", false, state_->ctx.in_clip())) {
+            state_->anim.need_record_key_all = true;
         }
         if (ImGui::MenuItem(
                 "Delete Keyframe",
@@ -160,8 +167,8 @@ auto menu_bar::render(
         ImGui::EndMenu();
     }
 
-    state_->ui.left_top_voffset += 20.0f;
-    state_->ui.right_top_voffset += 20.0f;
+    state_->ui.left_offset += 20.0f;
+    state_->ui.right_offset += 20.0f;
 
     ImGui::EndMenuBar();
 

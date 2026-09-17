@@ -41,6 +41,19 @@ private:
     std::vector<edit_context> context_;
 };
 
+// Несколько правок одним шагом истории. Запись позы кладёт до трёх ключей, и
+// откатывать их по одному значило бы оставлять узел в позе, которой не было.
+class composite_operation final : public base_operation {
+public:
+    explicit composite_operation(std::vector<std::unique_ptr<base_operation>> parts);
+
+    auto execute() -> void override;
+    auto undo() -> void override;
+
+private:
+    std::vector<std::unique_ptr<base_operation>> parts_;
+};
+
 }  // namespace vw::sculptor
 
 // ---- from src/operations/add_animation_target_operation.h
@@ -108,7 +121,7 @@ export namespace vw::sculptor {
 struct add_model_component_params {
     std::string name;
     vec3i size{8, 8, 8};
-    block_category category;
+    voxel_category category;
 };
 
 class add_model_component_operation final : public base_operation {
@@ -126,6 +139,37 @@ private:
     engine_type* engine_;
     app_state* state_;
     add_model_component_params params_;
+};
+
+}  // namespace vw::sculptor
+
+// ---- from src/operations/attach_model_operation.h
+export namespace vw::sculptor {
+
+// Готовый .voxm вместо нового объёма. Узел встаёт на ту же ссылку, что и прежние
+// её хозяева, и объём у них один: правка второй ноги правит и первую.
+struct attach_model_params {
+    std::string name;
+    asset::asset_ref source;
+};
+
+class attach_model_operation final : public base_operation {
+public:
+    using engine_type = gfx::engine;
+
+    attach_model_operation(
+        engine_type& engine, app_state& state, asset::model_library& library,
+        attach_model_params params
+    );
+
+    auto execute() -> void override;
+    auto undo() -> void override;
+
+private:
+    engine_type* engine_;
+    app_state* state_;
+    asset::model_library* library_;
+    attach_model_params params_;
 };
 
 }  // namespace vw::sculptor
@@ -218,7 +262,7 @@ export namespace vw::sculptor {
 struct add_voxel_params {
     std::string name;
     vec3i position;
-    block_id new_block;
+    voxel new_voxel;
 };
 
 class add_voxel_operation final : public base_operation {
@@ -290,17 +334,11 @@ private:
 // ---- from src/operations/create_entity_operation.h
 export namespace vw::sculptor {
 
+// Голый узел: трансформ и место в дереве. Всё, что на нём будет, ставится
+// операциями компонентов, сложенными с этой в один шаг истории.
 struct create_entity_params {
     std::string name;
     std::string parent_name;
-
-    bool with_model  = false;
-    bool with_socket = false;
-    vec3i size       = vec3i{6, 6, 6};
-
-    // Набор блоков модели. Задаётся здесь и больше не меняется: модель несёт
-    // ровно один набор, и в этом весь смысл спрашивать его при создании.
-    block_category category;
 };
 
 class create_entity_operation final : public base_operation {
@@ -319,6 +357,46 @@ private:
     app_state* state_;
 
     create_entity_params params_;
+};
+
+}  // namespace vw::sculptor
+
+// ---- from src/operations/move_entity_operation.h
+export namespace vw::sculptor {
+
+struct move_entity_params {
+    std::string name;
+    std::string parent_name;
+
+    // Место среди детей нового родителя, отсчитанное по списку без самого узла:
+    // так одно и то же число значит одно и то же, переносят ли узел к чужому
+    // родителю или переставляют среди своих.
+    std::size_t index = 0;
+};
+
+// Перенос узла в иерархии. Узел остаётся там же в мире: локальный трансформ
+// пересчитывается под нового родителя, иначе перетаскивание в дереве двигало бы
+// модель на экране. Отмена возвращает и место среди соседей, и прежние числа
+// трансформа как есть, без обратного пересчёта.
+class move_entity_operation final : public base_operation {
+public:
+    using engine_type = gfx::engine;
+
+    move_entity_operation(engine_type& engine, app_state& state, const move_entity_params& params);
+
+    auto execute() -> void override;
+    auto undo() -> void override;
+
+private:
+    auto place_(ecs::entity parent, std::size_t index, const transform& local) -> void;
+
+    engine_type* engine_;
+    app_state* state_;
+    move_entity_params params_;
+
+    ecs::entity previous_parent_;
+    std::size_t previous_index_ = 0;
+    transform previous_local_;
 };
 
 }  // namespace vw::sculptor
@@ -609,7 +687,7 @@ export namespace vw::sculptor {
 struct paint_voxel_params {
     std::string name;
     vec3i position;
-    block_id new_block;
+    voxel new_voxel;
 };
 
 class paint_voxel_operation final : public base_operation {
@@ -625,7 +703,7 @@ private:
     engine_type* engine_;
     app_state* state_;
     paint_voxel_params params_;
-    block_id previous_block_;
+    voxel previous_voxel_;
 };
 
 }  // namespace vw::sculptor
@@ -884,7 +962,7 @@ private:
     engine_type* engine_;
     app_state* state_;
     remove_voxel_params params_;
-    block_id previous_block_;
+    voxel previous_voxel_;
 };
 
 }  // namespace vw::sculptor

@@ -7,6 +7,11 @@ import vw.asset;
 import vw.world;
 import vulkan;
 
+namespace vw::gfx::detail {
+struct face_axis_mapping;
+struct layer_rows;
+}  // namespace vw::gfx::detail
+
 export namespace vw::gfx {
 
 // Один жадный прямоугольник, двенадцать байт. Ни вершинного, ни индексного
@@ -16,7 +21,7 @@ export namespace vw::gfx {
 //
 // data0: min.x[6:0] | min.y[13:7] | min.z[20:14] | normal_id[23:21]
 //      | corners_ao[31:24]
-// data1: span_u[6:0] | span_v[13:7] | block_slot[23:14]
+// data1: span_u[6:0] | span_v[13:7] | voxel_slot[23:14]
 //      | corners_convex[31:24]
 // data2: corners_sky[15:0]
 //
@@ -31,9 +36,9 @@ export namespace vw::gfx {
 // внешней грани модели. Протяжённость в 128 ячеек хранится как 127 и влезает
 // ровно. Освободившиеся восемь бит заняла выпуклость.
 //
-// Слот блока занимает десять бит, а не восемь: личность блока — это категория и
+// Слот вокселя занимает десять бит, а не восемь: личность вокселя — это категория и
 // номер в ней, шестнадцать бит, и в запись она не влезает. Реестр раздаёт живым
-// блокам плотные номера, и сюда едет номер. Десять — это всё, что было свободно,
+// вокселям плотные номера, и сюда едет номер. Десять — это всё, что было свободно,
 // и потолок каталога стоит там же.
 //
 // corners_ao: два бита на угол в порядке обхода, от 0 (открыт) до 3 (закрыт).
@@ -61,7 +66,7 @@ struct quad {
     quad() = default;
 
     [[nodiscard]] static auto pack(
-        vec3i min_pos, vec3i max_pos, uint8 normal_id, block_slot slot, uint8 corners_ao,
+        vec3i min_pos, vec3i max_pos, uint8 normal_id, voxel_slot slot, uint8 corners_ao,
         uint8 corners_convex, uint16 corners_sky, uint16 corners_block
     ) -> quad;
 
@@ -139,7 +144,7 @@ public:
     [[nodiscard]]
     static auto generate_mesh_data(
         mesh_source src,
-        const block_registry& registry,
+        const voxel_registry& registry,
         mesh_options opts = {}
     ) -> mesh;
 
@@ -151,8 +156,8 @@ private:
         int32 y,
         int32 z,
         int32 face_direction,
-        block_id voxel_id,
-        const block_registry& registry,
+        voxel voxel_id,
+        const voxel_registry& registry,
         mesh_options opts
     ) -> void;
 
@@ -176,7 +181,7 @@ struct corner_light {
 struct face_mask_cell {
     // Номер в наборе, а не идентификатор: набор у модели один, и собирать его на
     // каждый воксель маски незачем — это делается один раз при выпуске квада.
-    block_index index;
+    voxel_index index;
     uint8 corner_ao;
 
     // Часть ключа слияния: две ячейки сливаются, только если свет совпал по всему
@@ -217,107 +222,13 @@ struct mesh_generation_storage {
     }
 };
 
-namespace detail {
-struct face_axis_mapping {
-    int32 width, height, depth;
-    int32 face_direction;
-    int32 voxel_scale;
-
-    face_axis_mapping(mesh_source src, int32 face_dir);
-
-    [[nodiscard]] auto to_model_coords(int32 u, int32 v, int32 layer) const
-        -> std::tuple<int32, int32, int32>;
-
-    [[nodiscard]] auto to_local_min_max(int32 u, int32 v, int32 w, int32 h, int32 layer) const
-        -> std::pair<vec3i, vec3i>;
-};
-
-[[nodiscard]] auto compute_corner_darkness(mesh_source src, int32 x, int32 y, int32 z,
-                                           int32 face) -> uint8;
-[[nodiscard]] auto compute_corner_convexity(mesh_source src, int32 x, int32 y, int32 z,
-                                            int32 face) -> uint8;
-[[nodiscard]] auto compute_corner_light(mesh_source src, int32 x, int32 y, int32 z,
-                                        int32 face) -> corner_light;
-
-// Единственная грань, для которой считается выпуклость. Боковая грань и так
-// читает свою форму по нормали, а нижняя никогда не та поверхность, по которой
-// смотрят, — остальные пять платили бы ключом слияния и ничего не показывали.
-inline constexpr int32 convex_face = 2;
-
-[[nodiscard]] auto is_face_visible(mesh_source src, int32 x, int32 y, int32 z,
-                                   int32 face_direction) -> bool;
-
-auto build_face_mask(
-    mesh_generation_storage& storage,
-    mesh_source src,
-    const face_axis_mapping& axes,
-    int32 face_direction,
-    int32 layer,
-    mesh_options opts
-) -> void;
-
-auto add_quad(
-    std::vector<quad>& quads,
-    int32 face_direction,
-    vec3i min_pos,
-    vec3i max_pos,
-    block_slot slot,
-    uint8 corner_ao,
-    uint8 corner_convex,
-    corner_light light
-) -> void;
-
-// Один слой, сведённый к битовым строкам: что видно и что стоит перед гранью —
-// это и есть плоскость, по которой берётся затенение. Пустой слой означает, что
-// граней в нём нет вовсе, и это заменяет линейный проход по всей маске.
-struct layer_rows {
-    std::array<uint64, 64> visible{};
-    std::array<uint64, 64> front{};
-
-    // Слой, в котором стоят сами грани. Выпуклость выбирает его так же, как
-    // затенение выбирает плоскость перед гранью, и он всё равно уже читался ради
-    // видимости — просто не сохранялся.
-    std::array<uint64, 64> own{};
-
-    // Плоскость перед гранью лежит вне чанка, поэтому каждая выборка затенения
-    // вокруг неё уходит за чанк по двум осям и читается как пустая.
-    bool front_outside = false;
-};
-
-[[nodiscard]] auto light_from_rows(mesh_source src, const layer_rows& rows,
-                                   int32 u_at, int32 v_at, int32 x, int32 y, int32 z,
-                                   int32 face) -> corner_light;
-
-[[nodiscard]] auto build_layer_rows(
-    mesh_source src,
-    const vw::asset::chunk_occupancy& occupancy,
-    const face_axis_mapping& axes,
-    int32 face_direction,
-    int32 layer,
-    layer_rows& out
-) -> bool;
-
-auto emit_rect(
-    mesh_generation_storage& storage,
-    const face_axis_mapping& axes,
-    int32 face_direction,
-    int32 layer,
-    int32 u_start,
-    int32 v_start,
-    int32 w,
-    int32 h,
-    const face_mask_cell& cell,
-    const std::array<uint16, 256>& slots
-) -> void;
-}  // namespace detail
-
 class strip_mesh_generator {
 public:
     [[nodiscard]]
     static auto generate_mesh_data(
         mesh_generation_storage& storage,
         mesh_source src,
-        const block_registry& registry,
+        const voxel_registry& registry,
         mesh_options opts = {}
     ) -> mesh;
 
@@ -328,7 +239,7 @@ private:
         const detail::face_axis_mapping& axes,
         int32 face_direction,
         int32 layer,
-        const block_registry& registry,
+        const voxel_registry& registry,
         mesh_options opts
     ) -> void;
 
@@ -336,7 +247,7 @@ private:
         mesh_generation_storage& storage,
         mesh_source src,
         int32 face_direction,
-        const block_registry& registry,
+        const voxel_registry& registry,
         mesh_options opts
     ) -> void;
 };
@@ -347,7 +258,7 @@ public:
     static auto generate_mesh_data(
         mesh_generation_storage& storage,
         mesh_source src,
-        const block_registry& registry,
+        const voxel_registry& registry,
         mesh_options opts = {}
     ) -> mesh;
 
@@ -370,7 +281,7 @@ private:
         const detail::face_axis_mapping& axes,
         int32 face_direction,
         int32 layer,
-        const block_registry& registry,
+        const voxel_registry& registry,
         mesh_options opts
     ) -> void;
 
@@ -378,7 +289,7 @@ private:
         mesh_generation_storage& storage,
         mesh_source src,
         int32 face_direction,
-        const block_registry& registry,
+        const voxel_registry& registry,
         mesh_options opts
     ) -> void;
 };

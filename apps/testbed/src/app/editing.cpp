@@ -120,9 +120,9 @@ auto testbed_app::draw_hover_() -> void {
     // outlines whichever button is about to be pressed.
     outline(hovered_->solid, colors::white);
 
-    // And where a placed block would land, which is the side of it the ray
+    // And where a placed voxel would land, which is the side of it the ray
     // came in through. Worth showing: at a scale of eight, guessing wrong
-    // about which face is a whole block out of place.
+    // about which face is a whole voxel out of place.
     if (tool_ == edit_tool::place && hovered_->empty != hovered_->solid) {
         outline(hovered_->empty, colors::green_4);
     }
@@ -144,13 +144,13 @@ auto testbed_app::apply_tool_() -> void {
 
     world_grid_->set_voxel(
         {cell.x * scale, cell.y * scale, cell.z * scale},
-        placing ? voxel{block_menu[static_cast<std::size_t>(place_choice_)].id} : voxel{}
+        placing ? voxel_menu[static_cast<std::size_t>(place_choice_)].id : voxels::air
     );
 
     ++edit_clicks_;
 }
 
-auto testbed_app::drop_emitter(block_id id, int32 radius) -> void {
+auto testbed_app::drop_emitter(voxel id, int32 radius) -> void {
     const int32 scale = generator_params_.voxel_scale;
 
     const auto floor_div = [](int32 a, int32 b) -> int32 {
@@ -172,7 +172,7 @@ auto testbed_app::drop_emitter(block_id id, int32 radius) -> void {
             for (int32 dx = -radius; dx <= radius; ++dx) {
                 world_grid_->set_voxel(
                     {(vx + dx) * scale, (*surface + dy) * scale, (vz + dz) * scale},
-                    voxel{id}
+                    id
                 );
             }
         }
@@ -180,7 +180,7 @@ auto testbed_app::drop_emitter(block_id id, int32 radius) -> void {
 
     const int32 side = (2 * radius) + 1;
     drop_status_ =
-        std::format("{} blocks at voxel {},{},{}", side * side * side, vx, *surface, vz);
+        std::format("{} voxels at {},{},{}", side * side * side, vx, *surface, vz);
 }
 
 }  // namespace vw::testbed

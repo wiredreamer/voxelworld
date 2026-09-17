@@ -240,7 +240,9 @@ auto spatial_system::voxel_ray_cast(
         const auto& model_comp     = reg.get<model_component>(ent);
         const auto& transform_comp = reg.get<transform_component>(ent);
 
-        if (!model_comp.has_model()) {
+        // Скрытый объём не перехватывает луч: его убрали с глаз ровно затем, чтобы
+        // добраться до того, что он заслонял.
+        if (!model_comp.has_model() || !model_comp.is_visible()) {
             continue;
         }
 

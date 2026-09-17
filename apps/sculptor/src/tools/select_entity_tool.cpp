@@ -35,16 +35,10 @@ auto select_entity_tool::render(
 }
 
 auto select_entity_tool::on_key_press(
-    const plat::key_press_event& ev
+    [[maybe_unused]] const plat::key_press_event& ev
 ) -> void {
-    // Не привычные по другим редакторам W/E/R: W, A, S и D заняты движением
-    // камеры, и опрашиваются они постоянно, а не только при захвате мыши.
-    switch (ev.key) {
-        case plat::keyboard::keys::E: gizmo_.set_mode(gizmo_mode::translate); break;
-        case plat::keyboard::keys::R: gizmo_.set_mode(gizmo_mode::rotate); break;
-        case plat::keyboard::keys::T: gizmo_.set_mode(gizmo_mode::scale); break;
-        default: break;
-    }
+    // Своих клавиш у инструмента нет: раскладка одна на весь редактор, а режим
+    // манипулятора лежит в состоянии.
 }
 
 auto select_entity_tool::on_mouse_move(

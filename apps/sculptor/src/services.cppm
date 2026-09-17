@@ -91,10 +91,41 @@ public:
 
     keyframe_service(engine_type& eng, app_state& state, operation_manager& op_manager);
 
-    auto add_keyframe() -> void;
     auto delete_keyframe() -> void;
 
+    // Поза выбранного узла уезжает в ключи на времени курсора. Каналы — по
+    // режиму манипулятора: крутили поворот, записался поворот; all_channels
+    // кладёт все три сразу, для опорной позы в начале клипа.
+    auto record_pose(bool all_channels) -> void;
+
+    // Курсор встаёт точно на соседний ключ выбранной дорожки. Без этого перезапись
+    // существующего ключа почти недостижима: шаг «процент длительности» в его
+    // время не попадает, и рядом вырастает второй ключ.
+    auto step_to_key(bool forward) -> void;
+
+    // Попадёт ли запись в существующий ключ. Спрашивает таймлайн, чтобы кнопка
+    // говорила, что сделает — завести ключ или переписать.
+    [[nodiscard]] auto has_key_at_cursor() const -> bool;
+
+    // Двигать ключ по времени умеет и таймлайн: правка одна и та же, и лежать
+    // она должна там же, где остальная работа с ключами.
+    auto move_keyframe(
+        const std::string& track_name, asset::animation_property property, uint32 keyframe_id,
+        float32 time
+    ) -> void;
+
 private:
+    // Ключ канала на времени курсора, если он там есть. Порог — миллисекунда:
+    // двух ключей на одном мгновении не бывает, а точного равенства float после
+    // перетаскивания курсора не бывает тоже.
+    [[nodiscard]] auto key_at_(
+        const std::string& track_name, asset::animation_property property, float32 time
+    ) const -> std::optional<keyframe_value>;
+
+    [[nodiscard]] auto pose_value_(
+        ecs::entity ent, asset::animation_property property, float32 time
+    ) const -> keyframe_value;
+
     engine_type* engine_;
     app_state* state_;
     operation_manager* op_manager_;

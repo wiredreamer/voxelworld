@@ -135,7 +135,7 @@ auto animated_crowd_scene::spawn_() -> void {
         models[part] = registry.create(
             parts[part].model, parts[part].fill.category(), parts[part].size
         );
-        models[part]->fill(voxel{parts[part].fill});
+        models[part]->fill(parts[part].fill);
     }
 
     const auto clip = make_clip_(world);

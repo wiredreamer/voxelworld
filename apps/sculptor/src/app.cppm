@@ -9,6 +9,7 @@ import vw.world;
 import vw.platform;
 import vw.gfx;
 import :state;
+import :shortcuts;
 import :operations;
 import :services;
 import :tools;
@@ -28,11 +29,14 @@ public:
 
 private:
     auto handle_key_press(const plat::key_press_event& ev) -> void;
-    auto handle_file_shortcuts(const plat::key_press_event& ev) -> void;
+    auto run_command_(command cmd) -> void;
     auto handle_mouse_move(const plat::mouse_move_event& ev) -> void;
     auto handle_mouse_press(const plat::mouse_press_event& ev) -> void;
     auto handle_mouse_release(const plat::mouse_release_event& ev) -> void;
 
+    auto render_panels_(float delta_time) -> void;
+    auto update_animation_context_() -> void;
+    auto sync_visibility_() -> void;
     auto handle_animation_actions_() -> void;
     auto collect_dirty_models_() -> void;
     auto prune_contexts_() -> void;
@@ -64,13 +68,12 @@ private:
     menu_bar menu_bar_;
     breadcrumb_bar breadcrumb_bar_;
     tool_panel tool_panel_;
-    block_palette_panel block_palette_panel_;
+    gizmo_panel gizmo_panel_;
+    voxel_palette_panel voxel_palette_panel_;
     entity_properties_panel entity_properties_panel_;
-    rig_panel rig_panel_;
     socket_panel socket_panel_;
     keyframe_properties_panel keyframe_properties_panel_;
     entity_tree_panel entity_tree_panel_;
-    clip_manager_panel clip_manager_panel_;
     timeline_panel timeline_panel_;
     fsm_panel fsm_panel_;
 
@@ -79,6 +82,9 @@ private:
     open_file_modal open_file_modal_;
     save_as_modal save_as_modal_;
     add_machine_modal add_machine_modal_;
+    shortcuts_modal shortcuts_modal_;
+    create_clip_modal create_clip_modal_;
+    open_clip_modal open_clip_modal_;
 };
 
 }  // namespace vw::sculptor

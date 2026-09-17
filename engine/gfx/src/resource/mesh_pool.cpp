@@ -11,7 +11,7 @@ namespace vw::gfx {
 
 
 mesh_pool::mesh_pool(
-    vulkan_context& context, const block_registry& registry, uint32 workers
+    vulkan_context& context, const voxel_registry& registry, uint32 workers
 )
     : context_{&context}, registry_{&registry} {
     auto count = workers != 0 ? workers : std::min(std::thread::hardware_concurrency(), 4u);

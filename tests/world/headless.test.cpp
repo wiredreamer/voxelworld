@@ -14,8 +14,8 @@ using namespace vw::ecs;
 namespace {
 
 auto make_cube(world& w, asset::model_registry& models, const char* name) -> entity {
-    auto model = models.create(name, blocks::terrain::category, 4, 4, 4);
-    model->fill(voxel{blocks::terrain::grass[0]});
+    auto model = models.create(name, voxels::world::category, 4, 4, 4);
+    model->fill(voxels::world::grass[0]);
 
     const auto ent = w.create().with<transform_component>().with<model_component>().get_entity();
     w.system<model_system>().modify(ent).set_model(std::move(model));
@@ -69,10 +69,10 @@ TEST_CASE("a moved viewer is reported to the world grid", "[world]") {
 TEST_CASE("voxels survive a round trip through the model registry", "[world]") {
     asset::model_registry models;
 
-    auto model = models.create("scratch", blocks::terrain::category, 16, 16, 16);
-    model->set_voxel(1, 2, 3, voxel{blocks::terrain::dirt[0]});
+    auto model = models.create("scratch", voxels::world::category, 16, 16, 16);
+    model->set_voxel(1, 2, 3, voxels::world::dirt[0]);
 
-    REQUIRE(models.get("scratch")->get_voxel(1, 2, 3).id == blocks::terrain::dirt[0]);
+    REQUIRE(models.get("scratch")->get_voxel(1, 2, 3) == voxels::world::dirt[0]);
     REQUIRE(models.get("scratch")->is_empty(4, 5, 6));
 }
 
@@ -81,7 +81,7 @@ TEST_CASE("chunk occupancy matches the voxel volume bit for bit", "[world][occup
     asset::page_pool pages;
 
     constexpr int32 side = asset::chunk_occupancy::side;
-    asset::model model{identity_pool, pages, blocks::terrain::category, side, side, side};
+    asset::model model{identity_pool, pages, voxels::world::category, side, side, side};
 
     asset::model_writer writer{model};
 
@@ -90,7 +90,7 @@ TEST_CASE("chunk occupancy matches the voxel volume bit for bit", "[world][occup
     for (int32 x = 0; x < 8; ++x) {
         for (int32 y = 0; y < 8; ++y) {
             for (int32 z = 0; z < 8; ++z) {
-                writer.set(x, y, z, voxel{blocks::terrain::stone_deep[2]});
+                writer.set(x, y, z, voxels::world::stone_deep[2]);
             }
         }
     }
@@ -101,7 +101,7 @@ TEST_CASE("chunk occupancy matches the voxel volume bit for bit", "[world][occup
         const int32 x = static_cast<int32>((state >> 8) % side);
         const int32 y = static_cast<int32>((state >> 14) % side);
         const int32 z = static_cast<int32>((state >> 20) % side);
-        writer.set(x, y, z, voxel{blocks::terrain::clay[0]});
+        writer.set(x, y, z, voxels::world::clay[0]);
     }
 
     asset::chunk_occupancy occupancy;
@@ -123,7 +123,7 @@ TEST_CASE("chunk occupancy matches the voxel volume bit for bit", "[world][occup
 TEST_CASE("chunk occupancy declines models that are not 64 cubes", "[world][occupancy]") {
     asset::model_identity_pool identity_pool;
     asset::page_pool pages;
-    asset::model model{identity_pool, pages, blocks::terrain::category, 32, 32, 32};
+    asset::model model{identity_pool, pages, voxels::world::category, 32, 32, 32};
 
     asset::chunk_occupancy occupancy;
     REQUIRE_FALSE(model.build_occupancy(occupancy));
@@ -176,10 +176,10 @@ TEST_CASE("voxel scale reaches the bounds once", "[world]") {
     constexpr int32 side        = 4;
 
     auto model = std::make_shared<asset::model>(
-        models.get_identity_pool(), models.get_page_pool(), blocks::terrain::category, side,
+        models.get_identity_pool(), models.get_page_pool(), voxels::world::category, side,
         side, side, voxel_scale
     );
-    model->fill(voxel{blocks::terrain::grass[0]});
+    model->fill(voxels::world::grass[0]);
 
     const auto ent = w.create().with<transform_component>().with<model_component>().get_entity();
     w.system<model_system>().modify(ent).set_model(std::move(model));
@@ -230,4 +230,45 @@ TEST_CASE("every system reports its own timing", "[world]") {
         sum += ms;
     }
     REQUIRE(stats.total_ms == Catch::Approx(sum));
+}
+
+// Рендер освобождает экземпляр по изменению модели. Без него снятая модель так и
+// висела в мире на том месте, где её сняли, и за узлом больше не ходила.
+TEST_CASE("removing a model is reported as a model change", "[world]") {
+    world w;
+    auto& models = w.resource<asset::model_registry>();
+
+    const auto ent = make_cube(w, models, "cube");
+    w.update(0.016F);
+    w.clear_changed();
+
+    w.modify(ent).without<model_component>();
+    w.update(0.016F);
+
+    REQUIRE(w.changed<model_component>().contains(ent));
+}
+
+// Скрытый объём убирают с глаз затем, чтобы добраться до заслонённого: луч выбора
+// обязан проходить сквозь него, иначе кисть упиралась бы в невидимое.
+TEST_CASE("a hidden model lets the picking ray through", "[world]") {
+    world w;
+    auto& models = w.resource<asset::model_registry>();
+
+    const auto front = make_cube(w, models, "front");
+    const auto back  = make_cube(w, models, "back");
+    w.system<transform_system>().modify(back).set_position(vec3f{0.0F, 0.0F, 10.0F});
+    w.update(0.016F);
+
+    const spatial::ray ray{vec3f{2.0F, 2.0F, -10.0F}, vec3f{2.0F, 2.0F, 30.0F}};
+    std::vector<entity> candidates;
+
+    const auto seen = w.system<spatial_system>().voxel_ray_cast(ray, candidates);
+    REQUIRE(seen.has_value());
+    REQUIRE(seen->ent == front);
+
+    w.system<model_system>().modify(front).set_visible(false);
+
+    const auto through = w.system<spatial_system>().voxel_ray_cast(ray, candidates);
+    REQUIRE(through.has_value());
+    REQUIRE(through->ent == back);
 }

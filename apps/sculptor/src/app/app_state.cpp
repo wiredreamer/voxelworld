@@ -65,23 +65,23 @@ auto socket_state::clear_all(
 }
 
 auto tool_state::brush_for(
-    block_category category, const block_registry& registry
-) const -> block_id {
-    const block_id remembered = brush_of_set[category.value];
+    voxel_category category, const voxel_registry& registry
+) const -> voxel {
+    const voxel remembered = brush_of_set[category.value];
 
     // Воздух — законный номер любого набора, и в палитре он лежит нулевым. Кистью
     // ему быть нельзя: непочатый набор иначе открылся бы стиралкой вместо цвета.
-    if (remembered != blocks::air && remembered.category() == category &&
-        registry.slot_of(remembered) != missing_block_slot) {
+    if (remembered != voxels::air && remembered.category() == category &&
+        registry.slot_of(remembered) != missing_voxel_slot) {
         return remembered;
     }
 
-    for (const block_type& block : registry.all()) {
-        if (block.id.category() == category && block.id != blocks::air) {
-            return block.id;
+    for (const voxel_type& type : registry.all()) {
+        if (type.id.category() == category && type.id != voxels::air) {
+            return type.id;
         }
     }
-    return blocks::air;
+    return voxels::air;
 }
 
 auto app_state::reset(
@@ -90,17 +90,6 @@ auto app_state::reset(
     scene.clear_entities(world);
     sockets.clear_all(world);
     *this = app_state{};
-}
-
-auto app_state::apply_kind_defaults(
-    const block_registry& blocks
-) -> void {
-    const auto kind = file.kind == asset::kinds::structure ? block_set_kind::materials
-                                                           : block_set_kind::palette;
-
-    if (const block_set* set = blocks.first_set(kind); set != nullptr) {
-        tool.selected_block = tool.brush_for(set->category, blocks);
-    }
 }
 
 auto animation_state::has_unsaved_clip(

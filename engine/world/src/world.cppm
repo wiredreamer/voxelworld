@@ -120,7 +120,7 @@ public:
 
     // По умолчанию — встроенный каталог: так мир поднимается в тестах и в
     // headless-сборке, где движка нет. Движок передаёт свой.
-    explicit world(const block_registry& blocks = default_block_registry());
+    explicit world(const voxel_registry& voxel_types = default_voxel_registry());
     ~world();
 
     world(const world&)                    = delete;
@@ -131,8 +131,8 @@ public:
     auto update(float32 delta_time) -> void;
     auto clear_changed() -> void;
 
-    [[nodiscard]] auto blocks() const -> const block_registry& {
-        return *blocks_;
+    [[nodiscard]] auto voxel_types() const -> const voxel_registry& {
+        return *voxel_types_;
     }
 
     [[nodiscard]] auto create() -> modifier;
@@ -286,7 +286,7 @@ private:
 
     // Перед системами: запекатель света снимает с реестра таблицу излучения, а
     // строится он системой сетки.
-    const block_registry* blocks_;
+    const voxel_registry* voxel_types_;
 
     ecs::registry registry_;
     // Ресурсы стоят перед системами намеренно: система может держать модели, чьи

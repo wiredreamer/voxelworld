@@ -17,14 +17,14 @@ auto world_grid::get_voxel(
     auto cc = world_to_chunk_coord(world_pos);
     auto it = chunks_.find(cc);
     if (it == chunks_.end()) {
-        return empty_voxel;
+        return voxels::air;
     }
     auto lc = world_to_local_coord(world_pos);
     return it->second->get_voxel(lc / voxel_scale_);
 }
 
 auto world_grid::set_voxel(
-    vec3i world_pos, const voxel& v
+    vec3i world_pos, voxel v
 ) -> void {
     auto cc = world_to_chunk_coord(world_pos);
     auto it = chunks_.find(cc);

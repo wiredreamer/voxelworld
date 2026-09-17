@@ -24,8 +24,7 @@ include(Catch)
 # Tests link the module libraries directly, never vwengine: nothing here needs
 # a GPU, and a headless configuration must not drag Vulkan into the link.
 add_executable(core_tests
-    core/voxel.test.cpp
-    core/blocks.test.cpp
+    core/voxels.test.cpp
     core/color.test.cpp
     core/vec2.test.cpp
     core/vec3.test.cpp
@@ -94,6 +93,7 @@ catch_discover_tests(ecs_tests)
 
 add_executable(world_tests
     world/headless.test.cpp
+    world/hierarchy.test.cpp
     world/column_staging.test.cpp
     world/surface.test.cpp
     world/sky_light.test.cpp

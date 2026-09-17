@@ -123,14 +123,14 @@ auto chunk::get_voxel(
 }
 
 auto chunk::set_voxel(
-    int32 x, int32 y, int32 z, const voxel& v
+    int32 x, int32 y, int32 z, voxel v
 ) -> void {
     volume_->voxels().set_voxel(x, y, z, v);
     fill_ = volume_->voxels().scan_fill();
 }
 
 auto chunk::set_voxel(
-    vec3i local, const voxel& v
+    vec3i local, voxel v
 ) -> void {
     set_voxel(local.x, local.y, local.z, v);
 }

@@ -28,7 +28,38 @@ timeline_panel::timeline_panel(
     , clip_service_(&clip_svc)
     , keyframe_service_(&kf_svc)
     , create_kf_modal_(eng, st, op_manager)
-    , delete_track_modal_(eng, st, op_manager) {}
+    , delete_track_modal_(eng, st, op_manager)
+    , save_clip_as_modal_(eng, st, clip_svc)
+    , layer_blend_modal_(st) {}
+
+auto timeline_panel::render_close_confirm_popup_() const -> void {
+    if (!ImGui::BeginPopupModal("Close Animation?", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        return;
+    }
+
+    ImGui::Text(
+        "Animation \"%s\" has unsaved changes. Close anyway?",
+        state_->anim.selected_clip_name.c_str()
+    );
+    ImGui::Spacing();
+
+    if (ImGui::Button("Save & Close")) {
+        static_cast<void>(clip_service_->save_clip(state_->anim.selected_clip_name));
+        clip_service_->close_clip(state_->anim.selected_clip_name);
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Close")) {
+        clip_service_->close_clip(state_->anim.selected_clip_name);
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel")) {
+        ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::EndPopup();
+}
 
 auto timeline_panel::render(
     float delta_time
@@ -42,30 +73,9 @@ auto timeline_panel::render(
         return;
     }
 
-    const ImGuiViewport* viewport = ImGui::GetMainViewport();
-    const auto pos                = ImVec2{
-        viewport->WorkPos.x + 10.f,
-        viewport->WorkPos.y + viewport->WorkSize.y  //
-            - state_->ui.left_bottom_voffset        //
-            - 10.f
-    };
-    const auto size = ImVec2{
-        viewport->WorkSize.x - 20.f,  //
-        state_->ui.bottom_panel_height - 10.f
-    };
-    ImGui::SetNextWindowPos(pos, ImGuiCond_Always, ImVec2(0.0f, 1.0f));
-    ImGui::SetNextWindowSize(size, ImGuiCond_Always);
-
-    constexpr ImGuiWindowFlags window_flags =  //
-        ImGuiWindowFlags_NoCollapse |          //
-        ImGuiWindowFlags_NoSavedSettings |     //
-        ImGuiWindowFlags_NoMove |              //
-        ImGuiWindowFlags_NoResize |            //
-        ImGuiWindowFlags_NoBringToFrontOnFocus;
-
     const auto title = std::format("Timeline - {}###Timeline", state_->anim.selected_clip_name);
     bool still_open  = state_->ui.show_timeline;
-    ImGui::Begin(title.c_str(), &still_open, window_flags);
+    begin_panel(*state_, panel_slot::footer, title.c_str(), &still_open);
 
     if (!still_open && state_->ui.show_timeline) {
         state_->anim.selected_track_name.clear();
@@ -133,13 +143,15 @@ auto timeline_panel::render(
     render_toolbar(clip_duration);
     ImGui::Separator();
     render_tracks();
+    update_key_drag_(clip_duration);
+    render_keyframe_context_menu_();
 
     create_kf_modal_.render(delta_time);
     delete_track_modal_.render(delta_time);
+    save_clip_as_modal_.render(delta_time);
+    layer_blend_modal_.render(delta_time);
 
-    state_->ui.left_bottom_voffset += ImGui::GetWindowHeight() + 10.f;
-
-    ImGui::End();
+    end_panel(*state_, panel_slot::footer);
 }
 
 auto timeline_panel::render_toolbar(
@@ -151,39 +163,16 @@ auto timeline_panel::render_toolbar(
         return;
     }
 
-    const bool can_add_track = !state_->scene.selected_name.empty() && clip &&
-        !clip->has_track(state_->scene.selected_name);
-    if (can_add_track) {
-        if (ImGui::Button("Add Track")) {
-            add_track_params params = {
-                .clip_name  = state_->anim.selected_clip_name,
-                .track_name = state_->scene.selected_name,
-            };
-            auto op = std::make_unique<add_track_operation>(*engine_, *state_, params);
-            op_manager_->execute(std::move(op));
-
-            state_->anim.selected_track_name = state_->scene.selected_name;
-            state_->anim.expanded_tracks.insert(state_->scene.selected_name);
-        }
-        ImGui::SameLine();
-    }
-
-    bool can_add_kf = !state_->anim.selected_track_name.empty() &&
-        !state_->anim.selected_clip_name.empty() &&
-        clip->has_track(state_->anim.selected_track_name);
-    if (can_add_kf) {
-        if (ImGui::Button("Add Keyframe")) {
-            create_kf_modal_.open(state_->anim.selected_track_name);
-        }
-        ImGui::SameLine();
-    }
-
-    if (can_add_track || can_add_kf) {
-        ImGui::TextDisabled("|");
-        ImGui::SameLine();
-    }
+    render_clip_controls_();
+    render_target_hint_();
 
     render_playback_controls(clip);
+
+    ImGui::SameLine();
+    ImGui::TextDisabled("|");
+    ImGui::SameLine();
+
+    render_record_controls_();
 
     ImGui::SameLine();
     ImGui::TextDisabled("|");
@@ -256,6 +245,191 @@ auto timeline_panel::render_toolbar(
     zoom_percent_ = std::clamp(zoom_percent_, 100.f, 1000.f);
 }
 
+// Управление клипами живёт в шапке таймлайна, а не в своей панели: клип и есть
+// то, что здесь правят, а панель сбоку занимала место ради пяти кнопок.
+auto timeline_panel::render_clip_controls_() -> void {
+    const auto& registry = engine_->get_world().resource<asset::animation_clip_registry>();
+
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextDisabled("Clip");
+    ImGui::SameLine();
+
+    ImGui::PushItemWidth(180.f);
+    if (ImGui::BeginCombo("##clip", state_->anim.selected_clip_name.c_str())) {
+        for (const auto& [name, clip] : registry.all()) {
+            if (!clip) {
+                continue;
+            }
+
+            const bool is_selected = state_->anim.selected_clip_name == name;
+            const auto label       = state_->anim.has_unsaved_clip(name) ?
+                      std::format("[{}] {}*", state_->anim.get_layer_for_clip(name), name) :
+                      std::format("[{}] {}", state_->anim.get_layer_for_clip(name), name);
+
+            if (ImGui::Selectable(label.c_str(), is_selected) && !is_selected) {
+                state_->anim.selected_clip_name   = name;
+                state_->anim.selected_track_name.clear();
+                state_->anim.selected_keyframe_id = asset::invalid_keyframe_id;
+            }
+            if (is_selected) {
+                ImGui::SetItemDefaultFocus();
+            }
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::PopItemWidth();
+
+    ImGui::SameLine();
+    if (ImGui::Button("New")) {
+        state_->ui.need_create_clip_modal = true;
+    }
+
+    ImGui::SameLine();
+    if (ImGui::Button("Open")) {
+        state_->ui.need_load_clip_modal = true;
+    }
+
+    ImGui::SameLine();
+    if (ImGui::Button("Save")) {
+        static_cast<void>(clip_service_->save_clip(state_->anim.selected_clip_name));
+    }
+
+    ImGui::SameLine();
+    if (ImGui::Button("Save As")) {
+        save_clip_as_modal_.open();
+    }
+
+    ImGui::SameLine();
+    if (ImGui::Button("Close")) {
+        state_->ui.need_close_clip = true;
+    }
+
+    ImGui::SameLine();
+    ImGui::TextDisabled("|");
+    ImGui::SameLine();
+
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextDisabled("Layer");
+    const auto current_layer = state_->anim.get_layer_for_clip(state_->anim.selected_clip_name);
+    for (std::size_t i = 0; i < layer_count; ++i) {
+        ImGui::SameLine();
+
+        const bool is_active = current_layer == i;
+        if (is_active) {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+        }
+        const auto btn_id = std::format("{}##layer_btn", i);
+        if (ImGui::SmallButton(btn_id.c_str())) {
+            clip_service_->stop_layer_for_clip(state_->anim.selected_clip_name);
+            state_->anim.clip_to_layer[state_->anim.selected_clip_name] = i;
+        }
+        if (is_active) {
+            ImGui::PopStyleColor();
+        }
+    }
+
+    // Затухания имеют смысл только поверх чужой позы: на нижнем слое клип и так
+    // задаёт её целиком.
+    if (current_layer > 0) {
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Fade")) {
+            layer_blend_modal_.open();
+        }
+    }
+
+    ImGui::SameLine();
+    ImGui::TextDisabled("|");
+    ImGui::SameLine();
+    render_clip_blend_controls_();
+
+    if (state_->ui.need_close_clip) {
+        state_->ui.need_close_clip = false;
+        if (state_->anim.has_unsaved_clip(state_->anim.selected_clip_name)) {
+            need_close_confirm_popup_ = true;
+        } else {
+            clip_service_->close_clip(state_->anim.selected_clip_name);
+        }
+    }
+
+    if (need_close_confirm_popup_) {
+        need_close_confirm_popup_ = false;
+        ImGui::OpenPopup("Close Animation?");
+    }
+    render_close_confirm_popup_();
+}
+
+// Запись ключа — единственный способ положить позу в клип, и кнопка говорит,
+// что именно произойдёт: завести ключ или переписать тот, на котором стоим.
+auto timeline_panel::render_record_controls_() -> void {
+    const bool can_record = !state_->scene.selected_name.empty();
+
+    ImGui::BeginDisabled(!can_record);
+
+    const bool updates  = can_record && keyframe_service_->has_key_at_cursor();
+    const auto caption  = std::format("{} ({})", updates ? "Update key" : "Key", keys_of(command::record_key));
+
+    if (updates) {
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{0.65f, 0.45f, 0.1f, 1.f});
+    }
+    if (ImGui::Button(caption.c_str())) {
+        keyframe_service_->record_pose(false);
+    }
+    if (updates) {
+        ImGui::PopStyleColor();
+    }
+
+    ImGui::SameLine();
+    if (ImGui::Button("Key all")) {
+        keyframe_service_->record_pose(true);
+    }
+
+    ImGui::EndDisabled();
+
+    ImGui::SameLine();
+    if (ImGui::Button("<|")) {
+        keyframe_service_->step_to_key(false);
+    }
+    ImGui::SetItemTooltip("Previous key (%s)", std::string{keys_of(command::prev_key)}.c_str());
+
+    ImGui::SameLine();
+    if (ImGui::Button("|>")) {
+        keyframe_service_->step_to_key(true);
+    }
+    ImGui::SetItemTooltip("Next key (%s)", std::string{keys_of(command::next_key)}.c_str());
+}
+
+// Узел без цели анимации клип адресовать не может, и записанная поза потерялась
+// бы молча. Поэтому не запрет, а предложение завести цель.
+auto timeline_panel::render_target_hint_() -> void {
+    const auto& name = state_->scene.selected_name;
+    if (name.empty()) {
+        ImGui::TextDisabled("Select a node in the scene or in the list on the left");
+        return;
+    }
+
+    const auto it = state_->scene.name_to_entity.find(name);
+    if (it == state_->scene.name_to_entity.end()) {
+        return;
+    }
+
+    auto& world = engine_->get_world();
+    if (world.has<ecs::animation_target_component>(it->second)) {
+        return;
+    }
+
+    ImGui::TextColored(ImVec4{1.f, 0.8f, 0.3f, 1.f}, "'%s' is not an animation target", name.c_str());
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Add target")) {
+        op_manager_->execute(
+            std::make_unique<add_animation_target_operation>(
+                *engine_,
+                *state_,
+                add_animation_target_params{.entity_name = name, .target_name = name}
+            )
+        );
+    }
+}
+
 auto timeline_panel::render_tracks() -> void {
     const auto& clip_registry = engine_->get_world().resource<asset::animation_clip_registry>();
 
@@ -314,11 +488,16 @@ auto timeline_panel::render_tracks() -> void {
 
     const float time_ruler_y = ImGui::GetCursorScreenPos().y;
 
-    ImGui::TextDisabled("Tracks");
+    ImGui::TextDisabled("Targets");
     ImGui::NextColumn();
 
     const ImVec2 ruler_start = ImGui::GetCursorScreenPos();
     const float ruler_width  = usable_track_width;
+
+    // Обратный перевод жеста — из точки курсора во время — считает по тем же
+    // числам, по которым нарисованы ключи.
+    track_origin_x_ = ruler_start.x;
+    track_scale_    = track_area_width;
 
     render_time_ruler(vec2f{ruler_start.x, ruler_start.y}, ruler_width, track_area_width, clip_duration);
     ImGui::NextColumn();
@@ -327,9 +506,20 @@ auto timeline_panel::render_tracks() -> void {
     draw_list->ChannelsSplit(2);
     draw_list->ChannelsSetCurrent(1);
 
-    auto& tracks = clip->get_tracks();
-    for (const auto& track : tracks) {
-        render_track_row(track, usable_track_width, clip_duration, scroll_offset_);
+    const auto rows = collect_rows_();
+    for (const auto& entry : rows) {
+        if (entry.track != nullptr) {
+            render_track_row(entry, usable_track_width, clip_duration, scroll_offset_);
+        } else {
+            render_target_row_(entry, usable_track_width);
+        }
+    }
+
+    if (rows.empty()) {
+        ImGui::TextDisabled("no targets");
+        ImGui::NextColumn();
+        ImGui::Dummy(ImVec2(usable_track_width, 16.f));
+        ImGui::NextColumn();
     }
 
     const float tracks_end_y = ImGui::GetCursorScreenPos().y;
@@ -348,13 +538,72 @@ auto timeline_panel::render_tracks() -> void {
     ImGui::EndChild();
 }
 
+// Список слева — это цели рига, а не дорожки клипа: пока узел не анимировали,
+// дорожки у него нет, и по списку дорожек до него было не добраться — а завести
+// дорожку можно только тому, кто выбран.
+auto timeline_panel::collect_rows_() const -> std::vector<row> {
+    const auto& registry = engine_->get_world().resource<asset::animation_clip_registry>();
+    const auto clip      = registry.get(state_->anim.selected_clip_name);
+    if (!clip) {
+        return {};
+    }
+
+    std::vector<row> rows;
+
+    const auto root_it = state_->scene.name_to_entity.find(state_->scene.root_name);
+    if (root_it != state_->scene.name_to_entity.end()) {
+        auto& anim_sys = engine_->get_world().system<ecs::animation_system>();
+        for (auto& name : anim_sys.collect_targets(root_it->second)) {
+            const auto* track = clip->get_track(name);
+            rows.push_back(row{.name = std::move(name), .track = track, .is_target = true});
+        }
+    }
+
+    // Дорожки, которым в риге цели не нашлось, показываются следом: клип чужого
+    // персонажа иначе выглядел бы пустым, хотя ключи в нём есть.
+    for (const auto& track : clip->get_tracks()) {
+        const auto& name  = track.get_target_name();
+        const bool listed = std::ranges::any_of(rows, [&name](const row& entry) {
+            return entry.name == name;
+        });
+        if (!listed) {
+            rows.push_back(row{.name = name, .track = &track, .is_target = false});
+        }
+    }
+
+    return rows;
+}
+
+auto timeline_panel::render_target_row_(
+    const row& entry, float track_area_width
+) -> void {
+    const bool is_selected = state_->anim.selected_track_name == entry.name ||
+        state_->scene.selected_name == entry.name;
+
+    // Приглушённо и без маркеров: ключей у цели ещё нет, а выбрать её нужно —
+    // первая же запись заведёт ей дорожку.
+    ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
+    const auto label = std::format("  {}##target", entry.name);
+    if (ImGui::Selectable(label.c_str(), is_selected)) {
+        state_->scene.selected_name       = entry.name;
+        state_->anim.selected_track_name  = entry.name;
+        state_->anim.selected_keyframe_id = asset::invalid_keyframe_id;
+    }
+    ImGui::PopStyleColor();
+
+    ImGui::NextColumn();
+    ImGui::Dummy(ImVec2(track_area_width, 16.f));
+    ImGui::NextColumn();
+}
+
 auto timeline_panel::render_track_row(
-    const asset::animation_track& track,
+    const row& entry,
     float track_area_width,
     float clip_duration,
     float scroll_offset
 ) -> void {
-    const auto& target           = track.get_target_name();
+    const auto& track            = *entry.track;
+    const auto& target           = entry.name;
     const bool is_expanded       = state_->anim.expanded_tracks.contains(target);
     const bool is_track_selected = (state_->anim.selected_track_name == target);
 
@@ -372,8 +621,13 @@ auto timeline_panel::render_track_row(
     const auto node_id = std::format("{}##track", target);
     const bool opened  = ImGui::TreeNodeEx(node_id.c_str(), node_flags);
 
+    // Выбор дорожки — это выбор узла: запись ключа и манипулятор смотрят на
+    // выделение сцены, и расходиться этим двум спискам нельзя.
     if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
         state_->anim.selected_track_name = target;
+        if (state_->scene.name_to_entity.contains(target)) {
+            state_->scene.selected_name = target;
+        }
     }
 
     render_track_context_menu(target);
@@ -525,6 +779,12 @@ auto timeline_panel::render_playback_controls(
             state_->anim.timeline_cursor = 0.f;
         }
     }
+
+    ImGui::SameLine();
+    if (ImGui::Button("Reset")) {
+        clip_service_->reset_all();
+    }
+    ImGui::SetItemTooltip("Stop every layer and return the pose the prefab was saved with");
 }
 
 auto timeline_panel::render_clip_blend_controls_() const -> void {
@@ -763,6 +1023,21 @@ auto timeline_panel::render_keyframe_markers(
                     color
                 );
 
+                // Призрак ключа там, куда его тянут: сам ключ до отпускания не
+                // двигается — его время уезжает в историю один раз.
+                if (key_drag_ && key_drag_moved_ && drag_key_id_ == kf.id() &&
+                    drag_key_track_ == track_name && drag_key_property_ == prop) {
+                    const float ghost_x =
+                        cursor_pos.x + ((drag_key_time_ / clip_duration) * scale) - scroll_offset;
+                    draw_list->AddQuad(
+                        ImVec2(ghost_x, y - diamond_size),
+                        ImVec2(ghost_x + diamond_size, y),
+                        ImVec2(ghost_x, y + diamond_size),
+                        ImVec2(ghost_x - diamond_size, y),
+                        IM_COL32(255, 200, 50, 255)
+                    );
+                }
+
                 ImVec2 mouse = ImGui::GetMousePos();
                 if (ImGui::IsWindowHovered(ImGuiHoveredFlags_None) &&
                     std::abs(mouse.x - x) < diamond_size + 2.f &&
@@ -772,19 +1047,80 @@ auto timeline_panel::render_keyframe_markers(
                         state_->anim.selected_property    = prop;
                         state_->anim.selected_keyframe_id = kf.id();
                         keyframe_clicked_                 = true;
+
+                        // Курсор встаёт на выбранный ключ: правят позу того
+                        // мгновения, которое выбрали, и запись попадает в этот
+                        // же ключ, а не заводит соседний.
+                        state_->anim.timeline_cursor = kf.time;
+
+                        if (state_->scene.name_to_entity.contains(track_name)) {
+                            state_->scene.selected_name = track_name;
+                        }
+
+                        key_drag_          = true;
+                        key_drag_moved_    = false;
+                        drag_key_id_       = kf.id();
+                        drag_key_track_    = track_name;
+                        drag_key_property_ = prop;
+                        drag_key_time_     = kf.time;
                     }
 
                     if (ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
                         state_->anim.selected_track_name  = track_name;
                         state_->anim.selected_property    = prop;
                         state_->anim.selected_keyframe_id = kf.id();
-                        ImGui::OpenPopup("KeyframeContextMenu");
+                        need_keyframe_menu_               = true;
                     }
                 }
             }
         },
         channel_var
     );
+}
+
+auto timeline_panel::update_key_drag_(
+    float clip_duration
+) -> void {
+    if (!key_drag_) {
+        return;
+    }
+
+    if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+        if (track_scale_ <= 0.f) {
+            return;
+        }
+
+        const float local_x = ImGui::GetMousePos().x - track_origin_x_ + scroll_offset_;
+        const float time    = std::clamp((local_x / track_scale_) * clip_duration, 0.f, clip_duration);
+
+        // Порог в пару пикселей: без него обычный клик по ключу считался бы
+        // микроскопическим переносом и плодил бы шаги отмены.
+        if (std::abs(ImGui::GetMouseDragDelta(ImGuiMouseButton_Left).x) > 2.f) {
+            key_drag_moved_ = true;
+        }
+
+        if (key_drag_moved_) {
+            drag_key_time_               = time;
+            state_->anim.timeline_cursor = time;
+        }
+        return;
+    }
+
+    if (key_drag_moved_) {
+        keyframe_service_->move_keyframe(
+            drag_key_track_, drag_key_property_, drag_key_id_, drag_key_time_
+        );
+    }
+
+    key_drag_       = false;
+    key_drag_moved_ = false;
+}
+
+auto timeline_panel::render_keyframe_context_menu_() -> void {
+    if (need_keyframe_menu_) {
+        need_keyframe_menu_ = false;
+        ImGui::OpenPopup("KeyframeContextMenu");
+    }
 
     if (ImGui::BeginPopup("KeyframeContextMenu")) {
         if (ImGui::MenuItem("Delete Keyframe")) {
@@ -837,7 +1173,7 @@ auto timeline_panel::render_playhead(
     }
 
     ImVec2 mouse = ImGui::GetMousePos();
-    if (!keyframe_clicked_ && ImGui::IsWindowHovered(ImGuiHoveredFlags_None) &&
+    if (!keyframe_clicked_ && !key_drag_ && ImGui::IsWindowHovered(ImGuiHoveredFlags_None) &&
         mouse.x >= track_area_x && mouse.x <= track_area_x + track_width &&
         mouse.y >= area_top && mouse.y <= area_bottom) {
         if (ImGui::IsMouseDragging(ImGuiMouseButton_Left) ||

@@ -23,25 +23,56 @@ enum class tools : uint8 {
     paint_voxel,
     color_picker,
     move_pivot,
+
+    // Правка позы в клипе. Не select_entity с другим названием: выбор узла там
+    // ведёт к дорожке, а жест манипулятора не уходит в историю документа —
+    // позу в файл кладёт запись ключа.
+    pose,
+};
+
+// Чем занят манипулятор. Живёт здесь, а не в самом манипуляторе: режим
+// переключают и кнопки, и клавиши, а манипуляторов в редакторе два — узловой и
+// точки вращения.
+enum class gizmo_mode : uint8 { translate, rotate, scale };
+
+// Панели, у которых есть право показываться не всегда. Диалоги и крошки сюда не
+// входят: они спрашивают не «где мы», а «о чём речь».
+enum class panels : uint8 {
+    tools,
+    palette,
+    gizmo,
+    properties,
+    entity_tree,
+    sockets,
+    timeline,
+    keyframe,
+    fsm,
 };
 
 struct ui_state {
-    float left_top_voffset    = 0.f;
-    float left_bottom_voffset = 0.f;
-    float right_top_voffset   = 0.f;
+    // Сколько места вдоль края уже занято панелями этого кадра. Считается здесь,
+    // а не в самих панелях: порядок задаётся порядком вызовов, и панель, которой
+    // в этом контексте нет, не оставляет после себя дыры.
+    float32 left_offset   = 0.f;
+    float32 bottom_offset = 0.f;
+    float32 right_offset  = 0.f;
 
     bool need_startup_modal   = true;
     bool need_new_file_modal  = false;
     bool need_open_file_modal = false;
     bool need_save_as_modal   = false;
+    bool need_shortcuts_modal = false;
 
-    float bottom_panel_height   = 400.f;
+    float32 bottom_panel_height = 400.f;
     bool show_timeline          = false;
-    bool show_clip_manager      = false;
     bool show_sockets           = true;
-    bool show_rig               = true;
+
+    // Просьба перейти к правке клипа. Флаг, а не вызов на месте: просят и
+    // меню, и диалоги создания с открытием, а сервисы есть только у
+    // приложения.
+    bool need_enter_animation   = false;
     // Узел, которому диалог состава просит завести объём: сам он этого не
-    // умеет — объёму нужны размер и набор блоков.
+    // умеет — объёму нужны размер и набор вокселей.
     std::string need_add_model_for;
 
     // Узел, чьему слоту просят выбрать кандидата: список файлов — тоже диалог.
@@ -62,11 +93,6 @@ struct ui_state {
 
 struct file_state {
     std::string filename;
-
-    // Тип документа из шапки: character, structure — или пусто у предмета. В
-    // мире его нет, потому что ни один компонент от него не зависит; он решает,
-    // каким набором блоков открывать документ.
-    std::string kind;
     bool has_unsaved_changes = false;
 
     // Узлы, чьи объёмы правились с последней записи. Флага на весь документ
@@ -133,17 +159,17 @@ struct context_state {
     }
 
     // Узел выбирают и в префабе, и в клипе: в клипе выбор говорит, чью дорожку
-    // правят и кого двигает гизмо. Внутри объёма выбирать нечего — узел уже
-    // назван контекстом, а в автомате узлов нет вовсе.
+    // правят и кого двигает манипулятор. Внутри объёма выбирать нечего — узел
+    // уже назван контекстом, а в автомате узлов нет вовсе.
     [[nodiscard]] auto allows_node_select() const -> bool {
         return kind() == edit_kind::prefab || kind() == edit_kind::clip;
     }
 
-    // Сам объём правят и из префаба, и провалившись в него: точка вращения и
-    // обрезка нужны там же, где воксели. В клипе не правится ничего — позу
-    // ведёт дорожка.
+    // Объём правят только изнутри него: точка вращения и обрезка живут в самом
+    // .voxm, который делят все узлы и префабы, на него сославшиеся, и правка из
+    // префаба молча меняла бы чужие модели.
     [[nodiscard]] auto allows_volume_edit() const -> bool {
-        return kind() == edit_kind::prefab || kind() == edit_kind::model;
+        return kind() == edit_kind::model;
     }
 
     // Узел, чей под-ассет открыт. Пусто — либо префаб, либо контекст без узла.
@@ -157,7 +183,8 @@ struct context_state {
     // когда-нибудь можно нажать здесь.
     [[nodiscard]] auto allows_tool(tools tool) const -> bool {
         switch (tool) {
-            case tools::select_entity: return allows_node_select();
+            case tools::select_entity: return in_prefab();
+            case tools::pose: return in_clip();
             case tools::add_voxel:
             case tools::remove_voxel:
             case tools::paint_voxel:
@@ -169,7 +196,45 @@ struct context_state {
     }
 
     [[nodiscard]] auto default_tool() const -> tools {
-        return kind() == edit_kind::model ? tools::add_voxel : tools::select_entity;
+        switch (kind()) {
+            case edit_kind::model: return tools::add_voxel;
+            case edit_kind::clip: return tools::pose;
+            case edit_kind::prefab:
+            case edit_kind::fsm: break;
+        }
+        return tools::select_entity;
+    }
+
+    // Та же мысль, что и у allows_tool, только про панели: палитра поверх
+    // префаба, где красить нечем, и дерево узлов внутри объёма, откуда из него
+    // не выйти, обещают работу, которой в этом контексте нет.
+    [[nodiscard]] auto shows(panels panel) const -> bool {
+        switch (panel) {
+            case panels::tools:
+            case panels::palette: return kind() == edit_kind::model;
+
+            // Манипулятор двигает узел, а не воксели: там, где узел выбирают,
+            // его режим и переключают.
+            case panels::gizmo: return allows_node_select();
+
+            // Свойства открыты и в префабе, и в объёме: внутри объёма панель
+            // показывает только его собственные секции.
+            case panels::properties:
+                return kind() == edit_kind::prefab || kind() == edit_kind::model;
+
+            // Дерево нужно и внутри объёма: там им прячут соседние части, не
+            // выходя из правки. Выбирать узлы оттуда по-прежнему нельзя.
+            case panels::entity_tree:
+                return kind() == edit_kind::prefab || kind() == edit_kind::model;
+
+            case panels::sockets: return in_prefab();
+
+            case panels::timeline:
+            case panels::keyframe: return in_clip();
+
+            case panels::fsm: return in_fsm();
+        }
+        return false;
     }
 
     auto enter(edit_context ctx) -> void {
@@ -191,6 +256,12 @@ struct scene_state {
     std::unordered_map<ecs::entity, std::string> entity_to_name;
     std::vector<ecs::entity> entities;
 
+    // Узлы, выключенные глазом в дереве. Хранится намерение, а не итог: скрытый
+    // родитель прячет и детей, но их собственный выбор помнится и вернётся, когда
+    // родителя покажут. В файл и в историю не попадает — это то, на что смотрят,
+    // а не то, из чего префаб состоит.
+    std::unordered_set<std::string> hidden_nodes;
+
     auto clear_entities(world_type& world) -> void;
 };
 
@@ -204,17 +275,18 @@ struct volume_state {
 
 struct tool_state {
     tools selected_tool     = tools::add_voxel;
-    block_id selected_block = blocks::palette::gray[9];
+    gizmo_mode gizmo        = gizmo_mode::translate;
+    voxel selected_voxel = voxels::palette::gray[9];
 
     // Кисть помнится на набор: модель несёт ровно один набор, и переход к
     // модели другого не должен стоить заново выбранного цвета. Плоский массив
     // по значению категории — полкилобайта и ни одной аллокации.
-    std::array<block_id, 256> brush_of_set{};
+    std::array<voxel, 256> brush_of_set{};
 
-    // Чем красить в этом наборе: запомненным блоком, а если такого ещё не было —
-    // первым блоком набора.
-    [[nodiscard]] auto brush_for(block_category category, const block_registry& registry) const
-        -> block_id;
+    // Чем красить в этом наборе: запомненным вокселем, а если такого ещё не было —
+    // первым вокселем набора.
+    [[nodiscard]] auto brush_for(voxel_category category, const voxel_registry& registry) const
+        -> voxel;
 };
 
 struct clip_settings {
@@ -236,7 +308,8 @@ struct animation_state {
 
     bool need_toggle_playback = false;
     bool need_stop_playback   = false;
-    bool need_add_keyframe    = false;
+    bool need_record_key     = false;
+    bool need_record_key_all = false;
     bool need_delete_keyframe = false;
     bool need_step_forward    = false;
     bool need_step_backward   = false;
@@ -369,12 +442,6 @@ struct app_state {
     }
 
     auto reset(world_type& world) -> void;
-
-    // Тип документа выбирает набор блоков, которым откроется первый объём:
-    // структуру строят из вещества мира, всё прочее красят палитрой. Набор ищется
-    // по виду, а не по имени: каталог вправе звать свои наборы как угодно. Дальше
-    // набор помнит сам объём, и панель идёт за ним.
-    auto apply_kind_defaults(const block_registry& blocks) -> void;
 };
 
 }  // namespace vw::sculptor

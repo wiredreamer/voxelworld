@@ -68,12 +68,12 @@ auto lamp_edits_scene::tick(float32 /*delta_time*/) -> void {
             continue;
         }
 
-        // На воксель над землёй, чтобы блок всегда ложился в воздух и оба
-        // прогона делали одну и ту же геометрическую работу, каким бы блок ни
+        // На воксель над землёй, чтобы новый всегда ложился в воздух и оба
+        // прогона делали одну и ту же геометрическую работу, каким бы он ни
         // оказался.
         stand().grid().set_voxel(
             {vx * scale, (*surface + 1) * scale, vz * scale},
-            voxel{inert_ ? blocks::terrain::stone[1] : blocks::terrain::glowstone}
+            inert_ ? voxels::world::stone[1] : voxels::world::glowstone
         );
 
         ++placed_;
@@ -137,7 +137,7 @@ auto lamp_edits_scene::collect_report(gfx::report& out) const -> void {
 
 auto lamp_edits_scene::ui() -> void {
     ImGui::Text("lamp-edits: %llu %s placed, cursor %d of %d",
-                static_cast<unsigned long long>(placed_), inert_ ? "inert blocks" : "lamps",
+                static_cast<unsigned long long>(placed_), inert_ ? "inert voxels" : "lamps",
                 cursor_, cells);
 }
 

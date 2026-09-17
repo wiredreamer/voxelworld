@@ -17,6 +17,12 @@ auto model_system::on_add(entity e) -> void {
     world_->registry().request_change<model_component>(e);
 }
 
+template <typename C>
+    requires std::same_as<C, model_component>
+auto model_system::on_remove(entity e) -> void {
+    world_->registry().request_change<model_component>(e);
+}
+
 auto model_system::update(float32 /*dt*/) -> void {
     auto& reg       = world_->registry();
     auto& requested = reg.requested<model_component>();
@@ -63,6 +69,21 @@ auto model_system::model_modifier::set_source(
     component_->source_ = source;
 }
 
+auto model_system::model_modifier::set_visible(
+    bool visible
+) -> void {
+    if (component_->visible_ == visible) {
+        return;
+    }
+
+    component_->visible_ = visible;
+
+    // Заявляется по трансформу, как и точка вращения: геометрия не менялась, и
+    // изменение модели погнало бы меш на пересборку, а у редактора — пометило
+    // бы объём несохранённым. Буфер рендера видит смену в ветке трансформа.
+    system_->world_->registry().request_change<transform_component>(entity_);
+}
+
 auto model_system::model_modifier::set_pivot(
     const vec3f& pivot
 ) -> void {
@@ -87,7 +108,7 @@ auto model_system::model_modifier::set_chunk(
 }
 
 auto model_system::model_modifier::set_voxel(
-    int x, int y, int z, const voxel& v
+    int x, int y, int z, voxel v
 ) -> void {
     if (component_->model_) {
         component_->model_->set_voxel(x, y, z, v);
@@ -96,7 +117,7 @@ auto model_system::model_modifier::set_voxel(
 }
 
 auto model_system::model_modifier::set_voxel(
-    vec3i pos, const voxel& v
+    vec3i pos, voxel v
 ) -> void {
     if (component_->model_) {
         component_->model_->set_voxel(pos.x, pos.y, pos.z, v);
@@ -105,7 +126,7 @@ auto model_system::model_modifier::set_voxel(
 }
 
 auto model_system::model_modifier::fill(
-    const voxel& v
+    voxel v
 ) -> void {
     if (component_->model_) {
         component_->model_->fill(v);
@@ -114,5 +135,6 @@ auto model_system::model_modifier::fill(
 }
 
 template void model_system::on_add<model_component>(entity);
+template void model_system::on_remove<model_component>(entity);
 
 }  // namespace vw::ecs

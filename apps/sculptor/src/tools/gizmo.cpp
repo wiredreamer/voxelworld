@@ -154,19 +154,22 @@ auto snapped(float32 value, float32 step) -> float32 {
 }  // namespace
 
 gizmo::gizmo(
-    engine_type& eng, app_state& st, operation_manager& op_manager, gizmo_target target
+    engine_type& eng, app_state& st, operation_manager& op_manager, gizmo_target target,
+    gizmo_commit commit
 )
-    : engine_(&eng), state_(&st), op_manager_(&op_manager), target_(target) {}
+    : engine_(&eng)
+    , state_(&st)
+    , op_manager_(&op_manager)
+    , target_(target)
+    , commit_(commit) {}
 
-auto gizmo::set_mode(
-    gizmo_mode mode
-) -> void {
-    // У точки вращения есть только перенос: поворачивать и масштабировать точку
-    // нечего, поэтому манипулятор с такой целью режима не меняет вовсе.
-    if (dragging_ || target_ == gizmo_target::pivot) {
-        return;
+auto gizmo::mode_() const -> gizmo_mode {
+    // Начатый жест доигрывается тем режимом, которым начался: переключить его
+    // посреди перетаскивания значит мерить смещение одной ручки углом другой.
+    if (dragging_) {
+        return drag_mode_;
     }
-    mode_ = mode;
+    return target_ == gizmo_target::pivot ? gizmo_mode::translate : state_->tool.gizmo;
 }
 
 auto gizmo::build_frame_(
@@ -236,7 +239,7 @@ auto gizmo::pick_(
     for (const auto axis_id : axes) {
         const auto& axis = fr.axes[axis_index(axis_id)];
 
-        if (mode_ == gizmo_mode::rotate) {
+        if (mode_() == gizmo_mode::rotate) {
             vec3f hit;
             if (!ray_plane(fr.pivot, axis, r, hit)) {
                 continue;
@@ -258,7 +261,7 @@ auto gizmo::pick_(
         // Ручка масштаба — кубик на конце оси, и меряться надо до его центра.
         // Отрезком его не описать: куб стоит поперёк оси и выступает за её
         // конец, так что ограничение по длине резало ровно половину ручки.
-        if (mode_ == gizmo_mode::scale) {
+        if (mode_() == gizmo_mode::scale) {
             const auto center = fr.pivot + (axis * fr.scale);
             const auto reach  = std::max(handle_half * 1.8F, pick_tolerance) * fr.scale;
             if (distance_to_ray(center, r) > reach) {
@@ -321,7 +324,7 @@ auto gizmo::on_mouse_move(
         return;
     }
 
-    switch (mode_) {
+    switch (mode_()) {
         case gizmo_mode::translate: apply_translate_(ent, drag_frame_); break;
         case gizmo_mode::rotate: apply_rotate_(ent, drag_frame_); break;
         case gizmo_mode::scale: apply_scale_(ent, drag_frame_); break;
@@ -345,6 +348,7 @@ auto gizmo::on_mouse_press(
 
     active_          = axis_id;
     hovered_         = axis_id;
+    drag_mode_       = mode_();
     dragging_        = true;
     drag_frame_      = *fr;
     start_transform_ = world.get<ecs::transform_component>(ent).get_transform();
@@ -358,7 +362,7 @@ auto gizmo::on_mouse_press(
     const auto r       = camera.screen_to_world_ray(window.get_cursor_pos(), window.get_size());
     const auto& axis   = fr->axes[axis_index(axis_id)];
 
-    if (mode_ == gizmo_mode::rotate) {
+    if (mode_() == gizmo_mode::rotate) {
         vec3f hit;
         if (ray_plane(fr->pivot, axis, r, hit)) {
             const auto [u, v] = basis_of(axis);
@@ -381,6 +385,12 @@ auto gizmo::on_mouse_release() -> void {
 
     dragging_ = false;
     active_   = gizmo_axis::none;
+
+    // Превью остаётся как есть: узел уже стоит там, куда его привели, а в файл
+    // эту позу положит запись ключа.
+    if (commit_ == gizmo_commit::preview) {
+        return;
+    }
 
     const auto& name = state_->edited_node();
     if (!state_->scene.name_to_entity.contains(name)) {
@@ -553,7 +563,7 @@ auto gizmo::render(
         const auto& axis = fr->axes[axis_index(axis_id)];
         const auto col   = axis_color(axis_id, axis_id == lit);
 
-        switch (mode_) {
+        switch (mode_()) {
             case gizmo_mode::translate: draw_arrow_(*fr, axis, col); break;
             case gizmo_mode::rotate: draw_torus_(*fr, axis, col); break;
             case gizmo_mode::scale: {

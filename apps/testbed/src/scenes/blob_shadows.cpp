@@ -36,8 +36,8 @@ auto blob_shadows_scene::spawn_() -> void {
         // рельефа — восемь, поэтому тело размером с человека это шестнадцать
         // поперёк и сорок в высоту; построенное по числам рельефа, оно стоит в
         // один воксель и читается крапинкой — с чего эта сцена и начиналась.
-        model_ = registry.create("blob_body", blocks::palette::category, 16, 40, 16);
-        model_->fill(voxel{blocks::palette::red[4]});
+        model_ = registry.create("blob_body", voxels::palette::category, 16, 40, 16);
+        model_->fill(voxels::palette::red[4]);
 
         pending_.reserve(static_cast<std::size_t>(count));
         for (int32 i = 0; i < count; ++i) {
