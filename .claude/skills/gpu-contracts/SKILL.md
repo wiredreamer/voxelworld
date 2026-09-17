@@ -188,7 +188,14 @@ std430 нет диагностики на расхождение: ошибки �
   - Привязки набора 1: 0 входные команды, 1 AABB, 2 выход, 3 счётчики,
     4 видимость.
   - `DrawCommand` и `draw_command` повторяют `vk::DrawIndexedIndirectCommand`.
-- **Сторож:** слои валидации в Debug ловят привязки и размеры; смысл полей — ничто.
+- **Сторож:** `static_assert` на смещения и размер у обеих структур:
+  `cull_frustum_ubo` (`planes` 0, `eye` 576, `pass_count` 592, `pad` 596,
+  `sizeof == 608` при пяти каскадах) в `cull_pipeline.cppm` и `draw_command`
+  (0, 4, 8, 12, 16, `sizeof == 20` и равенство
+  `sizeof(vk::DrawIndexedIndirectCommand)`) в `combined_buffer.cppm`. Сдвинул
+  поле в C++ — сборка встала, это и есть момент сдвинуть его в `cull.comp`.
+  Сдвиг только в шейдере не ловит ничто. Слои валидации в Debug ловят привязки и
+  размеры; смысл полей — ничто.
 - **Если разошлись:** модели пропадают или мигают при повороте камеры, тень
   рисует список чужого прохода.
 
@@ -216,10 +223,13 @@ std430 нет диагностики на расхождение: ошибки �
   `CullParams` в `light_cull.comp`, поля с теми же именами; `list` — значение
   `cull_list` (там же: 0 источники, 1 тела), шейдер сравнивает его с
   `cull_list_sources`.
-- **Сторож:** у `light_cull_ubo` — `static_assert` на смещения `z_scale`,
-  `near_depth`, `screen_width`, `cap`, `list` и `sizeof == 128`; у
-  `point_light_data` и `blob_data` их нет. Позицию, `range` и `cull_*` косвенно
-  сверяет `--verify-lights=N`; цвет, силу и `params` — только картинка.
+- **Сторож:** `static_assert` на смещения и размер у всех трёх структур:
+  `light_cull_ubo` (`z_scale` 64, `near_depth` 80, `screen_width` 96, `cap` 112,
+  `list` 124, `sizeof == 128`), `point_light_data` (`position` 0, `color` 16,
+  `intensity` 32, `range` 36, `sizeof == 48`) и `blob_data` (`position_radius`
+  0, `params` 16, `cull_a` 32, `cull_b` 48, `sizeof == 64`). Сдвиг только в
+  шейдере не ловит ничто: позицию, `range` и `cull_*` косвенно сверяет
+  `--verify-lights=N`; цвет, силу и `params` — только картинка.
 - **Если разошлись:** свет не там или его нет, пятна не под телами; сдвинутый
   `range` даёт пустые или переполненные списки кластеров.
 - Буферы растут по кадру в полёте, и дескриптор переписывается только у

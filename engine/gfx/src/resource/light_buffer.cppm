@@ -28,6 +28,12 @@ struct point_light_data {
     alignas(4) float32 range;
 };
 
+static_assert(offsetof(point_light_data, position) == 0);
+static_assert(offsetof(point_light_data, color) == 16);
+static_assert(offsetof(point_light_data, intensity) == 32);
+static_assert(offsetof(point_light_data, range) == 36);
+static_assert(sizeof(point_light_data) == 48);
+
 constexpr float32 blob_reach_falls = 3.0F;
 
 struct blob_data {
@@ -38,6 +44,12 @@ struct blob_data {
     alignas(16) vec4f cull_a;
     alignas(16) vec4f cull_b;
 };
+
+static_assert(offsetof(blob_data, position_radius) == 0);
+static_assert(offsetof(blob_data, params) == 16);
+static_assert(offsetof(blob_data, cull_a) == 32);
+static_assert(offsetof(blob_data, cull_b) == 48);
+static_assert(sizeof(blob_data) == 64);
 
 class light_buffer {
 public:

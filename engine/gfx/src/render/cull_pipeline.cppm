@@ -1,3 +1,7 @@
+module;
+
+#include <cstddef>
+
 export module vw.gfx:render.cull_pipeline;
 
 import std;
@@ -23,13 +27,19 @@ class vulkan_context;
 inline constexpr uint32 cull_plane_count = (shadow_map::cascade_count + 1) * 6;
 
 struct cull_frustum_ubo {
-    vec4f planes[cull_plane_count];
+    alignas(16) vec4f planes[cull_plane_count];
 
-    vec4f eye;
+    alignas(16) vec4f eye;
 
-    uint32 pass_count;
-    uint32 pad[3];
+    alignas(4) uint32 pass_count;
+    alignas(4) uint32 pad[3];
 };
+
+static_assert(offsetof(cull_frustum_ubo, planes) == 0);
+static_assert(offsetof(cull_frustum_ubo, eye) == 576);
+static_assert(offsetof(cull_frustum_ubo, pass_count) == 592);
+static_assert(offsetof(cull_frustum_ubo, pad) == 596);
+static_assert(sizeof(cull_frustum_ubo) == 608);
 
 class cull_pipeline {
 public:

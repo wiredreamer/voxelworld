@@ -1,3 +1,7 @@
+module;
+
+#include <cstddef>
+
 export module vw.gfx:resource.combined_buffer;
 
 import std;
@@ -23,12 +27,20 @@ export namespace vw::gfx {
 class vulkan_context;
 
 struct draw_command {
-    uint32 index_count;
-    uint32 instance_count;
-    uint32 first_index;
-    int32 vertex_offset;
-    uint32 first_instance;
+    alignas(4) uint32 index_count;
+    alignas(4) uint32 instance_count;
+    alignas(4) uint32 first_index;
+    alignas(4) int32 vertex_offset;
+    alignas(4) uint32 first_instance;
 };
+
+static_assert(offsetof(draw_command, index_count) == 0);
+static_assert(offsetof(draw_command, instance_count) == 4);
+static_assert(offsetof(draw_command, first_index) == 8);
+static_assert(offsetof(draw_command, vertex_offset) == 12);
+static_assert(offsetof(draw_command, first_instance) == 16);
+static_assert(sizeof(draw_command) == 20);
+static_assert(sizeof(draw_command) == sizeof(vk::DrawIndexedIndirectCommand));
 
 struct buffer_chunk_size {
     uint32 quad_count;
