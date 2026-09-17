@@ -494,22 +494,34 @@ auto combined_buffer_pool::update_chunk_visibility_(
     const vec3i origin{
         cell_of(camera_voxel.x), cell_of(camera_voxel.y), cell_of(camera_voxel.z)};
 
+    const bool origin_in_frame = origin.x >= cell_lo.x && origin.y >= cell_lo.y &&
+        origin.z >= cell_lo.z && origin.x <= cell_hi.x && origin.y <= cell_hi.y &&
+        origin.z <= cell_hi.z;
+    if (!origin_in_frame) {
+        stats_.chunk_cull.visible = stats_.chunk_cull.chunks;
+        for (std::size_t i = 0; i < buffers_.size(); ++i) {
+            std::ranges::fill(visibility_flags_[i], 1U);
+            buffers_[i]->write_visibility(visibility_flags_[i]);
+        }
+        return;
+    }
+
     ecs::walk_visible_chunks(
         origin, cell_lo, cell_hi,
-        [&](vec3i cell) -> const vw::asset::cell_links* {
+        [&](vec3i cell) -> vw::ecs::cell_lookup {
             static const vw::asset::cell_links sealed{};
 
             auto* c = grid->get_chunk(
                 vec3i{to_chunk(cell.x), to_chunk(cell.y), to_chunk(cell.z)});
             if (c == nullptr) {
-                return nullptr;
+                return vw::ecs::cell_lookup::nothing_placed();
             }
             if (c->is_solid()) {
                 return &sealed;
             }
             const auto it = chunk_links_.find(c->get_entity());
             if (it == chunk_links_.end()) {
-                return nullptr;
+                return vw::ecs::cell_lookup::placed_without_links();
             }
             return &it->second.cells[vw::asset::chunk_links::cell_index(
                 to_sub(cell.x), to_sub(cell.y), to_sub(cell.z))];

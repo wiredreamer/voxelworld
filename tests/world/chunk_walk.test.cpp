@@ -57,19 +57,46 @@ public:
         }
     }
 
+    auto place_without_links(vec3i coord) -> void {
+        chunks_.erase(coord);
+        unlinked_.insert(coord);
+    }
+
     [[nodiscard]] auto links_at(vec3i coord) const -> const asset::cell_links* {
         const auto it = chunks_.find(coord);
         return it == chunks_.end() ? nullptr : &it->second;
     }
 
+    [[nodiscard]] auto lookup_at(vec3i coord) const -> cell_lookup {
+        if (const auto it = chunks_.find(coord); it != chunks_.end()) {
+            return &it->second;
+        }
+        return unlinked_.contains(coord) ? cell_lookup::placed_without_links()
+                                         : cell_lookup::nothing_placed();
+    }
+
 private:
     std::unordered_map<vec3i, asset::cell_links> chunks_;
+    std::unordered_set<vec3i> unlinked_;
 };
 
 auto walk(const fake_grid& grid, vec3i origin, int32 radius) -> std::set<std::tuple<int32, int32, int32>> {
     std::set<std::tuple<int32, int32, int32>> seen;
     walk_visible_chunks(
         origin, radius, [&grid](vec3i c) { return grid.links_at(c); },
+        [&seen](vec3i c) { seen.insert({c.x, c.y, c.z}); }
+    );
+    return seen;
+}
+
+auto walk_underground(const fake_grid& grid, vec3i origin, int32 radius)
+    -> std::set<std::tuple<int32, int32, int32>> {
+    const vec3i extent{radius, radius, radius};
+    std::set<std::tuple<int32, int32, int32>> seen;
+    walk_visible_chunks(
+        origin, origin - extent, origin + extent,
+        [&grid](vec3i c) { return grid.lookup_at(c); }, [](vec3i) { return false; },
+        [](const asset::chunk_pocket&) { return true; },
         [&seen](vec3i c) { seen.insert({c.x, c.y, c.z}); }
     );
     return seen;
@@ -190,6 +217,30 @@ TEST_CASE("an opening in the surface reveals the cave under it", "[world][walk]"
 
     REQUIRE(seen.contains({1, -1, 1}));
     REQUIRE(seen.contains({0, -1, 1}));
+}
+
+TEST_CASE("a chunk placed without links does not hide what is behind it", "[world][walk]") {
+    fake_grid grid;
+    grid.fill(3, sealed());
+    grid.set({0, 0, 0}, wide_open());
+    grid.set({2, 0, 0}, wide_open());
+    grid.place_without_links({1, 0, 0});
+
+    const auto seen = walk_underground(grid, {0, 0, 0}, 3);
+
+    REQUIRE(seen.contains({1, 0, 0}));
+    REQUIRE(seen.contains({2, 0, 0}));
+}
+
+TEST_CASE("underground space with no chunk placed stops the walk", "[world][walk]") {
+    fake_grid grid;
+    grid.set({0, 0, 0}, wide_open());
+    grid.set({2, 0, 0}, wide_open());
+
+    const auto seen = walk_underground(grid, {0, 0, 0}, 3);
+
+    REQUIRE_FALSE(seen.contains({1, 0, 0}));
+    REQUIRE_FALSE(seen.contains({2, 0, 0}));
 }
 
 TEST_CASE("the radius bounds the walk", "[world][walk]") {

@@ -11,6 +11,27 @@ export namespace vw::ecs {
 
 class world;
 
+// см. docs/world.md#обход
+struct cell_lookup {
+    const asset::cell_links* links = nullptr;
+    bool placed                    = false;
+
+    cell_lookup() = default;
+
+    cell_lookup(const asset::cell_links* placed_links)
+        : links{placed_links}, placed{placed_links != nullptr} {}
+
+    [[nodiscard]] static auto placed_without_links() -> cell_lookup {
+        cell_lookup lookup;
+        lookup.placed = true;
+        return lookup;
+    }
+
+    [[nodiscard]] static auto nothing_placed() -> cell_lookup {
+        return cell_lookup{};
+    }
+};
+
 template <typename LinksAt, typename IsSky, typename StartsIn, typename Visit>
 auto walk_visible_chunks(
     vec3i origin, vec3i lo, vec3i hi, LinksAt&& links_at, IsSky&& is_sky, StartsIn&& starts_in,
@@ -22,18 +43,17 @@ auto walk_visible_chunks(
     std::unordered_map<vec3i, uint64> queued;
     std::vector<std::pair<vec3i, int32>> pending;
 
-    const auto pockets_of = [&](vec3i coord) -> std::span<const asset::chunk_pocket> {
-        const auto* links = links_at(coord);
-        if (links == nullptr) {
+    const auto pockets_of = [&](const cell_lookup& cell) -> std::span<const asset::chunk_pocket> {
+        if (cell.links == nullptr) {
             return {&open_pocket, 1};
         }
-        return links->pockets;
+        return cell.links->pockets;
     };
 
-    // см. docs/world.md#обход
     {
-        const auto pockets = pockets_of(origin);
-        uint64 mask        = seen_bit;
+        const cell_lookup origin_cell = links_at(origin);
+        const auto pockets            = pockets_of(origin_cell);
+        uint64 mask                   = seen_bit;
 
         bool found = false;
         for (std::size_t i = 0; i < pockets.size(); ++i) {
@@ -60,7 +80,7 @@ auto walk_visible_chunks(
         const auto [coord, pocket_index] = pending.back();
         pending.pop_back();
 
-        const auto pockets = pockets_of(coord);
+        const auto pockets = pockets_of(links_at(coord));
         if (static_cast<std::size_t>(pocket_index) >= pockets.size()) {
             continue;
         }
@@ -77,14 +97,12 @@ auto walk_visible_chunks(
                 continue;
             }
 
-            const auto* next_links = links_at(next);
-            if (next_links == nullptr && !is_sky(next)) {
+            const cell_lookup next_cell = links_at(next);
+            if (next_cell.links == nullptr && !next_cell.placed && !is_sky(next)) {
                 continue;
             }
 
-            const auto next_pockets = next_links == nullptr
-                ? std::span<const asset::chunk_pocket>{&open_pocket, 1}
-                : std::span<const asset::chunk_pocket>{next_links->pockets};
+            const auto next_pockets = pockets_of(next_cell);
 
             auto& mask = queued[next];
             if ((mask & seen_bit) == 0) {
