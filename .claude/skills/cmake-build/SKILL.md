@@ -72,8 +72,11 @@ cmake -S . -B build/headless -G Ninja -DCMAKE_BUILD_TYPE=Release \
 `animations/` и `fsm/` ищутся в нём (имена — `vw::asset::dirs`). Редактор правит
 ассеты репозитория, поэтому `git status` показывает правку сразу; сборке «на
 раздачу» нужно поставить `.`, и корнем станет каталог рядом с исполняемым
-файлом. Арене ассеты копирует `vw_setup_assets` (см. «Шейдеры и ассеты») — она
-их только читает.
+файлом. Тип в командной строке обязателен —
+`-DVW_SCULPTOR_ASSET_ROOT:STRING=.`: у кэш-записи тип `PATH`, и без него CMake
+развернёт `.` в абсолютный путь сборочной машины, а сборка молча останется с ним.
+Арене ассеты копирует `vw_setup_assets` (см. «Шейдеры и ассеты») — она их только
+читает.
 
 Зависимости gfx (glfw3, imgui, vulkan-headers) вынесены в vcpkg-фичу `gfx`,
 включённую по умолчанию; `-DVCPKG_MANIFEST_NO_DEFAULT_FEATURES=ON` оставляет
@@ -197,8 +200,9 @@ push, `release.yml` — на тег `v*`. Версии инструментов 
 | `analysis.yml` | `asan-windows` | MSVC ASan, gfx включён — под санитайзер попадает мешер |
 | `release.yml` | `build-windows` `build-linux` `release` | пакеты `sculptor` и GitHub Release |
 
-Джоб `coverage` перечисляет бинарники тестов вручную (`objects` в шаге Report):
-новый тестовый таргет впиши и туда.
+Джоб `coverage` перечисляет бинарники тестов вручную — список `test_targets` в
+шаге Report, из него собирается `objects` для `llvm-cov`. Новый тестовый таргет
+впиши и туда, иначе его строки в покрытие не попадут.
 
 ### Санитайзеры
 
@@ -211,11 +215,16 @@ Windows (`asan-windows`) — MSVC `/fsanitize=address`; локально так 
 ```
 cmake -S . -B build/asan -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DVW_BUILD_APPS=OFF \
       -DCMAKE_DISABLE_FIND_PACKAGE_Catch2=ON \
-      -DCMAKE_CXX_FLAGS="/fsanitize=address" -DCMAKE_EXE_LINKER_FLAGS="/INCREMENTAL:NO" \
+      -DCMAKE_CXX_FLAGS_INIT="/fsanitize=address" -DCMAKE_EXE_LINKER_FLAGS="/INCREMENTAL:NO" \
       -DCMAKE_TOOLCHAIN_FILE=C:/Users/lucius/vcpkg/scripts/buildsystems/vcpkg.cmake \
       -DVCPKG_TARGET_TRIPLET=x64-windows
 ```
 
+- `CMAKE_CXX_FLAGS_INIT`, а не `CMAKE_CXX_FLAGS`: значение второго из командной
+  строки замещает подготовленное CMake (`/DWIN32 /D_WINDOWS /GR /EHsc` у MSVC), и
+  сборка осталась бы без `/EHsc`. К `_INIT` платформенный модуль дописывает своё,
+  но читается оно только при первой конфигурации каталога сборки — меняешь флаг,
+  конфигурируй заново пустой каталог.
 - `RelWithDebInfo`, не `Debug`: CMake кладёт `/RTC1` в отладочные флаги, а ASan
   от MSVC с ним несовместим. `/INCREMENTAL:NO` обязателен — ASan требует
   неинкрементальной линковки.
@@ -274,9 +283,13 @@ overlay-триплет `cmake/triplets/x64-linux-libcxx.cmake`
 ### Упаковка релиза
 
 `build-windows` и `build-linux` собирают только таргет `sculptor`
-(`VW_BUILD_TESTS=OFF`) и складывают в `package/` исполняемый файл и `shaders/`
-(на Windows ещё `*.dll`); `release` скачивает артефакты, пакует Windows-часть в
-zip и публикует оба архива.
+(`VW_BUILD_TESTS=OFF`, `VW_SCULPTOR_ASSET_ROOT:STRING=.`) и складывают в
+`package/` исполняемый файл, `shaders/` и `assets/` (на Windows ещё `*.dll`);
+`release` скачивает артефакты, пакует Windows-часть в zip и публикует оба архива.
+
+- Корень ассетов и копия дерева `assets/` в пакете — одно изменение: с корнем `.`
+  Sculptor читает и пишет рядом с собой, и без дерева в пакете ему нечего
+  открыть. Ассеты берутся из чекаута, как их берёт `vw_setup_assets` для арены.
 
 - Linux-архив (`tar -czf`) собирается в `build-linux`, а не в `release`:
   `upload-artifact` передаёт файлы zip'ом без прав доступа, и бинарь доехал бы

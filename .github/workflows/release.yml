@@ -37,6 +37,7 @@ jobs:
           cmake -B build -S . -G Ninja
           -DCMAKE_BUILD_TYPE=Release
           -DVW_BUILD_TESTS=OFF
+          -DVW_SCULPTOR_ASSET_ROOT:STRING=.
           -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake
 
       - name: Build sculptor
@@ -49,6 +50,7 @@ jobs:
           cp build/apps/sculptor/sculptor.exe package/
           cp build/apps/sculptor/*.dll package/ 2>/dev/null || true
           cp -r build/apps/sculptor/shaders package/
+          cp -r assets package/
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -103,6 +105,7 @@ jobs:
           cmake -B build -S . -G Ninja
           -DCMAKE_BUILD_TYPE=Release
           -DVW_BUILD_TESTS=OFF
+          -DVW_SCULPTOR_ASSET_ROOT:STRING=.
           -DCMAKE_C_COMPILER=clang-${{ env.VW_LLVM_VERSION }}
           -DCMAKE_CXX_COMPILER=clang++-${{ env.VW_LLVM_VERSION }}
           -DCMAKE_CXX_FLAGS=-stdlib=libc++
@@ -119,6 +122,7 @@ jobs:
           mkdir package
           cp build/apps/sculptor/sculptor package/
           cp -r build/apps/sculptor/shaders package/
+          cp -r assets package/
           tar -czf sculptor-${{ github.ref_name }}-linux.tar.gz -C package .
 
       - name: Upload artifact

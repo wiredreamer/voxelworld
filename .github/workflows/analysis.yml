@@ -170,9 +170,11 @@ jobs:
           cov=llvm-cov-${{ env.VW_LLVM_VERSION }}
           $profdata merge -sparse prof/*.profraw -o merged.profdata
 
-          objects="build-cov/tests/core_tests"
-          for t in ecs_tests world_tests; do
-            objects="$objects -object build-cov/tests/$t"
+          test_targets="core_tests asset_tests ecs_tests world_tests"
+
+          objects=""
+          for target in $test_targets; do
+            objects="$objects -object build-cov/tests/$target"
           done
 
           skip='.*(vcpkg_installed|_deps|/tests/).*'
@@ -234,7 +236,7 @@ jobs:
           -DCMAKE_BUILD_TYPE=RelWithDebInfo
           -DVW_BUILD_APPS=OFF
           -DCMAKE_DISABLE_FIND_PACKAGE_Catch2=ON
-          -DCMAKE_CXX_FLAGS="/fsanitize=address"
+          -DCMAKE_CXX_FLAGS_INIT="/fsanitize=address"
           -DCMAKE_EXE_LINKER_FLAGS="/INCREMENTAL:NO"
           -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake
 
