@@ -14,9 +14,6 @@ namespace {
 
 constexpr int32 side = asset::chunk_occupancy::side;
 
-// A column built by hand out of occupancy bits, with nothing around it. The
-// four sides come out sealed, which is what the tests below are about.
-// Coordinates are the ones light_column uses: y counts up from the bottom.
 class column_fixture {
 public:
     explicit column_fixture(int32 chunks) : occupancy_(static_cast<std::size_t>(chunks)) {}
@@ -35,7 +32,6 @@ public:
         }
     }
 
-    // Rock from the bottom of the column up to and including y.
     auto floor_at(int32 y) -> void {
         fill_solid(0, 0, 0, side - 1, y, side - 1);
     }
@@ -69,9 +65,6 @@ TEST_CASE("open sky is fully lit and rock is dark", "[sky_light]") {
     REQUIRE(light.level_at(32, 0, 32) == 0);
 }
 
-// Rule one on its own: a column that sees the sky is at 15 however deep it
-// goes, with no falloff and no flood involved. This is the shaft of light
-// through a hole in a ceiling.
 TEST_CASE("a shaft open to the sky is lit to the bottom", "[sky_light]") {
     column_fixture fixture{2};
 
@@ -94,13 +87,6 @@ TEST_CASE("a shaft open to the sky is lit to the bottom", "[sky_light]") {
     REQUIRE(light.level_at(33, 50, 32) == 0);
 }
 
-// Rule two, and the one that matters. Under an overhang light is no longer
-// under open sky, so a step costs one whichever way it goes -- down exactly as
-// much as sideways. Getting this wrong gives shafts instead of a gradient.
-//
-// The wall is what makes the test say anything: without it the open side is
-// skylit all the way down, every voxel of the pocket touches a 15, and going
-// down would look free when it is not.
 TEST_CASE("under an overhang light falls one level a step", "[sky_light]") {
     column_fixture fixture{2};
     fixture.floor_at(40);
@@ -132,9 +118,6 @@ TEST_CASE("under an overhang light falls one level a step", "[sky_light]") {
     }
 }
 
-// What a height map cannot do. Every column under the lid is closed to the sky,
-// so a height map would call the whole chamber dark. Light gets in the only way
-// it can, sideways from the mouth, and runs out before the middle.
 TEST_CASE("light reaches into a chamber a height map would call sealed", "[sky_light]") {
     column_fixture fixture{2};
     fixture.floor_at(40);
@@ -158,9 +141,6 @@ TEST_CASE("light reaches into a chamber a height map would call sealed", "[sky_l
     }
 }
 
-// The number that decided where this field ends up living. A flat world has to
-// come out nearly free: rock below, sky above, and one layer of pages where the
-// two meet.
 TEST_CASE("a flat world costs one layer of pages", "[sky_light]") {
     column_fixture fixture{2};
     fixture.floor_at(40);
@@ -182,9 +162,6 @@ TEST_CASE("a flat world costs one layer of pages", "[sky_light]") {
     }
 }
 
-// The nibble packing, and the only part of the field that can be wrong quietly.
-// Two levels one apart in x land in the two halves of the same byte, so a swap
-// shows up here and nowhere else.
 TEST_CASE("a paged field reads back what was flooded", "[sky_light]") {
     column_fixture fixture{2};
     fixture.floor_at(40);
@@ -210,8 +187,6 @@ TEST_CASE("a paged field reads back what was flooded", "[sky_light]") {
 
     REQUIRE(mismatches == 0);
 
-    // Not a vacuous run: the gradient under the overhang puts different levels
-    // in the two halves of one byte.
     const asset::light_field bottom = light.bake(0, asset::light_channel::sky);
     REQUIRE(bottom.level_at(31, 59, 32) == 14);
     REQUIRE(bottom.level_at(30, 59, 32) == 13);
@@ -219,9 +194,6 @@ TEST_CASE("a paged field reads back what was flooded", "[sky_light]") {
 
 namespace {
 
-// Nine columns in one continuous voxel space, so a cave can be dug across a
-// seam without thinking about which column it lands in. x and z run 0..191, and
-// the middle column -- the one under examination -- is 64..127 in both.
 class world_fixture {
 public:
     static constexpr int32 wide = side * 3;
@@ -251,8 +223,6 @@ public:
         fill_solid(0, 0, 0, wide - 1, y, wide - 1);
     }
 
-    // A lid over the whole neighbourhood with one square hole left in it. Built
-    // as four rectangles because occupancy bits only ever go on.
     auto lid_with_hole(int32 y, int32 hx0, int32 hz0, int32 hx1, int32 hz1) -> void {
         fill_solid(0, y, 0, hx0 - 1, y, wide - 1);
         fill_solid(hx1 + 1, y, 0, wide - 1, y, wide - 1);
@@ -260,8 +230,6 @@ public:
         fill_solid(hx0, y, hz1 + 1, hx1, y, wide - 1);
     }
 
-    // How many chunks of a column the flood is allowed to see. Anything above
-    // that is open air, which is what a plain beside a mountain looks like.
     auto set_column_height(int32 cx, int32 cz, int32 chunks) -> void {
         heights_[static_cast<std::size_t>((cz * 3) + cx)] = chunks;
     }
@@ -282,9 +250,6 @@ public:
         return occupancy_[slot(cx, cz, y / side)].test(x % side, y % side, z % side);
     }
 
-    // The nine columns as light_column wants them. drop_diagonals turns the
-    // four corner columns into rock, which is how the tests below show the
-    // corners are being read at all.
     [[nodiscard]] auto light(bool drop_diagonals = false) const -> ecs::light_column {
         std::vector<std::vector<const asset::chunk_occupancy*>> held(9);
         ecs::light_column::neighbourhood around{};
@@ -311,12 +276,6 @@ public:
         return ecs::light_column{std::span<const asset::chunk_occupancy* const>{middle}};
     }
 
-    // A second implementation, on purpose the dumbest one that can be right: a
-    // dense array over all nine columns, rule one by walking each voxel column
-    // down from the top, then a breadth-first walk. No bit tricks, no skirt, and
-    // no code shared with the thing it checks. The middle column sits sixty-four
-    // voxels from this array's own edge, further than light travels, so what it
-    // says there is the true answer.
     [[nodiscard]] auto reference() const -> std::vector<uint8> {
         const int32 h = height();
         std::vector<uint8> level(
@@ -392,8 +351,6 @@ private:
     std::vector<asset::chunk_occupancy> occupancy_;
 };
 
-// Every voxel of the middle column against the reference. Returns how many
-// disagreed, and names the first one on the way past.
 auto middle_mismatches(
     const ecs::light_column& light, const world_fixture& fixture,
     const std::vector<uint8>& reference
@@ -424,16 +381,10 @@ auto middle_mismatches(
 
 }  // namespace
 
-// The whole point of the skirt, put as strongly as it can be: the middle column
-// lit with fifteen voxels of its neighbours has to come out identical to the
-// middle of a flood over all nine columns at once. Not close. Identical.
 TEST_CASE("the skirt reproduces a flood over the whole neighbourhood", "[sky_light]") {
     world_fixture fixture{2};
     fixture.floor_at(40);
 
-    // A lid whose mouth is nine voxels outside the middle column. Nothing under
-    // it is open to the sky, so every level inside the middle column arrived
-    // from a neighbour -- which is exactly what a sealed flood cannot know.
     fixture.fill_solid(56, 50, 20, 170, 50, 170);
 
     const auto reference = fixture.reference();
@@ -449,22 +400,15 @@ TEST_CASE("the skirt reproduces a flood over the whole neighbourhood", "[sky_lig
         REQUIRE(light.level_at(6, 49, 32) == 0);
     }
 
-    // Without this the section above proves nothing. A check that also passes
-    // on the broken version is not a check.
     SECTION("a sealed column gets it wrong") {
         REQUIRE(middle_mismatches(fixture.sealed(), fixture, reference) > 0);
     }
 }
 
-// The corners of the skirt come from the four diagonal columns, and a path can
-// turn a corner. Leave them out and nothing notices until a cave mouth happens
-// to sit on a diagonal.
 TEST_CASE("the skirt corners come from the diagonal neighbours", "[sky_light]") {
     world_fixture fixture{2};
     fixture.floor_at(40);
 
-    // Sealed over everything but one hole, and the hole is in the corner column
-    // so the only way into the middle one is across a diagonal.
     fixture.lid_with_hole(50, 58, 58, 61, 61);
 
     const auto reference = fixture.reference();
@@ -482,9 +426,6 @@ TEST_CASE("the skirt corners come from the diagonal neighbours", "[sky_light]") 
     }
 }
 
-// A short column beside tall ones. Above the top of a column that exists there
-// is open sky, not rock: get that backwards and the seam between a plain and a
-// mountain draws itself as a dark wall.
 TEST_CASE("a column shorter than its neighbours is not walled off", "[sky_light]") {
     world_fixture fixture{3};
     fixture.floor_at(40);
@@ -497,11 +438,6 @@ TEST_CASE("a column shorter than its neighbours is not walled off", "[sky_light]
     REQUIRE(fixture.light().level_at(32, 130, 32) == 15);
 }
 
-// Not run by default: it generates real terrain and reports what the flood
-// costs, what the bake costs, and what the fields weigh once they are paged.
-// Those numbers decide how this is scheduled and whether it can stay resident,
-// so they get measured rather than guessed. Run with
-// `world_tests "[.sky_light_measure]"`.
 TEST_CASE("sky light cost on real terrain", "[.sky_light_measure]") {
     static constexpr int32 grid           = 5;
     static constexpr int32 pages_per_side = side / 8;
@@ -533,7 +469,6 @@ TEST_CASE("sky light cost on real terrain", "[.sky_light_measure]") {
         }
     }
 
-    // Chunk models per column, bottom up from the floor every column shares.
     std::unordered_map<vec2i, std::vector<asset::model*>> stacks;
     int32 chunk_count = 0;
 
@@ -562,15 +497,10 @@ TEST_CASE("sky light cost on real terrain", "[.sky_light_measure]") {
     int32 uniform_chunks    = 0;
     int32 mixed_pages       = 0;
 
-    // The scratch a worker would keep, not allocate: nine columns of occupancy
-    // is 4.6 MB and the flood runs in seven more, and creating either per job
-    // costs more than filling it.
     std::vector<std::vector<asset::chunk_occupancy>> held(9);
     std::vector<std::vector<const asset::chunk_occupancy*>> pointers(9);
     ecs::light_scratch scratch;
 
-    // Only the columns that have all eight neighbours, which is the only case
-    // the engine ever lights.
     for (int32 cx = 1; cx < grid - 1; ++cx) {
         for (int32 cz = 1; cz < grid - 1; ++cz) {
             ecs::light_column::neighbourhood around{};
@@ -582,9 +512,6 @@ TEST_CASE("sky light cost on real terrain", "[.sky_light_measure]") {
                     const auto slot  = static_cast<std::size_t>(((dz + 1) * 3) + (dx + 1));
                     const auto& from = stacks.at(vec2i{cx + dx, cz + dz});
 
-                    // Only as deep as the skirt reaches: fifteen voxels is two
-                    // pages of eight, so a neighbour is read two page columns
-                    // wide and the middle one whole.
                     const int32 px0 = dx < 0 ? pages_per_side - skirt_pages : 0;
                     const int32 px1 = dx > 0 ? skirt_pages : pages_per_side;
                     const int32 pz0 = dz < 0 ? pages_per_side - skirt_pages : 0;
@@ -604,13 +531,6 @@ TEST_CASE("sky light cost on real terrain", "[.sky_light_measure]") {
 
             const auto rowed = std::chrono::steady_clock::now();
 
-            // The same flood twice, once in the buffers a worker keeps and once
-            // in fresh ones, with the order alternating so that neither gets
-            // the warm cache every time. Seven megabytes of fresh pages a
-            // column is the whole of what the scratch saves, and on a machine
-            // with anything else running on it the difference is smaller than
-            // the noise between two runs -- so the two have to be measured
-            // against each other rather than against yesterday.
             const bool scratch_first = ((cx + cz) % 2) == 0;
             uint64 fresh_ns          = 0;
 

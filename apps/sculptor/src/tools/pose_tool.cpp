@@ -69,8 +69,6 @@ auto pose_tool::on_mouse_press(
         return;
     }
 
-    // Дорожка следует за выбором: её имя — имя узла, и клип правят там же, где
-    // и возят узел.
     state_->scene.selected_name      = named->second;
     state_->anim.selected_track_name = named->second;
 }

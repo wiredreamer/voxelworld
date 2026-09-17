@@ -22,8 +22,6 @@ app::app(
     : gfx::app(eng)
     , camera_controller_(0.1f, 5.0f)
 
-    // Корень ассетов у редактора — его рабочий каталог: ссылки в префабе
-    // начинаются с папки моделей, а не с имени файла.
     , model_library_(
           eng.get_world().resource<asset::model_registry>(), eng.get_voxel_registry(),
           app_state::asset_root_name
@@ -115,9 +113,6 @@ auto app::render(
     refresh_volume_bounds_();
     sync_visibility_();
 
-    // Правило одно и живёт в контексте, поэтому и горячие клавиши, и панель
-    // подчиняются ему здесь: выбранный инструмент, которому в этом контексте
-    // нечего делать, меняется на подходящий, а не тихо перестаёт работать.
     if (!state_.ctx.allows_tool(state_.tool.selected_tool)) {
         state_.tool.selected_tool = state_.ctx.default_tool();
     }
@@ -152,7 +147,6 @@ auto app::render(
 
     render_panels_(delta_time);
 
-    // modals
     startup_modal_.render(delta_time);
     new_file_modal_.render(delta_time);
     open_file_modal_.render(delta_time);
@@ -197,16 +191,15 @@ auto app::render(
 #if 0
     ImGui::Begin("Shadow Map Debug");
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
-    // Сетка 2x2 для всех каскадов
     for (uint32 i = 0; i < gfx::shadow_map::cascade_count; ++i) {
         void* shadow_map_texture_id = renderer.get_shadow_map_texture_id(i);
         ImGui::Image(
             reinterpret_cast<ImTextureID>(shadow_map_texture_id),
-            ImVec2(256, 256),  // Уменьшенный размер для сетки
-            ImVec2(0, 0),      // UV координаты верхнего левого угла
-            ImVec2(1, 1),      // UV координаты нижнего правого угла
-            ImVec4(1, 1, 1, 1), // tint цвет
-            ImVec4(0, 0, 0, 0)  // border цвет
+            ImVec2(256, 256),
+            ImVec2(0, 0),
+            ImVec2(1, 1),
+            ImVec4(1, 1, 1, 1),
+            ImVec4(0, 0, 0, 0)
         );
         if (i % 2 == 0) {
             ImGui::SameLine();
@@ -217,8 +210,6 @@ auto app::render(
 #endif
 }
 
-// Один список на все панели: какая из них уместна, решает контекст, а не флажок
-// в каждом вызове. Порядок вызовов и есть порядок панелей вдоль края.
 auto app::render_panels_(
     float delta_time
 ) -> void {
@@ -265,8 +256,6 @@ auto app::handle_key_press(
         return;
     }
 
-    // Раскладка одна на весь редактор и разбирается здесь: инструмент получает
-    // событие только затем, чтобы вести собственный жест, а не толковать клавиши.
     if (const auto cmd = match(ev)) {
         run_command_(*cmd);
     }
@@ -293,8 +282,6 @@ auto app::run_command_(
         case command::file_new: state_.ui.need_new_file_modal = true; break;
         case command::file_open: state_.ui.need_open_file_modal = true; break;
 
-        // Открытый клип сохраняется вместо документа: Ctrl+S в анимации — про
-        // то, что правится сейчас, а префаб от правки позы не менялся.
         case command::file_save:
             if (state_.ctx.in_clip() && !state_.anim.selected_clip_name.empty()) {
                 state_.ui.need_save_clip = true;
@@ -391,9 +378,6 @@ auto app::handle_mouse_release(
     }
 }
 
-// В анимацию входят фактом открытого клипа, а не открытой панелью: клип создают
-// и открывают из меню, а панели, которая только тем и занималась, что включала
-// режим своим появлением, больше нет.
 auto app::update_animation_context_() -> void {
     if (state_.ui.need_save_clip) {
         state_.ui.need_save_clip = false;
@@ -410,8 +394,6 @@ auto app::update_animation_context_() -> void {
         }
     }
 
-    // Клип закрыли — править в этом режиме нечего, и держать его значит оставить
-    // редактор без инструментов.
     if (state_.ctx.in_clip() && state_.anim.selected_clip_name.empty()) {
         clip_service_.force_exit_animation_mode();
     }
@@ -470,9 +452,6 @@ auto app::update_title_() -> void {
     get_engine().get_window().set_title(title);
 }
 
-// Узел может исчезнуть из-под контекста: удаление, undo создания, переоткрытие
-// документа. Проверять это в каждой панели значит забыть в одной из них, а
-// забытая проверка здесь — путь в никуда, по которому ещё и рисуют.
 auto app::prune_contexts_() -> void {
     auto& stack = state_.ctx.stack;
 
@@ -492,15 +471,9 @@ auto app::prune_contexts_() -> void {
     }
 }
 
-// Дерево хранит, что выключено глазом, а здесь это становится флагом модели:
-// узел скрыт, если скрыт он сам или кто-то выше. Объём, в который провалились,
-// не скрывается никогда — прятать то, что правят, значит остаться и без
-// картинки, и без кисти. Его дети при этом следуют за предками как обычно.
 auto app::sync_visibility_() -> void {
     auto& scene = state_.scene;
 
-    // Имя удалённого узла забывается: иначе новый узел с тем же именем родился
-    // бы скрытым без видимой причины.
     std::erase_if(scene.hidden_nodes, [&scene](const std::string& name) {
         return !scene.name_to_entity.contains(name);
     });
@@ -530,8 +503,6 @@ auto app::sync_visibility_() -> void {
             is_edited = !edited.empty() && named->second == edited;
         }
 
-        // Безымянные дети — превью сокетов и поддеревья вариантов — идут за
-        // своим узлом: иначе скрытая рука оставляла бы в воздухе меч.
         const bool shown = !hidden || is_edited;
         if (world.has<ecs::model_component>(ent) &&
             world.get<ecs::model_component>(ent).is_visible() != shown) {
@@ -590,8 +561,6 @@ auto app::render_volume_overlay_() -> void {
     const auto& transform_comp = world.get<ecs::transform_component>(ent);
     auto& renderer             = get_engine().get_renderer();
 
-    // Рамка по непустым вокселям: после расширения модель часто болтается внутри
-    // собственного габарита, и по одному габариту не видно, что резать есть что.
     if (state_.volume.occupied) {
         const auto& bounds = *state_.volume.occupied;
         const auto size    = bounds.size();
@@ -613,9 +582,6 @@ auto app::render_volume_overlay_() -> void {
         );
     }
 
-    // Точка вращения — само начало координат узла: объём стоит сдвинутым на
-    // -pivot, поэтому сюда она и приходится. Крест по осям узла, а не по осям
-    // мира: повёрнутый узел иначе не отличить от неповёрнутого.
     const auto node       = transform_comp.get_world_matrix();
     constexpr float32 arm = 1.5f;
 
@@ -625,9 +591,6 @@ auto app::render_volume_overlay_() -> void {
 }
 
 auto app::collect_dirty_models_() -> void {
-    // Правку объёма ловим общим признаком изменения, а не из каждой операции:
-    // иначе список придётся дописывать в каждой новой из них, и первая же
-    // забытая молча потеряет правку при сохранении.
     for (const auto ent : get_engine().get_world().changed<ecs::model_component>()) {
         state_.file.dirty_models.insert(ent);
     }

@@ -31,8 +31,6 @@ auto field_label(const char* text) -> void {
     ImGui::SetNextItemWidth(-1.0f);
 }
 
-// Условие человеку: параметр, оператор, значение. Объявленный bool показывается
-// словом — так же, как он пишется в файл.
 auto condition_text(const asset::voxf_data& data, const asset::fsm_condition& condition)
     -> std::string {
     const auto it = std::ranges::find(data.params, condition.parameter, &asset::voxf_param::name);
@@ -101,14 +99,12 @@ auto fsm_panel::commit_edit_() -> void {
 }
 
 auto fsm_panel::render(
-    float /*delta_time*/
+    float
 ) -> void {
     if (!state_->ctx.in_fsm() || !state_->fsm.is_open()) {
         return;
     }
 
-    // Ширина задана, высота по содержимому: список состояний растёт правкой, а
-    // прыгающая от неё ширина колонок читалась бы как дрожь.
     ImGui::SetNextWindowSize(ImVec2(440.0f, 0.0f), ImGuiCond_Always);
     begin_panel(*state_, panel_slot::right, "State Machine");
 
@@ -186,7 +182,6 @@ auto fsm_panel::render_params_() -> void {
             commit_edit_();
         }
 
-        // У триггера значения нет: он живёт в наборе сработавших, а не на доске.
         if (param.type != asset::voxf_param_type::trigger) {
             ImGui::SameLine();
             ImGui::SetNextItemWidth(ImGui::GetFontSize() * 4.0f);
@@ -285,8 +280,6 @@ auto fsm_panel::render_state_(
             state.name = name;
         }
         if (ImGui::IsItemDeactivatedAfterEdit()) {
-            // Переименование тянет за собой всех, кто сюда вёл: иначе правка
-            // имени молча оторвала бы состояние от автомата.
             if (editing_ && index < before_.states.size()) {
                 const auto& old_name = before_.states[index].name;
                 for (auto& other : data.states) {
@@ -420,8 +413,6 @@ auto fsm_panel::render_rule_(
             commit_edit_();
         }
 
-        // Ожидания — условия на проигрыватель, а не на данные, поэтому и стоят
-        // отдельно от when.
         bool wait_end = rule.wait_until_end;
         if (ImGui::Checkbox("wait end", &wait_end)) {
             begin_edit_();
@@ -522,8 +513,6 @@ auto fsm_panel::render_incoming_(
     ImGui::SameLine(label_width());
 
     if (sources.empty()) {
-        // Состояние, в которое никто не ведёт, — либо входное, либо потерянное,
-        // и это ровно то, ради чего секция считается.
         ImGui::TextDisabled(
             "%s", state_name == state_->fsm.data.entry_state ? "entry" : "nothing leads here"
         );

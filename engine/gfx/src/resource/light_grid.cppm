@@ -16,19 +16,12 @@ using namespace ::vw::ecs;
 
 export namespace vw::gfx {
 
-// off не стоит ничего и работает в обычном кадре. counts — дешёвая половина:
-// хватает, чтобы узнать, насколько сетка полна и сколько переполнилось. full
-// добавляет сами списки — это мегабайты за кадр и оправдано только под
-// --verify-lights.
 enum class cluster_readback_level : uint8 {
     off,
     counts,
     full,
 };
 
-// Два списка над одной сеткой: источники, освещающие кластер, и тела, его
-// затеняющие. Оба строит один проход одним и тем же кодом, потому что вопрос —
-// каких кластеров касается этот шар — здесь дважды один и тот же.
 enum class cull_list : uint32 {
     sources = 0,
     blobs   = 1,
@@ -36,24 +29,16 @@ enum class cull_list : uint32 {
 
 inline constexpr uint32 cull_list_count = 2;
 
-// О чём спросили отсев одного кадра и что он ответил. Забирается назад целым
-// кольцом позже, когда забор этого кадра уже дождались, — так чтение никогда
-// ничего не тормозит и не гонится с записью на GPU.
 struct cluster_readback {
     cull_list kind = cull_list::sources;
     spatial::cluster_grid grid{};
     uint32 cap = 0;
 
-    // Вход шейдера, а не сцены: пространство вида, глубина положительна вперёд —
-    // ровно то, что компьютный проход построил себе сам. Источник — шар, пятно
-    // тени под телом — колонка, и обе капсулы, поэтому `kind` говорит, что значат
-    // записи, а не в каком они списке.
     std::vector<spatial::view_capsule> columns;
 
     // Длиной cluster_count + 1, последняя запись — счёт переполнений.
     std::vector<uint32> counts;
 
-    // Пусто на уровне counts; длиной cluster_count * cap на уровне full.
     std::vector<uint32> indices;
 };
 
@@ -61,10 +46,6 @@ class light_grid {
 public:
     static constexpr uint32 max_frames_in_flight = 2;
 
-    // Наборы принадлежат light_buffer. Сюда относятся биндинги 1, 2, 4 и 5 набора
-    // 3; 0 — собственный у light_buffer, 3 — у blob_buffer, и все пишутся в один
-    // набор, чтобы компьютный проход и фрагмент доставали все шесть одной
-    // привязкой.
     light_grid(
         vulkan_context& context,
         deletion_queue& deletion,
@@ -79,10 +60,6 @@ public:
     light_grid(light_grid&&)                         = delete;
     auto operator=(light_grid&&) -> light_grid&      = delete;
 
-    // Запоминается, а не применяется сразу. Буферы перестраиваются внутри
-    // dispatch, для записываемого сейчас кадра, чей забор begin_frame уже
-    // дождался: переписать дескрипторный набор, который читает другой кадр, — это
-    // единственный способ здесь ошибиться.
     auto set_grid(const spatial::cluster_grid& grid, uint32 cap, uint32 blob_cap) -> void;
 
     auto dispatch(
@@ -96,17 +73,12 @@ public:
 
     auto set_readback(cluster_readback_level level) -> void;
 
-    // Завершившийся кадр либо ничего. Невзятое отбрасывается с приходом
-    // следующего: отставший проверяльщик должен проверять свежий кадр, а не
-    // очередь старых.
     [[nodiscard]] auto take_readback(cull_list kind) -> std::optional<cluster_readback>;
 
     [[nodiscard]] auto get_cluster_count() const -> uint32;
     [[nodiscard]] auto get_cap() const -> uint32;
 
 private:
-    // Буферы одного списка для одного кадра в полёте плюс то, о чём этот кадр
-    // спросили, в ожидании ответа.
     struct list_frame {
         std::unique_ptr<device_storage_buffer> counts;
         std::unique_ptr<device_storage_buffer> indices;
@@ -140,7 +112,6 @@ private:
         return (frame_index * cull_list_count) + static_cast<uint32>(kind);
     }
 
-    // Счётчики плюс одна запись за ними — под счёт не поместившихся назначений.
     [[nodiscard]] auto counts_size_() const -> vk::DeviceSize;
     [[nodiscard]] auto indices_size_(cull_list kind) const -> vk::DeviceSize;
 
@@ -165,17 +136,12 @@ private:
     cluster_readback_level readback_ = cluster_readback_level::off;
     std::array<std::optional<cluster_readback>, cull_list_count> ready_{};
 
-    // Увеличивается всякий раз, когда сетка меняет форму; кадр, чьи буферы несут
-    // более старое значение, перестроит их при следующей записи.
     std::array<uint64, max_frames_in_flight> built_{};
     uint64 generation_ = 1;
 
     spatial::cluster_grid grid_{};
     uint32 cap_ = 32;
 
-    // Кластер, держащий больше нескольких тел, — это толпа, стоящая друг на друге, а
-    // шестнадцатое пятно над пикселем всё равно никто не различит. Полмегабайта за
-    // кадр против двух с половиной у источников.
     uint32 blob_cap_      = 16;
     uint32 cluster_count_ = 0;
 };

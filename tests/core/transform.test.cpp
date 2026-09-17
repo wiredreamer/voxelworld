@@ -107,8 +107,6 @@ TEST_CASE("transform calc_matrix", "[transform]") {
 }
 
 TEST_CASE("transform from_matrix reverses calc_matrix", "[transform]") {
-    // Поворот сверяется матрицей, а не кватернионом: q и -q — один и тот же
-    // поворот, и сравнение компонент ругалось бы на верный ответ.
     const auto round_trips = [](const vec3f& position, const vec3f& euler, const vec3f& scale) {
         transform source;
         source.set_position(position);
@@ -129,8 +127,6 @@ TEST_CASE("transform from_matrix reverses calc_matrix", "[transform]") {
         round_trips(vec3f{1.0f, -2.0f, 3.5f}, vec3f{0.3f, -1.1f, 0.7f}, vec3f{2.0f, 0.5f, 3.0f});
     }
 
-    // Половина оборота вокруг каждой оси обнуляет след матрицы и уводит разбор
-    // в ветки по наибольшей диагонали.
     SECTION("half turns take every branch") {
         round_trips(vec3f{}, vec3f{math::pi, 0.0f, 0.0f}, vec3f{1.0f, 1.0f, 1.0f});
         round_trips(vec3f{}, vec3f{0.0f, math::pi, 0.0f}, vec3f{1.0f, 1.0f, 1.0f});

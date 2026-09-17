@@ -22,9 +22,6 @@ auto set_pivot_operation::execute() -> void {
     previous_pivot_ = world.get<ecs::model_component>(ent).get_pivot();
     world.system<ecs::model_system>().modify(ent).set_pivot(params_.new_pivot);
 
-    // Точка вращения лежит в файле объёма, а изменение заявляется по трансформу:
-    // сбор изменённых объёмов его не видит, и без явной пометки запись префаба
-    // оставила бы .voxm со старой точкой.
     state_->file.dirty_models.insert(ent);
     state_->file.has_unsaved_changes = true;
 }

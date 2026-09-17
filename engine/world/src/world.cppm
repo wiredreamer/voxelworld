@@ -16,8 +16,6 @@ import vw.ecs;
 
 export namespace vw::ecs {
 
-// Порядок здесь — это порядок кадра: каждая система видит мир таким, каким его
-// оставила предыдущая.
 using world_systems = std::tuple< //
     hierarchy_system, character_controller_system, animation_fsm_system,
     physics_system, transform_system, model_system, spatial_system,
@@ -27,27 +25,19 @@ using world_systems = std::tuple< //
 
 inline constexpr std::size_t world_system_count = std::tuple_size_v<world_systems>;
 
-// Имя система носит сама: таблица имён рядом с кортежем разъезжается с ним при
-// первой же перестановке, и разъехавшуюся видно только по перепутанным числам.
 inline constexpr auto world_system_names = []<std::size_t... Is>(
-    std::index_sequence<Is...> /*unused*/
+    std::index_sequence<Is...>
 ) {
     return std::array<std::string_view, sizeof...(Is)>{
         std::tuple_element_t<Is, world_systems>::system_name...
     };
 }(std::make_index_sequence<world_system_count>{});
 
-// Сколько заняла каждая система на последнем кадре, в порядке кортежа. Замер
-// идёт всегда: одиннадцать чтений часов на кадр не стоят ничего, а метрика,
-// которую надо включить, показывает не тот кадр, из-за которого её открыли.
 struct world_update_stats {
     std::array<float32, world_system_count> ms{};
     float32 total_ms = 0.0f;
 };
 
-// Владеет реестром, системами и общими реестрами ассетов и держит их в согласии:
-// добавление или удаление компонента извещает каждую систему, которой этот тип
-// небезразличен.
 class world final {
 public:
     using systems = world_systems;
@@ -118,8 +108,6 @@ public:
         std::vector<entity> entities_;
     };
 
-    // По умолчанию — встроенный каталог: так мир поднимается в тестах и в
-    // headless-сборке, где движка нет. Движок передаёт свой.
     explicit world(const voxel_registry& voxel_types = default_voxel_registry());
     ~world();
 
@@ -265,10 +253,6 @@ private:
         registry_.batch_remove<T>(entities);
     }
 
-    // Уничтожение сущности обязано известить системы о каждом компоненте, который
-    // она ещё держит, а тип к тому моменту известен только по идентификатору —
-    // поэтому каждый тип компонента при первом добавлении оставляет за собой
-    // типизированный удалитель.
     template <typename T>
     auto remember_remove_hook_() -> void {
         const uint32 id = component_id_of<T>();
@@ -284,14 +268,9 @@ private:
 
     world_update_stats update_stats_;
 
-    // Перед системами: запекатель света снимает с реестра таблицу излучения, а
-    // строится он системой сетки.
     const voxel_registry* voxel_types_;
 
     ecs::registry registry_;
-    // Ресурсы стоят перед системами намеренно: система может держать модели, чьи
-    // страницы принадлежат model_registry, поэтому реестр обязан пережить каждую
-    // систему, которая у него занимала.
     resources resources_;
     systems systems_;
     std::vector<void (*)(world&, entity)> remove_hooks_;

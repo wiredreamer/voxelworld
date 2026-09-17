@@ -22,7 +22,7 @@ socket_panel::socket_panel(
     : engine_(&eng), state_(&st), op_manager_(&op_manager), library_(&library) {}
 
 auto socket_panel::render(
-    float /*delta_time*/
+    float
 ) -> void {
     if (state_->scene.selected_name.empty()) {
         return;
@@ -351,8 +351,6 @@ auto socket_panel::load_preview_(
         return;
     }
 
-    // Превью — содержимое по ссылке, как и кандидат слота: в запись оно не
-    // идёт, и решает это метка на сущностях, а не список исключений у писателя.
     auto& variants = world.system<ecs::variant_system>();
     for (const auto ent : result->entities) {
         variants.mark_content(ent, parent_ent);

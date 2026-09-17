@@ -15,7 +15,6 @@ import :services;
 import :tools;
 import :ui;
 
-// ---- from src/app/app.h
 export namespace vw::sculptor {
 
 class app final : public gfx::app {

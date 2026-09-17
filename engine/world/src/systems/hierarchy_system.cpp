@@ -8,7 +8,7 @@ namespace vw::ecs {
 hierarchy_system::hierarchy_system(world& w)
     : world_{&w} {}
 
-auto hierarchy_system::update(float32 /*dt*/) -> void {}
+auto hierarchy_system::update(float32) -> void {}
 
 hierarchy_system::hierarchy_modifier::hierarchy_modifier(
     hierarchy_system* system,
@@ -95,8 +95,6 @@ auto hierarchy_system::hierarchy_modifier::set_parent(entity parent, std::size_t
 
     auto& reg = system_->world_->registry();
 
-    // Прежний родитель отпускает узел: иначе перенос оставил бы его в двух
-    // списках детей сразу, и обход дерева проходил бы его дважды.
     if (reg.has<hierarchy_component>(entity_)) {
         const auto previous = reg.get<hierarchy_component>(entity_).parent_;
         if (previous.is_valid() && reg.has<hierarchy_component>(previous)) {

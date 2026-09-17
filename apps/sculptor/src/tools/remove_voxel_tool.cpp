@@ -16,7 +16,7 @@ remove_voxel_tool::remove_voxel_tool(
     : engine_(&eng), state_(&st), op_manager_(&op_manager) {}
 
 auto remove_voxel_tool::render(
-    float /*delta_time*/
+    float
 ) -> void {
     if (hovered_voxel_ == vec3i{-1, -1, -1}) {
         return;
@@ -55,12 +55,12 @@ auto remove_voxel_tool::render(
 }
 
 auto remove_voxel_tool::on_key_press(
-    const plat::key_press_event& /*ev*/
+    const plat::key_press_event&
 ) -> void {
 }
 
 auto remove_voxel_tool::on_mouse_move(
-    const plat::mouse_move_event& /*ev*/
+    const plat::mouse_move_event&
 ) -> void {
    update_hovered_voxel_();
 }
@@ -92,7 +92,7 @@ auto remove_voxel_tool::on_mouse_press(
 }
 
 auto remove_voxel_tool::on_mouse_release(
-    const plat::mouse_release_event& /*ev*/
+    const plat::mouse_release_event&
 ) -> void {}
 
 auto remove_voxel_tool::on_activate() -> void {

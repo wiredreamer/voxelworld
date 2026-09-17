@@ -16,8 +16,6 @@ class vulkan_context;
 struct mesh_generation_task {
     vw::asset::model_identity identity;
     std::weak_ptr<vw::asset::model> model_ref;
-    // Пусто у модели, которая не чанк мира. Слабая по той же причине, что и
-    // модель: пока задача ждёт очереди, колонку могло унести из виду.
     std::weak_ptr<vw::asset::chunk_volume> chunk_ref;
     std::promise<mesh> promise;
     mesh_options opts;
@@ -34,10 +32,6 @@ struct mesh_generation_task {
         , opts(opts) {}
 };
 
-// Мешинг идёт вне кадрового потока, поэтому кадровые перцентили о нём ничего не
-// говорят. Счётчики ведутся по воркеру и сливаются под тем же замком очереди,
-// который воркер и так берёт, — так на горячем пути нет ни атомиков, ни ложного
-// разделения строк кэша.
 struct mesh_gen_worker_stats {
     uint64 chunks = 0;
     uint64 nanos  = 0;
@@ -109,12 +103,6 @@ private:
     mutable std::mutex gen_mutex_;
     std::condition_variable gen_cv_;
     bool gen_running_ = true;
-    // Осиротевшее собирается по срезу таблицы за кадр. Полный обход раз в
-    // шестидесятый кадр плохо решал обе половины задачи: мёртвая геометрия лежала в
-    // памяти до прихода уборки, а сама уборка, придя, давала всплеск в
-    // миллисекунды. Важен второй бюджет: просмотр корзины не стоит ничего,
-    // освобождение меша — это пара деаллокаций, а после ухода колонки из виду
-    // освобождать приходится сотни.
     std::size_t sweep_bucket_ = 0;
     static constexpr std::size_t sweep_buckets_per_frame_ = 512;
     static constexpr std::size_t sweep_orphans_per_frame_ = 32;

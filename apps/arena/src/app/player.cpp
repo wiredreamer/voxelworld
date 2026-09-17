@@ -58,8 +58,6 @@ auto player::attach_machines_() const -> void {
 
     auto& world = engine_.get_world();
 
-    // Порядок ссылок в префабе — это номера слоёв: нулевой ведёт тело, первый
-    // накладывается поверх.
     for (std::size_t layer = 0; layer < prefab->fsm_refs.size(); ++layer) {
         const auto* data = assets_.get_fsm(prefab->fsm_refs[layer]);
         if (data == nullptr) {
@@ -138,8 +136,6 @@ auto player::update(
         need_update_jump_ = false;
     }
 
-    // Скорость и опору система кладёт на доску сама, а счётчик прыжков — чисто
-    // игровое понятие, и приходит он отсюда.
     world.system<ecs::animation_fsm_system>().modify(ent).set_parameter(
         "jump_count", static_cast<float32>(jump_counter_)
     );
@@ -232,9 +228,6 @@ auto player::create_body_part(
 
     world.system<ecs::hierarchy_system>().modify(ent).set_parent(root_);
 
-    // Компоненты узла ставят те же кодеки, которыми префаб встаёт из файла.
-    // Пока это место читало теги само, оно тихо расходилось с загрузчиком:
-    // добавленный там компонент сюда не доезжал.
     const auto& ent_data = assets_.get_entity(prefab_name, part_name);
     ecs::apply_node(world, ent, ent_data, assets_.library());
 

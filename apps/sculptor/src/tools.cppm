@@ -10,7 +10,6 @@ import vw.gfx;
 import :state;
 import :operations;
 
-// ---- from src/tools/base_tool.h
 export namespace vw::sculptor {
 
 class base_tool {
@@ -29,7 +28,6 @@ public:
 
 }  // namespace vw::sculptor
 
-// ---- from src/tools/add_voxel_tool.h
 export namespace vw::sculptor {
 
 class add_voxel_tool final : public base_tool {
@@ -58,7 +56,6 @@ private:
 
 }  // namespace vw::sculptor
 
-// ---- from src/tools/color_picker_tool.h
 export namespace vw::sculptor {
 
 class color_picker_tool final : public base_tool {
@@ -87,7 +84,6 @@ private:
 
 }  // namespace vw::sculptor
 
-// ---- from src/tools/dummy_tool.h
 export namespace vw::sculptor {
 
 class dummy_tool final : public base_tool {
@@ -117,7 +113,6 @@ public:
 
 }  // namespace vw::sculptor
 
-// ---- from src/tools/paint_tool.h
 export namespace vw::sculptor {
 
 class paint_tool final : public base_tool {
@@ -146,7 +141,6 @@ private:
 
 }  // namespace vw::sculptor
 
-// ---- from src/tools/remove_voxel_tool.h
 export namespace vw::sculptor {
 
 class remove_voxel_tool final : public base_tool {
@@ -175,23 +169,14 @@ private:
 
 }  // namespace vw::sculptor
 
-// ---- from src/tools/gizmo.h
 export namespace vw::sculptor {
 
-// Что двигает манипулятор: сам узел или точку вращения его объёма. Точка живёт
-// в вокселях объёма, поэтому ходит по осям самого узла и шагает полвокселя.
 enum class gizmo_target : uint8 { node, pivot };
 
 enum class gizmo_axis : uint8 { none, x, y, z };
 
-// Куда уходит законченный жест: в историю правок документа или никуда. В клипе
-// поза — это превью кадра, в файл её кладёт запись ключа, и «сохранять» её в
-// историю префаба значит помечать документ изменённым за то, чего в нём нет.
 enum class gizmo_commit : uint8 { history, preview };
 
-// Манипулятор выбранной сущности. Не инструмент: он живёт поверх выбора и
-// обязан работать и там, где инструменты запрещены, — в анимационном режиме
-// поза узла правится именно им.
 class gizmo final {
 public:
     using engine_type = gfx::engine;
@@ -206,9 +191,6 @@ public:
 
     auto on_mouse_move(ecs::entity ent) -> void;
 
-    // Отвечает, взял ли манипулятор нажатие себе: если взял, выбор сущности под
-    // курсором меняться не должен — иначе клик по ручке перекидывал бы выбор на
-    // то, что за ней.
     auto on_mouse_press(ecs::entity ent) -> bool;
     auto on_mouse_release() -> void;
 
@@ -217,13 +199,8 @@ public:
     }
 
 private:
-    // Точка вращения только ездит: поворачивать и растягивать её нечего, и общий
-    // режим узла на неё не распространяется.
     [[nodiscard]] auto mode_() const -> gizmo_mode;
 
-    // Оси, вдоль которых ходит ручка, и точка, вокруг которой всё вращается.
-    // Оси берутся у родителя: позиция и поворот узла заданы относительно него,
-    // и дельта по мировой оси легла бы в них криво.
     struct frame {
         vec3f pivot;
         std::array<vec3f, 3> axes;
@@ -255,28 +232,19 @@ private:
 
     bool dragging_ = false;
 
-    // Снимок на начало жеста: правка идёт от него, а не от предыдущего кадра,
-    // иначе ошибка копится, а undo обязан вернуть ровно исходное состояние.
     transform start_transform_;
     vec3f start_pivot_{};
     float32 start_offset_ = 0.0F;
     float32 start_angle_  = 0.0F;
 
-    // Система отсчёта тоже замораживается. Считать от свежей нельзя: сдвинув
-    // узел, она сама уезжает вслед за ним, и следующий кадр меряет смещение уже
-    // от нового места — узел начинает дёргаться.
     frame drag_frame_{};
     gizmo_mode drag_mode_ = gizmo_mode::translate;
 };
 
 }  // namespace vw::sculptor
 
-// ---- from src/tools/move_pivot_tool.h
 export namespace vw::sculptor {
 
-// Точку вращения объёма двигает тот же манипулятор, что и узлы, — просто целится
-// он в неё. Своей работы с мышью у инструмента нет: провалившись в объём, правят
-// либо воксели, либо точку, и второе целиком отдано манипулятору.
 class move_pivot_tool final : public base_tool {
 public:
     using engine_type = gfx::engine;
@@ -301,12 +269,8 @@ private:
 
 }  // namespace vw::sculptor
 
-// ---- from src/tools/pose_tool.h
 export namespace vw::sculptor {
 
-// Правка позы в клипе. Выбор узла здесь ведёт не к его свойствам, а к дорожке,
-// и подсветки наведения нет намеренно: в анимации по сцене не ходят выбирая, в
-// ней возят один узел за другим, и мигающая рамка под курсором только мешает.
 class pose_tool final : public base_tool {
 public:
     using engine_type = gfx::engine;
@@ -332,7 +296,6 @@ private:
 
 }  // namespace vw::sculptor
 
-// ---- from src/tools/select_entity_tool.h
 export namespace vw::sculptor {
 
 class select_entity_tool final : public base_tool {

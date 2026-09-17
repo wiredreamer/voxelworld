@@ -17,8 +17,6 @@ namespace vw::sculptor {
 
 namespace {
 
-// Ширина колонки имени: значения секций встают в один столбец, иначе панель
-// читается как набор несвязанных строк.
 constexpr float32 label_column = 70.f;
 
 auto field_label(std::string_view label) -> void {
@@ -33,10 +31,6 @@ auto add_by_operation(component_drawer& drawer) -> void {
     };
 }
 
-// Углы показываются в градусах, а живут кватернионом, и обратный перевод не
-// однозначен: пока крутят поле, оно обязано показывать набранное, а не то, что
-// получилось после двух преобразований. Отсюда память между кадрами — на один
-// узел, потому что правят всегда один.
 struct rotation_memory {
     std::string node;
     quat value;
@@ -113,9 +107,6 @@ auto register_model(component_drawer_registry& drawers) -> void {
     drawer.draw = [](const component_drawer_context& in) {
         const auto& model_comp = in.engine.get_world().get<ecs::model_component>(in.ent);
 
-        // Имя файла, а не весь путь: панель прижата к правому краю, и полный
-        // путь раздвинул бы её на треть экрана ради строки, которая и так одна
-        // и та же у всех узлов префаба.
         const auto& source = model_comp.get_source();
         field_label("Volume");
         if (source.empty()) {
@@ -128,8 +119,6 @@ auto register_model(component_drawer_registry& drawers) -> void {
             }
         }
 
-        // Набор — только на чтение: он задан конструктором модели и не меняется,
-        // а видеть его надо, иначе о том, чем модель красится, сказать нечего.
         const auto model     = model_comp.get_model();
         const voxel_set* set = model ?
             in.engine.get_voxel_registry().set_of(model->category()) :
@@ -143,9 +132,6 @@ auto register_model(component_drawer_registry& drawers) -> void {
             static_cast<int>(set_name.size()), set_name.data()
         );
 
-        // Занятый объём показывается, только когда он меньше габарита: совпали —
-        // говорить не о чем, разошлись — это и есть ответ на вопрос, почему
-        // модель болтается внутри себя и что срежет Trim.
         const auto& bounds  = in.state.volume.occupied;
         const bool can_trim = bounds.has_value() && bounds->size() != model_size;
         if (!bounds.has_value()) {
@@ -157,9 +143,6 @@ auto register_model(component_drawer_registry& drawers) -> void {
             ImGui::TextDisabled("%dx%dx%d", occupied.x, occupied.y, occupied.z);
         }
 
-        // Точка вращения объёма: узел садится на неё, а поддерево её не видит.
-        // Правится она только изнутри .voxm — она часть файла объёма, — а из
-        // префаба видна, чтобы было понятно, вокруг чего узел крутится.
         vec3f pivot = model_comp.get_pivot();
         if (!in.state.ctx.allows_volume_edit()) {
             field_label("Pivot");
@@ -191,8 +174,6 @@ auto register_model(component_drawer_registry& drawers) -> void {
         return std::format("{}x{}x{}", size.x, size.y, size.z);
     };
 
-    // Объёму нужны размер и набор вокселей, поэтому строка передаёт работу своему
-    // диалогу, а не заводит компонент на месте.
     drawer.add = [](const component_drawer_context& in) {
         in.state.ui.need_add_model_for = in.node_name;
     };
@@ -220,8 +201,6 @@ auto register_sockets(component_drawer_registry& drawers) -> void {
         field_label("Points");
         ImGui::TextDisabled("%d", static_cast<int32>(sockets.size()));
 
-        // Сами точки правит своя панель: здесь их список занял бы больше места,
-        // чем всё остальное вместе.
         if (!in.state.ui.show_sockets && ImGui::Button("Show")) {
             in.state.ui.show_sockets = true;
         }
@@ -299,8 +278,6 @@ auto register_variant(component_drawer_registry& drawers) -> void {
 
         const auto& candidates = slot.get_candidates();
 
-        // Кандидаты подписаны именами файлов: путь у них общий и длинный, а
-        // различаются они последним куском.
         const auto label_of = [&candidates](std::size_t index) {
             return std::format("{}{}", candidates[index].stem(), candidates[index].extension());
         };
@@ -308,8 +285,6 @@ auto register_variant(component_drawer_registry& drawers) -> void {
         std::optional<std::size_t> picked;
         std::optional<std::size_t> dropped;
 
-        // Пустой список ничего про себя не пишет: под ним стоит кнопка, и она
-        // говорит то же самое короче.
         if (!candidates.empty()) {
             const auto current = slot.get_selected();
 
@@ -338,14 +313,10 @@ auto register_variant(component_drawer_registry& drawers) -> void {
             }
         }
 
-        // Кнопка стоит вне ветки: со списком она нужна ровно так же, как без
-        // него, а спрятанная за «пусто» она даёт добавить только первого.
         if (ImGui::Button("Add")) {
             in.state.ui.need_add_candidate_for = in.node_name;
         }
 
-        // Операции идут после того, как виджеты закрыты: они меняют и список, и
-        // объём узла, а ссылка на слот взята до них.
         if (picked.has_value()) {
             in.ops.execute(
                 std::make_unique<select_variant_operation>(
@@ -392,8 +363,6 @@ auto register_variant(component_drawer_registry& drawers) -> void {
     drawers.register_for<ecs::variant_slot_component>(std::move(drawer));
 }
 
-// Автоматы принадлежат префабу целиком, как и риг, поэтому секция появляется
-// на корне. Порядок в списке — номера слоёв, и стрелка вверх этим и занята.
 auto register_machines(component_drawer_registry& drawers) -> void {
     component_drawer drawer;
     drawer.tag   = "fsm";
@@ -478,20 +447,14 @@ auto register_rig(component_drawer_registry& drawers) -> void {
     drawer.tag   = "rig";
     drawer.title = "Rig";
 
-    // Ни add, ни remove: риг — свойство префаба целиком, и в составе узла ему
-    // делать нечего. Живёт он на корне, так что и секция видна при выбранном
-    // корне — своей панели у него больше нет.
     drawer.draw = [](const component_drawer_context& in) {
         auto& world          = in.engine.get_world();
         const auto& rig_name = world.get<ecs::rig_component>(in.ent).get_name();
 
-        // Буфер на один документ: риг у префаба один, и правят всегда его.
         static std::string input;
 
         imgui_input_text_string("Name", input);
 
-        // Имя уезжает в операцию по окончании правки, а не по каждой букве:
-        // иначе стек undo забьётся посимвольной историей набора.
         if (ImGui::IsItemDeactivatedAfterEdit()) {
             if (input != rig_name) {
                 in.ops.execute(
@@ -508,8 +471,6 @@ auto register_rig(component_drawer_registry& drawers) -> void {
             ImGui::TextDisabled("no rig: clips are not checked");
         }
 
-        // Список целей нигде не хранится — он и есть дерево, поэтому собирается
-        // заново на каждый показ.
         const auto targets = world.system<ecs::animation_system>().collect_targets(in.ent);
 
         const auto header = std::format("Targets: {}", targets.size());
@@ -577,9 +538,6 @@ auto params_of(const ecs::structure_component& structure, std::string name)
     };
 }
 
-// Метаданные генератора. Тип и раса — открытые словари: их состав знает
-// генератор, и выбирать их из списка значило бы держать этот список в двух
-// местах.
 auto register_structure(component_drawer_registry& drawers) -> void {
     component_drawer drawer;
     drawer.tag   = "structure";
@@ -655,8 +613,6 @@ auto register_structure(component_drawer_registry& drawers) -> void {
     drawers.register_for<ecs::structure_component>(std::move(drawer));
 }
 
-// Мебель и стык — одна и та же форма: узел с трансформом и словом. Отрисовщик
-// поэтому один на два компонента, с точностью до подписи.
 auto register_point(
     component_drawer_registry& drawers, point_kind kind, std::string tag, std::string title,
     std::string_view field
@@ -716,7 +672,6 @@ auto register_point(
 }  // namespace
 
 component_drawer_registry::component_drawer_registry() {
-    // Порядок регистрации — он же порядок секций в панели.
     register_transform(*this);
     register_model(*this);
     register_sockets(*this);

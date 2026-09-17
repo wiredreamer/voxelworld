@@ -1,7 +1,5 @@
 export module vw.world:systems;
 
-// Собирает системы мира: каждая живёт в своей партиции и правит только те
-// компоненты, с которыми дружит.
 export import :systems.hooks;
 export import :systems.hierarchy;
 export import :systems.transform;

@@ -1,7 +1,5 @@
 name: CI
 
-# Только push: pull_request на том же коммите заводит второй, точно такой же
-# прогон — у него свой ref, и concurrency их не схлопывает.
 on: push
 
 concurrency:
@@ -9,20 +7,10 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Версия прибита намеренно: `import std` открывается точным UUID, который
-  # меняется в каждом релизе CMake (таблица — в корневом CMakeLists.txt).
-  # Раннер обновляется сам, и без этой строки очередной CMake молча закрывает
-  # гейт, роняя сборку на генерации.
   VW_CMAKE_VERSION: 4.4.0
   VCPKG_BINARY_SOURCES: 'clear;x-gha,readwrite'
   VW_LLVM_VERSION: 20
 
-# Полная конфигурация собирается на обеих системах. Релизная платформа по PRD
-# по-прежнему одна — Windows; Linux здесь держит переносимость честной, потому
-# что единственное, что мешало ей раньше, — расхождение стандартных библиотек:
-# движок шёл на libc++, а зависимости приезжали из vcpkg собранными libstdc++.
-# Лечится это overlay-триплетом (cmake/triplets/x64-linux-libcxx.cmake), а не
-# правками в коде.
 jobs:
   build:
     runs-on: windows-latest
@@ -100,11 +88,6 @@ jobs:
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
 
-      # No Vulkan SDK on purpose: vw.core, vw.ecs and vw.world must build and
-      # test on a machine that has never seen a GPU.
-      #
-      # Предупреждения — ошибки во всех джобах: чисто собирается и движок
-      # целиком, и приложения, обоими компиляторами.
       - name: Configure without a GPU
         run: >
           cmake -B build-headless -S . -G Ninja
@@ -120,14 +103,6 @@ jobs:
       - name: Test
         run: ctest --test-dir build-headless --output-on-failure
 
-  # Полная конфигурация на второй системе: движок, приложения и тесты. Один
-  # Release, а не матрица — джоб и так самый долгий из всех, потому что vcpkg
-  # собирает glfw3, imgui и Catch2 из исходников: под libc++ бинарного кэша
-  # LunarG и GitHub для этого триплета не существует.
-  #
-  # Версия дистрибутива прибита по той же причине, что и версия CMake выше:
-  # список пакетов LunarG именует релиз (noble), и `ubuntu-latest`, съехав,
-  # уронил бы установку Vulkan SDK, а не сборку — искать было бы дольше.
   linux:
     runs-on: ubuntu-24.04
     steps:
@@ -149,15 +124,9 @@ jobs:
           sudo apt-get install -y \
             libc++-${{ env.VW_LLVM_VERSION }}-dev \
             libc++abi-${{ env.VW_LLVM_VERSION }}-dev
-          # Отсюда компилятор берут и порты vcpkg: свой тулчейн им подсовывать
-          # нельзя, он замещает штатный целиком, а CC и CXX штатный уважает.
-          # Имена с суффиксом, потому что другого llvm.sh не заводит, а `clang++`
-          # из PATH на Ubuntu 24.04 — это Clang 18 с libstdc++.
           echo "CC=clang-${{ env.VW_LLVM_VERSION }}" >> "$GITHUB_ENV"
           echo "CXX=clang++-${{ env.VW_LLVM_VERSION }}" >> "$GITHUB_ENV"
 
-      # xorg-dev и родня — то, чего требует порт glfw3: без них он собирается,
-      # но без единого бэкенда окна, и падение приходит уже на линковке.
       - name: Install windowing dependencies
         run: |
           sudo apt-get install -y \
@@ -165,9 +134,6 @@ jobs:
             libglu1-mesa-dev libxkbcommon-dev libwayland-dev wayland-protocols \
             extra-cmake-modules pkg-config
 
-      # Ради glslc и libvulkan: заголовки придут из vcpkg (в них и лежит
-      # vulkan.cppm, из которого собирается модуль `vulkan`), а компилятор
-      # шейдеров и сама библиотека — отсюда.
       - name: Install Vulkan SDK
         run: |
           wget -qO- https://packages.lunarg.com/lunarg-signing-key-pub.asc \
@@ -176,9 +142,6 @@ jobs:
             https://packages.lunarg.com/vulkan/lunarg-vulkan-noble.list
           sudo apt-get update
           sudo apt-get install -y vulkan-sdk
-          # Пакет LunarG раскладывает SDK по /usr и переменной за собой не
-          # оставляет, а порт `vulkan` в vcpkg падает FATAL_ERROR, если
-          # find_package(Vulkan) промахнулся.
           echo "VULKAN_SDK=/usr" >> "$GITHUB_ENV"
 
       - name: Setup CMake and Ninja
@@ -203,9 +166,6 @@ jobs:
           -DVCPKG_OVERLAY_TRIPLETS=${{ github.workspace }}/cmake/triplets
           -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake
 
-      # Порт, упавший внутри vcpkg, оставляет причину в buildtrees и в вывод
-      # джоба её не выносит: там остаётся только «vcpkg install failed». Без
-      # этого шага падение порта неотличимо от падения нашей конфигурации.
       - name: Show vcpkg failure logs
         if: failure()
         run: |
@@ -223,8 +183,6 @@ jobs:
       - name: Build
         run: cmake --build build
 
-      # Раннер без GPU, поэтому исполняются те же тесты, что и везде: ни один из
-      # них устройства не открывает.
       - name: Test
         run: ctest --test-dir build --output-on-failure
 

@@ -44,9 +44,6 @@ auto edit_components_modal::render() -> void {
         need_open_ = false;
     }
 
-    // Компоненту, которому мало одной кнопки, отвечает свой диалог, а этот
-    // уходит с дороги: вложенных модальных окон не бывает, да и выбирать размер
-    // объёма поверх списка состава нечитаемо.
     if (!state_->ui.need_add_model_for.empty()) {
         add_model_modal_.open(state_->ui.need_add_model_for);
         state_->ui.need_add_model_for.clear();
@@ -60,8 +57,6 @@ auto edit_components_modal::render() -> void {
         const auto it = state_->scene.name_to_entity.find(entity_name_);
 
         if (need_close_ || it == state_->scene.name_to_entity.end()) {
-            // Либо уступили место другому диалогу, либо узел исчез из-под этого:
-            // undo создания, удаление, переоткрытие.
             need_close_ = false;
             ImGui::CloseCurrentPopup();
         } else {
@@ -69,8 +64,6 @@ auto edit_components_modal::render() -> void {
             ImGui::Separator();
             ImGui::Spacing();
 
-            // Состав — тот же реестр, что и панель: компонент, который нечем
-            // поставить и нечем снять, в диалоге про состав не показывается.
             for (const auto& drawer : default_drawers().all()) {
                 if (!drawer.add && !drawer.remove) {
                     continue;

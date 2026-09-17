@@ -17,9 +17,6 @@ struct frame_sample {
     ecs::world_update_stats systems{};
 };
 
-// Копит целые кадровые сэмплы за прогон бенчмарка и сводит их к перцентилям.
-// Сэмплы хранятся целиком намеренно: всплеск полного кадрового времени что-то
-// значит только рядом со стадией, которая его породила.
 class frame_recorder final {
 public:
     explicit frame_recorder(uint32 capacity);
@@ -29,9 +26,6 @@ public:
     [[nodiscard]] auto sample_count() const -> uint32;
     [[nodiscard]] auto report() const -> std::string;
 
-    // Те же стадии и те же перцентили, но деревом: текст читает человек, это —
-    // машина. Обе формы идут от одной таблицы стадий, поэтому разойтись им
-    // негде.
     auto collect(gfx::report& out) const -> void;
 
 private:

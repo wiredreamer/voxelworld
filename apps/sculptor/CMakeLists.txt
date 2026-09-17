@@ -1,9 +1,5 @@
 project(sculptor VERSION 0.2.0 LANGUAGES CXX)
 
-# Редактор открывает ассеты прямо из репозитория: он их не только читает, но и
-# пишет, а копия в каталоге сборки уносила бы правки в сторону от git и гибла
-# при следующей сборке. Сборка «на раздачу» ставит сюда ".", и корнем становится
-# каталог рядом с исполняемым файлом.
 set(VW_SCULPTOR_ASSET_ROOT "${CMAKE_SOURCE_DIR}/assets"
     CACHE PATH "Asset directory Sculptor reads and writes")
 

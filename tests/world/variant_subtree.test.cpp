@@ -14,8 +14,6 @@ namespace {
 
 namespace fs = std::filesystem;
 
-// Кандидат-поддерево — это файл, и читается он разборщиком, поэтому тесту нужен
-// настоящий каталог ассетов.
 struct temp_assets final {
     fs::path root;
 
@@ -50,7 +48,6 @@ constexpr std::string_view orc_head =
     "\t\trot 0 0 0\n"
     "\t\tscale 1 1 1\n";
 
-// Та же голова, но без сокета: контракт слота она не закрывает.
 constexpr std::string_view bare_head =
     "# Vox File Version 4.0\n"
     "root head_bare\n"
@@ -77,7 +74,6 @@ struct subtree_fixture final {
     }
 };
 
-// Узел со слотом, который требует цель `head` и сокет `helmet`.
 auto make_prefab() -> asset::vox_prefab_data {
     asset::vox_prefab_data prefab;
     prefab.root_name = "head";
@@ -120,8 +116,6 @@ TEST_CASE("a subtree candidate hangs under the node", "[variant]") {
     REQUIRE(fx.w.has<socket_component>(content));
 }
 
-// Отказ не оставляет после себя половины поддерева: контракт проверяется по
-// файлу, до того как прежнее содержимое снято.
 TEST_CASE("a candidate that does not close the slot is refused", "[variant]") {
     subtree_fixture fx{"contract"};
 
@@ -144,7 +138,6 @@ TEST_CASE("a candidate that does not close the slot is refused", "[variant]") {
     REQUIRE(slot.get_content() == before);
 }
 
-// Содержимое по ссылке в файл не пишется: его принесёт кандидат, а не дерево.
 TEST_CASE("content by reference stays out of the file", "[variant]") {
     subtree_fixture fx{"write"};
 

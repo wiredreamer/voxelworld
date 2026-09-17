@@ -249,10 +249,6 @@ auto camera::screen_to_world_ray(
         return vec3f{point.x / point.w, point.y / point.w, point.z / point.w};
     };
 
-    // Глубина перевёрнута: ближняя плоскость — единица, дальняя — ноль, так
-    // строит perspective_matrix_reversed. По привычному отображению −1…+1 оба
-    // конца ложились в десятую долю от камеры, и луч выбора выходил длиной в
-    // треть вокселя — не доставая ни до чего.
     return vw::spatial::ray{unproject(ndc_x, ndc_y, 1.0f), unproject(ndc_x, ndc_y, 0.0f)};
 }
 

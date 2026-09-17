@@ -43,8 +43,6 @@ auto shortcuts_modal::render() -> void {
             ImGui::SeparatorText(std::string{group}.c_str());
         }
 
-        // Недоступное здесь показано серым: раскладка одна на редактор, и врать,
-        // что клавиша сейчас сработает, она не должна.
         const bool available = is_available(entry.cmd, *state_);
 
         ImGui::BeginDisabled(!available);

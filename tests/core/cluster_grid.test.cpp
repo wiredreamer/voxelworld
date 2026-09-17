@@ -12,8 +12,6 @@ using spatial::view_sphere;
 
 namespace {
 
-// The frame the bench measures: 1280x720, 32-pixel tiles, 24 slices, and a far
-// bound at the fog rather than at the camera's fifty thousand.
 auto bench_grid() -> cluster_grid {
     const float32 fov_scale = 1.0F / std::tan(math::radians(60.0F * 0.5F));
 
@@ -29,10 +27,6 @@ auto bench_grid() -> cluster_grid {
     };
 }
 
-// The reader's half of the deal, and the reason the property below can be
-// stated at all: what the fragment shader works out from gl_FragCoord and its
-// own depth. Nothing outside this test needs it -- the shader arrives at the
-// pixel already in pixels and never projects anything.
 auto cluster_of(const cluster_grid& grid, const vec3f& point) -> std::optional<uint32> {
     if (point.z < grid.near_depth || point.z > grid.far_depth) {
         return std::nullopt;
@@ -55,7 +49,6 @@ auto cluster_of(const cluster_grid& grid, const vec3f& point) -> std::optional<u
     );
 }
 
-// Euclidean, because the falloff is: raw > 0 is exactly length(offset) < range.
 auto reaches(const view_sphere& light, const vec3f& point) -> bool {
     const float32 across = point.x - light.center.x;
     const float32 down   = point.y - light.center.y;
@@ -105,9 +98,6 @@ TEST_CASE("slice_of and z_range_of invert each other", "[cluster]") {
     }
 }
 
-// Up to float slop at the walls: the two directions of the mapping are a log
-// and a pow of the same numbers, and a depth sitting exactly on a boundary can
-// land either side of it.
 TEST_CASE("every depth lands in the slab its slice names", "[cluster]") {
     const cluster_grid grid = bench_grid();
 
@@ -145,9 +135,6 @@ TEST_CASE("slice_of never goes backwards and stops at both ends", "[cluster]") {
     }
 }
 
-// The claim the plan rests on when it says the price of cutting by depth can be
-// measured in one build: one slice has to be the flat-tile case exactly, not
-// approximately.
 TEST_CASE("one slice is exactly flat tiles", "[cluster]") {
     cluster_grid grid = bench_grid();
     grid.slices       = 1;
@@ -160,8 +147,6 @@ TEST_CASE("one slice is exactly flat tiles", "[cluster]") {
     REQUIRE(grid.slice_of(37.0F) == 0);
 }
 
-// The property the whole pass exists to hold: a pixel a source can light finds
-// that source in its own cluster. Everything else here is a border case of it.
 TEST_CASE("a source is listed in every cluster it can light", "[cluster]") {
     const cluster_grid grid = bench_grid();
 
@@ -172,9 +157,6 @@ TEST_CASE("a source is listed in every cluster it can light", "[cluster]") {
     uint32 checked = 0;
     uint32 missed  = 0;
 
-    // Points come out of the cube around the source and the reach is the ball
-    // inside it, so a little under half of them are thrown away before
-    // anything is asked. The counts leave tens of thousands of real checks.
     for (int32 light_n = 0; light_n < 160; ++light_n) {
         const view_sphere light = random_light(grid, rng);
 
@@ -218,14 +200,11 @@ TEST_CASE("a source behind the camera reaches nothing", "[cluster]") {
 
     REQUIRE(clusters.get_assignment_count() == 0);
 
-    // Wholly in front and still wholly nearer than the grid begins.
     clusters.add(1, view_sphere{.center = vec3f{0.0F, 0.0F, 0.01F}, .radius = 0.02F});
 
     REQUIRE(clusters.get_assignment_count() == 0);
 }
 
-// The one that divides by a depth on its way to a tile, so the one where a
-// clamp missing at the near wall shows up as an infinity.
 TEST_CASE("a source across the near plane keeps to the frame", "[cluster]") {
     const cluster_grid grid = bench_grid();
 
@@ -264,8 +243,6 @@ TEST_CASE("a source larger than the scene is listed everywhere", "[cluster]") {
     }
 }
 
-// Two tiles, one slice, and a source that fits inside one of them: small enough
-// to say exactly where every assignment went.
 TEST_CASE("a cluster past its cap counts the rest and stays out of its neighbour", "[cluster]") {
     const cluster_grid grid{
         .screen_width  = 64,
@@ -333,9 +310,6 @@ TEST_CASE("clear puts the grid back where it started", "[cluster]") {
 
 namespace {
 
-// A cull that agreed with the reference on everything: the buffers the GPU
-// would have written if the translation is faithful. Every test below starts
-// from these and then breaks exactly one thing.
 struct gpu_buffers {
     std::vector<uint32> counts;
     std::vector<uint32> indices;
@@ -364,8 +338,6 @@ auto as_gpu_wrote(const cluster_lights& reference) -> gpu_buffers {
     return out;
 }
 
-// Four sources at different depths and offsets, enough that a few hundred
-// clusters carry a list and a few carry more than one.
 auto lit_reference(const cluster_grid& grid, uint32 cap) -> cluster_lights {
     cluster_lights clusters{grid, cap};
 
@@ -443,7 +415,6 @@ TEST_CASE("a different source with the same count is caught", "[cluster]") {
     const uint32 cap     = reference.get_cap();
     const uint32 cluster = first_cluster_with_two(gpu, grid.cluster_count());
 
-    // A source index nothing in this scene ever assigns.
     gpu.indices[static_cast<std::size_t>(cluster) * cap] = 99;
 
     const auto check = spatial::check_clusters(reference, gpu.counts, gpu.indices);
@@ -457,8 +428,6 @@ TEST_CASE("a different source with the same count is caught", "[cluster]") {
 TEST_CASE("past the cap only the count is compared", "[cluster]") {
     const cluster_grid grid = bench_grid();
 
-    // Three sources over every cluster with room for one: every cluster counts
-    // three and stores whichever one got there first.
     cluster_lights reference{grid, 1};
     for (uint32 light = 0; light < 3; ++light) {
         reference.add(light, view_sphere{.center = vec3f{0.0F, 0.0F, 10.0F}, .radius = 1.0e6F});
@@ -466,8 +435,6 @@ TEST_CASE("past the cap only the count is compared", "[cluster]") {
 
     gpu_buffers gpu = as_gpu_wrote(reference);
 
-    // The GPU's atomics let a different source win. Which one is a race, and
-    // the check must not have an opinion about it.
     std::ranges::fill(gpu.indices, 2U);
 
     const auto check = spatial::check_clusters(reference, gpu.counts, gpu.indices);
@@ -565,8 +532,6 @@ TEST_CASE("a column is listed in every cluster it can reach", "[cluster]") {
 
     cluster_lights clusters{grid, 64};
 
-    // Tall and thin, standing across the slabs the way the ground under a body
-    // does: this is the case a ball around it gets wrong by a factor of five.
     const std::array<view_capsule, 4> columns{
         view_capsule{
             .end_a = vec3f{0.0F, 20.0F, 30.0F}, .end_b = vec3f{0.0F, -140.0F, 30.0F},
@@ -580,8 +545,6 @@ TEST_CASE("a column is listed in every cluster it can reach", "[cluster]") {
             .end_a = vec3f{-18.0F, 40.0F, 12.0F}, .end_b = vec3f{-18.0F, -60.0F, 14.0F},
             .radius = 6.0F
         },
-        // Leaning, so the clamp along the spine is exercised rather than the
-        // straight-down case where every depth is the same.
         view_capsule{
             .end_a = vec3f{5.0F, 30.0F, 20.0F}, .end_b = vec3f{-40.0F, -90.0F, 220.0F},
             .radius = 10.0F
@@ -635,8 +598,6 @@ TEST_CASE("a column is listed in every cluster it can reach", "[cluster]") {
 TEST_CASE("a column costs far fewer clusters than the ball around it", "[cluster]") {
     const cluster_grid grid = bench_grid();
 
-    // The ground under a body: sixteen wide, two hundred tall. This is the
-    // whole reason the shape exists, so it is the thing to pin down.
     const view_capsule column{
         .end_a  = vec3f{0.0F, 24.0F, 260.0F},
         .end_b  = vec3f{0.0F, -144.0F, 260.0F},

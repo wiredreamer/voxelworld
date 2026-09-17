@@ -22,7 +22,7 @@ open_file_modal::open_file_modal(
     : engine_(&eng), state_(&st), library_(&library), op_manager_(&op_manager) {}
 
 auto open_file_modal::render(
-    float /*delta_time*/
+    float
 ) -> void {
     if (state_->ui.need_open_file_modal) {
         ImGui::OpenPopup("Open File");
@@ -39,7 +39,6 @@ auto open_file_modal::render(
         ImGui::Text("Existing Files:");
         ImGui::Spacing();
 
-        // Список существующих файлов с фиксированной высотой
         const float list_height = ImGui::GetTextLineHeightWithSpacing() * 7.5f;
 
         constexpr ImGuiChildFlags child_flags =       //

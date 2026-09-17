@@ -145,8 +145,6 @@ enum class buttons : int32 {
 
 }  // namespace mouse
 
-// Значения совпадают с константами GLFW: оконный бэкенд берёт их как есть, и
-// таблица перевода не нужна.
 enum class cursor_modes : int32 {
     NORMAL   = 0x00034001,
     HIDDEN   = 0x00034002,

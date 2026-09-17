@@ -34,7 +34,6 @@ auto add_model_component_operation::execute() -> void {
     const auto model = model_reg.create(params_.name, params_.category, params_.size);
     model->fill(fill);
 
-    // Вращать новый объём удобнее вокруг середины, чем вокруг угла.
     model->set_pivot(
         vec3f{params_.size.x / 2.f, params_.size.y / 2.f, params_.size.z / 2.f}
     );

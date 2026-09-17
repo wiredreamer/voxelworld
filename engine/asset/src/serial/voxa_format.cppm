@@ -35,8 +35,6 @@ public:
     auto deserialize(const std::filesystem::path& filepath)
         -> std::expected<std::shared_ptr<animation_clip>, error_type>;
 
-    // Разбор в отрыве от файловой системы: тем же путём идёт и файл, и буфер из
-    // фаззера, и строка из теста. Ошибку открытия эта форма вернуть не может.
     auto deserialize(std::istream& input)
         -> std::expected<std::shared_ptr<animation_clip>, error_type>;
 
@@ -53,8 +51,6 @@ private:
     std::shared_ptr<animation_clip> clip_;
     std::optional<error_type> error_;
 
-    // Риг копится отдельно и применяется в конце: сам клип заводит команда
-    // clip, а порядок строк в шапке форматом не закреплён.
     std::string rig_;
 
     std::unique_ptr<animation_track> current_track_;

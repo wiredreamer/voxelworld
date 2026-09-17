@@ -9,7 +9,7 @@ namespace vw::ecs {
 animation_fsm_system::animation_fsm_system(world& w)
     : world_(&w) {}
 
-auto animation_fsm_system::update(float32 /*dt*/) -> void {
+auto animation_fsm_system::update(float32) -> void {
     auto view =
         world_->registry()
             .view<animation_fsm_component, animation_player_component>();

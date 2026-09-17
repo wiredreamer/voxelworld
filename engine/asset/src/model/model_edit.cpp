@@ -56,8 +56,6 @@ auto trimmed(
 
     auto result = registry.create_unnamed(source.category(), new_size);
 
-    // Один писатель на всё копирование: поэлементный set_voxel брал бы мьютекс
-    // пула идентичностей на каждый воксель, а их тут весь объём модели.
     {
         model_writer writer{*result};
 

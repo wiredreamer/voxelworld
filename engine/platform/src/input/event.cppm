@@ -118,15 +118,12 @@ struct event_sink_base {
 
 export namespace vw::plat {
 
-// Идентификатор типа события выдаётся лениво, при первой подписке или отправке.
 template <event_type E>
 auto event_id_of() -> uint32 {
     static const uint32 id = detail::next_event_id();
     return id;
 }
 
-// Колбэки хранятся по типу события, поэтому диспетчер никогда не смотрит на
-// события, на которые никто не подписан.
 class event_dispatcher {
 public:
     template <event_type E, event_callback_type<E> F>
@@ -142,8 +139,6 @@ public:
         if (sink == nullptr) {
             return;
         }
-        // Стирание со сдвигом, а не обмен с последним: порядок вектора — это
-        // порядок подписки, и он же порядок вызова.
         std::erase_if(sink->entries, [id](const auto& entry) { return entry.id == id.value; });
     }
 
@@ -153,8 +148,6 @@ public:
         if (sink == nullptr) {
             return;
         }
-        // По индексу, а не итератором: колбэк вправе подписаться прямо отсюда, а
-        // это перевыделяет вектор.
         for (std::size_t i = 0; i < sink->entries.size(); ++i) {
             if (sink->entries[i].callback(event)) {
                 event.handled = true;
@@ -193,8 +186,6 @@ private:
             : nullptr;
     }
 
-    // Индекс — event_id_of<E>(), поэтому приведение обратно к sink<E> однозначно.
-    // Хранилище принадлежит экземпляру: два окна не делят подписки.
     std::vector<std::unique_ptr<detail::event_sink_base>> sinks_;
     uint32 next_id_ = 1;
 };

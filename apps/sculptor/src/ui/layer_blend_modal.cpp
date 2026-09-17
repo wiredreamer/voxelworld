@@ -30,7 +30,7 @@ auto layer_blend_modal::open() -> void {
 }
 
 auto layer_blend_modal::render(
-    float /*delta_time*/
+    float
 ) -> void {
     if (need_open_) {
         ImGui::OpenPopup("Layer Blend");

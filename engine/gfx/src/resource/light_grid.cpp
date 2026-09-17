@@ -12,9 +12,6 @@ namespace vw::gfx {
 
 namespace {
 
-// Набор 3 держит оба списка: 0 — источники, 1 и 2 — их сетка; 3 — тела, 4 и 5 — их.
-// Счётчики и индексы пишет компьют, все шесть читает фрагмент, и одна привязка
-// достаёт до всего.
 auto counts_binding_of(cull_list kind) -> uint32 {
     return kind == cull_list::sources ? 1U : 4U;
 }
@@ -271,8 +268,6 @@ auto light_grid::set_readback(
 
     readback_ = level;
 
-    // Через поколение, а не перестроением здесь: зеркала принадлежат буферам кадра,
-    // и трогать их вправе только запись этого же кадра.
     ++generation_;
 
     for (auto& slot : ready_) {
@@ -312,8 +307,6 @@ auto light_grid::harvest_(
 
     lf.pending_valid = false;
 
-    // Размер берётся из снимка, а не из полей: сетка могла с тех пор сменить форму, а
-    // зеркала держат старую.
     const auto clusters = static_cast<std::size_t>(lf.pending.grid.cluster_count());
 
     if (lf.counts_host) {
@@ -384,9 +377,6 @@ auto light_grid::record_(
         vk::PipelineBindPoint::eCompute, compute_pipeline_layout_, 1, light_set, nullptr
     );
 
-    // Группа на пару «форма и срез», а не поток: шестьдесят четыре потока группы
-    // делят между собой прямоугольник тайлов этой пары. Число групп равно числу
-    // форм, а его любое устройство разрешает довести до 65535.
     cmd.dispatch(sphere_count, grid_.slices, 1);
 }
 
@@ -416,8 +406,6 @@ auto light_grid::dispatch(
         return;
     }
 
-    // До перестроения: оно выбрасывает те самые буферы, в которые писал прошлый круг
-    // с этим индексом кадра.
     for (const cull_list kind : every_list) {
         harvest_(kind, frame_index);
     }
@@ -432,16 +420,10 @@ auto light_grid::dispatch(
     write_params_(cull_list::sources, view, light_count, frame_index);
     write_params_(cull_list::blobs, view, blob_count, frame_index);
 
-    // Индексы не очищаются: слот читается, только когда счётчик говорит, что в него
-    // писали в этом кадре, поэтому очистка была бы мегабайтами записей впустую.
-    // Счётчики очищаются, и для обоих списков, даже когда один пуст: фрагмент читает
-    // счётчик прежде всего остального.
     for (const cull_list kind : every_list) {
         cmd.fillBuffer(list_(kind, frame_index).counts->get_buffer(), 0, counts_size_(), 0);
     }
 
-    // Один барьер, а не по барьеру на буфер. Пятнадцать подряд стоили 0,243 мс там,
-    // где один стоит 0,022, — урок, который не стоит учить дважды.
     cmd.pipelineBarrier(
         vk::PipelineStageFlagBits::eTransfer,
         vk::PipelineStageFlagBits::eComputeShader,
@@ -454,8 +436,6 @@ auto light_grid::dispatch(
         nullptr
     );
 
-    // Между двумя диспатчами барьера нет: пишут они в разные буферы, а общее у них
-    // одно — сетка, которую оба читают.
     if (light_count > 0 || blob_count > 0) {
         cmd.bindPipeline(vk::PipelineBindPoint::eCompute, compute_pipeline_);
 
@@ -503,8 +483,6 @@ auto light_grid::dispatch(
         }
     }
 
-    // Вход шейдера, а не сцены: пространство вида, со знаком глубины, перевёрнутым
-    // один раз ровно там, где его переворачивает компьютный проход.
     auto to_view = [&view](const vec4f& point) -> vec3f {
         const vec4f in_view = view * vec4f{point.x, point.y, point.z, 1.0F};
 

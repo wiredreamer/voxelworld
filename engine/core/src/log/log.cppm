@@ -1,8 +1,5 @@
 module;
 
-// Global module fragment уцелел здесь по одной причине: опция сборки доходит до
-// кода макросом и обязана быть раскрыта до того, как её назовёт purview.
-// Стандартных заголовков тут нет — они приходят через `import std`.
 #ifndef VW_LOG_MIN_LEVEL
 #define VW_LOG_MIN_LEVEL trace
 #endif
@@ -31,8 +28,6 @@ auto set_level(level lvl) -> void;
 auto add_file_sink(std::string_view path) -> void;
 auto write(level lvl, std::string_view category, std::string_view message) -> void;
 
-// Категория — отдельный тип, чтобы log::info(cat, fmt, ...) нельзя было спутать
-// с log::info(fmt, ...), когда первый аргумент строка.
 struct log_category {
     std::string_view value;
 

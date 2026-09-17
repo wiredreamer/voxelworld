@@ -32,7 +32,6 @@ auto make_fsm() -> asset::animation_fsm {
     return fsm;
 }
 
-// Слой в покое: ни блендов, ни проигрывания, поэтому wait_* ничему не мешают.
 auto stopped_layer() -> asset::animation_layer {
     asset::animation_layer layer;
     layer.state = asset::animation_state::stopped;
@@ -49,8 +48,6 @@ TEST_CASE("a condition compares a parameter with a value", "[fsm]") {
     REQUIRE(asset::fsm_condition{"speed", fsm_compare::greater_equal, 2.5F}.holds(board));
     REQUIRE_FALSE(asset::fsm_condition{"speed", fsm_compare::equal, 0.0F}.holds(board));
 
-    // Незаполненный параметр — ноль, а не отказ: условие по нему просто не
-    // выполняется, и автомат остаётся там, где стоял.
     REQUIRE(asset::fsm_condition{"grounded", fsm_compare::equal, 0.0F}.holds(board));
     REQUIRE_FALSE(asset::fsm_condition{"grounded", fsm_compare::greater, 0.0F}.holds(board));
 }
@@ -64,8 +61,6 @@ TEST_CASE("the blackboard keeps one value per name", "[fsm]") {
     REQUIRE(board.get("speed") == 3.0F);
 }
 
-// Условия правила складываются, а не выбираются: «или» выражается двумя
-// переходами в одно состояние.
 TEST_CASE("every condition of a rule has to hold", "[fsm]") {
     asset::animation_fsm fsm;
     fsm.add_state({
@@ -96,8 +91,6 @@ TEST_CASE("every condition of a rule has to hold", "[fsm]") {
     REQUIRE(fsm.evaluate(stopped_layer(), triggers, board).has_value());
 }
 
-// Переход, объявленный для всех состояний, — это и есть «важнее того, что
-// сейчас играет», поэтому он проверяется раньше правил текущего состояния.
 TEST_CASE("a transition from any state outruns the current one", "[fsm]") {
     auto fsm = make_fsm();
     fsm.add_any_transition({
@@ -114,8 +107,6 @@ TEST_CASE("a transition from any state outruns the current one", "[fsm]") {
     REQUIRE(result.has_value());
     REQUIRE(result->target_state == "hit");
 
-    // Сработавший триггер съеден: иначе он сработал бы ещё раз на следующем
-    // кадре, уже из нового состояния.
     REQUIRE(triggers.empty());
 }
 
@@ -131,8 +122,6 @@ TEST_CASE("a transition from any state does not fire into itself", "[fsm]") {
     REQUIRE_FALSE(fsm.evaluate(stopped_layer(), triggers, board).has_value());
 }
 
-// Ни триггера, ни условий — это «когда клип доиграет»: всю работу делает
-// wait_until_end, и заводить ради этого параметр «всегда» не за что.
 TEST_CASE("a rule without a trigger and conditions waits for the clip", "[fsm]") {
     asset::animation_fsm fsm;
     fsm.add_state({

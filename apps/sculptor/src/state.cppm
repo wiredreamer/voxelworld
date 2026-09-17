@@ -9,7 +9,6 @@ import vw.world;
 import vw.platform;
 import vw.gfx;
 
-// ---- from src/app/app_state.h
 export namespace vw::sculptor {
 
 using world_type    = ecs::world;
@@ -24,19 +23,11 @@ enum class tools : uint8 {
     color_picker,
     move_pivot,
 
-    // Правка позы в клипе. Не select_entity с другим названием: выбор узла там
-    // ведёт к дорожке, а жест манипулятора не уходит в историю документа —
-    // позу в файл кладёт запись ключа.
     pose,
 };
 
-// Чем занят манипулятор. Живёт здесь, а не в самом манипуляторе: режим
-// переключают и кнопки, и клавиши, а манипуляторов в редакторе два — узловой и
-// точки вращения.
 enum class gizmo_mode : uint8 { translate, rotate, scale };
 
-// Панели, у которых есть право показываться не всегда. Диалоги и крошки сюда не
-// входят: они спрашивают не «где мы», а «о чём речь».
 enum class panels : uint8 {
     tools,
     palette,
@@ -50,9 +41,6 @@ enum class panels : uint8 {
 };
 
 struct ui_state {
-    // Сколько места вдоль края уже занято панелями этого кадра. Считается здесь,
-    // а не в самих панелях: порядок задаётся порядком вызовов, и панель, которой
-    // в этом контексте нет, не оставляет после себя дыры.
     float32 left_offset   = 0.f;
     float32 bottom_offset = 0.f;
     float32 right_offset  = 0.f;
@@ -67,22 +55,13 @@ struct ui_state {
     bool show_timeline          = false;
     bool show_sockets           = true;
 
-    // Просьба перейти к правке клипа. Флаг, а не вызов на месте: просят и
-    // меню, и диалоги создания с открытием, а сервисы есть только у
-    // приложения.
     bool need_enter_animation   = false;
-    // Узел, которому диалог состава просит завести объём: сам он этого не
-    // умеет — объёму нужны размер и набор вокселей.
     std::string need_add_model_for;
 
-    // Узел, чьему слоту просят выбрать кандидата: список файлов — тоже диалог.
     std::string need_add_candidate_for;
 
-    // Корню просят добавить автомат: список файлов — тоже диалог. Узла здесь
-    // нет — автоматы принадлежат префабу целиком, как и риг.
     bool need_add_machine_modal = false;
 
-    // Слой, в автомат которого просят провалиться.
     std::optional<std::size_t> need_enter_machine;
 
     bool need_create_clip_modal = false;
@@ -95,28 +74,15 @@ struct file_state {
     std::string filename;
     bool has_unsaved_changes = false;
 
-    // Узлы, чьи объёмы правились с последней записи. Флага на весь документ
-    // мало: объёмы лежат отдельными файлами, и правка одного вокселя не должна
-    // переписывать все .voxm префаба и шуметь в git.
     std::unordered_set<ecs::entity> dirty_models;
 };
 
-// Что правится прямо сейчас. Не флаг «режим анимации», а тип документа: из
-// .voxf надо уметь провалиться в клип состояния, из префаба — в объём узла, и
-// одним булевым полем такая вложенность не описывается.
 enum class edit_kind : uint8 { prefab, model, clip, fsm };
 
-// Под-ассет, в который провалились. Имени файла здесь нет намеренно: у объёма
-// его знает узел, у клипа — anim.selected_clip_name, и обе ссылки меняются под
-// рукой (переименование префаба, «Save As»). Контекст говорит, что правится, а
-// как оно называется сейчас, крошка спрашивает у мира.
 struct edit_context {
     edit_kind kind = edit_kind::model;
     std::string node_name;
 
-    // Слой автомата. Здесь номер, а не ссылка, по той же причине, по какой тут
-    // нет имени файла: ссылка живёт на корне и меняется под рукой, а чем сейчас
-    // занят слой — спрашивают у мира.
     std::size_t layer = 0;
 
     [[nodiscard]] static auto model(std::string node_name) -> edit_context {
@@ -133,8 +99,6 @@ struct edit_context {
 };
 
 struct context_state {
-    // Стек под-ассетов поверх документа. Пусто — правится сам префаб; его имя в
-    // крошках берётся из file.filename, чтобы «Save As» не оставил там старое.
     std::vector<edit_context> stack;
 
     [[nodiscard]] auto kind() const -> edit_kind {
@@ -153,34 +117,22 @@ struct context_state {
         return kind() == edit_kind::fsm;
     }
 
-    // Слой открытого автомата. Спрашивать имеет смысл только в контексте fsm.
     [[nodiscard]] auto layer() const -> std::size_t {
         return stack.empty() ? 0 : stack.back().layer;
     }
 
-    // Узел выбирают и в префабе, и в клипе: в клипе выбор говорит, чью дорожку
-    // правят и кого двигает манипулятор. Внутри объёма выбирать нечего — узел
-    // уже назван контекстом, а в автомате узлов нет вовсе.
     [[nodiscard]] auto allows_node_select() const -> bool {
         return kind() == edit_kind::prefab || kind() == edit_kind::clip;
     }
 
-    // Объём правят только изнутри него: точка вращения и обрезка живут в самом
-    // .voxm, который делят все узлы и префабы, на него сославшиеся, и правка из
-    // префаба молча меняла бы чужие модели.
     [[nodiscard]] auto allows_volume_edit() const -> bool {
         return kind() == edit_kind::model;
     }
 
-    // Узел, чей под-ассет открыт. Пусто — либо префаб, либо контекст без узла.
     [[nodiscard]] auto node_name() const -> std::string_view {
         return stack.empty() ? std::string_view{} : std::string_view{stack.back().node_name};
     }
 
-    // Воксельные инструменты работают только внутри объёма, выбор узла — только
-    // в самом префабе. Инструмент, которому в этом контексте нечего трогать, не
-    // прячется «серым», а не показывается вовсе: серая кнопка обещает, что её
-    // когда-нибудь можно нажать здесь.
     [[nodiscard]] auto allows_tool(tools tool) const -> bool {
         switch (tool) {
             case tools::select_entity: return in_prefab();
@@ -205,25 +157,16 @@ struct context_state {
         return tools::select_entity;
     }
 
-    // Та же мысль, что и у allows_tool, только про панели: палитра поверх
-    // префаба, где красить нечем, и дерево узлов внутри объёма, откуда из него
-    // не выйти, обещают работу, которой в этом контексте нет.
     [[nodiscard]] auto shows(panels panel) const -> bool {
         switch (panel) {
             case panels::tools:
             case panels::palette: return kind() == edit_kind::model;
 
-            // Манипулятор двигает узел, а не воксели: там, где узел выбирают,
-            // его режим и переключают.
             case panels::gizmo: return allows_node_select();
 
-            // Свойства открыты и в префабе, и в объёме: внутри объёма панель
-            // показывает только его собственные секции.
             case panels::properties:
                 return kind() == edit_kind::prefab || kind() == edit_kind::model;
 
-            // Дерево нужно и внутри объёма: там им прячут соседние части, не
-            // выходя из правки. Выбирать узлы оттуда по-прежнему нельзя.
             case panels::entity_tree:
                 return kind() == edit_kind::prefab || kind() == edit_kind::model;
 
@@ -241,7 +184,6 @@ struct context_state {
         stack.push_back(std::move(ctx));
     }
 
-    // Выход по крошке: глубина 0 — сам документ.
     auto leave_to(std::size_t depth) -> void {
         if (depth < stack.size()) {
             stack.resize(depth);
@@ -256,18 +198,11 @@ struct scene_state {
     std::unordered_map<ecs::entity, std::string> entity_to_name;
     std::vector<ecs::entity> entities;
 
-    // Узлы, выключенные глазом в дереве. Хранится намерение, а не итог: скрытый
-    // родитель прячет и детей, но их собственный выбор помнится и вернётся, когда
-    // родителя покажут. В файл и в историю не попадает — это то, на что смотрят,
-    // а не то, из чего префаб состоит.
     std::unordered_set<std::string> hidden_nodes;
 
     auto clear_entities(world_type& world) -> void;
 };
 
-// Занятый объём модели, о которой сейчас идёт речь. Считается один раз на смену
-// модели и читается и панелью, и рамкой в сцене: обход 64-куба — четверть
-// миллиона проверок, и каждый кадр их делать не за что.
 struct volume_state {
     asset::model_identity source = asset::invalid_model_identity;
     std::optional<asset::voxel_bounds> occupied;
@@ -278,13 +213,8 @@ struct tool_state {
     gizmo_mode gizmo        = gizmo_mode::translate;
     voxel selected_voxel = voxels::palette::gray[9];
 
-    // Кисть помнится на набор: модель несёт ровно один набор, и переход к
-    // модели другого не должен стоить заново выбранного цвета. Плоский массив
-    // по значению категории — полкилобайта и ни одной аллокации.
     std::array<voxel, 256> brush_of_set{};
 
-    // Чем красить в этом наборе: запомненным вокселем, а если такого ещё не было —
-    // первым вокселем набора.
     [[nodiscard]] auto brush_for(voxel_category category, const voxel_registry& registry) const
         -> voxel;
 };
@@ -360,23 +290,17 @@ struct socket_state {
     auto clear_all(world_type& world) -> void;
 };
 
-// Открытый .voxf. Документ лежит целиком, а не ссылкой в реестр: автомат — это
-// файл, у редактора он один за раз, и отмена работает снимком всего документа.
 struct fsm_document {
     asset::asset_ref source;
     asset::voxf_data data;
     bool has_unsaved_changes = false;
 
-    // Состояние, чьи переходы и «входящие» раскрыты. Имя, а не номер: список
-    // состояний перетасовывается правкой.
     std::string selected_state;
 
     [[nodiscard]] auto is_open() const -> bool {
         return !source.empty();
     }
 
-    // Кто ведёт в это состояние. Считается по всему файлу и потому не хранится:
-    // ответ меняется от любой правки чужого перехода.
     [[nodiscard]] auto incoming(std::string_view state_name) const -> std::vector<std::string> {
         std::vector<std::string> sources;
 
@@ -407,15 +331,8 @@ struct fsm_document {
 };
 
 struct app_state {
-    // Корень ассетов задаётся на конфигурации (VW_SCULPTOR_ASSET_ROOT) и по
-    // умолчанию указывает на assets/ репозитория: редактор правит те же файлы,
-    // которые читают arena и git. Копия в каталоге сборки этого не давала бы —
-    // правка оставалась бы там и погибала при следующей сборке.
     static constexpr std::string_view asset_root_name = VW_SCULPTOR_ASSET_ROOT;
 
-    // Имена каталогов лежат в vw.asset (asset::dirs): по ним же движок строит
-    // ссылку на безымянный объём. Здесь они только превращаются в путь на
-    // диске — ссылка отсчитывается от корня, а не от рабочего каталога.
     [[nodiscard]] static auto prefab_dir() -> std::filesystem::path;
     [[nodiscard]] static auto model_dir() -> std::filesystem::path;
     [[nodiscard]] static auto clip_dir() -> std::filesystem::path;
@@ -431,9 +348,6 @@ struct app_state {
     animation_state anim;
     socket_state sockets;
 
-    // Узел, о котором идёт речь: его называет контекст, а если контекст узла не
-    // называет — префаб и клип не называют — то выделение. Undo умеет вернуть
-    // контекст чужого объёма, и править тогда надо тот узел, чьё имя в крошках.
     [[nodiscard]] auto edited_node() const -> const std::string& {
         if (!ctx.stack.empty() && !ctx.stack.back().node_name.empty()) {
             return ctx.stack.back().node_name;

@@ -20,7 +20,7 @@ tool_panel::tool_panel(
     : state_(&st) {}
 
 auto tool_panel::render(
-    float /*delta_time*/
+    float
 ) const -> void {
     begin_panel(*state_, panel_slot::left, "Tools");
 
@@ -57,8 +57,6 @@ auto tool_panel::render_tool_button(
     }
     ImGui::PopStyleColor(2);
 
-    // Подпись клавиши берётся из общей таблицы: разойтись с тем, что клавиша
-    // делает, она таким образом не может.
     const auto keys = keys_of(command_for_tool(tool));
     ImGui::SameLine();
     ImGui::TextDisabled("%.*s", static_cast<int>(keys.size()), keys.data());

@@ -54,8 +54,6 @@ auto debug_window::render_animation_panel() -> void {
         return;
     }
 
-    // Выбранное существо держится за идентификатор, а не за место в списке:
-    // список пересобирается каждый кадр, и порядок в нём — дело реестра.
     const auto selected = std::ranges::find(animated, animation_entity_);
     if (selected == animated.end()) {
         animation_entity_ = animated.front();
@@ -91,8 +89,6 @@ auto debug_window::render_animation_panel() -> void {
             loop_text(layer.loop_mode), layer.playback_speed
         );
 
-        // Прогресс перехода — то, ради чего окно и заводилось: по числу видно,
-        // доиграет ли смешивание до того, как условие сменится обратно.
         if (layer.is_blending()) {
             const auto fraction = layer.blend_elapsed / layer.blend_transition.duration;
             ImGui::Text("%-10s from %s", "blending", clip_name(layer.blend_prev_clip));
@@ -113,8 +109,6 @@ auto debug_window::render_animation_panel() -> void {
         ImGui::Text("%-10s %zu targets", "mask", layer.mask.size());
     }
 
-    // Доска одна на все слои: скорость и опора не бывают отдельно для локомоции
-    // и отдельно для атаки.
     ImGui::SeparatorText("parameters");
 
     const auto entries = fsm.get_board().entries();

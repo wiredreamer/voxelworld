@@ -163,8 +163,6 @@ auto debug_window::render_panels() -> void {
             continue;
         }
 
-        // Открытость держит сам ImGui через крестик окна, поэтому флаг уходит
-        // туда ссылкой, а тело рисуется, только пока окно развёрнуто.
         if (ImGui::Begin(panel_titles[i], &panel_open_[i], window_flags)) {
             render_panel_body(static_cast<panel>(i));
         }

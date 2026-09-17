@@ -20,7 +20,7 @@ gizmo_panel::gizmo_panel(
     : state_(&st) {}
 
 auto gizmo_panel::render(
-    float /*delta_time*/
+    float
 ) const -> void {
     begin_panel(*state_, panel_slot::left, "Gizmo");
 

@@ -7,7 +7,7 @@ namespace vw::ecs {
 namespace {
 
 template <typename Tuple, std::size_t... Is>
-auto make_systems(world& w, std::index_sequence<Is...> /*unused*/) -> Tuple {
+auto make_systems(world& w, std::index_sequence<Is...>) -> Tuple {
     return Tuple{std::tuple_element_t<Is, Tuple>(w)...};
 }
 

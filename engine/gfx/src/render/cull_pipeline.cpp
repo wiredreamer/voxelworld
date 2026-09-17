@@ -50,8 +50,6 @@ auto cull_pipeline::create_descriptor_set_layouts_() -> void {
         "create frustum descriptor set layout"
     );
 
-    // Команды, границы, отсеянный вывод, счётчики и видимость по инстансам, которую
-    // пишет обход связности.
     std::array<vk::DescriptorSetLayoutBinding, 5> buffer_bindings{};
     for (uint32 i = 0; i < buffer_bindings.size(); i++) {
         buffer_bindings[i] = {

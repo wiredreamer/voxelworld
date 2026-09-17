@@ -55,7 +55,7 @@ auto create_keyframe_modal::open(
 }
 
 auto create_keyframe_modal::render(
-    float /*delta_time*/
+    float
 ) -> void {
     if (need_open_) {
         ImGui::OpenPopup("Add Keyframe");

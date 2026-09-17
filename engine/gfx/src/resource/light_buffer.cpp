@@ -65,9 +65,6 @@ auto light_buffer::update(
         const vec3f& pos      = transform_comp.get_position();
         const float32 range   = light_comp.get_range();
 
-        // Точно, а не по подобранной на глаз отсечке: затухание линейно по расстоянию
-        // и обращается в ноль на range, поэтому вне этого куба источник не освещает
-        // ничего вовсе.
         const spatial::aabb reach{
             .min = vec3f{pos.x - range, pos.y - range, pos.z - range},
             .max = vec3f{pos.x + range, pos.y + range, pos.z + range},
@@ -87,14 +84,6 @@ auto light_buffer::update(
         });
     }
 
-    // Сверх предела оставляются ближайшие, остальные отбрасываются. Обрезка списка
-    // там, где случайно кончился обход, выбросила бы те источники, которые ECS
-    // перечислил последними, а стоящий рядом с камерой попадает туда с той же
-    // вероятностью, что и любой другой.
-    //
-    // Предел, а не буфер подлиннее: после пары десятков болит попиксельный цикл, и
-    // лишние записи только его кормят. Лечится это кластеризацией, и данная строка
-    // как раз отмечает, где она понадобится.
     const auto max_visible = static_cast<std::size_t>(max_visible_);
 
     if (point_lights_data.size() > max_visible) {
@@ -148,7 +137,6 @@ auto light_buffer::expand_buffer_if_needed_(uint32 frame_index, uint32 required_
         capacity *= 2;
     }
 
-    // Без копирования: update() перепишет весь буфер сразу после возврата отсюда.
     auto new_lights_buffer = std::make_unique<storage_buffer>(
         *context_, capacity * sizeof(point_light_data)
     );

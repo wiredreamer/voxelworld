@@ -33,19 +33,6 @@ function(vw_compile_shaders)
     add_custom_target(vw_compile_shaders ALL DEPENDS ${SHADER_SPV_OUTPUTS})
 endfunction()
 
-# Stages every compiled shader next to the executable, before the executable is
-# considered built.
-#
-# Two traps live here and both have cost a day. The staging used to be a
-# POST_BUILD command, which runs only when the target relinks -- so a change to
-# a shader alone recompiled the .spv and never delivered it, and the application
-# went on running the previous one. And the list of shaders used to be a glob of
-# the build directory taken at configure time, so a newly added shader was
-# missing until somebody reconfigured after building it once.
-#
-# A custom target the executable depends on has neither problem: it runs
-# whenever the executable is built, by any target name, and it copies whatever
-# the compile step produced rather than whatever configure happened to see.
 function(vw_setup_shaders TARGET)
     vw_compile_shaders()
 

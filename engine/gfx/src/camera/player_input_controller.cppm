@@ -20,7 +20,6 @@ struct player_input_params {
     float32 mouse_sensitivity = 0.1f;
 };
 
-// Общий слой ввода: читает клавиатуру и мышь и выдаёт player_input_state.
 class player_input_controller {
 public:
     explicit player_input_controller(window& window, player_input_params params = {});

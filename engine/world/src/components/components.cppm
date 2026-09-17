@@ -1,7 +1,5 @@
 export module vw.world:components;
 
-// Собирает компоненты мира. Поля закрыты, менять их вправе только дружественная
-// система — правка идёт через её modifier, который поднимает нужные флаги.
 export import :components.transform;
 export import :components.model;
 export import :components.spatial;

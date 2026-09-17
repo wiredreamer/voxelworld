@@ -50,7 +50,6 @@ engine::engine(
     world_      = std::make_unique<world_type>(voxel_registry_);
     debug_tool_ = std::make_unique<debug_window_type>(*this);
 
-    // Пустое приложение по умолчанию — чтобы не проверять на null
     app_ = std::make_unique<app_type>(*this);
 
     window_resize_sub_ =
@@ -83,8 +82,6 @@ engine::~engine() {
 
 auto engine::shutdown() -> void {
     running_ = false;
-    // Генерация мешей читает страницы моделей, которыми владеет world_, а он
-    // разрушается раньше renderer_; потоки обязаны встать до ухода любого из них.
     renderer_->get_mesh_pool().stop_gen_threads();
     renderer_->wait_idle();
 }
@@ -190,8 +187,6 @@ auto engine::write_bench_report_() const -> void {
         recorder_->report()
     );
 
-    // Мешинг идёт вне кадрового потока, поэтому сводится по чанкам: кадровые
-    // перцентили скрыли бы его целиком.
     const auto meshing = renderer_->get_mesh_pool().get_gen_stats();
     std::format_to(
         std::back_inserter(report_text),
@@ -226,10 +221,6 @@ auto engine::write_bench_report_() const -> void {
         columns.queue_peak
     );
 
-    // Свет — это стадия между двумя предыдущими: колонку генерируют, освещают, когда
-    // появились все восемь соседей, и только затем размещают и мешат. Разделено на
-    // три части, потому что они движутся независимо: rows — это память, flood —
-    // волна, bake — постраничная упаковка.
     const auto light      = world_->system<ecs::world_grid_system>().get_light_stats();
     const auto grid_stats = world_->system<ecs::world_grid_system>().get_stats();
     std::format_to(
@@ -269,9 +260,6 @@ auto engine::write_bench_report_() const -> void {
         grid.loaded_count - grid.drawn_count
     );
 
-    // Пул страниц — это потолок, а не бюджет: page_entry держит индекс в двадцати
-    // битах, и за этой границей страница молча накладывается на чужую. Первым к нему
-    // приближается глубокий мир.
     const auto& pool  = world_->resource<asset::model_registry>().get_page_pool();
     const auto in_use = pool.allocated_count();
     constexpr auto addressable = asset::page_pool::block_size * asset::page_pool::max_blocks;
@@ -297,10 +285,6 @@ auto engine::write_bench_report_() const -> void {
         static_cast<float32>(stats_.vram_peak_bytes) * to_mb
     );
 
-    // Геометрия попадает в класс размера, кратный степени двойки, и занимает весь
-    // слот независимо от того, сколько из него использует. Видеть стоит обе половины
-    // потерь: розданные, но не заполненные слоты (ёмкость против количества) и место
-    // внутри слота, до которого меш не дотягивается (числа заполнения).
     const auto& buffers = renderer_->get_stats().combined_buffers;
 
     float32 slot_mb = 0.0F;
@@ -335,8 +319,6 @@ auto engine::write_bench_report_() const -> void {
         used_mb
     );
 
-    // Состояние на последнем кадре, а не среднее: обход отвечает на вопрос о том, где
-    // камера стоит сейчас.
     const auto& cull = renderer_->get_stats().combined_buffers.chunk_cull;
     std::format_to(
         std::back_inserter(report_text),
@@ -358,9 +340,6 @@ auto engine::write_bench_report_() const -> void {
         cull.max_pockets
     );
 
-    // Что скажет о себе само приложение: сцена, её счётчики, её приборы. Раньше
-    // это печаталось в stdout из деструктора, то есть уже после записи файла, и
-    // в отчёт не попадало вовсе.
     report extra;
     if (app_) {
         app_->collect_report(extra);
@@ -382,7 +361,6 @@ auto engine::write_bench_report_() const -> void {
         return;
     }
 
-    // Тот же прогон деревом: шапка, стадии и всё, что доложило приложение.
     report structured;
     structured.section("run")
         .value("gpu", std::string_view{static_cast<const char*>(props.deviceName)})
@@ -449,7 +427,6 @@ auto engine::update_stats() -> void {
         stats_.fps = 1000.0f / stats_.frame_ms;
     }
 
-    // Обновляем память только раз в секунду
     const auto time_since_last_memory_update =
         std::chrono::duration<float32>(current_time - last_memory_update_time_).count();
     if (time_since_last_memory_update >= memory_update_interval_sec_) {

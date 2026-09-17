@@ -39,8 +39,6 @@ auto expand_model_operation::execute() -> void {
         params_.dir.z < 0 ? 1 : 0
     };
 
-    // Один писатель на всё копирование: поэлементный set_voxel брал бы мьютекс
-    // пула идентичностей на каждый воксель, а их тут весь объём модели.
     {
         asset::model_writer writer{*new_model};
 

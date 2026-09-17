@@ -9,7 +9,6 @@ import vw.world;
 import vw.platform;
 import vw.gfx;
 
-// ---- from apps/arena/src/app/dummy_enemy.h
 export namespace vw::arena {
 
 class dummy_enemy {
@@ -38,7 +37,6 @@ private:
 
 }  // namespace vw::arena
 
-// ---- from apps/arena/src/app/player.h
 export namespace vw::arena {
 
 class player {
@@ -66,7 +64,6 @@ private:
 
     auto handle_attack() const -> void;
     [[nodiscard]] auto can_attack() const -> bool;
-    // Автоматы приходят из префаба: их список и порядок — это слои.
     auto attach_machines_() const -> void;
 
     gfx::engine& engine_;
@@ -93,7 +90,6 @@ private:
 
 }  // namespace vw::arena
 
-// ---- from apps/arena/src/app/world_setup.h
 export namespace vw::arena {
 
 struct world_setup_result {
@@ -104,7 +100,6 @@ auto setup_world_grid(gfx::engine& engine) -> world_setup_result;
 
 }  // namespace vw::arena
 
-// ---- from apps/arena/src/app/arena_app.h
 export namespace vw::arena {
 
 class arena_app final : public gfx::app {
@@ -134,7 +129,6 @@ private:
 
 }  // namespace vw::arena
 
-// ---- from apps/arena/src/app/debug_hud.h
 export namespace vw::arena {
 
 auto render_debug_hud(

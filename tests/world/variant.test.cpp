@@ -24,8 +24,6 @@ struct variant_fixture final {
     variant_fixture() {
         auto& models = w.resource<asset::model_registry>();
 
-        // Две головы разного размера и с разными точками вращения: подмена
-        // обязана быть видна, а узел — остаться на месте.
         auto small = models.create_unnamed(voxels::palette::category, vec3i{4, 4, 4});
         small->set_pivot(vec3f{2.0F, 2.0F, 2.0F});
         library.adopt(small_ref, small);
@@ -100,9 +98,6 @@ TEST_CASE("a variant slot survives a round trip through the world", "[variant]")
     REQUIRE(tag->prop("target") == "head");
 }
 
-// Главная проверка слота: голова меняется, а шея и шлем на сокете стоят. Держит
-// это точка вращения, которая живёт в самом объёме, — узел её не знает и не
-// двигается.
 TEST_CASE("switching a variant leaves the node and its subtree in place", "[variant]") {
     variant_fixture fx;
 
@@ -128,9 +123,6 @@ TEST_CASE("switching a variant leaves the node and its subtree in place", "[vari
     ));
 }
 
-// Номер выбранного — это позиция, и список под ним двигается: выбор обязан
-// держаться за ссылку, иначе удаление соседа сверху молча переводит слот на
-// другого кандидата.
 TEST_CASE("the selection follows its candidate, not its number", "[variant]") {
     variant_fixture fx;
 
@@ -140,7 +132,6 @@ TEST_CASE("the selection follows its candidate, not its number", "[variant]") {
     auto& variants = fx.w.system<variant_system>();
     REQUIRE(variants.apply(head, fx.library, 1).has_value());
 
-    // Убираем кандидата, стоявшего выше выбранного.
     const bool moved = variants.modify(head).set_candidates({big_ref});
 
     REQUIRE_FALSE(moved);
@@ -148,8 +139,6 @@ TEST_CASE("the selection follows its candidate, not its number", "[variant]") {
     REQUIRE(fx.w.get<variant_slot_component>(head).selected_ref() == big_ref);
 }
 
-// А вот если убрали самого выбранного, слот обязан сказать об этом: в сцене
-// остался кандидат, которого в списке больше нет.
 TEST_CASE("dropping the chosen candidate is reported", "[variant]") {
     variant_fixture fx;
 
@@ -178,9 +167,6 @@ TEST_CASE("a candidate outside the list is refused", "[variant]") {
     REQUIRE(result.error() == variant_error::out_of_range);
 }
 
-// Поддерево ставится инстанцированием, а не подменой объёма, и системе оно не по
-// зубам: про такого кандидата слот знает, но ставит его тот, у кого есть
-// разборщик.
 TEST_CASE("a subtree candidate is not a volume swap", "[variant]") {
     variant_fixture fx;
 

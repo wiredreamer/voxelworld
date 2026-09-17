@@ -26,8 +26,6 @@ auto add_variant_slot_operation::execute() -> void {
 
     world.modify(ent).with<ecs::variant_slot_component>();
 
-    // Имя слота по умолчанию — имя узла: слот «head» на узле head читается, а
-    // пустое имя пришлось бы придумывать в диалоге до того, как понятно зачем.
     world.system<ecs::variant_system>().modify(ent).set_name(params_.name);
 
     state_->file.has_unsaved_changes = true;

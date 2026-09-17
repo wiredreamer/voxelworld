@@ -11,8 +11,6 @@ namespace {
 
 constexpr int32 side = 8;
 
-// Куб 3x3x3 из камня, поставленный так, чтобы со всех сторон остались пустые
-// слои: именно их и режет trimmed.
 auto fill_block(asset::model& m, vec3i from, vec3i to) -> void {
     asset::model_writer writer{m};
     for (int32 x = from.x; x <= to.x; ++x) {
@@ -67,8 +65,6 @@ TEST_CASE("trim moves the pivot by what it cut", "[trim]") {
 
     const auto cut = asset::trimmed(*m, registry);
 
-    // Точка вращения задана в вокселях объёма: срезали два слоя снизу — она
-    // обязана сдвинуться на два, иначе узел прыгнет на величину среза.
     REQUIRE(cut != nullptr);
     REQUIRE(cut->pivot() == vec3f{1.5f, 0.f, 2.f});
 }

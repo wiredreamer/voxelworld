@@ -37,8 +37,6 @@ auto select_entity_tool::render(
 auto select_entity_tool::on_key_press(
     [[maybe_unused]] const plat::key_press_event& ev
 ) -> void {
-    // Своих клавиш у инструмента нет: раскладка одна на весь редактор, а режим
-    // манипулятора лежит в состоянии.
 }
 
 auto select_entity_tool::on_mouse_move(
@@ -48,8 +46,6 @@ auto select_entity_tool::on_mouse_move(
         gizmo_.on_mouse_move(state_->scene.name_to_entity[state_->scene.selected_name]);
     }
 
-    // Пока тянут ручку, курсор ездит по модели, и подсветка под ним только
-    // мешала бы: наведение считается лишь вне жеста.
     if (!gizmo_.is_dragging()) {
         update_hovered_entity_();
     }
@@ -62,8 +58,6 @@ auto select_entity_tool::on_mouse_press(
         return;
     }
 
-    // Ручка манипулятора перекрывает выбор: клик по ней обязан начать жест, а не
-    // перекинуть выбор на то, что нарисовано за ней.
     if (state_->scene.name_to_entity.contains(state_->scene.selected_name) &&
         gizmo_.on_mouse_press(state_->scene.name_to_entity[state_->scene.selected_name])) {
         return;

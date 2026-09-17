@@ -6,8 +6,6 @@ namespace vw {
 
 namespace {
 
-// Каталог правят руками, а повтор идентификатора молча отобрал бы у одного из
-// двух вокселей слот и имя. Квадратичная проверка на сотне записей ничего не стоит.
 [[nodiscard]] consteval auto catalog_ids_unique() -> bool {
     for (std::size_t i = 0; i < default_voxel_catalog.size(); ++i) {
         for (std::size_t j = i + 1; j < default_voxel_catalog.size(); ++j) {
@@ -19,9 +17,6 @@ namespace {
     return true;
 }
 
-// Раздел обязан покрывать набор подряд и ровно один раз. Панель вокселей идёт по
-// разделам, а не по каталогу, поэтому воксель вне раздела не нарисуется вовсе, а
-// накрытый дважды нарисуется дважды.
 [[nodiscard]] consteval auto groups_tile_sets() -> bool {
     for (const voxel_set& set : default_voxel_sets) {
         uint32 next = 1;
@@ -42,9 +37,6 @@ namespace {
     return true;
 }
 
-// Цвет любой записи обязан быть цветом палитры. Иначе в мире заведётся оттенок,
-// которого художнику не выдать, и ландшафт начнёт спорить по тону с тем, что
-// стоит на нём.
 [[nodiscard]] consteval auto catalog_colours_are_palette() -> bool {
     for (const voxel_desc& desc : default_voxel_catalog) {
         if (desc.material.clr == colors::empty) {
@@ -57,8 +49,6 @@ namespace {
     return true;
 }
 
-// Палитра обязана держать всю палитру: недостающий цвет художнику взять неоткуда,
-// а понять, что его нет, можно только не найдя его в панели.
 [[nodiscard]] consteval auto palette_covers_colours() -> bool {
     for (const voxel_set& set : default_voxel_sets) {
         if (set.kind != voxel_set_kind::palette) {
@@ -81,10 +71,6 @@ namespace {
     return true;
 }
 
-// И держать каждый ровно один раз. Два номера с одним материалом — это выбор, в
-// котором художнику нечего выбирать, зато мешер их не сольёт и разведёт соседние
-// грани по разным квадам. Свечение входит в материал, поэтому хвост glow-вариантов
-// проверке не мешает: их цвет повторяется, а материал — нет.
 [[nodiscard]] consteval auto palette_materials_unique() -> bool {
     for (const voxel_set& set : default_voxel_sets) {
         if (set.kind != voxel_set_kind::palette) {

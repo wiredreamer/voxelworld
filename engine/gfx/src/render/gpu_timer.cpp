@@ -100,9 +100,6 @@ auto gpu_timer::end(
     cmd.writeTimestamp(vk::PipelineStageFlagBits::eBottomOfPipe, pool_, query);
 }
 
-// Доступность запрашивается по каждому запросу, а не ожидается: пропущенная в этом
-// кадре стадия оставляет свою пару незаписанной, и обычное чтение объявило бы
-// неготовым весь диапазон.
 auto gpu_timer::resolve(
     uint32 frame_index
 ) -> void {

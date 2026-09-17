@@ -85,8 +85,6 @@ TEST_CASE("chunk occupancy matches the voxel volume bit for bit", "[world][occup
 
     asset::model_writer writer{model};
 
-    // One uniform page, one sparse page and a lot of empty ones, so all three
-    // page modes take part.
     for (int32 x = 0; x < 8; ++x) {
         for (int32 y = 0; y < 8; ++y) {
             for (int32 z = 0; z < 8; ++z) {
@@ -129,9 +127,6 @@ TEST_CASE("chunk occupancy declines models that are not 64 cubes", "[world][occu
     REQUIRE_FALSE(model.build_occupancy(occupancy));
 }
 
-// Корень иерархии сам ничего не рисует, и о своей форме знает только по коробке
-// физики: пока границы считались лишь по модели, тело, собранное из детей, в
-// дерево не попадало вовсе, сколько бы слоёв ему ни назначили.
 TEST_CASE("a collider without a model still gets spatial bounds", "[world]") {
     world w;
 
@@ -151,8 +146,6 @@ TEST_CASE("a collider without a model still gets spatial bounds", "[world]") {
 
     const auto bounds = w.get<spatial_component>(ent).get_bounds();
 
-    // Смещение поднимает коробку на половину роста, поэтому начало координат
-    // тела — точка между ступнями, а не середина.
     REQUIRE(bounds.min.y == 40.0F);
     REQUIRE(bounds.max.y == 64.0F);
     REQUIRE(bounds.size().x == 12.0F);
@@ -165,9 +158,6 @@ TEST_CASE("a collider without a model still gets spatial bounds", "[world]") {
     REQUIRE(std::ranges::find(found, ent) != found.end());
 }
 
-// Масштаб вокселя доезжает до границ ровно один раз — мировой матрицей, куда
-// его кладёт chunk::create_entity_. Пока границы умножали на него второй раз
-// сами, чанк арены получал коробку в шестнадцать раз больше себя.
 TEST_CASE("voxel scale reaches the bounds once", "[world]") {
     world w;
     auto& models = w.resource<asset::model_registry>();
@@ -199,8 +189,6 @@ TEST_CASE("voxel scale reaches the bounds once", "[world]") {
     REQUIRE(bounds.size().z == static_cast<float32>(side * voxel_scale));
 }
 
-// А у несущего и то, и другое границы остаются модельными: по ним такую
-// сущность видели до сих пор, и подмена сдвинула бы и отсев, и попадания луча.
 TEST_CASE("a model outranks a collider when an entity has both", "[world]") {
     world w;
     auto& models = w.resource<asset::model_registry>();
@@ -232,8 +220,6 @@ TEST_CASE("every system reports its own timing", "[world]") {
     REQUIRE(stats.total_ms == Catch::Approx(sum));
 }
 
-// Рендер освобождает экземпляр по изменению модели. Без него снятая модель так и
-// висела в мире на том месте, где её сняли, и за узлом больше не ходила.
 TEST_CASE("removing a model is reported as a model change", "[world]") {
     world w;
     auto& models = w.resource<asset::model_registry>();
@@ -248,8 +234,6 @@ TEST_CASE("removing a model is reported as a model change", "[world]") {
     REQUIRE(w.changed<model_component>().contains(ent));
 }
 
-// Скрытый объём убирают с глаз затем, чтобы добраться до заслонённого: луч выбора
-// обязан проходить сквозь него, иначе кисть упиралась бы в невидимое.
 TEST_CASE("a hidden model lets the picking ray through", "[world]") {
     world w;
     auto& models = w.resource<asset::model_registry>();

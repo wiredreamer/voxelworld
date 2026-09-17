@@ -53,9 +53,6 @@ auto voxm_serializer::serialize(
     output << std::format("size {} {} {}\n", size.x, size.y, size.z);
     output << std::format("pivot {} {} {}\n", pivot.x, pivot.y, pivot.z);
 
-    // Пробегами по X: набор у модели один, поэтому в записи стоит только номер
-    // в наборе. Строка одинаковых вокселей — обычное дело даже у персонажа, и
-    // построчная запись короче повоксельной в разы.
     for (int32 z = 0; z < size.z; ++z) {
         for (int32 y = 0; y < size.y; ++y) {
             int32 x = 0;
@@ -144,8 +141,6 @@ auto voxm_deserializer::deserialize(
         return std::unexpected(*error_);
     }
 
-    // Пустой объём — законный файл: модель, у которой стёрли все воксели, тоже
-    // должна сохраняться и читаться.
     if (!ensure_model_()) {
         return std::unexpected(error_type::parse_error);
     }
@@ -242,8 +237,6 @@ auto voxm_deserializer::process_run_(std::istringstream& iss) -> void {
 
     const auto id = voxel{category_, static_cast<uint8>(index)};
 
-    // Блок вне каталога — не повод потерять пробег: он нарисуется заглушкой, и
-    // это видно сразу, а половина модели из-за одного номера пропасть не может.
     if (id != voxels::air && voxel_types_->slot_of(id) == missing_voxel_slot &&
         unknown_voxels_.insert(id.value).second) {
         log::warn(

@@ -69,8 +69,6 @@ auto tool_state::brush_for(
 ) const -> voxel {
     const voxel remembered = brush_of_set[category.value];
 
-    // Воздух — законный номер любого набора, и в палитре он лежит нулевым. Кистью
-    // ему быть нельзя: непочатый набор иначе открылся бы стиралкой вместо цвета.
     if (remembered != voxels::air && remembered.category() == category &&
         registry.slot_of(remembered) != missing_voxel_slot) {
         return remembered;

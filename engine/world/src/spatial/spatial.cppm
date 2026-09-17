@@ -21,8 +21,6 @@ inline constexpr spatial_layer_mask all        = 0xFFFF;
 
 }  // namespace spatial_layer
 
-// Широкая фаза по границам сущностей: двоичное дерево раздутых коробок, которое
-// держит запросы логарифмическими и терпит малые смещения без перестроения.
 class dynamic_aabb_tree {
 public:
     dynamic_aabb_tree();

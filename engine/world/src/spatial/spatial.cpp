@@ -14,17 +14,14 @@ dynamic_aabb_tree::dynamic_aabb_tree() {
 }
 
 auto dynamic_aabb_tree::allocate_node() -> uint32 {
-    // Сначала проверить пул свободных узлов
     if (!free_nodes_.empty()) {
         uint32 index = free_nodes_.back();
         free_nodes_.pop_back();
         
-        // Сбросить узел в начальное состояние
         nodes_[index] = node{};
         return index;
     }
     
-    // Если пул пуст, выделить новый узел
     if (nodes_.size() >= nodes_.capacity()) {
         nodes_.reserve(nodes_.capacity() * 2);
     }
@@ -37,10 +34,8 @@ auto dynamic_aabb_tree::free_node(uint32 index) -> void {
         return;
     }
     
-    // Сбросить узел в начальное состояние
     nodes_[index] = node{};
     
-    // Добавить в пул свободных узлов для переиспользования
     free_nodes_.push_back(index);
 }
 
@@ -114,16 +109,13 @@ auto dynamic_aabb_tree::insert_leaf(uint32 leaf_index) -> void {
         return;
     }
     
-    // Найти лучший лист для вставки
     uint32 sibling = find_best_sibling(leaf_index);
     
     if (sibling == invalid_node_index) {
-        // Если не нашли, просто делаем новый узел корнем
         root_index_ = leaf_index;
         return;
     }
     
-    // Создать новый внутренний узел
     uint32 old_parent = nodes_[sibling].parent;
     uint32 new_parent = allocate_node();
     
@@ -133,14 +125,12 @@ auto dynamic_aabb_tree::insert_leaf(uint32 leaf_index) -> void {
     new_parent_node.right = leaf_index;
     new_parent_node.is_leaf = false;
     
-    // Обновить родителя старого листа
     nodes_[sibling].parent = new_parent;
     nodes_[leaf_index].parent = new_parent;
     
     new_parent_node.bounds = vw::spatial::aabb::merge(nodes_[sibling].bounds, nodes_[leaf_index].bounds);
     new_parent_node.layer = nodes_[sibling].layer | nodes_[leaf_index].layer;
     
-    // Обновить ссылку на родителя в старом родителе
     if (old_parent != invalid_node_index) {
         node& old_parent_node = nodes_[old_parent];
         if (old_parent_node.left == sibling) {
@@ -152,7 +142,6 @@ auto dynamic_aabb_tree::insert_leaf(uint32 leaf_index) -> void {
         root_index_ = new_parent;
     }
     
-    // Пересчитать AABB вверх по дереву
     refit(new_parent);
 }
 
@@ -171,7 +160,6 @@ auto dynamic_aabb_tree::remove_leaf(uint32 leaf_index) -> void {
     uint32 sibling = (nodes_[parent].left == leaf_index) ? nodes_[parent].right : nodes_[parent].left;
     
     if (grandparent != invalid_node_index) {
-        // Заменить родителя на брата
         node& grandparent_node = nodes_[grandparent];
         if (grandparent_node.left == parent) {
             grandparent_node.left = sibling;
@@ -180,15 +168,12 @@ auto dynamic_aabb_tree::remove_leaf(uint32 leaf_index) -> void {
         }
         nodes_[sibling].parent = grandparent;
         
-        // Пересчитать AABB вверх
         refit(grandparent);
     } else {
-        // Родитель был корнем, брат становится новым корнем
         root_index_ = sibling;
         nodes_[sibling].parent = invalid_node_index;
     }
     
-    // Освободить узел родителя
     free_node(parent);
 }
 

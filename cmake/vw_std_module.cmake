@@ -1,14 +1,5 @@
-# Provides `import std` for every toolchain the project builds on.
-#
-# CMake knows how to build the std module itself for MSVC and for Clang paired
-# with libc++ or libstdc++. The one case it refuses is Clang targeting the MSVC
-# ABI: that combination uses MS STL, and CMake has no recipe for it. Only there
-# do we build the module ourselves, from the very same std.ixx that MSVC uses.
-
 add_library(vw_std INTERFACE)
 
-# Clang, но с ABI от MSVC — единственная конфигурация, где std-модуль приходится
-# собирать вручную. На Linux тот же Clang идёт штатным путём CMake.
 set(VW_STD_NEEDS_MSVC_SOURCES OFF)
 if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "MSVC" AND CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC")
     set(VW_STD_NEEDS_MSVC_SOURCES ON)

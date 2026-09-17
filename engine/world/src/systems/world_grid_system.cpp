@@ -74,7 +74,7 @@ auto world_grid_system::shutdown() -> void {
     loader_.reset();
 }
 
-auto world_grid_system::update(float32 /*dt*/) -> void {
+auto world_grid_system::update(float32) -> void {
     if (!grid_ || !loader_) {
         return;
     }
@@ -106,9 +106,6 @@ auto world_grid_system::update(float32 /*dt*/) -> void {
 }
 
 namespace {
-// Все восемь, включая диагонали. Границам всегда хватало четырёх, но небесный
-// свет переходит через угол так же охотно, как через сторону, и у колонки,
-// освещённой без диагоналей, остаются тёмные клинья на стыке двух швов.
 constexpr vec2i column_neighbor_offsets[8] = {
     {1, 0},    //
     {-1, 0},   //
@@ -158,9 +155,6 @@ auto world_grid_system::queue_if_ready_(
         return;
     }
 
-    // Колонка, ушедшая за дальность отрисовки и вернувшаяся, — это свежий
-    // gen_column вокруг тех же моделей, поэтому её фаза говорит «рельеф», как бы
-    // давно её ни осветили. Помнят об этом модели.
     if (already_lit_(*it->second)) {
         it->second->set_phase(column_phase::complete);
         ready_columns_.push_back(coord);
@@ -189,7 +183,6 @@ auto world_grid_system::column_bottom_(
         if (chunks.empty()) {
             return std::nullopt;
         }
-        // Карта идёт сверху вниз, поэтому последняя запись — пол.
         return chunks.rbegin()->first;
     }
 
@@ -241,8 +234,6 @@ auto world_grid_system::dispatch_light_(
         return true;
     }
 
-    // Все колонки этого мира стоят на одном полу, поэтому его даст любая из
-    // девяти. Взять самую нижнюю — тот же ответ, но на одно допущение меньше.
     int32 bottom = std::numeric_limits<int32>::max();
     for (auto offset : column_neighbor_offsets) {
         if (const auto at = column_bottom_(coord + offset)) {
@@ -277,9 +268,6 @@ auto world_grid_system::collect_lit_columns_() -> void {
     while (auto result = baker_->try_pop_completed()) {
         const auto it = staged_columns_.find(result->coord);
         if (it == staged_columns_.end()) {
-            // В накопителе её нет, значит это перезаливка колонки, уже стоящей в
-            // мире, — или той, что с тех пор выгружена; от такой
-            // apply_relit_column_ ничего не находит и отбрасывает результат.
             apply_relit_column_(*result);
             continue;
         }
@@ -297,17 +285,6 @@ auto world_grid_system::collect_lit_columns_() -> void {
     }
 }
 
-// Перезалитая колонка уже стоит в мире с мешами, построенными под её старый свет,
-// поэтому каждый чанк, чей свет действительно сдвинулся, надо мешить заново.
-//
-// У большинства он не сдвинулся. Перезаливка запекает всю колонку, потому что
-// небесный свет после правки может измениться где угодно ниже, но лопата под
-// землёй не меняет ничего: порода была тёмной и осталась тёмной, и сравнение полей
-// — это то, что не даёт копке шахты перестраивать девять чанков на удар.
-//
-// Сравниваются оба канала, и чанк мешится один раз, если сдвинулся хоть один.
-// Зажжённый в запертой комнате факел двигает канал блоков и не двигает небесный;
-// дыра в крыше — наоборот.
 auto world_grid_system::apply_relit_column_(
     light_result& result
 ) -> void {
@@ -341,14 +318,6 @@ auto world_grid_system::apply_relit_column_(
     }
 }
 
-// Правки называют испорченные ими колонки; здесь они отправляются обратно через
-// того же пекаря, который освещал их изначально. Ничего инкрементального тут не
-// происходит: колонка заливается заново с нуля, и именно поэтому ответ после
-// правки в точности тот, с каким колонку сгенерировали бы.
-//
-// Колонка, освещаемая прямо сейчас, остаётся грязной, а не спрашивается повторно:
-// задача в полёте стартовала от вокселей, которые с тех пор сдвинулись, поэтому её
-// результат уже неверен, и следующий кадр всё равно закажет новую.
 auto world_grid_system::relight_dirty_columns_() -> void {
     if (baker_ == nullptr) {
         return;
@@ -362,8 +331,6 @@ auto world_grid_system::relight_dirty_columns_() -> void {
         return;
     }
 
-    // Перезаливки соперничают со стримингом за тех же четырёх воркеров, а земля
-    // под камерой важнее, чем шахта, осветившаяся кадром раньше.
     static constexpr int32 max_relights_per_frame = 2;
     int32 started                                 = 0;
 
@@ -404,8 +371,6 @@ auto world_grid_system::stage_completed_columns_() -> void {
 
         staged_columns_[coord] = std::move(col);
 
-        // Постановка этой колонки может достроить окрестность любой соседней — и
-        // её собственную.
         queue_if_ready_(coord);
         for (auto offset : column_neighbor_offsets) {
             queue_if_ready_(coord + offset);
@@ -445,22 +410,13 @@ auto world_grid_system::integrate_completed_columns_() -> void {
             continue;
         }
 
-        // Камера могла сдвинуться с момента постановки в очередь и увести с собой
-        // соседа. Тогда обратно в ожидание, а не размещение с дырой сбоку.
         if (!column_ready_(coord)) {
             it->second->set_phase(column_phase::terrain);
             continue;
         }
 
-        // Сначала границы, на всю колонку, и только потом размещение: соседи чанка
-        // сверху и снизу — из его же колонки, и если вынуть колонку из накопителя
-        // до их чтения, эти грани решат, что смотрят в открытый воздух.
         boundary_from_total += measure_ms([&] -> auto {
             for (auto& [y, cd] : it->second->get_all_chunk_data()) {
-                // Каждый сосед, который вообще когда-либо появится, есть уже
-                // сейчас — в накопителе или размещённый, — поэтому это последнее
-                // слово о границе чанка. Отсутствующий отсутствует навсегда (это
-                // открытое небо над колонкой пониже) и читается воздухом.
                 for (int32 fd = 0; fd < 6; ++fd) {
                     if (auto* neighbor = model_at_(cd.coord + boundary_face_offsets[fd])) {
                         cd.volume->set_boundary_slice(fd, *neighbor);
@@ -494,19 +450,9 @@ auto world_grid_system::integrate_completed_columns_() -> void {
 auto world_grid_system::dispatch_column_requests_() -> void {
     static constexpr int32 max_requests_per_frame = 8;
 
-    // Потолок на работу в полёте, а не только на начатую за кадр. У загрузчика не
-    // было ни того, ни другого: четыре воркера генерировали всё, что заказали, а
-    // колонка в состоянии «сгенерирована, но не размещена» держит девять моделей и
-    // около 280 страниц. При движении вперёд очередь в обычном прогоне доходила до
-    // пика в 482 колонки, и одна заминка главного потока — хватает секунды —
-    // уводила это за адресуемый предел пула страниц и убивала процесс. Вместо
-    // этого обратное давление: ничего нового не заказывается, пока не пришло
-    // заказанное.
+    // см. docs/world.md#потолок-работы-в-полёте
     static constexpr uint32 max_columns_in_flight = 96;
 
-    // Свет — второй этап со своей очередью, и колонка, ждущая освещения, держит те
-    // же девять моделей, что и ждущая генерации. Считать один загрузчик значило бы
-    // позволить генерации от него оторваться.
     const uint32 in_flight =
         loader_->pending_count() + (baker_ != nullptr ? baker_->pending_count() : 0U);
 
@@ -562,8 +508,6 @@ auto world_grid_system::rebuild_active_set_() -> vec2i {
         camera_column_ = camera_column;
         draw_distance_ = static_cast<int32>(wv.get_view_distance());
 
-        // На колонку дальше того, что будет нарисовано: кольцо генерируется, чтобы
-        // кольцо внутри знало свои границы и было смешено раз и навсегда.
         const auto dist = draw_distance_ + apron_columns;
 
         for (int32 dx = -dist; dx <= dist; ++dx) {
@@ -581,9 +525,6 @@ auto world_grid_system::rebuild_active_set_() -> vec2i {
 auto world_grid_system::demote_column_(
     vec2i coord
 ) -> void {
-    // Вне дальности отрисовки, но всё ещё нужна как сосед. Её меши, сущности и
-    // инстансы уходят, модели остаются, поэтому возвращение не стоит ничего, а
-    // колонка не генерируется дважды.
     auto col = std::make_unique<gen_column>(coord.x, coord.y);
 
     for (int32 y : grid_->column_levels(coord)) {
@@ -612,15 +553,10 @@ auto world_grid_system::unload_inactive_columns_() -> void {
         return !pending_active_columns_.contains(entry.first);
     });
 
-    // Колонка в очереди, у которой только что пропал сосед, проверяется заново при
-    // размещении, поэтому из очереди достаточно убрать исчезнувшие.
     std::erase_if(ready_columns_, [this](vec2i coord) -> bool {
         return !staged_columns_.contains(coord);
     });
 
-    // Камера сдвинулась, поэтому колонки, ждавшие только соседа, могли стать
-    // полными, а разжалованные — снова попасть в дальность. Пометка лишь
-    // выставляет фазу, так что обходить таблицу по ходу дела безопасно.
     for (const auto& [coord, col] : staged_columns_) {
         queue_if_ready_(coord);
     }

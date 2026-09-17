@@ -32,8 +32,6 @@ public:
 
     auto set_name(std::string name) -> void;
 
-    // Имя рига, под который записан клип. Пустое — риг не указан: клип из файла
-    // старше этой проверки, и ругаться на него не за что.
     [[nodiscard]] auto get_rig() const -> const std::string& {
         return rig_;
     }

@@ -7,13 +7,6 @@ import :entity;
 
 export namespace vw::ecs {
 
-// Разреженное множество без той части, что знает тип компонента: путь
-// «сущность -> плотный индекс», обратный список владельцев и правила обмена с
-// последним одинаковы у всех пулов. Двигать сами компоненты умеет только
-// наследник — он единственный, кому их тип известен.
-//
-// Удаление меняет элемент местами с последним, поэтому порядок в плотном массиве
-// не определён, зато обход остаётся непрерывным.
 class pool_base {
 public:
     pool_base()                                    = default;
@@ -32,8 +25,6 @@ public:
         }
     }
 
-    // Всё ниже лежит на горячем пути обхода, поэтому остаётся в интерфейсе, где
-    // импортирующий может это встроить.
     [[nodiscard]] auto has(entity e) const -> bool {
         return e.index != entity::invalid_index && e.index < sparse_indices_.size() &&
             sparse_indices_[e.index] != entity::invalid_index &&
@@ -57,9 +48,6 @@ public:
     }
 
 protected:
-    // Место сущности в плотном массиве. fresh — правда, если места ещё не было и
-    // наследнику надо дописать компонент в конец; ложь — если сущность уже здесь,
-    // и тогда он обязан заменить компонент в этом слоте.
     struct slot {
         uint32 index = entity::invalid_index;
         bool fresh   = false;
@@ -67,9 +55,6 @@ protected:
 
     auto reserve_slot_(entity e) -> slot;
 
-    // Слот, освобождаемый удалением, и слот последнего элемента, который встанет
-    // на его место. Оба invalid_index, если сущности в пуле нет; равны друг другу,
-    // если удаляется как раз последний.
     struct removal {
         uint32 index = entity::invalid_index;
         uint32 last  = entity::invalid_index;
@@ -84,8 +69,6 @@ private:
     std::vector<uint32> sparse_indices_;
 };
 
-// Хранилище компонентов одного типа. Плотный массив — обычный std::vector: он же
-// и выделяет память, и выравнивает её, и переносит содержимое при росте.
 template <typename T>
 class component_pool final : public pool_base {
 public:
@@ -96,8 +79,6 @@ public:
         if (fresh) {
             dense_.emplace_back(std::forward<Args>(args)...);
         } else {
-            // Замена на месте, а не присваивание: компоненту дозволено не иметь
-            // операторов присваивания вовсе.
             std::destroy_at(std::addressof(dense_[index]));
             std::construct_at(std::addressof(dense_[index]), std::forward<Args>(args)...);
         }
@@ -132,8 +113,6 @@ public:
         return has(e) ? std::addressof(dense_[slot_of(e)]) : nullptr;
     }
 
-    // Вызывающие, уже убедившиеся в наличии (например, представление), пропускают
-    // второй поиск.
     [[nodiscard]] auto get_unchecked(entity e) -> T& {
         return dense_[slot_of(e)];
     }
@@ -154,13 +133,6 @@ private:
     std::vector<T> dense_;
 };
 
-// Компонент, чей тип не назван ни в одной единице трансляции: пул знает о нём
-// только размер и выравнивание. Значение обязано быть тривиальным — байты и
-// ничего кроме, — потому что уничтожить или перенести его иначе, чем копией этих
-// байтов, пулу нечем. Выравнивание не может быть строже, чем у max_align_t.
-//
-// Движок этим путём не ходит: он существует ради компонентов, приходящих из
-// рантайма, где типа на этапе компиляции нет вовсе.
 struct component_layout {
     uint32 size  = 0;
     uint32 align = alignof(std::max_align_t);

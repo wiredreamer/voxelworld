@@ -29,7 +29,7 @@ auto save_clip_as_modal::open() -> void {
 }
 
 auto save_clip_as_modal::render(
-    float /*delta_time*/
+    float
 ) -> void {
     if (need_open_) {
         ImGui::OpenPopup("Save Animation As");

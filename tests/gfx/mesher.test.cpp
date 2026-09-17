@@ -12,9 +12,6 @@ using namespace vw;
 
 namespace {
 
-// One unit face, so a greedy result can be compared against a per-voxel one:
-// the two agree on which faces exist, never on how many quads they took to say
-// it.
 struct face_cell {
     int32 x = 0;
     int32 y = 0;
@@ -53,13 +50,10 @@ auto unpack_normal(const gfx::quad& q) -> uint8 {
     return static_cast<uint8>((q.data0 >> 21) & 0x7U);
 }
 
-// Слот палитры, а не идентификатор вокселя: в кваде едет плотный номер, который
-// раздал реестр, и занимает он десять бит.
 auto unpack_slot(const gfx::quad& q) -> uint16 {
     return static_cast<uint16>((q.data1 >> 14) & 0x3FFU);
 }
 
-// Two bits a corner, in winding order: 0 open, 3 shut in by two faces.
 auto unpack_sky(const gfx::quad& q) -> std::array<uint8, 4> {
     return {
         static_cast<uint8>(q.data2 & 0xFU),
@@ -102,9 +96,6 @@ constexpr vec3i face_normal[6] = {
     {1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1},
 };
 
-// Which end of the box each winding-order corner takes its components from.
-// Copied from voxel.vert: the shader is what turns a rectangle into vertices,
-// so this is the table that decides where a corner's occlusion lands on screen.
 constexpr int32 face_verts[6][4][3] = {
     {{1, 0, 0}, {1, 0, 1}, {1, 1, 1}, {1, 1, 0}},
     {{0, 0, 0}, {0, 1, 0}, {0, 1, 1}, {0, 0, 1}},
@@ -114,18 +105,6 @@ constexpr int32 face_verts[6][4][3] = {
     {{1, 0, 0}, {1, 1, 0}, {0, 1, 0}, {0, 0, 0}},
 };
 
-// Worked out from the model and the face normal alone, never from the mesher's
-// own idea of which way is u and which is v. That is the point of it: the rule
-// below is the same one the mesher applies, but where it lands on the face is
-// derived here from world coordinates, so a tangent table that is turned or
-// mirrored for one face out of six shows up as a mismatch.
-// The same geometry as expected_corner_ao, asking a different question: not
-// how shut in the corner is, but how much sky the four cells around it get.
-// Solid ones are left out of the average rather than counted as dark.
-//
-// The levels come from the flooded column rather than from the field on the
-// model, so this checks the whole chain -- bake, boundary planes, mesher --
-// against the thing all three are meant to reproduce.
 auto expected_corner_light(
     const asset::model& mdl, const ecs::light_column& column, vec3i cell, int32 face,
     vec3i corner, asset::light_channel channel
@@ -145,10 +124,6 @@ auto expected_corner_light(
     };
 
     const auto level = [&column, channel](vec3i p) -> int32 {
-        // A cell outside on two axes at once is at the very edge of the chunk,
-        // and the field only keeps one plane a face -- so the mesher clamps the
-        // other axes into it, first out of x, y, z wins. Pinned here rather
-        // than glossed over: it is the one place the answer is approximate.
         const auto out = [](int32 v) { return v < 0 || v >= side; };
 
         if (out(p.x)) {
@@ -162,8 +137,6 @@ auto expected_corner_light(
             return 0;
         }
         if (p.y >= column.height()) {
-            // Open sky above the column, and nothing else -- no lamp hangs
-            // over the world, so the other channel reads dark up there.
             return channel == asset::light_channel::sky
                        ? int32{ecs::light_column::max_level}
                        : 0;
@@ -183,8 +156,6 @@ auto expected_corner_light(
     const int32 other_i = (self_i == 0) ? -1 : 0;
     const int32 other_j = (self_j == 0) ? -1 : 0;
 
-    // The face's own front cell is air whenever the face is drawn, so the
-    // average always has something in it.
     int32 sum   = level(at(self_i, self_j));
     int32 count = 1;
 
@@ -219,9 +190,6 @@ auto expected_corner_ao(
         return !mdl.is_empty(p.x, p.y, p.z);
     };
 
-    // Cell (i, j) of the plane in front of the face, counted from the corner:
-    // cell 0 is the one whose near edge starts at the corner, cell -1 the one
-    // ending there.
     const auto at = [&](int32 i, int32 j) {
         vec3i p = front;
         p[a]    = corner[a] + i;
@@ -229,10 +197,6 @@ auto expected_corner_ao(
         return p;
     };
 
-    // Where the face's own cell sits relative to the corner. The three cells
-    // that matter are the two across an edge from it and the one diagonally
-    // opposite; the fourth is the face's own, and it is empty whenever the face
-    // is drawn at all.
     const int32 self_i  = front[a] - corner[a];
     const int32 self_j  = front[b] - corner[b];
     const int32 other_i = (self_i == 0) ? -1 : 0;
@@ -249,11 +213,6 @@ auto expected_corner_ao(
            static_cast<uint8>(diagonal);
 }
 
-// The same three samples as expected_corner_ao, read in the layer the face's
-// own cell stands in rather than the one in front of it, and counted for
-// absence instead of presence. Zero on every face but the top one, which is the
-// rule the mesher applies and the reason five faces out of six cost the greedy
-// merge nothing.
 auto expected_corner_convex(
     const asset::model& mdl, vec3i cell, int32 face, vec3i corner
 ) -> uint8 {
@@ -267,9 +226,6 @@ auto expected_corner_convex(
     const int32 a    = (axis + 1) % 3;
     const int32 b    = (axis + 2) % 3;
 
-    // Outside the model is not open. With no boundary slice to ask, treating a
-    // missing neighbour as absent would light a rim round the whole bounding
-    // box -- which is the one place this rule differs from occlusion's.
     const auto open = [&mdl](vec3i p) {
         if (p.x < 0 || p.y < 0 || p.z < 0) {
             return false;
@@ -316,8 +272,6 @@ auto ao_levels(const gfx::mesh& m, uint8 normal) -> std::set<uint8> {
     return levels;
 }
 
-// Every quad covers a rectangle of unit faces on one plane. Splitting it back
-// into those units is what makes greedy and simple comparable.
 auto to_face_cells(const gfx::mesh& m) -> std::set<face_cell> {
     std::set<face_cell> cells;
 
@@ -463,8 +417,6 @@ TEST_CASE("greedy meshing agrees with per-voxel meshing", "[mesh]") {
         REQUIRE(to_face_cells(fixture.greedy()) == to_face_cells(fixture.simple()));
     }
 
-    // A 64-cube is the only size that takes the bit-occupancy path, so the
-    // cases below are the ones that actually exercise it.
     SECTION("full-size chunk, terrain-like") {
         model_fixture fixture{64};
         uint32 state = 777;
@@ -529,8 +481,6 @@ TEST_CASE("boundary faces close the seam between chunks", "[mesh]") {
     asset::page_pool pages;
     voxel_registry registry;
 
-    // 64 so the bit path is the one under test: the +-X faces gather the
-    // neighbour plane bit by bit, which the other four directions never do.
     constexpr int32 size = 64;
     auto left  = std::make_shared<asset::model>(identity_pool, pages, voxels::world::category, size, size, size);
     auto right = std::make_shared<asset::model>(identity_pool, pages, voxels::world::category, size, size, size);
@@ -554,8 +504,6 @@ TEST_CASE("boundary faces close the seam between chunks", "[mesh]") {
         return count;
     };
 
-    // Face 0 is +X: without a neighbour the whole side is drawn, with one it
-    // disappears, and the other five sides are untouched either way.
     REQUIRE(count_faces(left_chunk, 0) == size * size);
     const auto before_minus_x = count_faces(left_chunk, 1);
 
@@ -566,11 +514,6 @@ TEST_CASE("boundary faces close the seam between chunks", "[mesh]") {
     REQUIRE(count_faces(left_chunk, 1) == before_minus_x);
 }
 
-// The sampler grades occlusion from nothing to shut in, and the packing has to
-// carry that grading through. It did not: the last step compared the value
-// against zero, so a corner brushed by one diagonal voxel came out identical to
-// the inside of a right angle, and the shading read as an outline rather than
-// as depth. A digest would not have caught it -- it was stable and wrong.
 TEST_CASE("ambient occlusion keeps all four levels", "[mesh]") {
     model_fixture fixture{16};
 
@@ -585,9 +528,6 @@ TEST_CASE("ambient occlusion keeps all four levels", "[mesh]") {
     }
 
     SECTION("three voxels are enough to produce every level") {
-        // Against the floor cell at (1, 4, 2) these are, in turn, a diagonal on
-        // its own, an edge, and a second edge at right angles to the first --
-        // which is one corner of each kind, plus the untouched ones.
         fixture.get()->set_voxel(2, 5, 1, voxels::world::clay[1]);
         fixture.get()->set_voxel(2, 5, 2, voxels::world::clay[1]);
         fixture.get()->set_voxel(1, 5, 3, voxels::world::clay[1]);
@@ -597,14 +537,6 @@ TEST_CASE("ambient occlusion keeps all four levels", "[mesh]") {
     }
 }
 
-// A trench that turns a corner, checked for the one thing that reads as a bug
-// rather than as shading: a point lighter than everything around it.
-//
-// A bend is where an occlusion term is most likely to produce one. A wider
-// kernel did, at every turn, because its far diagonals were the only samples in
-// range there and had been given no weight. Three samples cannot make that
-// mistake -- a corner is dark exactly when something touches it -- but the
-// invariant is worth keeping whatever the kernel becomes.
 TEST_CASE("a bent trench has no point lighter than its surroundings", "[mesh]") {
     model_fixture fixture{32};
 
@@ -680,12 +612,6 @@ TEST_CASE("a bent trench has no point lighter than its surroundings", "[mesh]") 
     }
 }
 
-// How far a wall reaches, written down as a number rather than left to be
-// rediscovered from a screenshot. One cell, and then nothing: the column beside
-// the wall is shaded, the next one is open ground. That is why the middle of a
-// trench three voxels wide reads exactly as bright as a field, and it is the
-// known price of three samples -- a two-cell kernel does see across a trench
-// three voxels wide, and charges ten percent of the quad count for it.
 TEST_CASE("occlusion reaches exactly one cell from a wall", "[mesh]") {
     model_fixture fixture{16};
 
@@ -695,23 +621,16 @@ TEST_CASE("occlusion reaches exactly one cell from a wall", "[mesh]") {
         }
     }
 
-    // One voxel tall, running the length of the floor: everything the up-faces
-    // sample lies in the plane just above them.
     for (int32 z = 0; z < 16; ++z) {
         fixture.get()->set_voxel(4, 5, z, voxels::world::clay[1]);
     }
 
-    // Every up-face corner, gathered by how far along x its lattice point sits.
-    // Away from the ends in z, where the wall stops and the picture changes.
     std::map<int32, std::set<uint8>> by_column;
     for (const auto& q : fixture.simple().quads) {
         const auto lo = unpack_min(q);
         const auto hi = unpack_max(q);
         const auto ao = unpack_ao(q);
 
-        // The floor's own up-faces. The wall has one too, a level higher, and
-        // nothing stands over it -- counting it in reads as the wall failing to
-        // occlude itself.
         if (unpack_normal(q) != 2 || lo.y != 4) {
             continue;
         }
@@ -730,17 +649,9 @@ TEST_CASE("occlusion reaches exactly one cell from a wall", "[mesh]") {
     REQUIRE(by_column[7] == std::set<uint8>{0});
 }
 
-// Every corner of every rectangle, against occlusion worked out from the model
-// directly. This is the check that a corner's value lands on the corner it was
-// computed for: the mesher indexes corners by its own two tangents, the shader
-// by winding order, and a table between them that is turned or mirrored for one
-// face out of six produces shading on the wrong side of that face -- which
-// reads as a bright seam where two faces meet and both went light.
 TEST_CASE("packed occlusion matches the model at every corner", "[mesh]") {
     model_fixture fixture{16};
 
-    // Away from the model's own walls, so nothing is decided by the absence of
-    // a boundary slice, and dense enough to put every corner case somewhere.
     uint32 state = 7771;
     for (int32 x = 2; x < 14; ++x) {
         for (int32 y = 2; y < 14; ++y) {
@@ -791,18 +702,10 @@ TEST_CASE("packed occlusion matches the model at every corner", "[mesh]") {
     REQUIRE(check(fixture.greedy(), "greedy") > 1000);
 }
 
-// Sky light all the way through: flood a column, bake it onto the model, mesh
-// it, and check every corner of every quad against a plain recomputation. Both
-// mesh generators are checked, which also pins the fast path -- greedy reads
-// the corners out of occupancy bit rows, simple asks the voxels one at a time,
-// and the two have to agree.
 TEST_CASE("packed sky light matches the field at every corner", "[mesh]") {
     model_fixture fixture{64};
     auto& mdl = *fixture.get();
 
-    // Rock with a shaft down into it and a tunnel off the bottom of the shaft.
-    // The tunnel is what makes the test say anything: along it the light falls
-    // a level a voxel, so most corners have four different numbers around them.
     asset::model_writer writer{mdl};
 
     for (int32 y = 0; y < 40; ++y) {
@@ -827,10 +730,6 @@ TEST_CASE("packed sky light matches the field at every corner", "[mesh]") {
         }
     }
 
-    // A pillar up to the ceiling of the chunk. Its top face reads the plane one
-    // voxel outside, which here is open sky at 15 -- and reading it wrong is
-    // what turned every outward face of every chunk black. Without something
-    // touching the ceiling the test cannot tell.
     for (int32 y = 40; y < 64; ++y) {
         for (int32 z = 50; z < 54; ++z) {
             for (int32 x = 50; x < 54; ++x) {
@@ -880,8 +779,6 @@ TEST_CASE("packed sky light matches the field at every corner", "[mesh]") {
                     FAIL();
                 }
 
-                // Face 2 is +Y, and a top face on the ceiling row is the one
-                // that has to reach outside the chunk to find its light.
                 if (face == 2 && hi.y == 64 && sky[slot] == 15) {
                     ++lit_ceiling;
                 }
@@ -891,9 +788,6 @@ TEST_CASE("packed sky light matches the field at every corner", "[mesh]") {
             }
         }
 
-        // Not a vacuous run: a field of one value would pass every comparison
-        // above and mean nothing, and neither would one where the whole shell
-        // came out dark.
         INFO(
             what << ": " << levels.size() << " distinct levels, " << lit_ceiling
                  << " lit ceiling corners"
@@ -908,10 +802,6 @@ TEST_CASE("packed sky light matches the field at every corner", "[mesh]") {
     REQUIRE(check(fixture.simple(), "simple") > 1000);
 }
 
-// The other channel, the same way through. A lamp underground rather than a
-// shaft to the surface, because block light has to be checked where sky light
-// is flatly zero -- if the two ever bled into one another this is where it
-// would show.
 TEST_CASE("packed block light matches the field at every corner", "[mesh]") {
     model_fixture fixture{64};
     auto& mdl = *fixture.get();
@@ -926,9 +816,6 @@ TEST_CASE("packed block light matches the field at every corner", "[mesh]") {
         }
     }
 
-    // A room with a corridor off it. The corridor is what makes the test say
-    // anything: the light falls a level a voxel along it, so most corners have
-    // four different numbers around them.
     for (int32 y = 20; y < 28; ++y) {
         for (int32 z = 20; z < 28; ++z) {
             for (int32 x = 20; x < 28; ++x) {
@@ -999,9 +886,6 @@ TEST_CASE("packed block light matches the field at every corner", "[mesh]") {
                     FAIL();
                 }
 
-                // The chunk is sealed rock, so nothing in it sees the sky. Any
-                // sky level at all here would mean the two halves of data2 had
-                // run into each other.
                 if (sky[slot] != 0) {
                     INFO(what << ": sky leaked into a sealed chunk, " << int32{sky[slot]});
                     FAIL();
@@ -1012,8 +896,6 @@ TEST_CASE("packed block light matches the field at every corner", "[mesh]") {
             }
         }
 
-        // Not a vacuous run: a field of one value would pass every comparison
-        // above and mean nothing.
         INFO(what << ": " << levels.size() << " distinct levels");
         REQUIRE(levels.size() > 4);
         REQUIRE(levels.contains(0));
@@ -1025,12 +907,7 @@ TEST_CASE("packed block light matches the field at every corner", "[mesh]") {
     REQUIRE(check(fixture.simple(), "simple") > 500);
 }
 
-// Occlusion samples reach one cell past the face, so a face on the edge of a
-// chunk asks its neighbour. If it did not, every chunk boundary would draw
-// itself as a line of unoccluded ground across an otherwise shaded corner.
 TEST_CASE("ambient occlusion reads across the chunk seam", "[mesh]") {
-    // Full chunk size on both sides: a boundary slice is only taken between
-    // models of exactly that side, and a smaller one is dropped in silence.
     model_fixture left{64};
     model_fixture right{64};
 
@@ -1040,13 +917,8 @@ TEST_CASE("ambient occlusion reads across the chunk seam", "[mesh]") {
         }
     }
 
-    // Just over the seam and one above the floor: from the last floor cell of
-    // `left` this is the neighbour along +x, in the plane its up-face samples.
     right.get()->set_voxel(0, 5, 8, voxels::world::clay[1]);
 
-    // The up-face of the last floor cell. Found rather than assumed: a lookup
-    // that silently misses would return four zeroes, which is exactly the value
-    // the unwired case is supposed to have.
     const auto seam_corners = [](const gfx::mesh& m) -> std::optional<std::array<uint8, 4>> {
         for (const auto& q : m.quads) {
             const auto lo = unpack_min(q);
@@ -1078,8 +950,6 @@ TEST_CASE("ambient occlusion reads across the chunk seam", "[mesh]") {
     REQUIRE(*after_greedy != open);
 }
 
-// Guards the shape of the output across refactors that are meant to preserve
-// it: the value only changes when the mesher deliberately changes.
 TEST_CASE("greedy meshing output is stable", "[mesh]") {
     model_fixture fixture{32};
 
@@ -1103,9 +973,6 @@ TEST_CASE("greedy meshing output is stable", "[mesh]") {
     REQUIRE(digest == 12075451168598608980ULL);
 }
 
-// The 32-cube above never reaches the bit path, so ambient occlusion out of
-// occupancy bits needs its own anchor: this digest covers the packed corner
-// values, which the greedy-against-simple comparison does not look at.
 TEST_CASE("full-size greedy meshing output is stable", "[mesh]") {
     model_fixture fixture{64};
 
@@ -1128,18 +995,9 @@ TEST_CASE("full-size greedy meshing output is stable", "[mesh]") {
 }
 
 
-// Convexity all the way through: the same shape of check as occlusion, over
-// both mesh generators, which pins the fast path against the slow one -- greedy
-// reads the corners out of occupancy bit rows, simple asks the voxels one at a
-// time. It also pins the winding reorder: convexity has to travel the same
-// shuffle out of sampler order that occlusion and sky light do, or the shader
-// bilinearly blends one rectangle for two of them and another for the third.
 TEST_CASE("packed convexity matches the model at every corner", "[mesh]") {
     model_fixture fixture{16};
 
-    // Away from the model's own walls, so nothing is decided by the absence of
-    // a boundary slice, and a height field rather than noise: convexity lives
-    // on the steps of a surface, and a cloud of loose voxels has few.
     uint32 state = 4127;
     for (int32 x = 2; x < 14; ++x) {
         for (int32 z = 2; z < 14; ++z) {
@@ -1187,16 +1045,10 @@ TEST_CASE("packed convexity matches the model at every corner", "[mesh]") {
         return spikes;
     };
 
-    // A count, not a smoke test: a surface of random steps has outside corners
-    // all over it, and a check that only ever compared zero against zero would
-    // pass with the whole term deleted.
     REQUIRE(check(fixture.simple(), "simple") > 50);
     REQUIRE(check(fixture.greedy(), "greedy") > 50);
 }
 
-// Convexity is the one sampler whose out-of-range default is not occlusion's.
-// A model with no boundary slices has to come out flush all round its own
-// bounding box, not ringed in light.
 TEST_CASE("a model without neighbours has no rim", "[mesh]") {
     model_fixture fixture{16};
 

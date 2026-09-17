@@ -37,13 +37,8 @@ struct color {
     [[nodiscard]] constexpr auto a() const -> uint8;
 };
 
-// Палитра Apollo: https://lospec.com/palette-list/apollo
-// Шесть рамп по шесть шагов, серая на десять, плюс чистые белый и чёрный.
-// Номер — шаг рампы от тёмного к светлому. Коричневых две: brown холодная и
-// уходит в кремовый, amber тёплая и уходит в золото.
 namespace colors {
 
-// Не цвет, а его отсутствие: полностью прозрачный.
 constexpr auto empty = color(0x00000000);
 
 constexpr auto blue_0   = color(0x172038FF);

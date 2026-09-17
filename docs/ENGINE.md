@@ -293,7 +293,9 @@ ctest --test-dir build/release --output-on-failure
 Зависимости: Catch2, GLFW, ImGui (glfw-binding, vulkan-binding), Vulkan-Headers.
 Версии зафиксированы в `vcpkg.json` через `builtin-baseline` и `version>=`.
 
-Гигиену интерфейсов проверяет `python scripts/lint_modules.py`.
+Гигиену интерфейсов проверяет `python scripts/lint_modules.py`. Он же следит,
+чтобы в коде не было комментариев: объяснения живут в `docs/`, а код ссылается
+на них строкой `// см. docs/…`.
 
 ## Известные долги
 

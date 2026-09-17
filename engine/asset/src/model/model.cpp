@@ -115,9 +115,6 @@ auto page_pool::free_count() const -> uint32 {
 }
 
 auto page_pool::ensure_capacity_(uint32 index) -> void {
-    // Выход за пул сам по себе ничем не падает — он молча накладывается на
-    // страницы другой модели. Лучше сказать об этом, чем испортить мир и упасть
-    // где-то в другом месте.
     if (index >= block_size * max_blocks) {
         log::critical(
             lc_pool_,
@@ -340,11 +337,6 @@ auto model::build_x_rows(
                             continue;
                         }
 
-                        // Восемь вокселей страничной строки — это восемь байт
-                        // подряд, поэтому они приходят одним словом, а маска
-                        // непустых выпадает из шести операций. Чтение по одному —
-                        // это восемь загрузок и восемь ветвлений, и туда, а не в
-                        // запись строк, уходило всё время build_occupancy.
                         const auto& page = pool_ptr_->get(entry.pool_index());
 
                         uint64 run = 0;
@@ -372,8 +364,6 @@ auto build_emission_table(
 ) -> emission_table {
     emission_table table;
 
-    // Только излучающие: строка заводится на категорию, в которой есть хоть один,
-    // а таких категорий заметно меньше, чем всех.
     for (const voxel_type& type : registry.all()) {
         if (type.material.emission != 0) {
             table.set(type.id, type.material.emission);
@@ -385,9 +375,6 @@ auto build_emission_table(
 
 namespace {
 
-// Карманы одной ячейки: куб из `size` вокселей, начинающийся в `origin` внутри
-// чанка. Грани индексируются одинаково с обеих сторон общей грани, поэтому у двух
-// соседних ячеек можно спросить, совпадают ли их отверстия.
 auto build_cell_links(
     const chunk_occupancy& occupancy, vec3i origin, int32 size, chunk_link_scratch& scratch
 ) -> cell_links {
@@ -442,7 +429,6 @@ auto build_cell_links(
             const int32 x = std::countr_zero(bits);
             pocket.volume |= chunk_pocket::volume_bit(x, y, z, volume_block);
 
-            // Остаток блока пропускается: записывается всё равно один бит на блок.
             const int32 next = ((x / volume_block) + 1) * volume_block;
             if (next >= 64) {
                 break;
@@ -685,7 +671,6 @@ auto model::extract_face(int32 face_direction, face_occupancy& out) const -> boo
         }
     };
 
-    // Внутри страницы слой каждый раз попадает в одну и ту же ячейку.
     const int32 ll = layer % ps;
 
     const auto cell_index = [axis, ll](int32 a, int32 b) -> int32 {
@@ -713,8 +698,6 @@ auto model::extract_face(int32 face_direction, face_occupancy& out) const -> boo
                 continue;
             }
 
-            // Разрешается один раз на всю страницу, а не на воксель: is_empty
-            // проходил бы таблицу и пул заново на каждой ячейке.
             const auto* data = get_page(page.x, page.y, page.z);
 
             for (int32 b = 0; b < ps; ++b) {
@@ -819,9 +802,6 @@ auto model::promote_to_sparse(int32 px, int32 py, int32 pz) -> page_type& {
     return page;
 }
 
-// Модель несёт ровно один набор, поэтому воксель чужого набора в неё не ложится
-// никак: страница хранит только номер. Это инвариант, а не ошибка ввода —
-// проверять его обязан тот, кто выбирает воксель, а сюда он доходить не должен.
 auto model::to_index_(voxel v) const -> voxel_index {
     if (v.is_empty()) {
         return voxel_index{};
@@ -859,10 +839,6 @@ auto model_registry::create(std::string_view name, voxel_category category, int3
     auto new_model =
         std::make_shared<model>(identity_pool_, page_pool_, category, width, height, depth);
 
-    // Имя здесь — имя сущности, и оно уникально только внутри одного префаба:
-    // два узла head из разных файлов дают одну запись. Прежняя модель при этом
-    // не пропадает — её держит компонент, — но из реестра она исчезает, и
-    // get вернёт чужую.
     const auto [it, inserted] = models_.try_emplace(std::string(name), new_model);
     if (!inserted) {
         log::warn(lc_registry_, "model '{}' is already registered, the entry is replaced", name);

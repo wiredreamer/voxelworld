@@ -11,9 +11,6 @@ export namespace vw::voxels {
 namespace palette {
 inline constexpr auto category = voxel_category{0};
 
-// Номера повторяют порядок colors::all — рампа за рампой, шаг за шагом. Это не
-// совпадение, а инвариант: его проверяет catalog.cpp, и он же делает набор палитрой.
-// Цвет здесь и есть личность вокселя, больше за номером не стоит ничего.
 inline constexpr auto blue   = voxel_span{category, 1, 6};
 inline constexpr auto green  = voxel_span{category, 7, 6};
 inline constexpr auto brown  = voxel_span{category, 13, 6};
@@ -24,9 +21,6 @@ inline constexpr auto gray   = voxel_span{category, 37, 10};
 inline constexpr auto white  = voxel{category, 47};
 inline constexpr auto black  = voxel{category, 48};
 
-// Хвост свечения: цвет тот же, что в рампе, но воксель рисует себя сам. Соседям он
-// света не даёт — заливка комнаты остаётся делом набора world, где за ней стоит
-// поведение, а не вид.
 inline constexpr auto glow_blue   = voxel{category, 49};
 inline constexpr auto glow_green  = voxel{category, 50};
 inline constexpr auto glow_amber  = voxel{category, 51};
@@ -73,9 +67,6 @@ inline constexpr auto lava       = voxel{category, 54};
 inline constexpr auto magma      = voxel{category, 55};
 inline constexpr auto glowstone  = voxel{category, 56};
 
-// Разделы набора. Покрывают его номера подряд и без дыр — это проверяет
-// catalog.cpp — и держат порядок каталога осмысленным: воксель, вставленный
-// мимо своего раздела, иначе просто пропал бы из панели.
 inline constexpr std::array groups = {
     voxel_group{"plants", grass[0], 12},
     voxel_group{"soil", dirt[0], 6},
@@ -93,8 +84,6 @@ inline constexpr std::array groups = {
 
 export namespace vw {
 
-// Наборы, о которых знает встроенный каталог. Отсюда интерфейс берёт и список
-// для выбора при создании модели, и разбиение палитры на разделы.
 inline constexpr std::array default_voxel_sets = {
     voxel_set{
         .category = voxels::palette::category,
@@ -110,21 +99,6 @@ inline constexpr std::array default_voxel_sets = {
     },
 };
 
-// Каталог по умолчанию. Порядок записей задаёт слоты, поэтому наборы идут
-// подряд: панель вокселей группирует их одним проходом, не сортируя. Палитра идёт
-// первой и занимает нулевую категорию как набор по умолчанию: модель, созданная
-// ни о чём не спросив, оказывается в ней.
-//
-// Нумерация внутри набора начинается с единицы: ноль означает пустоту в любом
-// наборе, потому что страница хранит только номер, а набор берётся у модели.
-// Нулевой байт обязан читаться как воздух — на этом стоят и таблица страниц, и
-// битовые проходы по вокселям. Для палитры это тот же ноль, что и для прочих:
-// воздух — её пустой номер, а не отдельный набор.
-//
-// Цвета намеренно повторяются между материалами: лёд и кристалл — одни и те же
-// три шага голубой рампы, и различает их только свечение. Ради этого разведение
-// личности вокселя и его цвета и затевалось. В палитре наоборот: там цвет и есть
-// личность, и повторяться ему нечего ради.
 inline constexpr std::array default_voxel_catalog = {
     voxel_desc{voxels::air, "air", {}, voxel_surface::invisible},
     voxel_desc{voxels::palette::blue[0], "palette.blue_0", {colors::blue_0}},

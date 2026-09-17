@@ -8,12 +8,8 @@ import :model.occupancy;
 
 export namespace vw::asset {
 
-// Одна ячейка сетки связности: куб в 32 вокселя, восьмая часть чанка.
 struct cell_links {
-    // У ячейки, изрезанной густой сетью тоннелей, карманов может быть очень много.
-    // Сверх этого числа они сливаются в один, отчего обход может сообщить только
-    // больше положенного, но никогда не меньше. Обход отмечает пройденные карманы
-    // 64-битной маской и один бит держит себе, отсюда и потолок.
+    // см. docs/world.md#карман
     static constexpr std::size_t max_pockets = 63;
 
     std::vector<chunk_pocket> pockets;
@@ -42,8 +38,6 @@ struct chunk_links {
     }
 };
 
-// Рабочая память для build_chunk_links. Держится вызывающим, чтобы мешинг чанка
-// не аллоцировал.
 struct chunk_link_scratch {
     std::vector<uint64> masks;
     std::vector<int32> row_begin;
@@ -51,24 +45,12 @@ struct chunk_link_scratch {
     std::vector<int32> stack;
 };
 
-// Заливка по пустым вокселям, отрезками, а не по вокселю: строка ячейки — часть
-// одного слова, и пустые её участки — это несколько промежутков. Заливка по
-// вокселю стоит дороже, чем мешинг всего чанка.
-//
-// Сохраняются только карманы, касающиеся грани: запечатанный пузырь в середине
-// ничего не соединяет, и заглянуть в него нельзя.
 [[nodiscard]] auto build_chunk_links(
     const chunk_occupancy& occupancy, chunk_link_scratch& scratch
 ) -> chunk_links;
 
 [[nodiscard]] auto build_chunk_links(const chunk_occupancy& occupancy) -> chunk_links;
 
-// Уровень излучения по идентификатору вокселя, 0..15. Отдельная таблица, а не сам
-// реестр: проходу нужен байт на воксель, а voxel_type занимает три десятка —
-// чтение на месте протаскивает через кэш килобайты ради байта ответа.
-//
-// Это копия, а не второй источник истины: излучение вокселя записано в реестре, а
-// отсюда строится один раз и передаётся дальше.
 using emission_table = voxel_table<uint8>;
 
 [[nodiscard]] auto build_emission_table(const voxel_registry& registry) -> emission_table;

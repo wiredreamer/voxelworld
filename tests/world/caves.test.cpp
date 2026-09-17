@@ -12,8 +12,6 @@ using namespace vw::ecs;
 
 namespace {
 
-// The world the generator produced, flattened into one array so the cave
-// structure can be walked without going through chunk boundaries.
 class sampled_region {
 public:
     static constexpr int32 chunk = 64;
@@ -73,14 +71,11 @@ public:
 
     [[nodiscard]] auto is_solid(int32 x, int32 y, int32 z) const -> bool {
         if (x < 0 || y < 0 || z < 0 || x >= size_x() || y >= size_y() || z >= size_z()) {
-            return true;  // outside the sampled region counts as rock
+            return true;
         }
         return solid_[at(x, y, z)];
     }
 
-    // Rock above and rock below. Requiring only rock above counts the empty
-    // space under the world floor as cave, which is most of what is down there
-    // and swamps every other number.
     [[nodiscard]] auto is_underground(int32 x, int32 y, int32 z) const -> bool {
         bool above = false;
         for (int32 up = y + 1; up < size_y(); ++up) {
@@ -114,10 +109,6 @@ private:
     std::vector<bool> solid_;
 };
 
-// Caves are scenery and somewhere to put ore, not a road network. What is worth
-// asserting is therefore the opposite of what it was for tunnels: a body has to
-// fit, the systems have to differ in size, some have to open to the sky -- and
-// they must NOT all join into one underground.
 struct cave_stats {
     std::size_t underground_total = 0;
     std::size_t underground_air   = 0;
@@ -126,19 +117,14 @@ struct cave_stats {
     // 8, so it needs a 2x4x2 box of clear voxels.
     std::size_t walkable = 0;
 
-    // Openings wide enough to read as a chamber rather than a crawl: a clear
-    // 5-cube around the voxel.
     std::size_t roomy = 0;
 
-    // Connected systems of walkable space, and how the biggest compares.
     std::size_t systems         = 0;
     std::size_t largest_system  = 0;
     std::size_t median_system   = 0;
 
-    // Underground air a flood fill from the sky can get to.
     std::size_t reachable = 0;
 
-    // Faces between air and rock: what the mesher has to turn into quads.
     std::size_t faces = 0;
 };
 
@@ -211,8 +197,6 @@ auto measure(const sampled_region& r) -> cave_stats {
         }
     }
 
-    // Separate systems, measured over the space a body can occupy: two caves
-    // joined by a crack a character cannot pass are still two caves.
     std::vector<uint8> seen(volume, 0);
     std::vector<vec3i> stack;
     std::vector<std::size_t> sizes;
@@ -263,8 +247,6 @@ auto measure(const sampled_region& r) -> cave_stats {
         stats.median_system  = sizes[sizes.size() / 2];
     }
 
-    // What the sky can reach: a cave with no entrance is one nobody will stand
-    // in, however good it looks.
     std::vector<uint8> reached(volume, 0);
     stack.clear();
 
@@ -333,12 +315,7 @@ auto report(std::string_view label, const cave_stats& stats) -> void {
 
 }  // namespace
 
-// Prints the whole table at once, so tuning does not need a rebuild per value.
-// Not part of the suite: tagged [.sweep], run it by name.
 TEST_CASE("cave shape sweep", "[world][caves][.sweep]") {
-    // Sampled at several places: a region only holds a handful of systems, so
-    // one patch of the map says as much about where it was cut as about the
-    // settings.
     struct probe {
         const char* label;
         int32 origin_x;
@@ -366,8 +343,6 @@ TEST_CASE("caves are rooms, not a tunnel network", "[world][caves]") {
 
     perlin_terrain_generator gen{identity_pool, pages, perlin_terrain_generator::params{}};
 
-    // Five columns is 320 voxels, enough to hold several regions of the cave
-    // grid and so several independent systems.
     const sampled_region area{5, 5, gen};
     const auto stats = measure(area);
 
@@ -392,35 +367,18 @@ TEST_CASE("caves are rooms, not a tunnel network", "[world][caves]") {
                                      : 0.0));
     REQUIRE(stats.underground_air > 0);
 
-    // Hollow enough to find, far from a sponge. The floor is low because the
-    // world is now a thousand voxels deep while these systems still hang off
-    // the surface: the same caves in an eighth of the rock read as 0.4 %. Once
-    // caves come from noise and fill the depth, this wants measuring per band
-    // rather than over the whole column.
     REQUIRE(fraction > 0.0004);
     REQUIRE(fraction < 0.05);
 
-    // A body fits in a good part of it. The share never approaches 1 even for a
-    // perfectly round chamber, because this counts the corners a 2x4x2 body can
-    // start from, and there are none against the wall.
     REQUIRE(walkable > 0.25);
 
-    // Not all one calibre: some of the air is open enough to stand around in.
     REQUIRE(roomy > 0.05);
 
-    // Several separate systems rather than one underground. Dungeons will be
-    // the connected part of the world; caves are not. Measured across patches
-    // of the map the biggest system holds between a quarter and a half of the
-    // walkable space, so the bar sits above that spread and well below one.
     REQUIRE(stats.systems >= 4);
     REQUIRE(biggest < 0.7);
 
 }
 
-// Whether the biggest system under one patch of ground happens to have an
-// opening is chance: a patch this size holds only a handful of fields. Ways in
-// are a property of the world, so they are counted over two patches at once.
-// Measured at 0.05 and 0.54 separately, 0.35 together.
 TEST_CASE("some caves are open to the sky", "[world][caves]") {
     asset::model_identity_pool identity_pool;
     asset::page_pool pages;

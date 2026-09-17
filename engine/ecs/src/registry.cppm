@@ -12,9 +12,6 @@ auto next_component_id() -> uint32;
 
 export namespace vw::ecs {
 
-// Идентификаторы компонентов выдаются лениво, при первом обращении, поэтому тип,
-// ни разу не названный на этапе компиляции (компонент из скрипта), может войти
-// через нетипизированную часть реестра с идентификатором, полученным так же.
 template <typename T>
 auto component_id_of() -> uint32 {
     static const uint32 id = detail::next_component_id();
@@ -36,7 +33,6 @@ public:
     [[nodiscard]] auto alive_entities() const -> std::vector<entity>;
     [[nodiscard]] auto destroyed() const -> const std::vector<entity>&;
 
-    // Рантайм-путь: компонент, чей тип не назван ни в одной единице трансляции.
     auto ensure_pool(uint32 component_id, component_layout layout) -> dynamic_pool&;
 
     [[nodiscard]] auto try_pool(uint32 component_id) -> pool_base*;
@@ -54,8 +50,6 @@ public:
     auto clear_requested(uint32 component_id) -> void;
     auto clear_changed() -> void;
 
-    // Слот выдаётся по идентификатору типа, поэтому приведение обратно к
-    // component_pool<T> однозначно: другого пула по этому идентификатору не бывает.
     template <typename T>
     auto pool_of() -> component_pool<T>& {
         auto& slot = pool_slot_(component_id_of<T>());
@@ -173,13 +167,8 @@ private:
     std::vector<entity> destroyed_set_;
 };
 
-// Идёт по наименьшему из запрошенных пулов и пропускает сущности, у которых нет
-// какого-то из остальных. Указатели на пулы разрешаются один раз на представление,
-// а не на элемент.
 template <typename... Cs>
 class component_view {
-    // Разрешается один раз при построении представления, поэтому обход — это
-    // обычная индексация плотного массива с известным на компиляции шагом.
     template <typename C>
     struct cursor {
         C* dense                = nullptr;
@@ -207,9 +196,6 @@ public:
         pick_entities_();
     }
 
-    // Поиск следующей подходящей сущности и так находит её плотный слот в каждом
-    // пуле, поэтому итератор хранит эти слоты, а не ищет их второй раз при
-    // разыменовании.
     struct iterator {
         const component_view* view = nullptr;
         std::size_t index          = 0;
@@ -241,12 +227,12 @@ public:
 
     private:
         template <std::size_t... Is>
-        [[nodiscard]] auto locate_all_(entity e, std::index_sequence<Is...> /*unused*/) -> bool {
+        [[nodiscard]] auto locate_all_(entity e, std::index_sequence<Is...>) -> bool {
             return (std::get<Is>(view->cursors_).locate(e, slots[Is]) && ...);
         }
 
         template <std::size_t... Is>
-        [[nodiscard]] auto deref_(std::index_sequence<Is...> /*unused*/) const
+        [[nodiscard]] auto deref_(std::index_sequence<Is...>) const
             -> std::tuple<entity, Cs&...> {
             return std::tuple<entity, Cs&...>{
                 view->owners_[index], std::get<Is>(view->cursors_).dense[slots[Is]]...};
@@ -263,9 +249,6 @@ public:
         return iterator{this, count_};
     }
 
-    // Форма с колбэком держит весь обход в одном теле цикла, что измеримо плотнее,
-    // чем гонять его через итератор. В системах, работающих каждый кадр, лучше
-    // использовать её.
     template <typename Fn>
     auto for_each(Fn&& fn) const -> void {
         for_each_(std::forward<Fn>(fn), std::index_sequence_for<Cs...>{});
@@ -273,7 +256,7 @@ public:
 
 private:
     template <typename Fn, std::size_t... Is>
-    auto for_each_(Fn&& fn, std::index_sequence<Is...> /*unused*/) const -> void {
+    auto for_each_(Fn&& fn, std::index_sequence<Is...>) const -> void {
         for (std::size_t i = 0; i < count_; ++i) {
             const entity e = owners_[i];
             const std::array<uint32, sizeof...(Cs)> slots{

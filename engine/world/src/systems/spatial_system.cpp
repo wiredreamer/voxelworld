@@ -32,7 +32,7 @@ auto spatial_system::spatial_modifier::set_layer(
     return *this;
 }
 
-auto spatial_system::update(float32 /*dt*/) -> void {
+auto spatial_system::update(float32) -> void {
     auto& reg       = world_->registry();
     auto& requested = reg.requested<spatial_component>();
     if (requested.empty()) {
@@ -40,11 +40,6 @@ auto spatial_system::update(float32 /*dt*/) -> void {
     }
 
     for (entity ent : requested) {
-        // Границы есть у того, чью форму движок знает: у несущего модель — по
-        // её вокселям, у несущего коллайдер — по коробке физики. Второе — про
-        // корень иерархии, который сам ничего не рисует: тело, собранное из
-        // детей, в дерево не попадало вовсе, и запрос столкновений его не
-        // находил, сколько бы слоёв ему ни назначили.
         const bool can_be_updated =  //
             reg.has<transform_component>(ent) &&
             reg.has<spatial_component>(ent) &&
@@ -67,9 +62,6 @@ auto spatial_system::update_entity(
 
     const auto& transform_comp = reg.get<transform_component>(ent);
 
-    // Модель важнее коллайдера у того, у кого есть и то, и другое: по её
-    // границам такую сущность видели до сих пор, и менять их значило бы менять
-    // отсев и попадания луча заодно.
     const spatial::aabb new_bounds = reg.has<model_component>(ent)
         ? calculate_aabb_from_model(ent, reg.get<model_component>(ent), transform_comp)
         : calculate_aabb_from_collider(reg.get<box_collider_component>(ent), transform_comp);
@@ -128,9 +120,6 @@ auto spatial_system::expand_aabb_for_fat(
 auto spatial_system::calculate_aabb_from_collider(
     const box_collider_component& collider, const transform_component& transform_comp
 ) -> spatial::aabb {
-    // Коробка физики осями мира и живёт: resolve_box_voxel вращения не знает и
-    // берёт середину как позицию плюс смещение. Границы, посчитанные через
-    // мировую матрицу, описывали бы не то тело, с которым столкнётся движок.
     const vec3f centre = transform_comp.get_position() + collider.get_offset();
     const vec3f half   = collider.get_extents() * 0.5f;
 
@@ -144,12 +133,6 @@ auto spatial_system::calculate_aabb_from_model(
         return spatial::aabb{.min={0.0f, 0.0f, 0.0f}, .max={0.0f, 0.0f, 0.0f}};
     }
 
-    // Размер в вокселях, без voxel_scale: масштаб уже несёт мировая матрица —
-    // chunk::create_entity_ кладёт его туда, и вершинный шейдер растит ей же
-    // воксельные координаты квада. Домножение здесь применяло его дважды, и
-    // чанк арены получал коробку в шестнадцать раз больше себя: отсев фрустумом
-    // брал в кадр всё подряд, а направления -X, -Y и -Z не срезались никогда,
-    // потому что дальняя стенка коробки стояла далеко за чанком.
     const vec3i model_size = model_comp.size();
 
     constexpr vec3f local_min{0.0f, 0.0f, 0.0f};
@@ -240,8 +223,6 @@ auto spatial_system::voxel_ray_cast(
         const auto& model_comp     = reg.get<model_component>(ent);
         const auto& transform_comp = reg.get<transform_component>(ent);
 
-        // Скрытый объём не перехватывает луч: его убрали с глаз ровно затем, чтобы
-        // добраться до того, что он заслонял.
         if (!model_comp.has_model() || !model_comp.is_visible()) {
             continue;
         }

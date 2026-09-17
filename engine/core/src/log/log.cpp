@@ -6,8 +6,6 @@ module;
 #  include <windows.h>
 #endif
 
-// Ради feature-test макроса: `import std` макросов не приносит, а понять,
-// есть ли у стандартной библиотеки база часовых поясов, больше нечем.
 #include <version>
 
 module vw.core;
@@ -83,8 +81,6 @@ auto timestamp() -> std::string {
     return std::format("{:%Y-%m-%d %H:%M:%S}",
                        std::chrono::floor<std::chrono::milliseconds>(local));
 #else
-    // У libc++ базы часовых поясов до сих пор нет, а санитайзерные сборки идут
-    // именно на ней. Для строки лога UTC достаточно.
     return std::format("{:%Y-%m-%d %H:%M:%S}",
                        std::chrono::floor<std::chrono::milliseconds>(now));
 #endif

@@ -342,9 +342,6 @@ auto animation_fsm::match_(
         return false;
     }
 
-    // Триггер и условия — разные вопросы: триггер это «случилось», условия это
-    // «сейчас так». Ни того, ни другого — переход безусловный: так пишется
-    // «когда клип доиграет», где всю работу делают wait_*.
     if (!rule.trigger_name.empty() && !triggers.contains(rule.trigger_name)) {
         return false;
     }
@@ -376,8 +373,6 @@ auto animation_fsm::result_of_(const transition_rule& rule) const
 auto animation_fsm::evaluate(
     const animation_layer& layer, trigger_set& triggers, const fsm_blackboard& board
 ) -> std::optional<transition_result> {
-    // Правила «из любого» идут первыми: объявить переход для всех состояний и
-    // значит сказать, что он важнее того, что сейчас играет.
     for (const auto& rule : any_transitions_) {
         if (rule.target_state == current_state_ || !match_(rule, layer, triggers, board)) {
             continue;

@@ -10,9 +10,6 @@ auto cluster_probe::collect(gfx::renderer& renderer, bool measuring) -> void {
     for (const gfx::cull_list kind : {gfx::cull_list::sources, gfx::cull_list::blobs}) {
         auto frame = renderer.take_cluster_readback(kind);
 
-        // Кадры стриминга светят миру, который ещё приезжает, и усреднение их в
-        // установившееся состояние — это способ отчитаться о сетке, которой
-        // никогда не было.
         if (frame && measuring) {
             account_(kind, *frame);
         }

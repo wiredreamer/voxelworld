@@ -135,8 +135,6 @@ auto keyframe_service::record_pose(
         properties.push_back(property_of(state_->tool.gizmo));
     }
 
-    // Дорожка заводится первой частью, а ключи ложатся следующими: внутри одного
-    // шага истории порядок соблюдается, и откат снимает их в обратном.
     bool track_pending = !clip->has_track(name);
 
     std::vector<std::unique_ptr<base_operation>> parts;
@@ -161,8 +159,6 @@ auto keyframe_service::record_pose(
             continue;
         }
 
-        // Ключ на этом времени переписывается, а не дублируется: два ключа на
-        // одном мгновении клип толкует как придётся, а человек видел один.
         if (const auto existing = key_at_(name, property, time)) {
             parts.push_back(
                 std::make_unique<modify_keyframe_operation>(
@@ -233,8 +229,6 @@ auto keyframe_service::step_to_key(
     const float32 from = state_->anim.timeline_cursor;
     std::optional<float32> best;
 
-    // По всем каналам дорожки сразу: человек прыгает по позам узла, а не по
-    // ключам отдельно взятого канала.
     for (const auto property : pose_properties) {
         const auto* channel_var = track->get_channel(property);
         if (channel_var == nullptr) {
@@ -299,8 +293,6 @@ auto keyframe_service::move_keyframe(
         return;
     }
 
-    // Ключ, на время которого его привели, уступает место: иначе на одном
-    // мгновении оказалось бы два, и клип брал бы из них произвольный.
     std::vector<std::unique_ptr<base_operation>> parts;
 
     if (const auto occupied = key_at_(track_name, property, time);

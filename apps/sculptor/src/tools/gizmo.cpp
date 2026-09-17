@@ -14,13 +14,9 @@ namespace {
 
 constexpr float32 two_pi = 2.0F * math::pi;
 
-// Сегментов по большой и малой окружности тора. Манипулятор мелкий на экране, и
-// разница между шестнадцатью и тридцатью двумя гранями не видна, а вершин вдвое
-// меньше.
 constexpr int32 major_segments = 28;
 constexpr int32 minor_segments = 6;
 
-// Доля длины оси, которую занимает наконечник.
 constexpr float32 head_fraction = 0.25F;
 
 constexpr float32 shaft_radius = 0.018F;
@@ -39,9 +35,6 @@ constexpr float32 pick_tolerance = 0.09F;
 
 constexpr float32 snap_translate = 0.5F;
 
-// Шаг точки вращения — полвокселя, и он не отключается: середина вокселя
-// приходится ровно на половину, а осмысленных значений между этими двумя у
-// точки вращения нет.
 constexpr float32 snap_pivot = 0.5F;
 constexpr float32 snap_rotate    = 15.0F * math::deg_to_rad;
 constexpr float32 snap_scale     = 0.1F;
@@ -50,8 +43,6 @@ constexpr auto axis_x = vec3f{1.0F, 0.0F, 0.0F};
 constexpr auto axis_y = vec3f{0.0F, 1.0F, 0.0F};
 constexpr auto axis_z = vec3f{0.0F, 0.0F, 1.0F};
 
-// Два орта, дополняющие ось до базиса. Ось единичная, поэтому достаточно взять
-// любой неколлинеарный вектор — им служит наименьшая по модулю координатная ось.
 auto basis_of(const vec3f& axis) -> std::pair<vec3f, vec3f> {
     const auto ax = std::abs(axis.x);
     const auto ay = std::abs(axis.y);
@@ -78,8 +69,6 @@ auto axis_index(gizmo_axis axis) -> std::size_t {
     }
 }
 
-// Цвета те же, что у осей сцены в app.cpp: X синяя, Y зелёная, Z красная.
-// Расходиться с ними нельзя — рядом на экране это читалось бы как разные оси.
 auto axis_color(gizmo_axis axis, bool highlighted) -> color {
     const auto base = [axis]() -> color {
         switch (axis) {
@@ -92,9 +81,6 @@ auto axis_color(gizmo_axis axis, bool highlighted) -> color {
     return highlighted ? colors::amber_5 : base;
 }
 
-// Параметр вдоль оси, в котором прямая ближе всего к лучу. Вырожденный случай —
-// взгляд вдоль самой оси: тогда ближайшая точка не определена, и ручка просто
-// не берётся.
 auto closest_on_axis(
     const vec3f& origin, const vec3f& axis, const spatial::ray& r, float32& t_out
 ) -> bool {
@@ -117,15 +103,11 @@ auto closest_on_axis(
 auto distance_to_ray(const vec3f& point, const spatial::ray& r) -> float32 {
     const auto w = point - r.start;
 
-    // Луч, а не прямая: точка позади камеры обязана меряться до её начала,
-    // иначе она «попадает» в ручку, оказавшуюся за спиной.
     const auto t       = std::max(math::dot(w, r.direction), 0.0F);
     const auto closest = r.start + (r.direction * t);
     return math::length(point - closest);
 }
 
-// Пересечение луча с плоскостью кольца. Скользящий взгляд отсекается: в нём
-// точка пересечения улетает, и угол скачет.
 auto ray_plane(
     const vec3f& origin, const vec3f& normal, const spatial::ray& r, vec3f& hit_out
 ) -> bool {
@@ -164,8 +146,6 @@ gizmo::gizmo(
     , commit_(commit) {}
 
 auto gizmo::mode_() const -> gizmo_mode {
-    // Начатый жест доигрывается тем режимом, которым начался: переключить его
-    // посреди перетаскивания значит мерить смещение одной ручки углом другой.
     if (dragging_) {
         return drag_mode_;
     }
@@ -182,16 +162,12 @@ auto gizmo::build_frame_(
 
     const auto& tc = world.get<ecs::transform_component>(ent);
 
-    // Начало координат узла и есть его точка вращения: объём висит вокруг неё
-    // со сдвигом на собственный pivot, но сама она в матрице узла — это ноль.
     const auto pivot = tc.get_world_matrix() * vec3f{0.0F, 0.0F, 0.0F};
 
     frame fr;
     fr.pivot = pivot;
     fr.axes  = {axis_x, axis_y, axis_z};
 
-    // Точка вращения задана в вокселях объёма, а объём повёрнут вместе с самим
-    // узлом — значит, и ручки ходят по его осям, а не по родительским.
     if (target_ == gizmo_target::pivot) {
         const auto& node_matrix = tc.get_world_matrix();
         const auto base         = node_matrix * vec3f{0.0F, 0.0F, 0.0F};
@@ -201,9 +177,6 @@ auto gizmo::build_frame_(
         }
     }
 
-    // Позиция и поворот узла заданы в пространстве родителя, поэтому и ручки
-    // ходят по его осям: иначе дельта по мировой оси легла бы в локальные поля
-    // криво, стоит родителю повернуться.
     if (target_ == gizmo_target::node && world.has<ecs::hierarchy_component>(ent)) {
         const auto parent = world.get<ecs::hierarchy_component>(ent).get_parent();
         if (parent.is_valid() && world.has<ecs::transform_component>(parent)) {
@@ -258,9 +231,6 @@ auto gizmo::pick_(
             continue;
         }
 
-        // Ручка масштаба — кубик на конце оси, и меряться надо до его центра.
-        // Отрезком его не описать: куб стоит поперёк оси и выступает за её
-        // конец, так что ограничение по длине резало ровно половину ручки.
         if (mode_() == gizmo_mode::scale) {
             const auto center = fr.pivot + (axis * fr.scale);
             const auto reach  = std::max(handle_half * 1.8F, pick_tolerance) * fr.scale;
@@ -300,8 +270,6 @@ auto gizmo::pick_(
     return best;
 }
 
-// Шаг — по требованию, а не по умолчанию: манипулятором чаще всего правят позу
-// для кейфрейма, а её подбирают на глаз.
 auto gizmo::snap_enabled_() const -> bool {
     return engine_->get_window().is_key_pressed(plat::keyboard::keys::LEFT_CONTROL);
 }
@@ -386,8 +354,6 @@ auto gizmo::on_mouse_release() -> void {
     dragging_ = false;
     active_   = gizmo_axis::none;
 
-    // Превью остаётся как есть: узел уже стоит там, куда его привели, а в файл
-    // эту позу положит запись ключа.
     if (commit_ == gizmo_commit::preview) {
         return;
     }
@@ -400,9 +366,6 @@ auto gizmo::on_mouse_release() -> void {
     auto& world    = engine_->get_world();
     const auto ent = state_->scene.name_to_entity[name];
 
-    // Жест — одна запись в истории. Пока тянут, правка идёт напрямую, и только
-    // на отпускании операция получает пару «было / стало»: иначе Ctrl+Z
-    // откатывал бы по кадру.
     if (target_ == gizmo_target::pivot) {
         const auto final_pivot = world.get<ecs::model_component>(ent).get_pivot();
         world.system<ecs::model_system>().modify(ent).set_pivot(start_pivot_);
@@ -477,8 +440,6 @@ auto gizmo::apply_pivot_(
         default: return;
     }
 
-    // Сам маркер при этом не двигается: он стоит в начале координат узла, а
-    // переезжает объём. Точку ставят не «сюда», а «на этот воксель модели».
     engine_->get_world().system<ecs::model_system>().modify(ent).set_pivot(next);
 }
 
@@ -502,8 +463,6 @@ auto gizmo::apply_rotate_(
         delta = snapped(delta, snap_rotate);
     }
 
-    // Ось берётся локальная: поворот узла задан относительно родителя, и
-    // накладывается он слева, как вращение всей его системы координат.
     const std::array<vec3f, 3> local_axes{axis_x, axis_y, axis_z};
     const auto rotation =
         quat_from_axis_angle(local_axes[axis_index(active_)], delta) * start_transform_.get_rotation();
@@ -526,8 +485,6 @@ auto gizmo::apply_scale_(
         return;
     }
 
-    // Тянут на длину манипулятора — масштаб меняется вдвое: так жест одинаково
-    // ощущается и вблизи, и издали, где сам манипулятор крупнее в мире.
     auto factor = 1.0F + ((t - start_offset_) / fr.scale);
     if (snap_enabled_()) {
         factor = snapped(factor, snap_scale);
@@ -615,8 +572,6 @@ auto gizmo::draw_torus_(
     const auto radius = ring_radius * fr.scale;
     const auto tube   = tube_radius * fr.scale;
 
-    // Тор, а не лента: плоское кольцо исчезает, когда смотришь на него с ребра,
-    // а целятся в него чаще всего именно в этом положении.
     for (int32 i = 0; i < major_segments; ++i) {
         const auto a0 = two_pi * static_cast<float32>(i) / major_segments;
         const auto a1 = two_pi * static_cast<float32>(i + 1) / major_segments;

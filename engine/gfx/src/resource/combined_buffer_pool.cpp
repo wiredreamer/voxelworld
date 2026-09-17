@@ -107,11 +107,6 @@ auto combined_buffer_pool::process_destroyed_(world_type& world) -> void {
     }
 }
 
-// Шаг в полтора раза, а не вдвое. Меш занимает весь свой класс независимо от того,
-// сколько из него использует, поэтому удвоение оставляет в среднем четверть каждого
-// слота пустой, а на классе с самыми большими чанками замерено 43%. Степени двойки
-// здесь никому не нужны: геометрия — это storage-буфер, читаемый по индексу, а не
-// вершинная привязка.
 auto combined_buffer_pool::get_chunk_size_for_mesh(
     uint32 quad_count
 ) -> buffer_chunk_size {
@@ -127,9 +122,6 @@ auto combined_buffer_pool::get_index_buffer() const -> vk::Buffer {
     return index_buffer_ ? index_buffer_->get_buffer() : nullptr;
 }
 
-// Один шаблон на все меши всех буферов: квад i — это 4i+0, 4i+1, 4i+2, 4i+2, 4i+3,
-// 4i+0, а команда отрисовки сдвигает его на нужные квады. Длины ему хватает по
-// самому большому классу размера: длиннее своего слота меш не бывает.
 auto combined_buffer_pool::ensure_index_pattern_(uint32 quads) -> void {
     if (index_buffer_ && quads <= index_quads_) {
         return;
@@ -146,14 +138,6 @@ auto combined_buffer_pool::ensure_index_pattern_(uint32 quads) -> void {
 
     const auto bytes = pattern.size() * sizeof(uint32);
 
-    // Не через кадровое кольцо staging. У того кольца бюджет на кадр, а проверка
-    // границ — assert, поэтому в релизной сборке мегабайт индексов уезжал прямо за
-    // окно и поверх данных следующего кадра: испорченные команды отрисовки и мировой
-    // проход в тридцать пять миллисекунд. Вместо этого — собственный host-visible
-    // буфер с копированием на стороне устройства. Списывается, а не отпускается:
-    // копия пока только записана в команды, а классов размера в одном кадре может
-    // всплыть несколько, и освобождение источника под ожидающей копией — это висячий
-    // дескриптор в vkCmdCopyBuffer.
     if (index_upload_) {
         deletion_->retire(std::move(index_upload_));
     }
@@ -198,8 +182,6 @@ auto combined_buffer_pool::update_meshes_(
     auto& model_changed = world.changed<model_component>();
     sorted_merge_range(mesh_pending_entities_, model_changed.begin(), model_changed.end());
 
-    // Расстояние — это два обращения к компонентам, поэтому вычисляется по разу на
-    // сущность, а не дважды на сравнение.
     sort_keys_.clear();
     sort_keys_.reserve(mesh_pending_entities_.size());
     for (entity ent : mesh_pending_entities_) {
@@ -243,8 +225,6 @@ auto combined_buffer_pool::update_meshes_(
         const bool has_transform = world.has<transform_component>(ent);
 
         if (!has_model || !has_transform) {
-            // Флаг скрытия принадлежал снятой модели. Вернувшаяся модель видима, и
-            // ветка трансформа его не перечитает, пока трансформ не тронут.
             hidden_entities_.erase(ent);
 
             if (entity_buffer_infos_.contains(ent)) {
@@ -279,8 +259,6 @@ auto combined_buffer_pool::update_meshes_(
             continue;
         }
 
-        // До проверки на пустой меш ниже: у чанка сплошной породы нет геометрии, но
-        // взгляд он всё равно перекрывает.
         chunk_links_[ent] = mesh_ptr->links;
 
         const auto quad_count = static_cast<uint32>(mesh_ptr->quads.size());
@@ -291,8 +269,6 @@ auto combined_buffer_pool::update_meshes_(
 
         buffer_chunk_size required_chunk_size = get_chunk_size_for_mesh(quad_count);
 
-        // Через staging теперь едет только сам меш: остаток класса размера остаётся
-        // как был и не рисуется.
         const vk::DeviceSize mesh_staging_cost = (quad_count * sizeof(quad)) + sizeof(uint32) +
             sizeof(draw_command) + (sizeof(mat4f) * 2);
 
@@ -368,17 +344,6 @@ auto combined_buffer_pool::update_meshes_(
     evict_uploaded_(world, pool);
 }
 
-// Копия меша на CPU уходит, как только геометрия оказалась на GPU: колонка рельефа
-// — это мегабайты, и второй раз её никто не читает. Чего ей делать нельзя, так это
-// уходить, пока в очереди на ту же модель стоит другая сущность. Копия существует
-// только в mesh_pool, и сущность, не нашедшая её, возвращается в список ожидающих —
-// где её уже никто и никогда не построит, потому что меш заказывается для
-// model_component только в тот кадр, когда он меняется.
-//
-// В это и упирались две сущности, делящие одну модель. Первая загружалась, копию
-// отпускали, и все остальные ждали вечно. Сторона GPU проблемой не была никогда:
-// combined_buffer ключует геометрию по индексу модели и считает ссылки, поэтому
-// вторая сущность делит те же квады, что записала первая.
 auto combined_buffer_pool::evict_uploaded_(
     world_type& world, mesh_pool& pool
 ) -> void {
@@ -386,9 +351,6 @@ auto combined_buffer_pool::evict_uploaded_(
         return;
     }
 
-    // По идентичности, а не по индексу: сущность, стоящая в очереди за более новым
-    // поколением той же модели, ждёт другой меш, и придерживать ради неё старый
-    // значило бы держать живой память, которую никто не прочтёт.
     awaited_models_.clear();
     for (entity ent : mesh_pending_entities_) {
         if (!world.has<model_component>(ent)) {
@@ -407,10 +369,6 @@ auto combined_buffer_pool::evict_uploaded_(
     }
 }
 
-// Скрытые объёмы гасятся тем же флагом, что и отсечённые чанки: геометрия остаётся
-// в буфере, и вернуть объём — значит лишь снова поднять флаг, а не заказывать меш,
-// копия которого на CPU давно отпущена. Обходится только список скрытых, а не все
-// модели: в мире их — каждый чанк.
 auto combined_buffer_pool::hide_marked_() -> void {
     for (const auto ent : hidden_entities_) {
         const auto it = entity_buffer_infos_.find(ent);
@@ -427,8 +385,6 @@ auto combined_buffer_pool::hide_marked_() -> void {
 auto combined_buffer_pool::update_chunk_visibility_(
     world_type& world, const vec3f& camera_pos
 ) -> void {
-    // Всё начинается видимым. Скрываются только чанки: у персонажа или предмета нет
-    // ни связности, ни места в обходе.
     visibility_flags_.resize(buffers_.size());
     for (std::size_t i = 0; i < buffers_.size(); ++i) {
         visibility_flags_[i].assign(buffers_[i]->get_stats().instance_capacity, 1U);
@@ -458,10 +414,6 @@ auto combined_buffer_pool::update_chunk_visibility_(
         return std::pair{it->second.buffer_index, index};
     };
 
-    // Скрыть все чанки, а затем позволить обходу вернуть те, до которых достаёт
-    // взгляд. Тот же проход собирает вертикальный размах мира: выше и ниже него
-    // чанков нет вовсе, и обход разошёлся бы по этой пустоте и спустился бы куда
-    // угодно.
     vec3i lo{std::numeric_limits<int32>::max(), std::numeric_limits<int32>::max(),
              std::numeric_limits<int32>::max()};
     vec3i hi{std::numeric_limits<int32>::lowest(), std::numeric_limits<int32>::lowest(),
@@ -516,18 +468,12 @@ auto combined_buffer_pool::update_chunk_visibility_(
     };
     const vec3i camera_chunk = grid->world_to_chunk_coord(camera_voxel);
 
-    // Открытое небо над миром реально, и камера стоит в нём. Под миром же нет ничего
-    // вовсе, а поскольку незагруженные чанки считаются открытыми, пуск обхода в этот
-    // пустой слой позволяет ему пройти под всем и подняться с другой стороны — так
-    // здесь и намерили в первый раз 0% скрытого. Пол обхода — это пол загруженного
-    // мира.
     lo.y = std::min(lo.y, camera_chunk.y);
     hi.y = std::max(hi.y + 1, camera_chunk.y);
 
-    // Дальше обход работает в ячейках связности, по нескольку на чанк.
     constexpr int32 per_side = vw::asset::chunk_links::cells_per_side;
     constexpr int32 cell_voxels =
-        vw::asset::chunk_links::cell_size * 1;  // in voxels, before voxel_scale
+        vw::asset::chunk_links::cell_size * 1;
 
     const auto to_chunk = [](int32 cell) -> int32 {
         return cell >= 0 ? cell / per_side : (cell - per_side + 1) / per_side;
@@ -541,7 +487,6 @@ auto combined_buffer_pool::update_chunk_visibility_(
         ((hi.x + 1) * per_side) - 1, ((hi.y + 1) * per_side) - 1,
         ((hi.z + 1) * per_side) - 1};
 
-    // Ячейка, в которой стоит камера, внутри её чанка.
     const int32 scaled_cell = cell_voxels * grid->voxel_scale();
     const auto cell_of      = [scaled_cell](int32 world) -> int32 {
         return world >= 0 ? world / scaled_cell : (world - scaled_cell + 1) / scaled_cell;
@@ -552,33 +497,24 @@ auto combined_buffer_pool::update_chunk_visibility_(
     ecs::walk_visible_chunks(
         origin, cell_lo, cell_hi,
         [&](vec3i cell) -> const vw::asset::cell_links* {
-            // Сплошную породу никогда не мешат, поэтому собственных связей у неё
-            // нет, — но это ровно то, чего обходу нельзя считать неизвестным:
-            // неизвестное читается как полностью открытое, и взгляд прошёл бы прямо
-            // сквозь коренную породу.
             static const vw::asset::cell_links sealed{};
 
             auto* c = grid->get_chunk(
                 vec3i{to_chunk(cell.x), to_chunk(cell.y), to_chunk(cell.z)});
             if (c == nullptr) {
-                return nullptr;  // not loaded
+                return nullptr;
             }
             if (c->is_solid()) {
                 return &sealed;
             }
             const auto it = chunk_links_.find(c->get_entity());
             if (it == chunk_links_.end()) {
-                return nullptr;  // not meshed yet, so nothing is known
+                return nullptr;
             }
             return &it->second.cells[vw::asset::chunk_links::cell_index(
                 to_sub(cell.x), to_sub(cell.y), to_sub(cell.z))];
         },
         [&, world_top = cell_hi.y](vec3i cell) -> bool {
-            // Небо — это всё, что выше верхушки данной колонки мира. Загруженная
-            // область — диск внутри квадратной коробки, поэтому колонок по углам нет
-            // вовсе, и объявление их небом на любой высоте позволяло обходу
-            // спуститься по углам и разойтись обратно под миром. Безопасный ответ
-            // там только один — «выше всего».
             const auto it = column_top_.find(vec2i{to_chunk(cell.x), to_chunk(cell.z)});
             if (it == column_top_.end()) {
                 return cell.y >= world_top;
@@ -586,7 +522,6 @@ auto combined_buffer_pool::update_chunk_visibility_(
             return to_chunk(cell.y) > it->second;
         },
         [&](const vw::asset::chunk_pocket& pocket) -> bool {
-            // В каком кармане своей ячейки стоит камера.
             const int32 voxels = grid->voxel_scale();
             const auto local   = [&](int32 world, int32 cell) -> int32 {
                 return (world / voxels) - (cell * vw::asset::chunk_links::cell_size);
@@ -636,8 +571,6 @@ auto combined_buffer_pool::update_transforms_(
     for (std::size_t i = 0; i < entities_to_process_.size(); ++i) {
         entity ent = entities_to_process_[i];
 
-        // До проверки буфера: скрыть можно и то, что ещё не загружено, и флаг
-        // обязан дождаться его появления.
         if (world.has<model_component>(ent) && !world.get<model_component>(ent).is_visible()) {
             hidden_entities_.insert(ent);
         } else {

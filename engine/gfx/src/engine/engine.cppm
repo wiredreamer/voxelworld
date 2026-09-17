@@ -23,8 +23,6 @@ using namespace ::vw::plat;
 
 export namespace vw::gfx {
 
-// Владелец окна, контекста Vulkan, рендерера и мира; крутит цикл кадра и раздаёт
-// приложению всё, до чего оно может дотянуться.
 class engine final {
 public:
     using renderer_type     = renderer;
@@ -54,7 +52,6 @@ public:
     [[nodiscard]] auto get_voxel_registry() const -> const voxel_registry&;
     [[nodiscard]] auto get_debug_tool() const -> debug_window_type&;
 
-    // Ноль означает, что загрузчик выберет своё умолчание.
     [[nodiscard]] auto get_terrain_workers() const -> uint32 {
         return bench_.terrain_workers;
     }
@@ -98,8 +95,6 @@ private:
     uint64 frame_index_       = 0;
     uint64 bench_start_frame_ = 0;
 
-    // Сколько сцена стримилась целиком: всё сгенерировано, смешено и загружено.
-    // Единственное число, которое двигают счётчики воркеров.
     float32 ready_ms_    = 0.0f;
     uint64 ready_frames_ = 0;
     bool ready_recorded_ = false;

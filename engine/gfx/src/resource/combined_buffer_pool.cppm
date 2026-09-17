@@ -40,9 +40,6 @@ struct chunk_cull_stats {
     uint32 visible = 0;
     float32 walk_ms = 0.0f;
 
-    // Насколько далеко ушёл обход и через что он шёл. Ячейки без чанка считаются
-    // открытым воздухом, поэтому большой `visited_empty` означает, что обход идёт
-    // вокруг мира, а не сквозь него.
     uint32 visited       = 0;
     uint32 visited_empty = 0;
     uint32 sealed        = 0;
@@ -60,10 +57,6 @@ struct combined_buffer_pool_stats {
     uint32 instance_capacity = 0;
     uint32 instance_count    = 0;
 
-    // Сущности, чья загрузка не влезла в кадровый бюджет staging и была отложена на
-    // следующий кадр. Застрявшее выше нуля значение означает, что кольцо съедают
-    // быстрее, чем оно пополняется, а ждущий там меш — это геометрия, которой ещё
-    // нет на экране; выглядит это дырой в мире, а не заминкой.
     uint32 mesh_pending     = 0;
     uint32 transform_pending = 0;
 
@@ -99,7 +92,6 @@ public:
 
     [[nodiscard]] auto get_buffers() const -> const std::vector<std::unique_ptr<combined_buffer>>&;
 
-    // Шаблон индексов квада, общий для всех буферов и всех мешей в них.
     [[nodiscard]] auto get_index_buffer() const -> vk::Buffer;
 
     [[nodiscard]] static auto get_chunk_size_for_mesh(
@@ -108,11 +100,6 @@ public:
 
     [[nodiscard]] auto get_stats() const -> const combined_buffer_pool_stats&;
 
-    // По умолчанию выключено: на нынешнем мире обход ничего не скрывает и стоит
-    // миллисекунд. Одно ложное отверстие заливает пещерную сеть, связную почти
-    // везде, а размер ячейки, нужный чтобы этого избежать, растёт вместе с миром.
-    // Оставлено ради звука, навигации и стриминга: там нужен точный ответ, а не
-    // консервативный.
     auto set_chunk_cull_enabled(bool enabled) -> void {
         chunk_cull_enabled_ = enabled;
     }
@@ -121,9 +108,6 @@ public:
         return chunk_cull_enabled_;
     }
 
-    // Где в этом кадре геометрия сдвинулась, появилась или пропала. Потребляется
-    // картой теней: она перерисовывает только те каскады, которых эти объёмы
-    // касаются.
     [[nodiscard]] auto get_touched_bounds() const -> std::span<const vw::spatial::aabb> {
         return touched_bounds_;
     }
@@ -161,28 +145,16 @@ private:
     std::vector<vw::spatial::aabb> touched_bounds_;
     std::vector<std::pair<float32, entity>> sort_keys_;
 
-    // Модели, чья геометрия дошла до GPU в этом кадре, и модели, которых ждут ещё
-    // стоящие в очереди сущности. Первое множество минус второе — это копия на CPU,
-    // которую можно отпустить, см. evict_uploaded_.
     std::vector<vw::asset::model_identity> uploaded_models_;
     std::unordered_set<vw::asset::model_identity> awaited_models_;
 
     bool chunk_cull_enabled_ = false;
     std::vector<std::vector<uint32>> visibility_flags_;
 
-    // Сущности, чья модель скрыта. Ведётся по смене трансформа — по тому каналу
-    // флаг и заявляется, — чтобы флаги видимости не обходили каждый кадр все
-    // модели мира ради пары скрытых.
     std::unordered_set<entity> hidden_entities_;
 
-    // Связность каждого смешенного чанка, включая те, у которых геометрии нет
-    // вовсе. Сплошная порода даёт пустой меш и до буфера не доходит, но именно об
-    // неё обход и обязан останавливаться, — поэтому это не может жить рядом с
-    // инстансами.
     std::unordered_map<entity, vw::asset::chunk_links> chunk_links_;
 
-    // Верхний загруженный чанк колонки — то, что отделяет небо от пробела внутри
-    // мира.
     std::unordered_map<vec2i, int32> column_top_;
 
     mutable combined_buffer_pool_stats stats_;

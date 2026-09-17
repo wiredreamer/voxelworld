@@ -36,11 +36,11 @@ auto move_pivot_tool::render(
 }
 
 auto move_pivot_tool::on_key_press(
-    const plat::key_press_event& /*ev*/
+    const plat::key_press_event&
 ) -> void {}
 
 auto move_pivot_tool::on_mouse_move(
-    const plat::mouse_move_event& /*ev*/
+    const plat::mouse_move_event&
 ) -> void {
     const auto ent = target_entity_();
     if (ent.is_valid()) {

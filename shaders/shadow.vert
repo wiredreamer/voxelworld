@@ -16,14 +16,10 @@ layout(set = 1, binding = 1, std430) readonly buffer NormalMatrices {
     mat4 normals[];
 } normalMatrices;
 
-// Same records the colour pass reads, same unrolling; the shadow pass only
-// needs the position out of them.
 struct Quad {
     uint data0;
     uint data1;
 
-    // Shadows do not read the light, but the record has to be the size the
-    // buffer was written at.
     uint data2;
 };
 
@@ -35,14 +31,9 @@ layout(push_constant) uniform ShadowPushConstants {
     uint cascadeIndex;
 } pushConstants;
 
-// Which world axis each face's two tangents run along. gfx::quad::pack carries
-// the same two tables and packs the extents in this order.
 const uint TANGENT_U_AXIS[6] = uint[6](2u, 2u, 0u, 0u, 0u, 0u);
 const uint TANGENT_V_AXIS[6] = uint[6](1u, 1u, 2u, 2u, 1u, 1u);
 
-// data1 keeps the two tangent extents, one less than the cell count, instead of
-// the far corner: along the face axis the far corner is always the near one
-// plus a cell, so storing it said nothing the normal had not already said.
 uvec3 unpackMax(uint data1, uvec3 mn, uint normal_id) {
     uvec3 mx = mn;
     mx[normal_id >> 1u] += 1u;
@@ -52,12 +43,12 @@ uvec3 unpackMax(uint data1, uvec3 mn, uint normal_id) {
 }
 
 const uvec3 FACE_VERTS[6][4] = uvec3[6][4](
-    uvec3[4](uvec3(1, 0, 0), uvec3(1, 0, 1), uvec3(1, 1, 1), uvec3(1, 1, 0)),  // +X
-    uvec3[4](uvec3(0, 0, 0), uvec3(0, 1, 0), uvec3(0, 1, 1), uvec3(0, 0, 1)),  // -X
-    uvec3[4](uvec3(0, 1, 0), uvec3(1, 1, 0), uvec3(1, 1, 1), uvec3(0, 1, 1)),  // +Y
-    uvec3[4](uvec3(0, 0, 0), uvec3(0, 0, 1), uvec3(1, 0, 1), uvec3(1, 0, 0)),  // -Y
-    uvec3[4](uvec3(0, 0, 1), uvec3(0, 1, 1), uvec3(1, 1, 1), uvec3(1, 0, 1)),  // +Z
-    uvec3[4](uvec3(1, 0, 0), uvec3(1, 1, 0), uvec3(0, 1, 0), uvec3(0, 0, 0))   // -Z
+    uvec3[4](uvec3(1, 0, 0), uvec3(1, 0, 1), uvec3(1, 1, 1), uvec3(1, 1, 0)),
+    uvec3[4](uvec3(0, 0, 0), uvec3(0, 1, 0), uvec3(0, 1, 1), uvec3(0, 0, 1)),
+    uvec3[4](uvec3(0, 1, 0), uvec3(1, 1, 0), uvec3(1, 1, 1), uvec3(0, 1, 1)),
+    uvec3[4](uvec3(0, 0, 0), uvec3(0, 0, 1), uvec3(1, 0, 1), uvec3(1, 0, 0)),
+    uvec3[4](uvec3(0, 0, 1), uvec3(0, 1, 1), uvec3(1, 1, 1), uvec3(1, 0, 1)),
+    uvec3[4](uvec3(1, 0, 0), uvec3(1, 1, 0), uvec3(0, 1, 0), uvec3(0, 0, 0))
 );
 
 void main() {

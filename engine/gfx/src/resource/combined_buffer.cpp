@@ -13,14 +13,6 @@ namespace vw::gfx {
 
 namespace {
 
-// Отсев по направлению грани в cull.comp меряет наблюдателя мировой коробкой
-// инстанса, а это верно ровно до тех пор, пока оси меша совпадают с мировыми.
-// Повёрнутая модель смотрит своим +X куда угодно, и целое направление её граней
-// пропадало, стоило камере зайти не с той стороны коробки. Поворот виден только
-// здесь, поэтому ответ едет на устройство вместе с границами.
-//
-// Отражение и разворот на пол-оборота уходят вместе с поворотами: оси они
-// сохраняют, но меняют местами стороны, а шейдер читает их таблицей.
 auto is_axis_aligned(
     const mat4f& transform_matrix
 ) -> bool {
@@ -42,8 +34,6 @@ auto is_axis_aligned(
 
 }  // namespace
 
-// Результат освобождения отбрасывается везде в деструкторах: пул всё равно
-// уходит следом, а поднимать отсюда ошибку некуда.
 combined_buffer::~combined_buffer() {
     if (compute_descriptor_set_ && descriptor_pool_) {
         static_cast<void>(
@@ -73,9 +63,6 @@ combined_buffer::combined_buffer(
     , descriptor_pool_(descriptor_pool)
     , descriptor_set_layout_(descriptor_set_layout)
     , compute_descriptor_set_layout_(compute_descriptor_set_layout) {
-    // При фиксированном числе слотов крупнейшие классы сразу держат мегабайты ради
-    // горстки мешей — у одного класса замерено 4,6 МБ на пять штук. Поэтому нижняя
-    // граница задана бюджетом в байтах, а дальше работает рост.
     constexpr uint32 initial_bytes = 256 * 1024;
     const auto slot_bytes = chunk_size_.quad_count * static_cast<uint32>(sizeof(quad));
     mesh_capacity_ = std::clamp(initial_bytes / std::max(slot_bytes, 1u), 4u, default_mesh_capacity_);
@@ -203,8 +190,6 @@ auto combined_buffer::allocate(
 auto combined_buffer::write_bounds_(
     uint32 instance_index, const mat4f& transform_matrix, const vw::spatial::aabb& bounds
 ) -> void {
-    // Четвёртая компонента минимума говорит шейдеру отсева, стоит ли модель по
-    // мировым осям; у максимума она свободна.
     const std::array<vec4f, 2> aabb_data{
         vec4f{
             bounds.min.x, bounds.min.y, bounds.min.z,
@@ -221,14 +206,9 @@ auto combined_buffer::write_bounds_(
     );
 }
 
-// Команда рисует меш, а не класс размера, в который он попал. Всё за quad_count —
-// остатки того, кто держал слот раньше, и не читается никогда.
 auto combined_buffer::write_draw_command_(
     uint32 instance_index, const mesh_allocation& mesh_alloc
 ) -> void {
-    // По команде на направление грани. Каждый меш индексирует один и тот же общий
-    // шаблон с начала; gl_VertexIndex наводит на серию квадов этого направления
-    // vertex_offset.
     std::array<draw_command, faces_per_mesh> commands{};
     uint32 offset = mesh_alloc.quad_offset;
 
@@ -311,8 +291,6 @@ auto combined_buffer::write_mesh(
     mesh_alloc.generation  = model_id.generation;
     mesh_alloc.face_counts = mesh_data.face_counts;
 
-    // Перестроение меша меняет, какая часть слота жива, поэтому команду надо
-    // переписать каждому инстансу, рисующему этот меш.
     for (const auto& [ent, ent_alloc] : entity_allocations_) {
         if (ent_alloc.model_index == model_id.index) {
             write_draw_command_(ent_alloc.instance_index, mesh_alloc);
@@ -404,10 +382,6 @@ auto combined_buffer::get_quad_buffer() const -> vk::Buffer {
 auto combined_buffer::expand_mesh_buffers_() -> void {
     const auto old_bytes = (mesh_capacity_ * chunk_size_.quad_count) * sizeof(quad);
 
-    // В полтора раза, а не вдвое. Буфер остаётся там, где его оставил прошлый рост,
-    // поэтому удвоение оставляет пустым от нуля до половины — замерено 47% пустоты
-    // на классе, который держит большую часть мира. Платой становятся лишние копии
-    // во время стриминга сцены, а они вне кадрового пути.
     mesh_capacity_ += (mesh_capacity_ + 1) / 2;
 
     auto new_quad_buffer = std::make_unique<device_storage_buffer>(
@@ -416,15 +390,12 @@ auto combined_buffer::expand_mesh_buffers_() -> void {
 
     staging_->replace_buffer(quad_buffer_->get_buffer(), new_quad_buffer->get_buffer());
 
-    // После replace_buffer, иначе копирование нацелилось бы само на себя
     staging_->copy_buffer(
         quad_buffer_->get_buffer(), 0, new_quad_buffer->get_buffer(), 0, old_bytes
     );
 
     deletion_->retire(std::exchange(quad_buffer_, std::move(new_quad_buffer)));
 
-    // Геометрия теперь читается через дескрипторный набор, а не привязывается
-    // вершинным буфером на каждую отрисовку, поэтому набору надо сообщить о новом.
     update_descriptor_set_();
 }
 
@@ -469,7 +440,6 @@ auto combined_buffer::expand_instance_buffers_() -> void {
         aabb_buffer_->get_buffer(), new_aabb_buffer->get_buffer()
     );
 
-    // После replace_buffer, иначе копирования нацелились бы сами на себя
     staging_->copy_buffer(
         model_matrix_buffer_->get_buffer(), 0,
         new_model_matrix_buffer->get_buffer(), 0,
@@ -519,7 +489,6 @@ auto combined_buffer::expand_instance_buffers_() -> void {
         )
     ));
 
-    // Переносить нечего: видимость переписывается целиком каждый кадр.
     deletion_->retire(std::exchange(
         visibility_buffer_,
         std::make_unique<device_storage_buffer>(

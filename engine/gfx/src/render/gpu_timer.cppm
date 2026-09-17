@@ -50,10 +50,6 @@ struct gpu_timing_stats {
     bool supported = false;
 };
 
-// Все поля render_timing_stats меряют запись команд, а не выполнение: кадр упирается
-// в GPU, поэтому числа со стороны CPU ничего не говорят о том, куда уходит время.
-// Увидеть это можно только метками времени. Стадии вложены друг в друга, а GPU их
-// перекрывает, поэтому части не обязаны складываться в целое.
 class gpu_timer final {
 public:
     gpu_timer(vulkan_context& context, uint32 frames_in_flight);

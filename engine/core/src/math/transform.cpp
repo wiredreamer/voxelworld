@@ -38,8 +38,6 @@ auto transform::from_matrix(
 
     vec3f scale{math::length(axes[0]), math::length(axes[1]), math::length(axes[2])};
 
-    // Отражение поворотом не выразить: знак определителя уходит в масштаб по
-    // первой оси, а поворот остаётся собственным.
     if (math::dot(math::cross(axes[0], axes[1]), axes[2]) < 0.0F) {
         scale.x = -scale.x;
     }
@@ -50,8 +48,6 @@ auto transform::from_matrix(
         }
     }
 
-    // Столбцы — оси поворота; кватернион восстанавливается по наибольшему из
-    // четырёх кандидатов, чтобы не делить на число около нуля.
     const float32 r00 = axes[0].x;
     const float32 r11 = axes[1].y;
     const float32 r22 = axes[2].z;

@@ -23,7 +23,7 @@ auto model_system::on_remove(entity e) -> void {
     world_->registry().request_change<model_component>(e);
 }
 
-auto model_system::update(float32 /*dt*/) -> void {
+auto model_system::update(float32) -> void {
     auto& reg       = world_->registry();
     auto& requested = reg.requested<model_component>();
     for (auto ent : requested) {
@@ -78,9 +78,6 @@ auto model_system::model_modifier::set_visible(
 
     component_->visible_ = visible;
 
-    // Заявляется по трансформу, как и точка вращения: геометрия не менялась, и
-    // изменение модели погнало бы меш на пересборку, а у редактора — пометило
-    // бы объём несохранённым. Буфер рендера видит смену в ветке трансформа.
     system_->world_->registry().request_change<transform_component>(entity_);
 }
 
@@ -93,9 +90,6 @@ auto model_system::model_modifier::set_pivot(
 
     component_->model_->set_pivot(pivot);
 
-    // Меняется место объёма, а не его геометрия, поэтому правка заявляется по
-    // трансформу: изменение модели гонит меш на пересборку, а матрицу в буфере
-    // рендера переписывает именно ветка трансформа.
     system_->world_->registry().request_change<transform_component>(entity_);
 }
 

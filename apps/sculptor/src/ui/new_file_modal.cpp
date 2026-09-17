@@ -20,7 +20,7 @@ new_file_modal::new_file_modal(
     : engine_(&eng), state_(&st), op_manager_(&op_manager) {}
 
 auto new_file_modal::render(
-    float /*delta_time*/
+    float
 ) -> void {
     if (state_->ui.need_new_file_modal) {
         ImGui::OpenPopup("New File");

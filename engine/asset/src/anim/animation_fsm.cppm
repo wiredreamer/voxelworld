@@ -9,8 +9,6 @@ import :anim.clip;
 
 export namespace vw::asset {
 
-// Независимый проигрыватель одного клипа с маской целей: смешивается с клипом,
-// который заменил, и появляется или гаснет целиком.
 struct animation_layer {
     std::shared_ptr<animation_clip> clip;
     animation_state state         = animation_state::stopped;
@@ -51,18 +49,10 @@ struct animation_layer {
     }
 };
 
-// Доска параметров: плоский список пар. Их единицы, линейный поиск по ним
-// дешевле хеша, и порядок в файле совпадает с порядком здесь.
-//
-// Тип один — число. Булево живёт здесь же нулём и единицей, целое точным
-// значением: отдельные типы стоили бы варианта в каждом сравнении ради того,
-// что и так помещается.
 class fsm_blackboard final {
 public:
     auto set(std::string_view name, float32 value) -> void;
 
-    // Нет параметра — ноль, а не отказ: условие по незаполненному параметру
-    // просто не выполняется, и автомат остаётся там, где стоял.
     [[nodiscard]] auto get(std::string_view name) const -> float32;
 
     [[nodiscard]] auto entries() const -> std::span<const std::pair<std::string, float32>> {
@@ -82,8 +72,6 @@ enum class fsm_compare : uint8 {
     greater_equal,
 };
 
-// Условие перехода — данные, а не лямбда: лямбду не записать в файл, и до этого
-// автомат мог существовать только в коде.
 struct fsm_condition {
     std::string parameter;
     fsm_compare compare = fsm_compare::greater;
@@ -99,8 +87,6 @@ public:
     struct transition_rule {
         std::string target_state;
 
-        // Все условия разом: «или» выражается двумя переходами в одно
-        // состояние, и читается это лучше, чем дерево из скобок в файле.
         std::vector<fsm_condition> conditions;
 
         std::string trigger_name;
@@ -136,8 +122,6 @@ public:
     auto add_state(state_node state) -> void;
     auto set_entry_state(std::string_view name) -> void;
 
-    // Переход из любого состояния. Проверяется раньше правил текущего: правило,
-    // объявленное для всех состояний, — это и есть «важнее того, что сейчас».
     auto add_any_transition(transition_rule rule) -> void;
 
     [[nodiscard]] auto get_current_state() const -> const std::string& {

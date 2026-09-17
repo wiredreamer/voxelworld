@@ -30,7 +30,7 @@ auto create_clip_modal::open() -> void {
 }
 
 auto create_clip_modal::render(
-    float /*delta_time*/
+    float
 ) -> void {
     if (need_open_) {
         ImGui::OpenPopup("Create Animation Clip");

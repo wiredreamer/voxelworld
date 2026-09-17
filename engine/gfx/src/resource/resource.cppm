@@ -1,6 +1,5 @@
 export module vw.gfx:resource;
 
-// Собирает партиции GPU-ресурсов: буферы, мешер, пулы под меши и свет.
 export import :meshing;
 export import :mesh_pool;
 export import :gpu_buffers;

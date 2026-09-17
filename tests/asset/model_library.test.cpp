@@ -9,8 +9,6 @@ using namespace vw;
 
 namespace {
 
-// Библиотека работает с настоящими файлами, поэтому каждому тесту нужен свой
-// каталог: общий оставил бы за собой .voxm предыдущего прогона.
 class temp_root final {
 public:
     explicit temp_root(std::string_view name)
@@ -50,8 +48,6 @@ TEST_CASE("a model survives a round trip through the library", "[library]") {
     const asset::asset_ref ref{"models/m_human/body.voxm"};
     REQUIRE(library.save(ref, *source).has_value());
 
-    // Ссылка ведёт от корня библиотеки, а не от текущего каталога: подкаталоги
-    // по дороге запись создаёт сама.
     REQUIRE(std::filesystem::exists(root.path() / "models/m_human/body.voxm"));
 
     asset::model_registry other_registry;
@@ -64,8 +60,6 @@ TEST_CASE("a model survives a round trip through the library", "[library]") {
     REQUIRE((*restored)->pivot() == vec3f{1.5F, 2.5F, 3.5F});
 }
 
-// Дедупликация по пути и есть причина, по которой ключом стала ссылка, а не имя
-// узла: два узла на одном .voxm обязаны править один объём, а не две копии.
 TEST_CASE("the library hands out one model per ref", "[library]") {
     const temp_root root{"library_dedup"};
     asset::model_registry registry;
@@ -96,8 +90,6 @@ TEST_CASE("a missing model is an error, not a crash", "[library]") {
     REQUIRE(missing.error() == asset::voxm_deserializer::error_type::file_open_failed);
 }
 
-// Объём, собранный не из файла, обязан попасть в кеш сразу: иначе следующая
-// загрузка того же пути прочитает его с диска вторым экземпляром.
 TEST_CASE("an adopted model answers the next lookup", "[library]") {
     const temp_root root{"library_adopt"};
     asset::model_registry registry;

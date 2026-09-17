@@ -85,7 +85,6 @@ private:
     void* mapped_memory_;
 };
 
-// Специализированные типы буферов
 class vertex_buffer final : public buffer {
 public:
     vertex_buffer(

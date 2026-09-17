@@ -14,8 +14,6 @@ namespace {
 
 constexpr int32 chunk_side = asset::chunk_occupancy::side;
 
-// The generated world, kept as occupancy per chunk -- which is exactly what the
-// mesher hands the connectivity build.
 class occupancy_world {
 public:
     occupancy_world(int32 columns, perlin_terrain_generator& gen) {
@@ -66,9 +64,6 @@ private:
               std::numeric_limits<int32>::lowest()};
 };
 
-// Connectivity of one cube of the chunk, so the same measurement can be taken
-// at 64, 32 and 16 voxels without changing anything else. A face of the cube is
-// a face of the sub-chunk, not of the chunk.
 auto sub_links(
     const asset::chunk_occupancy& occupancy, vec3i origin, int32 size
 ) -> asset::cell_links {
@@ -84,7 +79,6 @@ auto sub_links(
     asset::cell_links links;
     std::vector<vec3i> stack;
 
-    // Same 8x8 coarsening as the engine, over the face of the sub-chunk.
     const int32 block = std::max(1, size / asset::chunk_pocket::face_span);
     const auto block_bit = [block](int32 a, int32 b) -> uint64 {
         return uint64{1}
@@ -148,8 +142,6 @@ struct culling_result {
     std::size_t cells_walked = 0;
 };
 
-// Walks at the given resolution and reports how many whole chunks stay visible:
-// a chunk counts as visible if the walk reaches any cell inside it.
 auto measure_culling(const occupancy_world& world, int32 cell_size) -> culling_result {
     const int32 per_chunk = chunk_side / cell_size;
 
@@ -180,20 +172,16 @@ auto measure_culling(const occupancy_world& world, int32 cell_size) -> culling_r
         world.lo().x * per_chunk, world.lo().y * per_chunk, world.lo().z * per_chunk};
     const vec3i hi{
         ((world.hi().x + 1) * per_chunk) - 1,
-        ((world.hi().y + 1) * per_chunk) - 1 + per_chunk,  // one chunk of sky
+        ((world.hi().y + 1) * per_chunk) - 1 + per_chunk,
         ((world.hi().z + 1) * per_chunk) - 1,
     };
 
-    // Straight above the middle of the world, looking down: the case the whole
-    // exercise is about.
     const vec3i origin{
         (world.lo().x + world.hi().x) / 2 * per_chunk + (per_chunk / 2),
         hi.y,
         (world.lo().z + world.hi().z) / 2 * per_chunk + (per_chunk / 2),
     };
 
-    // The top of the world per column, so an empty cell can be told apart from
-    // a gap inside it.
     std::unordered_map<vec2i, int32> top_of;
     for (const auto& [cell, links] : cells) {
         const vec2i column{cell.x, cell.z};
@@ -218,7 +206,7 @@ auto measure_culling(const occupancy_world& world, int32 cell_size) -> culling_r
             return it == top_of.end() || cell.y > it->second;
         },
         [](const asset::chunk_pocket&) -> bool {
-            return true;  // the origin is empty sky here
+            return true;
         },
         [&](vec3i cell) {
             ++result.cells_walked;
@@ -240,9 +228,6 @@ auto measure_culling(const occupancy_world& world, int32 cell_size) -> culling_r
 
 }  // namespace
 
-// How much a connectivity walk can hide depends entirely on how coarse it is:
-// a face of a 64-cube is wide enough that open sky above a slope and a tunnel
-// below it both touch it, and the walk cannot tell they are different places.
 TEST_CASE("cave culling resolution sweep", "[world][culling][.sweep]") {
     asset::model_identity_pool identity_pool;
     asset::page_pool pages;
@@ -267,10 +252,6 @@ TEST_CASE("cave culling resolution sweep", "[world][culling][.sweep]") {
     }
 }
 
-// The ground truth the walk is approximating: flood fill the actual voxels from
-// the sky. If the caves are reachable from outside, no walk over chunk
-// connectivity -- at any resolution -- can hide them, and the fault is in the
-// world rather than in the algorithm.
 TEST_CASE("how much of the cave system the sky can reach", "[world][culling][.sweep]") {
     asset::model_identity_pool identity_pool;
     asset::page_pool pages;
@@ -310,7 +291,6 @@ TEST_CASE("how much of the cave system the sky can reach", "[world][culling][.sw
         }
     }
 
-    // Underground air: rock above it and rock below it in the same column.
     std::vector<uint8> underground(solid.size(), 0);
     std::size_t underground_air = 0;
 
@@ -335,7 +315,6 @@ TEST_CASE("how much of the cave system the sky can reach", "[world][culling][.sw
         }
     }
 
-    // Flood fill the empty space starting from the top layer, which is sky.
     std::vector<uint8> reached(solid.size(), 0);
     std::vector<vec3i> stack;
 
@@ -382,9 +361,6 @@ TEST_CASE("how much of the cave system the sky can reach", "[world][culling][.sw
     );
 }
 
-// The engine builds pockets from bit runs; the sweep above builds them from a
-// plain voxel flood fill. They have to agree, and when they did not the walk
-// went straight through solid rock.
 TEST_CASE("engine pockets agree with a voxel flood fill", "[world][culling][.sweep]") {
     asset::model_identity_pool identity_pool;
     asset::page_pool pages;
@@ -418,8 +394,6 @@ TEST_CASE("engine pockets agree with a voxel flood fill", "[world][culling][.swe
                         continue;
                     }
 
-                    // Order is not guaranteed to match, so compare the union of
-                    // openings per face.
                     for (int32 face = 0; face < asset::chunk_pocket::face_count; ++face) {
                         uint64 a = 0;
                         uint64 b = 0;

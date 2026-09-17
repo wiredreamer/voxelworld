@@ -40,9 +40,6 @@ namespace vw::testbed {
     for (std::size_t axis = 0; axis < 3; ++axis) {
         const float32 d = dir[axis];
 
-        // A ray exactly parallel to an axis never crosses a boundary on it.
-        // Left at the largest float rather than infinity so the three-way
-        // comparison below stays a comparison and never sees a NaN.
         if (std::abs(d) < 1e-6f) {
             step[axis] = 0;
             next[axis] = far_away;
@@ -105,8 +102,6 @@ auto testbed_app::draw_hover_() -> void {
     const auto scale = static_cast<float32>(generator_params_.voxel_scale);
     auto& renderer   = get_engine().get_renderer();
 
-    // A hair proud of the voxel on every side, or the wireframe z-fights
-    // the face it is sitting on and comes out dashed.
     const auto outline = [&](vec3i cell, color clr) {
         const vec3f at{
             (static_cast<float32>(cell.x) * scale) - 0.05f,
@@ -116,13 +111,8 @@ auto testbed_app::draw_hover_() -> void {
         renderer.draw_box(at, vec3f{scale + 0.1f, scale + 0.1f, scale + 0.1f}, clr);
     };
 
-    // What is under the crosshair, always -- the same thing Minecraft
-    // outlines whichever button is about to be pressed.
     outline(hovered_->solid, colors::white);
 
-    // And where a placed voxel would land, which is the side of it the ray
-    // came in through. Worth showing: at a scale of eight, guessing wrong
-    // about which face is a whole voxel out of place.
     if (tool_ == edit_tool::place && hovered_->empty != hovered_->solid) {
         outline(hovered_->empty, colors::green_4);
     }

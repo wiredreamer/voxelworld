@@ -8,10 +8,6 @@ import vw.gfx;
 
 using namespace vw;
 
-// Глубина у проекции перевёрнута: ближняя плоскость — единица, дальняя — ноль.
-// Пока луч выбора распаковывал привычные −1…+1, оба его конца ложились в
-// десятую долю от камеры, и отрезок длиной в треть вокселя не доставал ни до
-// чего — наведение не работало ни в одном инструменте Sculptor.
 TEST_CASE("the picking ray spans the whole view depth", "[camera]") {
     constexpr float32 near_plane = 0.1F;
     constexpr float32 far_plane  = 1000.0F;
@@ -28,7 +24,6 @@ TEST_CASE("the picking ray spans the whole view depth", "[camera]") {
     REQUIRE(math::dot(r.direction, cam.get_forward()) == Catch::Approx(1.0F).epsilon(0.001));
 }
 
-// То, ради чего луч и нужен: модель под прицелом обязана оказаться на нём.
 TEST_CASE("the picking ray reaches a model in front of the camera", "[camera]") {
     gfx::camera cam{60.0F, 1.0F, 0.1F, 1000.0F};
     cam.set_position(vec3f{25.0F, 25.0F, 25.0F});

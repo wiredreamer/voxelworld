@@ -9,9 +9,6 @@ export namespace vw::gfx {
 
 class engine;
 
-// Отладочная панель поверх ImGui: кадровые числа в главном окне, всё остальное —
-// в окнах, которые открывает его меню. Главное окно намеренно держится
-// маленьким: оно висит поверх сцены всегда, а панели открывают по одной.
 class debug_window final {
 public:
     using engine_type = engine;
@@ -33,8 +30,6 @@ public:
     [[nodiscard]] auto is_visible() const -> bool;
 
 private:
-    // Порядок здесь — порядок пунктов в меню; всё до view живёт под Stats,
-    // остальное под Settings.
     enum class panel : uint8 {
         systems,
         render,
@@ -71,13 +66,8 @@ private:
     auto render_panels() -> void;
     auto render_panel_body(panel id) -> void;
 
-    // Отрисовать примитивы, которые заказаны выключателями панели View. Зовётся
-    // из кадра отладчика, потому что примитив живёт ровно один кадр.
     auto submit_debug_draws() -> void;
 
-    // Строка «имя — время — максимум за прогон» с цветом по порогам. Ею меряют и
-    // системы, и стадии рендера, поэтому максимумы у них общие и сбрасываются
-    // вместе.
     auto metric_row(const char* name, float32 ms) -> void;
     auto count_row(const char* name, uint32 value) const -> void;
 
@@ -100,14 +90,10 @@ private:
 
     bool show_colliders_ = false;
 
-    // Существо, чей автомат показывает панель анимации. Держится за дескриптор,
-    // а не за место в списке: список пересобирается каждый кадр.
     ecs::entity animation_entity_;
 
     std::unordered_map<std::string, float32> metric_max_;
 
-    // График FPS строится по бакетам фиксированной длительности: кадры быстрее
-    // бакета сливаются в один столбец, поэтому график не зависит от частоты.
     static constexpr uint64 fps_bucket_count_        = 200;
     static constexpr float32 fps_bucket_duration_ms_ = 50.0f;
 

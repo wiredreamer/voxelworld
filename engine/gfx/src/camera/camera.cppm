@@ -38,8 +38,6 @@ public:
     auto set_rotation(float pitch, float yaw) -> void;
     auto set_aspect_ratio(float aspect) -> void;
 
-    // Дальность видимости — решение об отсеве, а не косметика: геометрию за дальней
-    // плоскостью проверка фрустумом отбрасывает раньше, чем та начнёт чего-то стоить.
     auto set_far(float32 far) -> void;
 
     [[nodiscard]] auto get_near() const -> float;

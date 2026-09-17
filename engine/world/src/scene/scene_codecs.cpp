@@ -14,8 +14,6 @@ constexpr log::log_category component_codec_lc{"component_codec"};
 
 namespace {
 
-// Значение тега — строка, и сколько в ней чисел, знает только читающий. Здесь
-// эти две стороны и встречаются: формат хранит текст, смысл ему придаёт кодек.
 auto write_vec3f(const vec3f& value) -> std::string {
     return std::format("{} {} {}", value.x, value.y, value.z);
 }
@@ -72,8 +70,6 @@ auto register_model(component_registry& codecs) -> void {
     codec.read = [](const component_read& in) {
         const auto ref = asset::asset_ref{in.tags.front()->value};
 
-        // Битая ссылка не повод ронять загрузку: узел встаёт без объёма, о чём
-        // сказано в логе, и остальной префаб открывается целиком.
         auto loaded = in.library.load(ref);
         if (!loaded.has_value()) {
             log::warn(
@@ -88,8 +84,6 @@ auto register_model(component_registry& codecs) -> void {
     };
 
     codec.write = [](const component_write& out) {
-        // Узел без ссылки законен: её раздаёт первая запись объёма, и до неё он
-        // просто ни на что не ссылается.
         const auto& source = out.source.get<model_component>(out.ent).get_source();
         if (!source.empty()) {
             out.out.add("model", source.str());
@@ -109,8 +103,6 @@ auto register_anim_target(component_registry& codecs) -> void {
         auto target_mod = in.target.system<animation_system>().modify_target(in.ent);
         target_mod.set_target_name(in.tags.front()->value);
 
-        // Поза покоя берётся из мира, а не из файла: трансформ к этому моменту
-        // уже применён — на то и фаза.
         if (in.target.has<transform_component>(in.ent)) {
             target_mod.set_rest_transform(
                 in.target.get<transform_component>(in.ent).get_transform()
@@ -143,8 +135,6 @@ auto register_variant(component_registry& codecs) -> void {
         std::vector<std::string> sockets;
         std::size_t selected = 0;
 
-        // Ключи повторяются: кандидатов у слота несколько, и требований тоже.
-        // prop() вернул бы только первый, поэтому свойства читаются подряд.
         for (const auto& [key, value] : tag->props) {
             if (key == "candidate") {
                 candidates.emplace_back(value);
@@ -234,8 +224,6 @@ auto size_from_text(std::string_view text) -> structure_size {
     return structure_size::unspecified;
 }
 
-// Метаданные генератора: тег на корне со своим блоком. Кодек тот же, что у всех
-// прочих, и в этом весь Architect — тип документа и несколько компонентов.
 auto register_structure(component_registry& codecs) -> void {
     component_codec codec;
     codec.tag = "structure";
@@ -266,8 +254,6 @@ auto register_structure(component_registry& codecs) -> void {
             tag.set_prop("type", structure.get_type());
         }
 
-        // Расы одной строкой: список короткий, а повтор тега здесь читался бы
-        // как несколько структур в одном узле.
         if (!structure.get_races().empty()) {
             std::string races;
             for (const auto& race : structure.get_races()) {
@@ -366,8 +352,6 @@ auto register_socket(component_registry& codecs) -> void {
 }  // namespace
 
 component_registry::component_registry() {
-    // Порядок регистрации — он же порядок тегов в файле. Читателю он безразличен,
-    // порядок применения задают фазы, а вот диффы от него остаются спокойными.
     register_transform(*this);
     register_model(*this);
     register_anim_target(*this);

@@ -12,8 +12,6 @@ using namespace vw::ecs;
 
 namespace {
 
-// Компонент, которого движок не знает, — ровно та проверка, ради которой заведён
-// реестр: ни разборщик, ни писатель, ни десериализатор о нём не слышали.
 struct probe_component final {
     float32 range = 0.0F;
     std::string colour;
@@ -96,8 +94,6 @@ TEST_CASE("a component the engine knows nothing about survives a round trip", "[
     REQUIRE(probe->prop("colour") == "amber");
 }
 
-// Незарегистрированный тег в мир не едет, но и из файла не пропадает: его несёт
-// мешок, а запись отдаёт обратно тем же текстом.
 TEST_CASE("a tag without a codec is ignored, not lost", "[codec]") {
     codec_fixture fx;
 
@@ -126,9 +122,6 @@ TEST_CASE("a tag without a codec is ignored, not lost", "[codec]") {
     REQUIRE(reread->entities.front().find("probe")->prop("range") == "12.5");
 }
 
-// Фаза трансформа обязана отработать раньше общей: позу покоя цель анимации
-// берёт из уже выставленного трансформа, и порядок этот — зависимость, а не
-// соседство строк.
 TEST_CASE("the transform phase runs before the general one", "[codec]") {
     codec_fixture fx;
 
@@ -138,8 +131,6 @@ TEST_CASE("the transform phase runs before the general one", "[codec]") {
     asset::vox_entity_data node;
     node.name = "body";
 
-    // Цель стоит в файле раньше трансформа: порядок тегов в узле ничего не
-    // решает, решают фазы.
     node.add("anim_target", "body");
     node.add("transform", "4 5 6\t0 0 0\t1 1 1");
     prefab.entities.push_back(node);

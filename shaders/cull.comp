@@ -11,14 +11,12 @@ struct DrawCommand {
 };
 
 struct AABB {
-    // min_point.w is the flag gfx::combined_buffer sets while the instance sits
-    // square on the world axes; faces_away is only sound while it is set.
     vec4 min_point;
     vec4 max_point;
 };
 
 layout(set = 0, binding = 0) uniform CullFrustumData {
-    vec4 planes[36];// six per pass: the camera and each of the five cascades
+    vec4 planes[36];
     vec4 eye;
     uint pass_count;
 } frustum_data;
@@ -39,8 +37,6 @@ layout(set = 1, binding = 3, std430) buffer Counts {
     uint counts[];
 } count_buffer;
 
-// Written on the CPU by the chunk connectivity walk: zero means no open path
-// from the viewer's chunk to this one, so nothing in it can be on screen.
 layout(set = 1, binding = 4, std430) readonly buffer Visibility {
     uint flags[];
 } visibility;
@@ -59,28 +55,15 @@ bool frustum_test(uint pass, vec3 bmin, vec3 bmax) {
     return true;
 }
 
-// Every face of a mesh is axis aligned in model space, so a whole direction is
-// back-facing when the viewer is on the wrong side of the whole box.
-// Conservative on purpose: a chunk the eye is inside keeps both sides of that
-// axis.
-//
-// It reads the box in world axes, so it says nothing about an instance turned
-// off them: a rotated model points its +X wherever its rotation does, and the
-// eye standing past the box on world X told the test to drop a direction that
-// was looking straight back at it -- a whole side of the model gone. Those
-// instances arrive with the flag clear and keep all six.
-//
-// Only the camera pass uses it. A shadow cascade would have to test against the
-// light instead, and a caster the camera cannot see still casts.
 bool faces_away(uint dir, vec3 bmin, vec3 bmax) {
     vec3 eye = frustum_data.eye.xyz;
     switch (dir) {
-        case 0u: return eye.x <= bmin.x;   // +X
-        case 1u: return eye.x >= bmax.x;   // -X
-        case 2u: return eye.y <= bmin.y;   // +Y
-        case 3u: return eye.y >= bmax.y;   // -Y
-        case 4u: return eye.z <= bmin.z;   // +Z
-        default: return eye.z >= bmax.z;   // -Z
+        case 0u: return eye.x <= bmin.x;
+        case 1u: return eye.x >= bmax.x;
+        case 2u: return eye.y <= bmin.y;
+        case 3u: return eye.y >= bmax.y;
+        case 4u: return eye.z <= bmin.z;
+        default: return eye.z >= bmax.z;
     }
 }
 

@@ -47,8 +47,6 @@ public:
     using error_type = asset::vox_parser::error_type;
 
     struct options {
-        // Теги, которые в этот раз не применяются: превью сокета ставит чужой
-        // префаб в сцену и не хочет ни его сокетов, ни его целей анимации.
         std::vector<std::string> skip_tags;
     };
 
@@ -68,15 +66,9 @@ public:
     auto deserialize(const std::filesystem::path& filepath, const options& opts)
         -> std::expected<result, error_type>;
 
-    // Разбор и применение разведены: данные префаба существуют помимо файла —
-    // их отдаёт и разборщик потока, и тест, и подстановка варианта.
     [[nodiscard]] auto instantiate(const asset::vox_prefab_data& prefab, const options& opts)
         -> result;
 
-    // Поставить в слот кандидата-поддерево. Здесь, а не в системе вариантов:
-    // поддерево — это файл, а файл умеет читать только тот, у кого есть
-    // разборщик. Отказ ничего не трогает — контракт проверяется до того, как
-    // прежнее содержимое снято.
     auto put_variant(entity node, std::size_t index) -> std::expected<void, variant_error>;
 
 private:

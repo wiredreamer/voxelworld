@@ -20,7 +20,7 @@ save_as_modal::save_as_modal(
     : engine_(&eng), state_(&st), file_service_(&file_svc) {}
 
 auto save_as_modal::render(
-    float /*delta_time*/
+    float
 ) -> void {
     if (state_->ui.need_save_as_modal) {
         ImGui::OpenPopup("Save As");

@@ -1,6 +1,5 @@
 BasedOnStyle: Google
 
-# Основные настройки
 Language: Cpp
 AccessModifierOffset: -4
 AlignConsecutiveAssignments:
@@ -84,14 +83,11 @@ Standard: Latest
 TabWidth: 4
 UseTab: Never
 
-# Настройки для многострочных функций
 AlignAfterOpenBracket: BlockIndent
 AllowAllParametersOfDeclarationOnNextLine: true
 
-# Настройки для include директив
 SortIncludes: CaseInsensitive
 IncludeBlocks: Regroup
 
-# Настройки для комментариев
 ReflowComments: true
 ColumnLimit: 100

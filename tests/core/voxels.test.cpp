@@ -5,9 +5,6 @@ import vw.core;
 
 using namespace vw;
 
-// Emptiness is the raw value being zero, and the page table, the occupancy walk
-// and the light flood all lean on that. Only category zero index zero is air; an
-// index of zero in any other category is an ordinary voxel.
 TEST_CASE("only air is empty", "[voxels]") {
     static_assert(voxels::air.is_empty());
     REQUIRE(voxel{}.is_empty());
@@ -24,16 +21,11 @@ TEST_CASE("voxel equality", "[voxels]") {
     REQUIRE_FALSE(voxels::world::grass[0] == voxels::world::grass[1]);
 }
 
-// A voxel carries a full identity, but a page stores only the index within its
-// model's set -- one byte, which is what model::build_x_rows folds eight at a
-// time out of a machine word.
 TEST_CASE("a page entry is one byte, an identity two", "[voxels]") {
     static_assert(sizeof(voxel_index) == 1);
     static_assert(sizeof(voxel) == 2);
 }
 
-// Zero is empty in every set, and the catalog numbers from one so that a zero
-// byte can only ever mean air.
 TEST_CASE("index zero is empty in any set", "[voxels]") {
     REQUIRE(voxel_index{}.is_empty());
     REQUIRE(voxel_index{0}.is_empty());
@@ -61,10 +53,6 @@ TEST_CASE("an ordinary voxel is unlit and unglowing", "[voxels]") {
     REQUIRE(grass.material.glow == 0);
 }
 
-// Two properties, not one. What a voxel gives its neighbours is a level the
-// flood carries; what it draws itself with is a brightness the shader adds
-// outside every occluder. Lava has both, and nothing in the engine makes one
-// follow from the other.
 TEST_CASE("an emitter carries a flood level and a glow apart", "[voxels]") {
     const voxel_registry registry;
 
@@ -72,14 +60,11 @@ TEST_CASE("an emitter carries a flood level and a glow apart", "[voxels]") {
     REQUIRE(lava.material.emission == 15);
     REQUIRE(lava.material.glow == 255);
 
-    // A crystal that glows without lighting the room is a glow with no light.
     const voxel_type& crystal = registry.get(voxels::world::crystal[0]);
     REQUIRE(crystal.material.emission == 0);
     REQUIRE(crystal.material.glow > 0);
 }
 
-// A level over fifteen cannot be baked: the quad keeps four bits a corner and
-// the flood steps down by one, so the two numbers have to agree on a ceiling.
 TEST_CASE("no voxel emits past the nibble", "[voxels]") {
     const voxel_registry registry;
 
@@ -88,9 +73,6 @@ TEST_CASE("no voxel emits past the nibble", "[voxels]") {
     }
 }
 
-// The whole point of separating a voxel's identity from its colour. Ice and
-// crystal are the same three steps of the blue ramp and differ only in glow;
-// under the old registry the second one registered would have been unreachable.
 TEST_CASE("two voxels may wear one colour", "[voxels]") {
     const voxel_registry registry;
 
@@ -124,8 +106,6 @@ TEST_CASE("find returns nothing for a name outside the catalog", "[voxels]") {
     REQUIRE_FALSE(registry.find("world.unobtainium").has_value());
 }
 
-// Slots are the quad's ten bits. They are handed out densely so the palette on
-// the device is exactly as long as the catalog.
 TEST_CASE("slots are dense and within the quad's ten bits", "[voxels]") {
     const voxel_registry registry;
 
@@ -138,8 +118,6 @@ TEST_CASE("slots are dense and within the quad's ten bits", "[voxels]") {
     }
 }
 
-// Slot zero is the loud stand-in, not air: a voxel missing from the catalog has
-// to be visible, and invisibility would hide the typo that produced it.
 TEST_CASE("a voxel outside the catalog reads as the missing slot", "[voxels]") {
     const voxel_registry registry;
 
@@ -153,7 +131,6 @@ TEST_CASE("a category is independent of every other", "[voxels]") {
     REQUIRE(voxels::palette::blue[0].category() == voxels::palette::category);
     REQUIRE(voxels::world::category != voxels::palette::category);
 
-    // Same index in two categories, two different voxels.
     REQUIRE(voxels::world::grass[0].index() == voxels::palette::blue[0].index());
     REQUIRE(voxels::world::grass[0] != voxels::palette::blue[0]);
 }
@@ -171,8 +148,6 @@ TEST_CASE("a material's variants sit next to each other", "[voxels]") {
     REQUIRE_FALSE(grass.contains(voxels::palette::blue[0]));
 }
 
-// The generator picks a variant out of a noise value, so the value is whatever
-// the noise happened to be and the span has to fold it itself.
 TEST_CASE("picking a variant wraps on the count", "[voxels]") {
     constexpr voxel_span grass = voxels::world::grass;
 
@@ -190,8 +165,6 @@ TEST_CASE("a voxel table answers with its default outside a live category", "[vo
     table.set(voxel{voxel_category{9}, 4}, 12);
     REQUIRE(table.get(voxel{voxel_category{9}, 4}) == 12);
 
-    // The row is per category, so a neighbour in the same one keeps the default
-    // and a different category is untouched.
     REQUIRE(table.get(voxel{voxel_category{9}, 5}) == 7);
     REQUIRE(table.get(voxel{voxel_category{10}, 4}) == 7);
 }
@@ -241,9 +214,6 @@ TEST_CASE("the registry names the sets it knows", "[voxels]") {
     REQUIRE(palette->kind == voxel_set_kind::palette);
 }
 
-// Whoever opens a document picks the set by what it is for -- a structure is
-// built out of matter, everything else is painted -- and the names of the sets
-// are the catalog's business, not theirs.
 TEST_CASE("the registry finds a set by its kind", "[voxels]") {
     const voxel_registry registry;
 
@@ -251,9 +221,6 @@ TEST_CASE("the registry finds a set by its kind", "[voxels]") {
     REQUIRE(registry.first_set(voxel_set_kind::materials)->category == voxels::world::category);
 }
 
-// The palette is an alphabet of colours: a colour missing from it is a colour
-// the artist cannot reach, and a colour in it twice is a choice with nothing to
-// choose between -- which the mesher then refuses to merge into one quad.
 TEST_CASE("the palette holds every colour exactly once", "[voxels]") {
     const voxel_registry registry;
 
@@ -269,18 +236,12 @@ TEST_CASE("the palette holds every colour exactly once", "[voxels]") {
     }
 }
 
-// An extension may add voxels in a category of its own without adding a set for
-// it. Whoever shows them has to cope, so the answer is nothing -- not a made-up
-// name.
 TEST_CASE("a category outside the catalog has no set", "[voxels]") {
     const voxel_registry registry;
 
     REQUIRE(registry.set_of(voxel_category{200}) == nullptr);
 }
 
-// Groups are what the palette walks, so a voxel outside every group would never
-// be drawn and a voxel inside two would be drawn twice. The catalog asserts this
-// at compile time; here it is stated where it can be read.
 TEST_CASE("the groups of a set cover it once each", "[voxels]") {
     const voxel_registry registry;
 

@@ -72,8 +72,6 @@ auto begin_panel(
         flags |= ImGuiWindowFlags_NoTitleBar;
     }
 
-    // Подвал держит ширину окна и высоту, заданную пользователем: содержимое
-    // таймлайна от кадра к кадру меняется, и авторазмер дёргал бы его по высоте.
     if (slot == panel_slot::footer) {
         ImGui::SetNextWindowSize(
             ImVec2{
@@ -215,8 +213,6 @@ auto collect_asset_refs(
             continue;
         }
 
-        // Ссылка отсчитывается от корня ассетов, а не от каталога, в котором
-        // нашли файл: в файле документа лежит именно она.
         const auto relative =
             fs::relative(entry.path(), fs::path{app_state::asset_root_name}, ec);
         refs.emplace_back(

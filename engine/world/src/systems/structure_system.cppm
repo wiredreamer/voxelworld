@@ -11,18 +11,13 @@ export namespace vw::ecs {
 
 class world;
 
-// Системы у структур нет и не будет — метаданные ничего не делают каждый кадр.
-// Этот класс существует ради правила «поля закрыты, меняет их дружественная
-// система»: без него метаданные пришлось бы открыть всем.
 class structure_system final {
 public:
     static constexpr std::string_view system_name = "structure";
 
     explicit structure_system(world& w);
 
-    // Пусто, и это не заготовка: метаданные ничему не отвечают каждый кадр. Цикл
-    // кадра зовёт update у всех, поэтому она есть.
-    auto update(float32 /*delta_time*/) -> void {}
+    auto update(float32) -> void {}
 
     class modifier {
     public:

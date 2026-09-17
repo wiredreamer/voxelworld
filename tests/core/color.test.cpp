@@ -69,7 +69,6 @@ TEST_CASE("color palette constants", "[color]") {
     REQUIRE(colors::all.back() == colors::black);
     REQUIRE(colors::all[23] == colors::amber_5);
 
-    // Номер в имени - шаг рампы, и чем он больше, тем шаг светлее.
     const auto luma = [](const color& c) -> uint32 {
         return static_cast<uint32>(c.r()) + static_cast<uint32>(c.g()) + static_cast<uint32>(c.b());
     };

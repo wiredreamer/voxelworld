@@ -129,30 +129,22 @@ renderer::~renderer() {
 }
 
 auto renderer::begin_frame() -> void {
-    // Ждем завершения предыдущего кадра
     const vk::Device device = context_->get_device();
     vk_must(
         device.waitForFences(in_flight_fences_[current_frame_], vk::True, std::numeric_limits<uint64>::max()),
         "wait for frame fence"
     );
 
-    // Сбрасываем fence для рендеринга перед использованием
     vk_must(device.resetFences(in_flight_fences_[current_frame_]), "reset frame fence");
 
-    // Забор, которого только что дождались, был выставлен кадром
-    // frame_counter_ - max_frames_in_flight_, поэтому всё списанное на том кадре или
-    // раньше GPU уже не читает.
     if (frame_counter_ >= max_frames_in_flight_) {
         deletion_queue_.collect(frame_counter_ - max_frames_in_flight_);
     }
     deletion_queue_.set_frame(frame_counter_);
 
-    // Тот же забор покрывает метки времени этого слота: сейчас их можно читать, а
-    // запросы сбрасываются снова, только когда этот кадр начнёт записываться.
     gpu_timer_->resolve(current_frame_);
     stats_.timing.gpu = gpu_timer_->get_stats();
 
-    // Получаем следующий image из swapchain (используем семафор)
     uint32 image_index = 0;
     const vk::Result result = device.acquireNextImageKHR(
         swapchain_,
@@ -172,7 +164,6 @@ auto renderer::begin_frame() -> void {
 
     current_image_index_ = image_index;
 
-    // Ждем завершения предыдущего использования этого изображения
     if (images_in_flight_[image_index] != nullptr) {
         vk_must(
             device.waitForFences(images_in_flight_[image_index], vk::True, std::numeric_limits<uint64>::max()),
@@ -180,10 +171,8 @@ auto renderer::begin_frame() -> void {
         );
     }
 
-    // Связываем fence с изображением
     images_in_flight_[image_index] = in_flight_fences_[current_frame_];
 
-    // Подготовка нового кадра ImGui
     ImGui_ImplVulkan_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
@@ -288,8 +277,6 @@ auto renderer::get_cluster_grid(
 ) const -> spatial::cluster_grid {
     const mat4f projection = camera.get_projection_matrix();
 
-    // Дальность тумана, а не камеры: логарифмическое отображение на 0,1..50000
-    // тратит большинство срезов за туманом, на воздух, в котором ничего не рисуется.
     const float32 far_depth = fog_settings_.enabled
                                   ? fog_settings_.far_distance
                                   : camera.get_far();
@@ -413,8 +400,6 @@ auto renderer::sync_meshes_(world_type& world) -> void {
                 comp.get_model(),
                 comp.get_chunk(),
                 mesh_options{
-                    // Меши, построенные до включения обхода, сохраняют свои
-                    // полностью открытые связи: это скрывает ничего, а не лишнее.
                     .build_links = combined_buffer_pool_->is_chunk_cull_enabled(),
                 }
             );
@@ -426,7 +411,6 @@ auto renderer::sync_meshes_(world_type& world) -> void {
 auto renderer::render(
     world_type& world, camera& camera
 ) -> void {
-    // Начинаем запись в command buffer
     vk::CommandBufferBeginInfo begin_info{};
     begin_info.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
 
@@ -447,8 +431,6 @@ auto renderer::render(
 
     const bool shadows_on = shadow_map_->get_settings().enabled;
 
-    // Пул идёт первым, чтобы карта теней узнала о геометрии этого кадра до того,
-    // как решит, какие каскады можно не трогать.
     stats_.timing.shadow_map_update_ms = measure_ms([&] {
         if (!shadows_on) {
             return;
@@ -461,9 +443,6 @@ auto renderer::render(
 
     const auto& cascade_frustums = shadow_map_->get_cascade_frustums();
 
-    // Выше прохода отрисовки, и обязано быть выше: кадровый uniform читает
-    // публикуемый здесь счётчик, а компьютный проход — куда и движется сетка света
-    // — внутри прохода отрисовки не записывается вовсе.
     stats_.timing.light_gather_ms = measure_ms([&] {
         light_buffer_->update(
             world, camera.get_frustum(), camera.get_position(), current_frame_
@@ -510,10 +489,6 @@ auto renderer::render(
             );
         }
 
-        // Нет каскадов — нет и каскадных проходов: диспатч отсева размеряется по
-        // переданным ему фрустумам, поэтому пустой span и убирает пять теневых
-        // проходов из кадра, а не оставляет их наполнять командные буферы, по
-        // которым никто ничего не нарисует.
         const vw::spatial::frustum& view_frustum = camera.get_frustum();
         const std::span<const vw::spatial::frustum> cull_cascades =
             shadows_on ? std::span<const vw::spatial::frustum>{cascade_frustums}
@@ -706,7 +681,6 @@ auto renderer::create_depth_resources() -> void {
 }
 
 auto renderer::create_render_pass() -> void {
-    // Вложение 0: образ цепочки показа, в него рисуют напрямую
     vk::AttachmentDescription color_attachment{};
     color_attachment.format         = swapchain_image_format_;
     color_attachment.samples        = vk::SampleCountFlagBits::e1;
@@ -799,7 +773,6 @@ auto renderer::create_render_pass() -> void {
 }
 
 auto renderer::create_descriptor_set_layouts() -> void {
-    // Раскладка дескрипторного набора uniform-буфера (набор 0, биндинг 0)
     vk::DescriptorSetLayoutBinding ubo_layout_binding{};
     ubo_layout_binding.binding         = 0;
     ubo_layout_binding.descriptorType  = vk::DescriptorType::eUniformBuffer;
@@ -813,8 +786,6 @@ auto renderer::create_descriptor_set_layouts() -> void {
 
     uniform_descriptor_set_layout_ = vk_must(context_->get_device().createDescriptorSetLayout(ubo_layout_info), "failed to create uniform descriptor set layout");
 
-    // Раскладка дескрипторного набора storage-буферов (набор 1: биндинг 0 — матрицы
-    // моделей, биндинг 1 — матрицы нормалей, биндинг 2 — квады)
     std::array<vk::DescriptorSetLayoutBinding, 3> storage_layout_bindings{};
     storage_layout_bindings[0].binding            = 0;
     storage_layout_bindings[0].descriptorType     = vk::DescriptorType::eStorageBuffer;
@@ -840,7 +811,6 @@ auto renderer::create_descriptor_set_layouts() -> void {
 
     storage_descriptor_set_layout_ = vk_must(context_->get_device().createDescriptorSetLayout(storage_layout_info), "failed to create storage descriptor set layout");
 
-    // Раскладка дескрипторного набора карты теней (набор 2, биндинг 0)
     vk::DescriptorSetLayoutBinding shadow_layout_binding{};
     shadow_layout_binding.binding            = 0;
     shadow_layout_binding.descriptorType     = vk::DescriptorType::eCombinedImageSampler;
@@ -856,7 +826,6 @@ auto renderer::create_descriptor_set_layouts() -> void {
 }
 
 auto renderer::create_graphics_pipeline() -> void {
-    // Используем уже созданные шейдеры
     vk::PipelineShaderStageCreateInfo shader_stages[] = {
         vertex_shader_->get_stage_info(), fragment_shader_->get_stage_info()
     };
@@ -1043,7 +1012,6 @@ auto renderer::create_wireframe_pipeline() -> void {
 }
 
 auto renderer::create_debug_pipeline() -> void {
-    // Используем уже созданные шейдеры
     vk::PipelineShaderStageCreateInfo shader_stages[] = {
         debug_vertex_shader_->get_stage_info(), debug_fragment_shader_->get_stage_info()
     };
@@ -1136,10 +1104,6 @@ auto renderer::create_debug_pipeline() -> void {
     debug_pipeline_ =
         vk_must(context_->get_device().createGraphicsPipeline(nullptr, pipeline_info), "create debug pipeline");
 
-    // Второй проход теми же шейдерами: вершина у залитой геометрии та же, а
-    // расходятся они четырьмя состояниями. Глубина выключена намеренно — ручка
-    // манипулятора обязана оставаться доступной внутри модели; отсечение снято,
-    // потому что на неё смотрят с любой стороны.
     input_assembly.topology = vk::PrimitiveTopology::eTriangleList;
     rasterizer.cullMode     = vk::CullModeFlagBits::eNone;
 
@@ -1193,12 +1157,9 @@ auto renderer::create_command_buffers() -> void {
 }
 
 auto renderer::create_sync_objects() -> void {
-    // Семафоры создаем по количеству кадров в полете
     image_available_semaphores_.resize(max_frames_in_flight_);
     render_finished_semaphores_.resize(swapchain_images_.size());
-    // Fences создаем по количеству кадров в полете
     in_flight_fences_.resize(max_frames_in_flight_);
-    // Инициализируем массив fences для изображений
     images_in_flight_.assign(swapchain_images_.size(), nullptr);
 
     vk::SemaphoreCreateInfo semaphore_info{};
@@ -1206,17 +1167,14 @@ auto renderer::create_sync_objects() -> void {
     vk::FenceCreateInfo fence_info{};
     fence_info.flags = vk::FenceCreateFlagBits::eSignaled;
 
-    // Создаем семафоры для каждого кадра в полете
     for (std::size_t i = 0; i < max_frames_in_flight_; i++) {
         image_available_semaphores_[i] = vk_must(context_->get_device().createSemaphore(semaphore_info), "failed to create synchronization objects for a frame");
     }
 
-    // Создаем семафоры для каждого изображения swapchain
     for (std::size_t i = 0; i < swapchain_images_.size(); i++) {
         render_finished_semaphores_[i] = vk_must(context_->get_device().createSemaphore(semaphore_info), "failed to create synchronization objects for a frame");
     }
 
-    // Создаем fences для каждого кадра в полете
     for (std::size_t i = 0; i < max_frames_in_flight_; i++) {
         in_flight_fences_[i] = vk_must(context_->get_device().createFence(fence_info), "failed to create synchronization objects for a frame");
     }
@@ -1237,18 +1195,13 @@ auto renderer::create_descriptor_pool() -> void {
 
     std::array pool_sizes = {
         vk::DescriptorPoolSize{
-            // Кадровые uniform, теневые uniform, фрустумы отсева чанков и сетка
-            // отсева — по кольцу на список, а списков два. Восемь колец, а не пять
-            // используемых: точная подгонка бросит исключение при старте в тот день,
-            // когда кто-нибудь добавит шестое, и в исключении будет назван пул, а не
-            // переполнившее его кольцо.
             vk::DescriptorType::eUniformBuffer,
             static_cast<uint32>(max_frames_in_flight_ * 8)
         },
         vk::DescriptorPoolSize{vk::DescriptorType::eStorageBuffer, STORAGE_BUFFER_COUNT},
         vk::DescriptorPoolSize{
             vk::DescriptorType::eCombinedImageSampler,
-            static_cast<uint32>(max_frames_in_flight_)  // Shadow map для каждого кадра
+            static_cast<uint32>(max_frames_in_flight_)
         }
     };
 
@@ -1262,7 +1215,6 @@ auto renderer::create_descriptor_pool() -> void {
 }
 
 auto renderer::create_descriptor_sets() -> void {
-    // Создаем descriptor sets для uniform buffer (set 0)
     std::vector layouts(max_frames_in_flight_, uniform_descriptor_set_layout_);
     vk::DescriptorSetAllocateInfo alloc_info{};
     alloc_info.descriptorPool     = descriptor_pool_;
@@ -1444,7 +1396,6 @@ auto renderer::cleanup_swapchain() -> void {
 
     context_->get_device().destroySwapchainKHR(swapchain_);
 
-    // Очищаем семафоры при пересоздании swapchain
     for (auto semaphore : image_available_semaphores_) {
         context_->get_device().destroySemaphore(semaphore);
     }
@@ -1452,7 +1403,6 @@ auto renderer::cleanup_swapchain() -> void {
         context_->get_device().destroySemaphore(semaphore);
     }
 
-    // Очищаем fences при пересоздании swapchain
     for (auto fence : in_flight_fences_) {
         context_->get_device().destroyFence(fence);
     }
@@ -1479,9 +1429,7 @@ auto renderer::recreate_swapchain() -> void {
         size = window_->framebuffer_size();
         window_->poll_events();
 
-        // Добавляем небольшую задержку, чтобы не нагружать CPU
-        // когда окно свернуто или имеет нулевой размер
-        std::this_thread::sleep_for(std::chrono::milliseconds(16));  // ~60 FPS
+        std::this_thread::sleep_for(std::chrono::milliseconds(16));
     }
 
     wait_idle();
@@ -1571,7 +1519,6 @@ auto renderer::render_world(
         (current_render_mode_ == render_mode::lit) ? graphics_pipeline_ : wireframe_pipeline_;
     command_buffers_[current_image_index_].bindPipeline(vk::PipelineBindPoint::eGraphics, current_pipeline);
 
-    // Биндим uniform buffer descriptor set один раз перед циклом
     command_buffers_[current_image_index_].bindDescriptorSets(
         vk::PipelineBindPoint::eGraphics,
         pipeline_layout_,
@@ -1580,31 +1527,28 @@ auto renderer::render_world(
         nullptr
     );
 
-    // Биндим shadow map descriptor set (set 2)
     command_buffers_[current_image_index_].bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
         pipeline_layout_,
-        2,  // Set index 2 (shadow map descriptor set layout)
+        2,
         1,
         &shadow_map_descriptor_sets_[current_frame_],
         0,
         nullptr);
 
-    // Биндим point lights descriptor set (set 3)
     vk::DescriptorSet point_lights_descriptor_set =
         light_buffer_->get_descriptor_set(current_frame_);
     command_buffers_[current_image_index_].bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
         pipeline_layout_,
-        3,  // Set index 3 (point lights descriptor set layout)
+        3,
         1,
         &point_lights_descriptor_set,
         0,
         nullptr);
 
-    // Биндим palette descriptor set (set 4)
     vk::DescriptorSet palette_ds = palette_buffer_->get_descriptor_set();
     command_buffers_[current_image_index_].bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
         pipeline_layout_,
-        4,  // Set index 4 (palette descriptor set layout)
+        4,
         1,
         &palette_ds,
         0,
@@ -1618,19 +1562,15 @@ auto renderer::render_world(
 
         vk::Buffer instance_index_buffer = buffer->get_instance_index_buffer();
 
-        // Биндим storage buffer descriptor set из буфера (set 1)
         vk::DescriptorSet buffer_descriptor_set = buffer->get_descriptor_set();
         command_buffers_[current_image_index_].bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
             pipeline_layout_,
-            1,  // Set index 1 (storage buffer descriptor set layout)
+            1,
             1,
             &buffer_descriptor_set,
             0,
             nullptr);
 
-        // Геометрия приходит из storage-буфера набора 1; во вершинном входе остался
-        // только индекс инстанса. Индексный буфер держит один шаблон квада, общий
-        // для всех мешей пула.
         constexpr vk::DeviceSize instance_offset = 0;
         command_buffers_[current_image_index_].bindVertexBuffers(
             0, instance_index_buffer, instance_offset);
@@ -1702,8 +1642,6 @@ auto renderer::update_uniform_buffer(
         ambient_settings_.convex_curve
     };
 
-    // Не масштабируется силой рассеянного света: весь его смысл в том, чтобы быть
-    // единственным светом, который небу не подчиняется.
     ubo.cave_ambient = vec4f{
         ambient_settings_.cave.x, ambient_settings_.cave.y, ambient_settings_.cave.z, 0.0f
     };
@@ -1720,9 +1658,6 @@ auto renderer::update_uniform_buffer(
 
     ubo.glow_params = vec4f{block_light_settings_.glow, 0.0f, 0.0f, 0.0f};
 
-    // Белую точку шейдер возводит в квадрат и делит на неё, поэтому ноль там — это
-    // деление на ноль на каждом пикселе. Ограничивается снизу один раз здесь, а не
-    // проверяется на каждом пикселе.
     ubo.tonemap_params = vec4f{
         tonemap_settings_.exposure, std::max(tonemap_settings_.white_point, 0.01f), 0.0f, 0.0f
     };
@@ -2054,10 +1989,6 @@ auto renderer::cleanup_palette_resources() -> void {
 namespace vw::gfx {
 
 auto renderer::create_point_lights_descriptor_set_layout() -> void {
-    // Набор 3, и под принесённое фроксельной сеткой новый набор не заводился:
-    // биндинг 0 — список источников, 1 — счётчик на кластер, 2 — индексы; 3 —
-    // список пятен под телами, 4 и 5 — их собственные счётчики и индексы. Четыре
-    // пишет компьют, все шесть читает фрагмент, и одна привязка достаёт до всего.
     std::array<vk::DescriptorSetLayoutBinding, 6> bindings{};
 
     for (uint32 i = 0; i < bindings.size(); ++i) {
@@ -2156,12 +2087,10 @@ auto renderer::create_shadow_map_descriptor_sets() -> void {
 }
 
 auto renderer::create_shadow_pipeline() -> void {
-    // Используем shadow шейдеры
     vk::PipelineShaderStageCreateInfo shader_stages[] = {
         shadow_vertex_shader_->get_stage_info(), shadow_fragment_shader_->get_stage_info()
     };
 
-    // Vertex input state (только позиция)
     auto binding_description    = quad::get_binding_descriptions();
     auto attribute_descriptions = quad::get_attribute_descriptions();
 
@@ -2192,7 +2121,6 @@ auto renderer::create_shadow_pipeline() -> void {
     dynamic_state.dynamicStateCount = 2;
     dynamic_state.pDynamicStates    = dynamic_states;
 
-    // Rasterizer state (для shadow mapping включаем depth bias)
     vk::PipelineRasterizationStateCreateInfo rasterizer{};
     rasterizer.depthClampEnable        = vk::False;
     rasterizer.rasterizerDiscardEnable = vk::False;
@@ -2209,7 +2137,6 @@ auto renderer::create_shadow_pipeline() -> void {
     multisampling.sampleShadingEnable  = vk::False;
     multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
 
-    // Color blend state (нет color attachments для shadow pass)
     vk::PipelineColorBlendStateCreateInfo color_blending{};
     color_blending.logicOpEnable   = vk::False;
     color_blending.attachmentCount = 0;
@@ -2227,7 +2154,6 @@ auto renderer::create_shadow_pipeline() -> void {
     push_constant_range.size       = sizeof(shadow_push_constant_data);
     push_constant_range.stageFlags = vk::ShaderStageFlagBits::eVertex;
 
-    // Pipeline layout для shadow pass (uniform и storage descriptor set layouts)
     std::array shadow_descriptor_set_layouts = {
         uniform_descriptor_set_layout_, storage_descriptor_set_layout_
     };
@@ -2241,7 +2167,6 @@ auto renderer::create_shadow_pipeline() -> void {
 
     shadow_pipeline_layout_ = vk_must(context_->get_device().createPipelineLayout(pipeline_layout_info), "failed to create shadow pipeline layout");
 
-    // Graphics pipeline для shadow pass
     vk::GraphicsPipelineCreateInfo pipeline_info{};
 
     pipeline_info.stageCount          = 2;
@@ -2280,11 +2205,7 @@ auto renderer::render_shadow_pass(
     stats_.timing.shadow_cascades_drawn =
         static_cast<float32>(shadow_map_->get_pending_count());
 
-    // Рендерим каждый каскад отдельно
     for (uint32 cascade_index = 0; cascade_index < shadow_map::cascade_count; ++cascade_index) {
-        // Каскад, который ничто не пометило неверным, сохраняет глубину, с которой
-        // был нарисован: карта в мировых координатах и остаётся верной, пока камера
-        // не выйдет за запас, с которым её строили.
         if (!shadow_map_->is_cascade_pending(cascade_index)) {
             continue;
         }
@@ -2293,7 +2214,6 @@ auto renderer::render_shadow_pass(
             static_cast<gpu_stage>(static_cast<uint32>(gpu_stage::shadow_cascade_0) + cascade_index);
         gpu_timer_->begin(command_buffers_[current_image_index_], cascade_stage);
 
-        // Начинаем shadow render pass для текущего каскада
         vk::RenderPassBeginInfo render_pass_info{};
         render_pass_info.renderPass        = shadow_map_->get_render_pass();
         render_pass_info.framebuffer       = shadow_map_->get_framebuffer(cascade_index);
@@ -2310,7 +2230,6 @@ auto renderer::render_shadow_pass(
 
         command_buffers_[current_image_index_].beginRenderPass(render_pass_info, vk::SubpassContents::eInline);
 
-        // Устанавливаем viewport и scissor для shadow map
         vk::Viewport viewport{};
         viewport.x        = 0.0f;
         viewport.y        = 0.0f;
@@ -2325,11 +2244,9 @@ auto renderer::render_shadow_pass(
         scissor.extent = {shadow_map_->get_size(), shadow_map_->get_size()};
         command_buffers_[current_image_index_].setScissor(0, scissor);
 
-        // Биндим shadow pipeline
         command_buffers_[current_image_index_].bindPipeline(vk::PipelineBindPoint::eGraphics,
             shadow_pipeline_);
 
-        // Биндим shadow uniform buffer descriptor set (set 0)
         command_buffers_[current_image_index_].bindDescriptorSets(
         vk::PipelineBindPoint::eGraphics,
         shadow_pipeline_layout_,
@@ -2338,13 +2255,11 @@ auto renderer::render_shadow_pass(
         nullptr
     );
 
-        // Устанавливаем push constant с индексом каскада
         shadow_push_constant_data push_constants{
             .cascade_index = cascade_index,
         };
         command_buffers_[current_image_index_].pushConstants<shadow_push_constant_data>(shadow_pipeline_layout_, vk::ShaderStageFlagBits::eVertex, 0, push_constants);
 
-        // Рендерим все объекты из combined_buffer_pool
         const auto& buffers = combined_buffer_pool_->get_buffers();
         for (const auto& buffer : buffers) {
             if (buffer->is_empty()) {
@@ -2353,11 +2268,10 @@ auto renderer::render_shadow_pass(
 
             vk::Buffer instance_index_buffer = buffer->get_instance_index_buffer();
 
-            // Биндим storage buffer descriptor set из буфера (set 1)
             vk::DescriptorSet buffer_descriptor_set = buffer->get_descriptor_set();
             command_buffers_[current_image_index_].bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
                 shadow_pipeline_layout_,
-                1,  // Set index 1 (storage buffer descriptor set layout)
+                1,
                 1,
                 &buffer_descriptor_set,
                 0,

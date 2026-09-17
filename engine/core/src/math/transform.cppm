@@ -19,10 +19,6 @@ public:
 
     [[nodiscard]] auto calc_matrix() const -> mat4f;
 
-    // Обратное к calc_matrix: перенос, поворот и масштаб по готовой матрице.
-    // Точное только для матриц, которые calc_matrix и строит. Произведение, где
-    // неравномерный масштаб стоит перед поворотом, даёт сдвиг, которого в
-    // трансформе нет, — он теряется, а поворот берётся ближайший.
     [[nodiscard]] static auto from_matrix(const mat4f& matrix) -> transform;
 
     auto set_position(const vec3f& position) -> void;

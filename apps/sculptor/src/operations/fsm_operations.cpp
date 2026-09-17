@@ -53,8 +53,6 @@ auto set_machines_operation::apply_(
     auto& world    = engine_->get_world();
     const auto ent = state_->scene.name_to_entity[state_->scene.root_name];
 
-    // Пустой список — это отсутствие компонента, а не компонент с пустым
-    // вектором: иначе в шапку поехала бы разница, которой в файле нет.
     if (machines.empty()) {
         if (world.has<ecs::animation_machines_component>(ent)) {
             world.modify(ent).without<ecs::animation_machines_component>();

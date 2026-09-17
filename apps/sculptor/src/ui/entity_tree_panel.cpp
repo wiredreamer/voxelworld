@@ -18,8 +18,6 @@ namespace {
 
 constexpr const char* node_payload = "VW_NODE";
 
-// Кромка строки, бросок на которую ставит узел соседом, — доля высоты с каждой
-// стороны. Середина — самое частое намерение, и ей отдана половина строки.
 constexpr float32 drop_edge = 0.25f;
 
 }  // namespace
@@ -39,10 +37,7 @@ auto entity_tree_panel::render(
 ) -> void {
     begin_panel(*state_, panel_slot::right, "Entity Tree");
 
-    // Состав правится только в самом префабе. Внутри объёма дерево открыто ради
-    // глаз — спрятать соседние части, не выходя из правки.
     if (state_->ctx.in_prefab()) {
-        // Родителя выбирают в самом окне, так что добавлять можно и без выделения.
         if (ImGui::Button("Add")) {
             creation_modal_.open();
         }
@@ -82,9 +77,6 @@ auto entity_tree_panel::render(
     end_panel(*state_, panel_slot::right);
 }
 
-// Провалившись в .voxm, правишь именно тот узел, через который вошёл, и уехать
-// из него мимо крошек нельзя. В клипе выбор, наоборот, нужен: им говорят, чью
-// дорожку правят.
 auto entity_tree_panel::select_(const std::string& name) const -> void {
     if (!state_->ctx.allows_node_select()) {
         return;
@@ -114,8 +106,6 @@ auto entity_tree_panel::render_entity_node(
 
     const bool hidden = parent_hidden || state_->scene.hidden_nodes.contains(name);
 
-    // Внутри объёма подсвечен узел из крошек: выделение туда не ходит, а
-    // показать, чьи соседи вокруг, всё равно нужно.
     const bool is_selected = state_->edited_node() == name;
     bool is_open           = false;
 
@@ -132,8 +122,6 @@ auto entity_tree_panel::render_entity_node(
         node_flags |= ImGuiTreeNodeFlags_Selected;
     }
 
-    // Скрытый узел — и скрытый вслед за предком — читается приглушённым, чтобы по
-    // дереву было видно, почему части нет на экране.
     if (hidden) {
         ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
     }
@@ -188,7 +176,6 @@ auto entity_tree_panel::render_entity_node(
 auto entity_tree_panel::render_visibility_toggle_(
     const std::string& name
 ) -> void {
-    // Объём, в который провалились, не прячется: править невидимое нечем.
     const bool locked =
         state_->ctx.kind() == edit_kind::model && state_->ctx.node_name() == name;
 
@@ -215,7 +202,6 @@ auto entity_tree_panel::render_visibility_toggle_(
 auto entity_tree_panel::render_drag_and_drop_(
     const std::string& name
 ) -> void {
-    // Корень префаба один и остаётся корнем: переносить его некуда.
     if (name != state_->scene.root_name && ImGui::BeginDragDropSource()) {
         ImGui::SetDragDropPayload(node_payload, name.c_str(), name.size() + 1);
         ImGui::TextUnformatted(name.c_str());
@@ -231,7 +217,6 @@ auto entity_tree_panel::render_drag_and_drop_(
     const float32 height = max.y - min.y;
     const float32 y      = ImGui::GetMousePos().y - min.y;
 
-    // У корня соседей нет, и любой бросок на него — внутрь.
     auto place = drop_place::inside;
     if (name != state_->scene.root_name) {
         if (y < height * drop_edge) {
@@ -248,8 +233,6 @@ auto entity_tree_panel::render_drag_and_drop_(
     if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(node_payload, accept_flags)) {
         const std::string dragged{static_cast<const char*>(payload->Data)};
 
-        // Недопустимый бросок ничего не рисует: подсказка обещает ровно то, что
-        // случится, если отпустить.
         if (auto move = plan_move_(dragged, name, place)) {
             auto* draw_list   = ImGui::GetWindowDrawList();
             const auto colour = ImGui::GetColorU32(ImGuiCol_DragDropTarget);
@@ -293,8 +276,6 @@ auto entity_tree_panel::plan_move_(
                    : ecs::invalid_entity;
     };
 
-    // Узел нельзя уложить в собственное поддерево: такой цикл движок отвергает
-    // исключением, а подсказка не должна его даже предлагать.
     for (auto ent = target_it->second; ent.is_valid(); ent = parent_of(ent)) {
         if (ent == dragged_it->second) {
             return std::nullopt;
@@ -312,8 +293,6 @@ auto entity_tree_panel::plan_move_(
         return std::nullopt;
     }
 
-    // Место считается по списку без переносимого узла — так же, как его читает
-    // операция и сам движок.
     const auto& children = world.get<ecs::hierarchy_component>(new_parent).get_children();
 
     std::vector<ecs::entity> siblings = children;
@@ -326,7 +305,6 @@ auto entity_tree_panel::plan_move_(
             (place == drop_place::after ? 1 : 0);
     }
 
-    // Бросок туда, где узел и так стоит, в историю не ложится.
     if (parent_of(dragged_it->second) == new_parent) {
         const auto current = static_cast<std::size_t>(
             std::distance(children.begin(), std::ranges::find(children, dragged_it->second))

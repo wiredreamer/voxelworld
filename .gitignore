@@ -1,4 +1,3 @@
-# CMake build
 out/
 build/
 CMakeFiles/
@@ -7,17 +6,13 @@ cmake_install.cmake
 Makefile
 CMakeUserPresets.json
 
-# VCPKG
 vcpkg_installed/
 
-# macOS
 .DS_Store
 
-# VSCode/CLion
 .vscode/
 .idea/
 
-# Компилятор/отладчик
 *.o
 *.obj
 *.so
@@ -28,20 +23,16 @@ vcpkg_installed/
 *.lib
 *.pdb
 
-# Логи и временные файлы
 *.log
 *.tmp
 *.swp
 *~
 bench/
 
-# Генерируемые файлы
 *.generated.*
 
-# Пользовательские настройки
 *.user
 .cache/
 .claude/settings.local.json
 
-# Worktrees
 .claude/worktrees/

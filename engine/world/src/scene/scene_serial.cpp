@@ -35,14 +35,10 @@ auto vox_serializer::extract() const -> asset::vox_prefab_data {
     asset::vox_prefab_data prefab;
     prefab.root_name = entity_names_.at(root_);
 
-    // Риг — свойство префаба целиком, поэтому он на корне и в шапке, а не в
-    // узле: узлов с целями много, риг у них один.
     if (world_->has<rig_component>(root_)) {
         prefab.rig = world_->get<rig_component>(root_).get_name();
     }
 
-    // Автоматы лежат там же, на корне, и по той же причине. Без этого редактор
-    // открыл бы префаб с автоматами и сохранил без них.
     if (world_->has<animation_machines_component>(root_)) {
         const auto sources = world_->get<animation_machines_component>(root_).get_sources();
         prefab.fsm_refs.assign(sources.begin(), sources.end());
@@ -55,9 +51,6 @@ auto vox_serializer::extract() const -> asset::vox_prefab_data {
         entity current = to_process.front();
         to_process.pop_front();
 
-        // Содержимое по ссылке в дерево не пишется: его принесёт кандидат слота
-        // или превью сокета, а не этот файл. Поддерево такого узла тоже не
-        // обходится — оно всё пришло вместе с ним.
         if (world_->has<slot_content_component>(current)) {
             continue;
         }
@@ -159,11 +152,6 @@ auto vox_deserializer::instantiate(
     result res;
     res.root_name = prefab.root_name;
 
-    // Проходов три, и это фазы, а не удобство. Сущности заводятся все сразу: в
-    // один проход родитель обязан стоять в файле раньше ребёнка, а нарушение
-    // этого порядка теряло связь молча. Дерево связывается до трансформов,
-    // трансформы — до всего прочего: позу покоя цель анимации берёт из уже
-    // выставленного трансформа.
     for (const auto& ent_data : prefab.entities) {
         create_entity_(ent_data, res);
     }
@@ -202,7 +190,6 @@ auto vox_deserializer::put_variant(
 
     const auto ref = slot.get_candidates()[index];
     if (ref.extension() != ".vox") {
-        // Объём ставит система: разборщик ей для этого не нужен.
         return world_->system<variant_system>().apply(node, *library_, index);
     }
 

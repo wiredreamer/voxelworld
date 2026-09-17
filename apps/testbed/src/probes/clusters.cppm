@@ -7,13 +7,8 @@ import vw.gfx;
 
 export namespace vw::testbed {
 
-// Вычитка сетки источников: сколько она раздаёт, насколько заполнена и сходится
-// ли с эталоном на CPU. Не сцена, а прибор: включается ключом и снимается с
-// любой сцены, какая идёт.
 class cluster_probe {
 public:
-    // stats — дешёвая половина: только счётчики. verify — она же плюс списки и
-    // эталон раз в N кадров, и это кадр заикания, поэтому по умолчанию выключено.
     cluster_probe(bool stats, uint32 verify_every)
         : stats_{stats}, verify_every_{verify_every} {}
 
@@ -26,15 +21,11 @@ public:
                                  : gfx::cluster_readback_level::counts;
     }
 
-    // Кадр приходит на полное кольцо позже, поэтому это всегда кадр, который
-    // точно закончился, и никогда тот, что записывается сейчас. Оба списка
-    // порознь: среднее по источникам и телам вместе не описывает ни одного.
     auto collect(gfx::renderer& renderer, bool measuring) -> void;
 
     auto collect_report(gfx::report& out) const -> void;
 
 private:
-    // Итог по одному списку.
     struct tally {
         spatial::cluster_grid grid{};
         uint32 cap = 0;
@@ -56,8 +47,6 @@ private:
 
     auto account_(gfx::cull_list kind, const gfx::cluster_readback& frame) -> void;
 
-    // Эталон — тот же код, который прибит юнит-тестами, и кормят его теми же
-    // сферами в пространстве вида, которые компьютный проход построил себе сам.
     auto verify_frame_(gfx::cull_list kind, const gfx::cluster_readback& frame) -> void;
 
     auto report_list_(gfx::report& out, gfx::cull_list kind, std::string_view what) const -> void;

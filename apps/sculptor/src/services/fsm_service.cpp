@@ -43,8 +43,6 @@ auto fsm_service::enter(
         return false;
     }
 
-    // Тот же файл с несохранённой правкой не перечитывается: выход по крошке
-    // правку не выбрасывает, и второй вход не должен поднимать поверх неё диск.
     const bool same_open = state_->fsm.source == sources[layer] && state_->fsm.has_unsaved_changes;
 
     if (!same_open) {
@@ -61,8 +59,6 @@ auto fsm_service::enter(
         state_->fsm.selected_state      = state_->fsm.data.entry_state;
     }
 
-    // Автомат — под-ассет префаба, а не объёма: заходят в него из корня, поэтому
-    // стек сбрасывается, как и у клипа.
     state_->ctx.leave_to(0);
     state_->ctx.enter(edit_context::fsm(layer));
 

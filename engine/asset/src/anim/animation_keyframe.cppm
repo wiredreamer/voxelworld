@@ -10,8 +10,6 @@ enum class animation_state : uint8 { stopped, playing, paused };
 
 enum class animation_loop_mode : uint8 { once, loop, ping_pong };
 
-// Точки вращения тут нет намеренно: она описывает геометрию модели, а не позу
-// узла, и клип, знающий её, ломается от любой правки объёма.
 enum class animation_property : uint8 { position, rotation, scale };
 
 struct transition {

@@ -10,7 +10,6 @@ import vw.platform;
 import vw.gfx;
 import :state;
 
-// ---- from src/operations/base_operation.h
 export namespace vw::sculptor {
 
 class operation_manager;
@@ -29,8 +28,6 @@ public:
     virtual auto execute() -> void = 0;
     virtual auto undo() -> void    = 0;
 
-    // Контекст, в котором правку сделали: по нему undo возвращает редактор туда,
-    // где её видно. Иначе Ctrl+Z из префаба меняет воксель в закрытом объёме.
     [[nodiscard]] auto get_context() const -> const std::vector<edit_context>& {
         return context_;
     }
@@ -41,8 +38,6 @@ private:
     std::vector<edit_context> context_;
 };
 
-// Несколько правок одним шагом истории. Запись позы кладёт до трёх ключей, и
-// откатывать их по одному значило бы оставлять узел в позе, которой не было.
 class composite_operation final : public base_operation {
 public:
     explicit composite_operation(std::vector<std::unique_ptr<base_operation>> parts);
@@ -56,7 +51,6 @@ private:
 
 }  // namespace vw::sculptor
 
-// ---- from src/operations/add_animation_target_operation.h
 export namespace vw::sculptor {
 
 struct add_animation_target_params {
@@ -85,7 +79,6 @@ private:
 
 }  // namespace vw::sculptor
 
-// ---- from src/operations/add_keyframe_operation.h
 export namespace vw::sculptor {
 
 struct add_keyframe_params {
@@ -115,7 +108,6 @@ private:
 
 }  // namespace vw::sculptor
 
-// ---- from src/operations/add_model_component_operation.h
 export namespace vw::sculptor {
 
 struct add_model_component_params {
@@ -143,11 +135,8 @@ private:
 
 }  // namespace vw::sculptor
 
-// ---- from src/operations/attach_model_operation.h
 export namespace vw::sculptor {
 
-// Готовый .voxm вместо нового объёма. Узел встаёт на ту же ссылку, что и прежние
-// её хозяева, и объём у них один: правка второй ноги правит и первую.
 struct attach_model_params {
     std::string name;
     asset::asset_ref source;
@@ -174,7 +163,6 @@ private:
 
 }  // namespace vw::sculptor
 
-// ---- from src/operations/add_socket_component_operation.h
 export namespace vw::sculptor {
 
 struct add_socket_component_params {
@@ -200,7 +188,6 @@ private:
 
 }  // namespace vw::sculptor
 
-// ---- from src/operations/add_socket_operation.h
 export namespace vw::sculptor {
 
 struct add_socket_params {
@@ -228,7 +215,6 @@ private:
 
 }  // namespace vw::sculptor
 
-// ---- from src/operations/add_track_operation.h
 export namespace vw::sculptor {
 
 struct add_track_params {
@@ -256,7 +242,6 @@ private:
 
 }  // namespace vw::sculptor
 
-// ---- from src/operations/add_voxel_operation.h
 export namespace vw::sculptor {
 
 struct add_voxel_params {
@@ -282,7 +267,6 @@ private:
 
 }  // namespace vw::sculptor
 
-// ---- from src/operations/close_clip_operation.h
 export namespace vw::sculptor {
 
 struct close_clip_params {
@@ -307,7 +291,6 @@ private:
 
 }  // namespace vw::sculptor
 
-// ---- from src/operations/create_clip_operation.h
 export namespace vw::sculptor {
 
 struct create_clip_params {
@@ -331,11 +314,8 @@ private:
 
 }  // namespace vw::sculptor
 
-// ---- from src/operations/create_entity_operation.h
 export namespace vw::sculptor {
 
-// Голый узел: трансформ и место в дереве. Всё, что на нём будет, ставится
-// операциями компонентов, сложенными с этой в один шаг истории.
 struct create_entity_params {
     std::string name;
     std::string parent_name;
@@ -361,7 +341,6 @@ private:
 
 }  // namespace vw::sculptor
 
-// ---- from src/operations/move_entity_operation.h
 export namespace vw::sculptor {
 
 struct move_entity_params {
@@ -374,10 +353,6 @@ struct move_entity_params {
     std::size_t index = 0;
 };
 
-// Перенос узла в иерархии. Узел остаётся там же в мире: локальный трансформ
-// пересчитывается под нового родителя, иначе перетаскивание в дереве двигало бы
-// модель на экране. Отмена возвращает и место среди соседей, и прежние числа
-// трансформа как есть, без обратного пересчёта.
 class move_entity_operation final : public base_operation {
 public:
     using engine_type = gfx::engine;
@@ -401,7 +376,6 @@ private:
 
 }  // namespace vw::sculptor
 
-// ---- from src/operations/delete_entity_operation.h
 export namespace vw::sculptor {
 
 struct delete_entity_params {
@@ -432,7 +406,6 @@ private:
 
 }  // namespace vw::sculptor
 
-// ---- from src/operations/expand_model_operation.h
 export namespace vw::sculptor {
 
 struct expand_model_params {
@@ -458,7 +431,6 @@ private:
 
 }  // namespace vw::sculptor
 
-// ---- from src/operations/add_variant_slot_operation.h
 export namespace vw::sculptor {
 
 struct add_variant_slot_params {
@@ -484,7 +456,6 @@ private:
 
 }  // namespace vw::sculptor
 
-// ---- from src/operations/remove_variant_slot_operation.h
 export namespace vw::sculptor {
 
 struct remove_variant_slot_params {
@@ -518,7 +489,6 @@ private:
 
 }  // namespace vw::sculptor
 
-// ---- from src/operations/set_variant_candidates_operation.h
 export namespace vw::sculptor {
 
 struct set_variant_candidates_params {
@@ -526,8 +496,6 @@ struct set_variant_candidates_params {
     std::vector<asset::asset_ref> candidates;
 };
 
-// Одна операция и на добавление, и на удаление кандидата: обе меняют один
-// список, и отмена у них одна — вернуть прежний.
 class set_variant_candidates_operation final : public base_operation {
 public:
     using engine_type = gfx::engine;
@@ -554,7 +522,6 @@ private:
 
 }  // namespace vw::sculptor
 
-// ---- from src/operations/select_variant_operation.h
 export namespace vw::sculptor {
 
 struct select_variant_params {
@@ -578,8 +545,6 @@ private:
     engine_type* engine_;
     app_state* state_;
 
-    // Кандидат — файл, и ставится он загрузкой: библиотека тут не роскошь, а
-    // единственный способ не завести второй экземпляр того же объёма.
     asset::model_library* library_;
 
     select_variant_params params_;
@@ -588,15 +553,12 @@ private:
 
 }  // namespace vw::sculptor
 
-// ---- from src/operations/trim_model_operation.h
 export namespace vw::sculptor {
 
 struct trim_model_params {
     std::string name;
 };
 
-// Обратная к expand_model_operation: срезает пустые слои с краёв объёма и
-// двигает точку вращения на срезанное, чтобы узел не сдвинулся.
 class trim_model_operation final : public base_operation {
 public:
     using engine_type = gfx::engine;
@@ -611,14 +573,11 @@ private:
     app_state* state_;
     trim_model_params params_;
 
-    // Прежний объём хранится целиком, а не пересчитывается обратно: срез теряет
-    // и размер, и то, сколько было пустых слоёв с какой стороны.
     std::shared_ptr<asset::model> previous_;
 };
 
 }  // namespace vw::sculptor
 
-// ---- from src/operations/modify_keyframe_operation.h
 export namespace vw::sculptor {
 
 struct modify_keyframe_params {
@@ -650,7 +609,6 @@ private:
 
 }  // namespace vw::sculptor
 
-// ---- from src/operations/operation_manager.h
 export namespace vw::sculptor {
 
 class operation_manager final {
@@ -662,8 +620,6 @@ public:
 
     auto execute(std::unique_ptr<base_operation> op) -> void;
 
-    // История принадлежит документу: с новым документом откатывать нечего, а
-    // старые операции откатили бы правку в сцене, которой уже нет.
     auto clear() -> void;
 
     [[nodiscard]] auto is_undo_empty() const -> bool;
@@ -681,7 +637,6 @@ private:
 
 }  // namespace vw::sculptor
 
-// ---- from src/operations/paint_voxel_operation.h
 export namespace vw::sculptor {
 
 struct paint_voxel_params {
@@ -708,7 +663,6 @@ private:
 
 }  // namespace vw::sculptor
 
-// ---- from src/operations/remove_animation_target_operation.h
 export namespace vw::sculptor {
 
 struct remove_animation_target_params {
@@ -738,7 +692,6 @@ private:
 
 }  // namespace vw::sculptor
 
-// ---- from src/operations/remove_keyframe_operation.h
 export namespace vw::sculptor {
 
 struct remove_keyframe_params {
@@ -767,15 +720,12 @@ private:
 
 }  // namespace vw::sculptor
 
-// ---- from src/operations/set_rig_operation.h
 export namespace vw::sculptor {
 
 struct set_rig_params {
     std::string rig_name;
 };
 
-// Риг у документа один и живёт на корне, поэтому операция не называет узла.
-// Пустое имя — «риг не указан»: компонент остаётся, но в шапку ничего не идёт.
 class set_rig_operation final : public base_operation {
 public:
     using engine_type = gfx::engine;
@@ -796,7 +746,6 @@ private:
 
 }  // namespace vw::sculptor
 
-// ---- from src/operations/set_pivot_operation.h
 export namespace vw::sculptor {
 
 struct set_pivot_params {
@@ -804,8 +753,6 @@ struct set_pivot_params {
     vec3f new_pivot;
 };
 
-// Точка вращения принадлежит модели, а не узлу, поэтому и правится отдельно от
-// трансформа: сдвинув её, узел с места не двигают.
 class set_pivot_operation final : public base_operation {
 public:
     using engine_type = gfx::engine;
@@ -824,7 +771,6 @@ private:
 
 }  // namespace vw::sculptor
 
-// ---- from src/operations/remove_model_component_operation.h
 export namespace vw::sculptor {
 
 struct remove_model_component_params {
@@ -852,7 +798,6 @@ private:
 
 }  // namespace vw::sculptor
 
-// ---- from src/operations/remove_socket_component_operation.h
 export namespace vw::sculptor {
 
 struct remove_socket_component_params {
@@ -887,7 +832,6 @@ private:
 
 }  // namespace vw::sculptor
 
-// ---- from src/operations/remove_socket_operation.h
 export namespace vw::sculptor {
 
 struct remove_socket_params {
@@ -915,7 +859,6 @@ private:
 
 }  // namespace vw::sculptor
 
-// ---- from src/operations/remove_track_operation.h
 export namespace vw::sculptor {
 
 struct remove_track_params {
@@ -941,7 +884,6 @@ private:
 
 }  // namespace vw::sculptor
 
-// ---- from src/operations/remove_voxel_operation.h
 export namespace vw::sculptor {
 
 struct remove_voxel_params {
@@ -967,7 +909,6 @@ private:
 
 }  // namespace vw::sculptor
 
-// ---- from src/operations/set_socket_transform_operation.h
 export namespace vw::sculptor {
 
 struct set_socket_transform_params {
@@ -1002,7 +943,6 @@ private:
 
 }  // namespace vw::sculptor
 
-// ---- from src/operations/set_transform_operation.h
 export namespace vw::sculptor {
 
 struct set_transform_params {
@@ -1028,12 +968,8 @@ private:
 
 }  // namespace vw::sculptor
 
-// ---- from src/operations/fsm_operations.h
 export namespace vw::sculptor {
 
-// Отмена автомата — снимок всего документа, а не правка поля. Файл маленький,
-// правки в нём крупные, а семейство операций на каждое поле дало бы тот же
-// результат дюжиной классов.
 struct set_fsm_params {
     asset::voxf_data before;
     asset::voxf_data after;
@@ -1051,9 +987,6 @@ private:
     set_fsm_params params_;
 };
 
-// Список автоматов префаба целиком: добавление, удаление и перестановка — это
-// одно и то же действие над упорядоченным списком, потому что порядок в нём
-// значит номера слоёв.
 struct set_machines_params {
     std::vector<asset::asset_ref> machines;
 };
@@ -1078,11 +1011,8 @@ private:
 
 }  // namespace vw::sculptor
 
-// ---- from src/operations/structure_operations.h
 export namespace vw::sculptor {
 
-// Метаданные структуры правятся целиком: полей четыре, они короткие, и снимок
-// всей четвёрки дешевле четырёх классов операций с одинаковым телом.
 struct set_structure_params {
     std::string name;
     std::string type;
@@ -1109,16 +1039,12 @@ private:
     set_structure_params previous_;
 };
 
-// Точка — метка на узле: категория мебели или профиль стыка. Компонент здесь
-// заводится и снимается тем же действием, что и задаётся текст, потому что
-// точка без своего слова смысла не имеет.
 enum class point_kind : uint8 { furniture, connection };
 
 struct set_point_params {
     std::string name;
     point_kind kind = point_kind::furniture;
 
-    // Пусто — снять метку с узла.
     std::string tag;
     bool present = true;
 };

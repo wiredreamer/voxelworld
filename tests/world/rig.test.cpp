@@ -23,9 +23,6 @@ auto make_target(std::string name, std::string parent) -> asset::vox_entity_data
     return data;
 }
 
-// Дерево из assets/prefabs/m_human.vox в миниатюре: корень без цели и два узла
-// с целями. Риг проверяется против настоящего дерева, поэтому и в тесте цели
-// берутся из узлов, а не из списка рядом.
 struct rig_fixture final {
     world w;
     voxel_registry voxel_types;
@@ -72,8 +69,6 @@ auto make_clip(std::string_view rig, std::initializer_list<std::string_view> tar
 
 }  // namespace
 
-// Список целей не лежит ни в файле, ни рядом — он и есть дерево. Дублировать
-// его значит завести второй источник правды, который разойдётся с первым.
 TEST_CASE("the targets of a rig come from the nodes that carry them", "[rig]") {
     rig_fixture fx;
     fx.load("humanoid");
@@ -96,8 +91,6 @@ TEST_CASE("a clip of the same rig passes the check", "[rig]") {
     REQUIRE(report.unknown_targets.empty());
 }
 
-// Сообщение обязано называть оба имени: «клип не подошёл» не говорит ничего,
-// а «клип для goblin, документ humanoid» говорит всё.
 TEST_CASE("a clip of a foreign rig names both rigs", "[rig]") {
     rig_fixture fx;
     fx.load("humanoid");
@@ -111,8 +104,6 @@ TEST_CASE("a clip of a foreign rig names both rigs", "[rig]") {
     REQUIRE(report.clip_rig == "goblin");
 }
 
-// Совпавшего имени рига мало: имя — дешёвая проверка, а настоящая идёт по
-// целям. Дорожка без узла не проиграется, и молчать об этом нельзя.
 TEST_CASE("a track without a node is reported even when the rigs match", "[rig]") {
     rig_fixture fx;
     fx.load("humanoid");
@@ -125,8 +116,6 @@ TEST_CASE("a track without a node is reported even when the rigs match", "[rig]"
     REQUIRE(report.unknown_targets == std::vector<std::string>{"tail"});
 }
 
-// Клип старше проверки рига не виноват в том, что её тогда не было: пустое имя
-// с любой стороны — «не указан», а не «не совпало».
 TEST_CASE("a clip without a rig is not a mismatch", "[rig]") {
     rig_fixture fx;
     fx.load("humanoid");

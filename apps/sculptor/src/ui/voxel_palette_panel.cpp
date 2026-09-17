@@ -37,8 +37,6 @@ voxel_palette_panel::voxel_palette_panel(
 auto voxel_palette_panel::swatch_(
     const voxel_type& type, int32 index_in_row
 ) -> void {
-    // Перенос ставится перед образцом, а не после: иначе последний в ряду
-    // утащил бы на свою строку то, что идёт за палитрой.
     if (index_in_row % swatches_per_row != 0) {
         ImGui::SameLine(0, 0);
     }
@@ -66,15 +64,9 @@ auto voxel_palette_panel::render(
     const voxel_registry& registry = engine_->get_voxel_registry();
     const voxel_category shown     = selected_model_category(*engine_, *state_);
 
-    // Кисть помнится на набор, и пишется она каждый кадр: так запоминается
-    // последний выбор, чем бы он ни был сделан — панелью, пипеткой или
-    // открытием файла.
     state_->tool.brush_of_set[state_->tool.selected_voxel.category().value] =
         state_->tool.selected_voxel;
 
-    // Кисть, оставшаяся от модели другого набора, в текущую не ложится вовсе —
-    // и уронила бы движок на первом же мазке. Поэтому она переезжает вместе с
-    // панелью, а не проверяется на каждом инструменте по отдельности.
     if (state_->tool.selected_voxel.category() != shown) {
         state_->tool.selected_voxel = state_->tool.brush_for(shown, registry);
     }
@@ -116,8 +108,6 @@ auto voxel_palette_panel::render(
         for (const voxel_group& group : set->groups) {
             ImGui::SeparatorText(std::string{group.name}.c_str());
 
-            // Нулевой отступ только вокруг образцов: рампа обязана читаться
-            // сплошной полосой, а заголовки от неё — отделяться.
             ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
             int32 in_row = 0;
             for (uint8 offset = 0; offset < group.count; ++offset) {
@@ -131,8 +121,6 @@ auto voxel_palette_panel::render(
             ImGui::PopStyleVar();
         }
     } else {
-        // Набор, о разделах которого каталог не знает: показать всё равно есть
-        // что — списком, — а придумывать за него разбиение панель не станет.
         ImGui::SeparatorText("voxels");
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
         int32 in_row = 0;

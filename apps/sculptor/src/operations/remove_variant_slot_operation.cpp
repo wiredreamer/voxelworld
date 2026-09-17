@@ -35,8 +35,6 @@ auto remove_variant_slot_operation::execute() -> void {
     saved_targets_   = slot.required_targets();
     saved_sockets_   = slot.required_sockets();
 
-    // Поддерево кандидата уходит вместе со слотом: в файле его нет, и без слота
-    // за ним никто не следит — оно осталось бы висеть в сцене навсегда.
     for (const auto content : slot.get_content()) {
         world.destroy(content);
     }
@@ -63,8 +61,6 @@ auto remove_variant_slot_operation::undo() -> void {
     modifier.set_required_sockets(saved_sockets_);
     modifier.select(saved_index_);
 
-    // Кандидат ставится заново, а не восстанавливается: поддерево снесено, и
-    // вернуть его можно только тем же путём, каким оно приехало.
     if (!saved_.empty()) {
         asset::vox_parser_plain parser;
         ecs::vox_deserializer deserializer{world, parser, *library_};

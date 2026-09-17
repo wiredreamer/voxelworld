@@ -6,15 +6,11 @@ import vw.core;
 namespace vw::testbed {
 namespace {
 
-// Таблица сцен: имя, которое принимает --scene, и то, как построить сцену на
-// уже стоящем стенде.
 struct scene_entry {
     std::string_view name;
     auto (*build)(testbed_app&, const arg_reader&) -> std::unique_ptr<scene>;
 };
 
-// Сцена строится из стенда и командной строки: свои ключи она читает сама, и
-// таблица о них ничего не знает.
 template <typename Scene>
 constexpr auto entry_for(std::string_view name) -> scene_entry {
     return {name, [](testbed_app& stand, const arg_reader& args) -> std::unique_ptr<scene> {

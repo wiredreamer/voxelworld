@@ -15,16 +15,8 @@ import :scene;
 
 export namespace vw::testbed {
 
-// Несомый источник круглый там, где лужа поставленного вокселя — ромб, поэтому
-// одна и та же досягаемость у них накрывает разный пол. Сечение ромба по свету
-// — квадрат площади 2r^2, шара — круг pi*r^2, и сходятся они на r * sqrt(2/pi).
-// Излучение четырнадцать поэтому несёт одиннадцать вокселей, а не четырнадцать,
-// и лужа на земле выходит того размера, какой дал бы воксель.
 inline constexpr float32 round_reach = 0.8f;
 
-// Что делает левая кнопка при захваченном курсоре. По умолчанию ничего: это
-// прежде всего стенд для замеров, и случайный клик, переложивший рельеф, тихо
-// испортил бы прогон.
 enum class edit_tool : int32 {
     none = 0,
     place,
@@ -36,9 +28,6 @@ struct voxel_choice {
     voxel id;
 };
 
-// Короткое меню, а не все сорок восемь цветов палитры. Два светящих идут
-// первыми, потому что ради них всё и затевалось; остального хватает, чтобы
-// построить что-нибудь, на что этот свет упадёт.
 constexpr std::array<voxel_choice, 8> voxel_menu{{
     {"glowstone (emits 14)", voxels::world::glowstone},
     {"lava (emits 15)", voxels::world::lava},
@@ -58,13 +47,8 @@ struct voxel_pick {
     vec3i empty;
 };
 
-// Стенд: мир, камера, инструменты правки, день с ночью и всё прочее, что
-// одинаково для любой сцены. Сама сцена живёт отдельно и получает стенд в
-// конструкторе.
 class testbed_app final : public gfx::app {
 public:
-    // Риг строится после сцены и потому приходит фабрикой: пустая означает
-    // «взять тот путь, который сцена сама себе назначила».
     testbed_app(
         gfx::engine& eng, const arg_reader& args, const scene_factory& make_scene,
         const camera_factory& make_camera
@@ -79,12 +63,7 @@ public:
     [[nodiscard]] auto is_bench_ready() const -> bool override;
     auto render(float32 delta_time) -> void override;
 
-    // Всё, что стенд знает о прогоне: блок сцены и показания приборов. Движок
-    // спрашивает это перед тем, как записать отчёт, поэтому оно попадает и в
-    // текст, и в JSON.
     auto collect_report(gfx::report& out) const -> void override;
-
-    // ——— то, чем стенд обслуживает сцену ———
 
     [[nodiscard]] auto engine() const -> gfx::engine& {
         return get_engine();
@@ -94,8 +73,6 @@ public:
     [[nodiscard]] auto renderer() const -> gfx::renderer&;
     [[nodiscard]] auto camera() const -> gfx::camera&;
 
-    // Камера человека: ею ходит свободный риг, ею же интерфейс спрашивает, не
-    // захвачен ли курсор.
     [[nodiscard]] auto camera_controller() const -> gfx::free_camera_controller& {
         return *camera_controller_;
     }
@@ -115,8 +92,6 @@ public:
         return generator_params_.voxel_scale;
     }
 
-    // Земля над началом координат: от неё риг отмеряет свой путь. Известна
-    // только после того, как колонка под камерой загрузилась.
     [[nodiscard]] auto altitude() const -> float32 {
         return bench_altitude_;
     }
@@ -125,19 +100,12 @@ public:
         return camera_placed_;
     }
 
-    // Все три очереди — генерация, свет, меш — пусты, то есть мир вокруг
-    // догрузился.
     [[nodiscard]] auto streaming_settled() const -> bool;
 
-    // Идёт замер: шаг мира фиксирован, кадры сочтены, отчёт будет записан. Всё,
-    // что в сцене движется, шагает тогда по номеру кадра, а не по часам — иначе
-    // сцена на каждой машине разная и мерить её нельзя.
     [[nodiscard]] auto benching() const -> bool {
         return benching_;
     }
 
-    // Куб светящих вокселей, вкопанный в землю под камерой: сцены ставят им своё
-    // содержимое, а UI — по кнопке.
     auto drop_emitter(voxel id, int32 radius) -> void;
 
 private:
@@ -169,8 +137,6 @@ private:
     ecs::perlin_terrain_generator::params generator_params_;
     bool camera_placed_ = false;
 
-    // Полдень для начала, чтобы первым увиденным был тот свет, под который
-    // настраивался весь остальной движок.
     float32 time_of_day_        = 0.5f;
     float32 day_length_seconds_ = 120.0f;
     float32 night_intensity_    = 0.06f;
@@ -193,12 +159,8 @@ private:
 
     cluster_probe clusters_;
 
-    // Строится последней: конструктор сцены вправе спрашивать стенд про мир и
-    // камеру, а к этому моменту всё остальное уже стоит.
     std::unique_ptr<scene> scene_;
 
-    // И риг — после неё: без ключа путь берётся тот, который назначила себе
-    // сцена.
     std::unique_ptr<camera_rig> rig_;
 };
 

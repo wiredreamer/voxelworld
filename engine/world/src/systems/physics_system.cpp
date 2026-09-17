@@ -152,9 +152,6 @@ auto physics_system::resolve_box_voxel(
     auto vs_i = grid->voxel_scale();
     bool grounded = false;
 
-    // Тело занимает горстку вокселей, и почти все они живут в одном чанке, но
-    // world_grid::get_voxel хеширует координату чанка на каждом из них. Поэтому
-    // найденное держится и между ячейками, и между итерациями.
     vec3i cached_coord{std::numeric_limits<int32>::min(), 0, 0};
     chunk* cached_chunk = nullptr;
 

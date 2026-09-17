@@ -80,8 +80,6 @@ auto open_clip_modal::render() -> void {
                 error_.clear();
                 rig_mismatch_seen_ = false;
 
-                // Открыли клип — значит пришли его править: режим включается
-                // сам, иначе после диалога пришлось бы искать, чем его включить.
                 state_->ui.need_enter_animation = true;
                 ImGui::CloseCurrentPopup();
                 break;

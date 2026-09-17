@@ -35,8 +35,6 @@ auto attach_model_operation::execute() -> void {
     state_->file.has_unsaved_changes = true;
 }
 
-// Объём остаётся в библиотеке: он принадлежит файлу, а не узлу, и на него
-// могут смотреть другие узлы.
 auto attach_model_operation::undo() -> void {
     const auto it = state_->scene.name_to_entity.find(params_.name);
     if (it == state_->scene.name_to_entity.end()) {

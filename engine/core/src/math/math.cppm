@@ -157,10 +157,6 @@ inline auto mix(const vec4f& a, const vec4f& b, float t) -> vec4f { return lerp(
 
 auto perspective_matrix(float fov, float aspect, float near, float far) -> mat4f;
 
-// Глубина идёт от 1 на ближней плоскости к 0 на дальней. Точность float гуще
-// всего у нуля, а проекция тратит её быстрее всего у камеры, поэтому одно гасит
-// другое, а не складывается с ним: при near 0,1 обычное отображение к километру
-// не оставляет ничего. Требует eGreater и очистки нулём.
 auto perspective_matrix_reversed(float fov, float aspect, float near, float far) -> mat4f;
 auto orthographic_matrix(float left, float right, float bottom, float top, float near, float far) -> mat4f;
 auto look_at_matrix(const vec3f& eye, const vec3f& target) -> mat4f;

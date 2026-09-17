@@ -8,8 +8,6 @@ import :anim.keyframe;
 export namespace vw::asset {
 
 template <typename T>
-// Одно анимируемое свойство одной цели: отсортированный список ключевых кадров
-// плюс интерполяция между соседями.
 class animation_channel final {
 public:
     enum class error_type : uint8 { empty };
@@ -133,8 +131,6 @@ auto make_animation_channel() -> animation_channel_for<Prop> {
     return animation_channel_for<Prop>(Prop);
 }
 
-// Все каналы одной цели, запечённые в фиксированную частоту кадров при первом
-// запросе и перезапекаемые при любом изменении канала.
 class animation_track final {
 public:
     enum class error_type : uint8 { empty };

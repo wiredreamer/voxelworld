@@ -91,8 +91,6 @@ TEST_CASE("a voxf file reads into states, transitions and parameters", "[voxf]")
     REQUIRE(idle.loop_mode == asset::animation_loop_mode::loop);
     REQUIRE(idle.transitions.size() == 2);
 
-    // Условия правила складываются: у прыжка их два, и оба стоят отдельными
-    // строками — повтор тега это список.
     const auto& to_jump = idle.transitions[1];
     REQUIRE(to_jump.conditions.size() == 2);
     REQUIRE(to_jump.conditions[0] == asset::fsm_condition{"jump_count", fsm_compare::equal, 0.0F});
@@ -106,8 +104,6 @@ TEST_CASE("a voxf file reads into states, transitions and parameters", "[voxf]")
     REQUIRE(data.states[2].fade_out.interp == math::interpolation_type::ease_in_out);
 }
 
-// Блок any стоит на верхнем уровне, а не внутри состояния: правило из него
-// относится ко всем, и приписывать его одному состоянию значило бы соврать.
 TEST_CASE("a voxf file keeps transitions from any state apart", "[voxf]") {
     const auto data = parse(locomotion);
 
@@ -115,7 +111,6 @@ TEST_CASE("a voxf file keeps transitions from any state apart", "[voxf]") {
     REQUIRE(data.any_transitions[0].target_state == "hit_reaction");
     REQUIRE(data.any_transitions[0].trigger_name == "hit");
 
-    // Блок any не съел состояние, идущее за ним.
     REQUIRE(data.states[3].name == "hit_reaction");
     REQUIRE(data.states[3].transitions.size() == 1);
 }
@@ -126,8 +121,6 @@ TEST_CASE("a voxf file survives a write and a read back", "[voxf]") {
     REQUIRE(round_trip(data) == data);
 }
 
-// Побайтового совпадения от записи не требуется, но объявленный bool должен
-// вернуться словом: иначе файл после сохранения читался бы хуже, чем до него.
 TEST_CASE("a voxf writer spells a declared bool with a word", "[voxf]") {
     const auto data = parse(locomotion);
 
@@ -148,8 +141,6 @@ TEST_CASE("a voxf file of a future major version is refused", "[voxf]") {
     REQUIRE(result.error() == asset::voxf_deserializer::error_type::unsupported_version);
 }
 
-// Словарь автомата закрыт, поэтому кривое условие — ошибка, а не тег, который
-// проносят нетронутым: иначе опечатка стала бы переходом, который не случается.
 TEST_CASE("a malformed condition is a parse error", "[voxf]") {
     std::istringstream input{"state idle\n\tto walk\n\t\twhen speed => 1\n"};
 
@@ -168,8 +159,6 @@ TEST_CASE("a voxf file becomes a running state machine", "[voxf]") {
     asset::fsm_blackboard board;
     asset::apply_defaults(data, board);
 
-    // Объявленные параметры лежат на доске с первого кадра, а триггер — нет: он
-    // живёт в наборе сработавших.
     REQUIRE(board.entries().size() == 3);
 
     asset::animation_layer layer;
@@ -187,7 +176,6 @@ TEST_CASE("a voxf file becomes a running state machine", "[voxf]") {
 
     fsm.apply_transition(*walking);
 
-    // Переход из блока any обгоняет правила состояния, в котором мы стоим.
     triggers.insert("hit");
     const auto hit = fsm.evaluate(layer, triggers, board);
     REQUIRE(hit.has_value());

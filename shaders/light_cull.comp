@@ -1,18 +1,5 @@
 #version 460 core
 
-// One workgroup is one (shape, slice) pair, and the threads inside it split
-// that pair's rectangle of tiles between them. Both halves of that carry
-// weight. Without the slices, a shape would face the whole depth of the scene
-// in one invocation; without the split, the rectangle of a lamp near the camera
-// -- half the screen, hundreds of tiles -- would still be walked by one thread
-// while the other sixty-three stood.
-//
-// Every thread of the group works the setup out for itself rather than reading
-// it from one that did. It is the same arithmetic on the same inputs in all of
-// them, so it costs the group nothing a barrier would not cost more.
-//
-// This is a translation of vw::spatial::scatter_slice, both shapes of it. When
-// the two disagree, that one is right -- see --verify-lights.
 layout(local_size_x = 64, local_size_y = 1) in;
 
 struct PointLightData {
@@ -25,13 +12,11 @@ struct PointLightData {
 layout(set = 0, binding = 0) uniform CullParams {
     mat4 view;
 
-    // x: z_scale, y: z_bias, z: tile size in pixels, w: slices.
     vec4 cluster_params;
 
     // x: near depth, y: far depth, z: proj[0][0], w: proj[1][1].
     vec4 cluster_extent;
 
-    // x: width, y: height, z: tiles across, w: tiles down.
     vec4 screen_dims;
 
     // x: the cap on one cluster's list, y: how many shapes the buffer holds,
@@ -50,9 +35,6 @@ layout(set = 1, binding = 0, std430) readonly buffer PointLights {
     PointLightData lights[];
 } pointLights;
 
-// One past the clusters is the tally of assignments that did not fit. Counting
-// it here costs an atomic only in the frames that overflow, and reading it back
-// costs four bytes rather than the whole counts buffer.
 layout(set = 1, binding = 1, std430) buffer ClusterCounts {
     uint counts[];
 } clusterCounts;
@@ -61,9 +43,6 @@ layout(set = 1, binding = 2, std430) writeonly buffer ClusterIndices {
     uint indices[];
 } clusterIndices;
 
-// The bodies and their own grid over the same clusters. One pass, dispatched
-// twice: which clusters does this shape touch is the same question both times,
-// and only the buffers it is asked about differ.
 layout(set = 1, binding = 3, std430) readonly buffer Blobs {
     BlobData items[];
 } blobs;
@@ -78,11 +57,8 @@ layout(set = 1, binding = 5, std430) writeonly buffer BlobIndices {
 
 const float far_away = 3.4028235e38;
 
-// A rectangle whose min sits past its max is what a slab the shape misses gives.
 const ivec4 no_tiles = ivec4(1, 1, 0, 0);
 
-// x / depth over a box of x and a range of depth. Monotone in both, so the
-// extremes sit at corners and four divides settle it.
 vec2 projected_span(float x_min, float x_max, float depth_min, float depth_max) {
     float near_min = x_min / depth_min;
     float far_min  = x_min / depth_max;
@@ -95,7 +71,6 @@ vec2 projected_span(float x_min, float x_max, float depth_min, float depth_max) 
     );
 }
 
-// x/depth and y/depth to the tiles that span holds. Both shapes end here.
 ivec4 rect_of_span(vec2 span_x, vec2 span_y) {
     vec2 ndc_x = span_x * params.cluster_extent.z;
     vec2 ndc_y = span_y * params.cluster_extent.w;
@@ -113,8 +88,6 @@ ivec4 rect_of_span(vec2 span_x, vec2 span_y) {
     vec2 pixel_x = ((ndc_x * 0.5) + 0.5) * width;
     vec2 pixel_y = ((ndc_y * 0.5) + 0.5) * height;
 
-    // Clamped before this and a shape off the side of the frame would claim the
-    // edge tile rather than nothing at all.
     if (pixel_x.y < 0.0 || pixel_x.x > width || pixel_y.y < 0.0 || pixel_y.x > height) {
         return no_tiles;
     }
@@ -131,8 +104,6 @@ ivec4 rect_of_span(vec2 span_x, vec2 span_y) {
     );
 }
 
-// A ball swept along a segment: the ground a body shades. Round, so what the
-// slab holds sits in a box and the box is what gets projected.
 ivec4 scatter_capsule(vec3 end_a, vec3 end_b, float radius, float slab_near, float slab_far) {
     float spine_near = min(end_a.z, end_b.z);
     float spine_far  = max(end_a.z, end_b.z);
@@ -144,8 +115,6 @@ ivec4 scatter_capsule(vec3 end_a, vec3 end_b, float radius, float slab_near, flo
         return no_tiles;
     }
 
-    // The widest cut anywhere in the slab: through the spine itself where the
-    // slab holds any of it, through the nearer wall otherwise.
     float outside        = max(0.0, max(slab_near - spine_far, spine_near - slab_far));
     float radius_squared = (radius * radius) - (outside * outside);
 
@@ -155,10 +124,6 @@ ivec4 scatter_capsule(vec3 end_a, vec3 end_b, float radius, float slab_near, flo
 
     float cut = sqrt(radius_squared);
 
-    // Only the length of spine that comes within reach of the slab. Without
-    // this clamp a column two hundred units long would hand its whole span to
-    // every slab it crosses, and the tiles between the two ends belong to
-    // neither of them.
     vec3 along = end_b - end_a;
 
     float t_near = 0.0;
@@ -181,8 +146,6 @@ ivec4 scatter_capsule(vec3 end_a, vec3 end_b, float radius, float slab_near, flo
     );
 }
 
-// Depth positive in front of the camera, so every comparison reads forwards.
-// The sign is turned once, here.
 vec3 forwards(vec4 in_view) {
     return vec3(in_view.x, in_view.y, -in_view.z);
 }
@@ -204,9 +167,6 @@ void main() {
     float slab_near = near_depth * pow(ratio, float(slice) / float(slices));
     float slab_far  = near_depth * pow(ratio, float(slice + 1u) / float(slices));
 
-    // 0 is the sources, 1 the patches under the bodies. One shape between the
-    // two again: a source reaches by a radius now that its falloff is round,
-    // and a ball is the capsule whose two ends have met.
     uint kind = params.cull_dims.w;
 
     vec3 end_a;
@@ -237,9 +197,6 @@ void main() {
     uint tiles_y = uint(params.screen_dims.w);
     uint cap     = params.cull_dims.x;
 
-    // Flattened so that a rectangle one tile tall divides as evenly as a square
-    // one: with a loop per row, a lamp spread wide and low would hand each row
-    // to a single thread again.
     uint tiles_wide = uint(rect.z - rect.x) + 1u;
     uint tiles_high = uint(rect.w - rect.y) + 1u;
     uint spread     = tiles_wide * tiles_high;
@@ -250,8 +207,6 @@ void main() {
 
         uint cluster = ((slice * tiles_y) + tile_y) * tiles_x + tile_x;
 
-        // The count runs past the cap and is left to: what does not fit is
-        // dropped rather than spilled into the next cluster's room.
         if (kind == 0u) {
             uint slot = atomicAdd(clusterCounts.counts[cluster], 1u);
 

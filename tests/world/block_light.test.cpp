@@ -14,10 +14,6 @@ constexpr int32 side = asset::chunk_occupancy::side;
 constexpr auto sky   = asset::light_channel::sky;
 constexpr auto block = asset::light_channel::block;
 
-// A real column of models, because block light is seeded out of block ids and
-// occupancy bits cannot carry one. Nothing stands around it, so the four sides
-// come out sealed and nothing above it, so the sky channel is wide open -- both
-// of which the tests below lean on.
 class column_fixture {
 public:
     explicit column_fixture(int32 chunks) {
@@ -76,8 +72,6 @@ TEST_CASE("a lamp lights its own voxel and falls one level a step", "[block_ligh
 
     const ecs::light_column light = fixture.light();
 
-    // The lamp block is solid, so its own level is never sampled by the mesher.
-    // It is still written, because the spread starts from it.
     REQUIRE(light.level_at(32, 32, 32, block) == 14);
 
     REQUIRE(light.level_at(33, 32, 32, block) == 13);
@@ -85,8 +79,6 @@ TEST_CASE("a lamp lights its own voxel and falls one level a step", "[block_ligh
     REQUIRE(light.level_at(32, 33, 32, block) == 13);
     REQUIRE(light.level_at(32, 32, 33, block) == 13);
 
-    // Fourteen steps and it is gone -- the same falloff sky light has, only
-    // starting from what the block says instead of from fifteen.
     REQUIRE(light.level_at(45, 32, 32, block) == 1);
     REQUIRE(light.level_at(46, 32, 32, block) == 0);
 }
@@ -134,8 +126,6 @@ TEST_CASE("a world with no emitters has no block light at all", "[block_light]")
     REQUIRE(field.uniform_level() == 0);
 }
 
-// The seeding skips the inside of a uniform page, which is what keeps a lava
-// lake costing its surface. The surface itself must survive that.
 TEST_CASE("a solid page of lava lights all the way round itself", "[block_light]") {
     column_fixture fixture{1};
     fixture.fill(vec3i{8, 8, 8}, vec3i{15, 15, 15}, voxels::world::lava);
@@ -155,9 +145,6 @@ TEST_CASE("a solid page of lava lights all the way round itself", "[block_light]
     REQUIRE(light.level_at(17, 12, 12, block) == 13);
 }
 
-// Two nibbles of one byte. A write to either must leave the other where it was,
-// and the whole point of keeping them apart is that the day cannot reach the
-// lamp -- if they ever merged, this is the test that would say so.
 TEST_CASE("the two channels do not touch each other", "[block_light]") {
     column_fixture fixture{1};
     fixture.set(32, 32, 32, voxels::world::glowstone);
@@ -197,16 +184,6 @@ TEST_CASE("a baked block field reads back what was flooded", "[block_light]") {
     }
 }
 
-// The mesh is a function of the light as much as of the voxels: the levels are
-// baked into the quad corners. mesh_pool keys on model_identity and drops a
-// request for one it already holds, so light that arrives without a new
-// identity never reaches the screen -- the chunk keeps the mesh it was given
-// moments earlier, built against the light this call is replacing.
-//
-// The symptom is a one-edit lag, and it is not obvious from the picture what
-// went wrong: place a lamp and nothing lights up, place anything at all beside
-// it and the first lamp comes on, because that second edit bumped the
-// generation for its own reasons.
 TEST_CASE("setting either light invalidates the mesh built from it", "[block_light]") {
     asset::model_identity_pool ids;
     asset::page_pool pages;

@@ -8,12 +8,6 @@ env:
   VW_CMAKE_VERSION: 4.4.0
   VW_LLVM_VERSION: 20
 
-# Релизная платформа по PRD одна — Windows, и Linux-архив её не догоняет: он
-# собирается, но ни разу не запускался, потому что GPU у раннера нет. Кладётся
-# он в релиз затем же, зачем в CI стоит вторая сборка: непереносимость иначе
-# копится молча, а замечается в тот день, когда её починка стоит дороже всего.
-# Прежний linux-джоб был на gcc-13 и не мог собраться в принципе; этот идёт на
-# Clang с libc++ — той же паре, что и вся динамика в Analysis.
 jobs:
   build-windows:
     runs-on: windows-latest
@@ -32,8 +26,6 @@ jobs:
           cmakeVersion: ${{ env.VW_CMAKE_VERSION }}
           ninjaVersion: latest
 
-      # Без окружения Visual Studio не найти std.ixx, из которого собирается
-      # std-модуль.
       - name: Setup MSVC environment
         uses: ilammy/msvc-dev-cmd@v1
 
@@ -50,8 +42,6 @@ jobs:
       - name: Build sculptor
         run: cmake --build build --target sculptor
 
-      # Ninja — одноконфигурационный генератор: бинарь и шейдеры лежат прямо в
-      # каталоге таргета, без подкаталога конфигурации.
       - name: Package
         shell: bash
         run: |
@@ -124,9 +114,6 @@ jobs:
       - name: Build sculptor
         run: cmake --build build --target sculptor
 
-      # Архив собирается здесь, а не в джобе релиза: upload-artifact кладёт файлы
-      # в zip, который прав доступа не хранит, и на той стороне бинарь приехал бы
-      # без бита исполнения. Внутри tar он его сохраняет.
       - name: Package
         run: |
           mkdir package
@@ -149,7 +136,6 @@ jobs:
       - name: Download artifacts
         uses: actions/download-artifact@v4
 
-      # Linux-архив приезжает уже собранным, ему упаковка не нужна.
       - name: Create zip archive
         run: cd sculptor-windows && zip -r ../sculptor-${{ github.ref_name }}-windows.zip .
 

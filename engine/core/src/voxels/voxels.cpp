@@ -6,9 +6,6 @@ namespace vw {
 
 namespace {
 
-// Слот ноль занят до всякого каталога: он отвечает за воксель, которого в реестре
-// нет, и обязан быть заметным. Идентификатор у записи нулевой и в таблицу слотов
-// она не попадает — иначе воздух забрал бы её слот себе.
 constexpr auto missing_desc = voxel_desc{
     voxel{},
     "missing",
@@ -62,9 +59,6 @@ auto voxel_registry::add_(
 ) -> void {
     const voxel_slot known = slot_of(desc.id);
 
-    // Расширение вправе переопределить воксель каталога — цвет, свечение,
-    // поверхность. Слот при этом остаётся прежним: заводить второй значило бы
-    // держать в палитре устройства запись, к которой уже никто не обратится.
     if (known != missing_voxel_slot) {
         by_slot_[known.value] =
             voxel_type{desc.id, known, desc.name, desc.material, desc.surface};

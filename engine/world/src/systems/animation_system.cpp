@@ -86,8 +86,6 @@ auto animation_system::build_and_cache_target_map(
 ) -> void {
     target_maps_[root_ent] = collect_target_map_(root_ent);
 
-    // Дерево пересобрали — прежние жалобы больше ничего не значат: цель могла
-    // появиться, и о новой пропаже надо сказать заново.
     warned_targets_.erase(root_ent);
 }
 

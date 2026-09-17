@@ -45,8 +45,6 @@ auto set_rig_operation::apply_(
         return;
     }
 
-    // Компонент не снимается даже под пустое имя: «рига нет» и «риг стёрли»
-    // для файла одно и то же — в шапку пустое имя всё равно не пойдёт.
     world.modify(it->second).with<ecs::rig_component>();
     world.system<ecs::animation_system>().modify_rig(it->second).set_name(rig_name);
 

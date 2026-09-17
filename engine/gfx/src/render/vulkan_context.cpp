@@ -12,9 +12,6 @@ namespace vw::gfx {
 namespace {
 constexpr log::log_category lc_{"vulkan_context"};
 
-// Диспетчер инициализируется в три шага — загрузчик, инстанс, устройство, — и это
-// единственный доступ к нему во всём движке. Khronos эти символы уже один раз
-// переносила; следующий перенос должен стоить ровно этой функции.
 auto dispatcher() -> vk::detail::DispatchLoaderDynamic& {
     return vk::detail::defaultDispatchLoaderDynamic;
 }
@@ -172,8 +169,6 @@ auto vulkan_context::create_instance_() -> void {
 }
 
 auto vulkan_context::create_surface_() -> void {
-    // vw.platform передаёт сюрфейсы непрозрачными числами, чтобы Vulkan не попадал в
-    // её интерфейс; NativeType называет C-дескриптор, не втягивая C-заголовок.
     const uint64 handle = window_->create_surface(
         reinterpret_cast<uint64>(static_cast<vk::Instance::NativeType>(instance_))
     );
@@ -220,9 +215,6 @@ auto vulkan_context::create_logical_device_() -> void {
         });
     }
 
-    // Каждая косвенная команда несёт свой индекс инстанса в firstInstance, и именно
-    // он кормит вершинный атрибут инстанса. Так здесь было всегда, а саму возможность
-    // ни разу не запрашивали.
     constexpr vk::PhysicalDeviceFeatures device_features{
         .multiDrawIndirect             = vk::True,
         .drawIndirectFirstInstance     = vk::True,
@@ -394,8 +386,6 @@ auto vulkan_context::check_device_extension_support_(
 auto vulkan_context::query_swapchain_support_(
     vk::PhysicalDevice device
 ) const -> swapchain_support_details {
-    // Устройство-кандидат, не способное на это ответить, просто не подходит, поэтому
-    // неудавшийся запрос вырождается в пустой ответ, а не в панику.
     return {
         .capabilities =
             device.getSurfaceCapabilitiesKHR(surface_).value_or(vk::SurfaceCapabilitiesKHR{}),

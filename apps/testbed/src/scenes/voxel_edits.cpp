@@ -23,10 +23,6 @@ auto voxel_edits_scene::start_() -> void {
         return;
     }
 
-    // get_surface_y отвечает в вокселях, и top_voxel_ тоже. Здесь когда-то
-    // делили на масштаб вокселя, отчего лопата оказывалась на восьмой части
-    // высоты мира — глубоко в породе, где ничего не освещено и ничего не
-    // рисуется. Сцена мерила копку, которая ни разу не вышла на поверхность.
     top_voxel_ = *surface;
     started_   = true;
 
@@ -38,7 +34,7 @@ auto voxel_edits_scene::start_() -> void {
     light_base_       = wgs.get_light_stats().columns;
 }
 
-auto voxel_edits_scene::tick(float32 /*delta_time*/) -> void {
+auto voxel_edits_scene::tick(float32) -> void {
     if (!stand().is_bench_ready()) {
         return;
     }

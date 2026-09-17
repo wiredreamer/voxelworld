@@ -26,11 +26,8 @@ entity_properties_panel::entity_properties_panel(
     , candidate_modal_(eng, st, op_manager, library) {}
 
 auto entity_properties_panel::render(
-    float /*delta_time*/
+    float
 ) -> void {
-    // Внутри объёма панель — про сам объём, и называется соответственно: узел со
-    // своим составом и трансформом правят в префабе, а сюда провалились за
-    // вокселями, точкой вращения и обрезкой.
     const bool volume_only = state_->ctx.kind() == edit_kind::model;
 
     begin_panel(
@@ -39,8 +36,6 @@ auto entity_properties_panel::render(
         volume_only ? "Volume###EntityProperties" : "Entity Properties###EntityProperties"
     );
 
-    // Внутри объёма панель говорит про узел из крошек, а не про выделение: туда
-    // выделение не ходит, а undo умеет вернуть контекст чужого объёма.
     const auto& name = state_->edited_node();
 
     if (!state_->scene.name_to_entity.contains(name)) {
@@ -61,8 +56,6 @@ auto entity_properties_panel::render(
 
         auto& world = engine_->get_world();
 
-        // Панель — обход реестра, а не список секций: новый компонент появляется
-        // здесь той же регистрацией, которой он появился в файле.
         for (const auto& drawer : default_drawers().all()) {
             if (!drawer.draw || !ecs::has_component(world, ent, drawer.component)) {
                 continue;
@@ -72,15 +65,10 @@ auto entity_properties_panel::render(
                 continue;
             }
 
-            // Секция объёма целиком не гасится: из префаба в объём входят её
-            // кнопкой, а что в ней можно менять, она решает сама.
             const bool editable = drawer.scope == drawer_scope::volume || state_->ctx.in_prefab();
 
             ImGui::SeparatorText(drawer.title.c_str());
 
-            // Секции подписывают кнопки глаголом, а существительное берут из
-            // заголовка. Своя область ID нужна, чтобы «Add» двух секций не стала
-            // для ImGui одной кнопкой.
             ImGui::PushID(drawer.tag.c_str());
             ImGui::BeginDisabled(!editable);
             drawer.draw(context);
@@ -108,9 +96,6 @@ auto entity_properties_panel::render_header_(
         return;
     }
 
-    // Состав — свойство узла целиком, а не одной из секций, поэтому кнопка живёт
-    // в строке с его именем и прижата к краю: так она не спорит с кнопками
-    // секций и не отнимает под себя отдельную строку внизу.
     constexpr std::string_view label = "Edit";
     const float32 width =
         ImGui::CalcTextSize(label.data()).x + (ImGui::GetStyle().FramePadding.x * 2.f);

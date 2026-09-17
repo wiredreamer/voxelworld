@@ -22,7 +22,11 @@ Review staged and unstaged changes for style and convention violations.
 - [ ] **Trailing return type**: All methods use `auto foo() -> type;` syntax
 - [ ] **Naming**: snake_case for types/functions/members, PascalCase for template params
 - [ ] **Project types**: Uses `uint32`, `float32` etc. instead of `std::uint32_t` or built-in types
-- [ ] **Comments**: No comments in implementations, no section separators, no obvious ones
+- [ ] **Comments**: none at all — in C++, GLSL, CMake, Python or CI. The only allowed ones are a
+      one-line `// см. docs/<file>.md#<section>` link, `} // namespace …`, an empty trailing `//`
+      that holds a clang-format line break, `clang-format off/on` and `NOLINT`. An explanation
+      belongs in `docs/`; a comment that states units, coordinate space or a packed field's meaning
+      means the name or type should say it instead. Unused parameters are unnamed, not `/*dt*/`
 - [ ] **Namespaces**: Correct namespace (vw::, vw::spatial::, vw::asset::, vw::ecs::, vw::gfx::, vw::sculptor::)
 - [ ] **No exceptions** in hot paths
 - [ ] **Modules**: no `inline` in `.cpp`; `import std` only in implementation units and internal

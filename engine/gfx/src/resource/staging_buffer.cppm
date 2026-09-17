@@ -42,10 +42,6 @@ public:
         vk::Buffer dst, vk::DeviceSize dst_offset, vk::DeviceSize staging_offset, vk::DeviceSize size
     ) -> void;
 
-    // Копирование устройство-в-устройство, записанное в тот же кадровый командный
-    // буфер. Flush ставит такие копии перед staging-записями, и это то, что нужно
-    // росту буфера: сперва перенести старое содержимое, затем применить записи
-    // текущего кадра.
     auto copy_buffer(
         vk::Buffer src, vk::DeviceSize src_offset,
         vk::Buffer dst, vk::DeviceSize dst_offset,

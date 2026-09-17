@@ -23,9 +23,6 @@ auto debug_window::render_systems_panel() -> void {
         const auto name = ecs::world_system_names[i];
         metric_row(name.data(), update.ms[i]);
 
-        // Своя разбивка есть у двух систем, и стоит она прямо под своей строкой:
-        // всплеск и то, из чего он состоит, разнесённые по разным местам окна,
-        // приходится сопоставлять глазами.
         if (name == ecs::physics_system::system_name) {
             const auto& physics = world.system<ecs::physics_system>().get_stats();
             ImGui::Indent();
@@ -77,8 +74,6 @@ auto debug_window::render_render_panel() -> void {
     metric_row("transforms", combined.timing.transforms_ms);
     metric_row("staging", combined.timing.staging_flush_ms);
 
-    // Это не время. Здесь то, что не влезло в кадровый бюджет staging и ждёт
-    // следующего кадра: ждущие меши — это ещё не нарисованные чанки.
     ImGui::Text(
         "%-16s %6u mesh  %6u transform", "pending", combined.mesh_pending,
         combined.transform_pending
@@ -215,8 +210,6 @@ auto debug_window::render_world_panel() -> void {
     );
     ImGui::Text("queue %u, peak %u", mesh.queue_depth, mesh.queue_peak);
 
-    // Обход идёт и с выключенным отсевом, поэтому счётчики отвечают на вопрос
-    // «сколько бы он скрыл», не меняя картинку.
     ImGui::SeparatorText("chunk cull");
     const auto& cull = engine_->get_renderer().get_stats().combined_buffers.chunk_cull;
     ImGui::Text(

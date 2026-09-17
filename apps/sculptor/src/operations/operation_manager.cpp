@@ -40,8 +40,6 @@ auto operation_manager::undo() -> void {
 
     auto& op = undo_.back();
 
-    // Контекст переключается до отката, а не после: правка обязана произойти на
-    // глазах, иначе Ctrl+Z выглядит как «ничего не случилось».
     state_->ctx.stack = op->context_;
     op->undo();
     redo_.emplace_back(std::move(op));

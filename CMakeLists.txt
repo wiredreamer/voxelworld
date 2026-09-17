@@ -1,11 +1,5 @@
 cmake_minimum_required(VERSION 4.0)
 
-# `import std` живёт за экспериментальным гейтом: CMake открывает его только на
-# точное значение UUID, и это значение меняется с каждым релизом. Таблицу нужно
-# дополнять при обновлении CMake — иначе гейт молча закрыт, а падает потом
-# генерация, жалуясь на «CXX_MODULE_STD requires toolchain support», и причина
-# по этой жалобе не видна. Значения берутся из Help/dev/experimental.rst
-# соответствующей версии.
 if(CMAKE_VERSION VERSION_LESS 4.1)
     set(CMAKE_EXPERIMENTAL_CXX_IMPORT_STD "a9e1cf81-9932-4810-974b-6eccaf14e457")
 elseif(CMAKE_VERSION VERSION_LESS 4.3)
@@ -43,9 +37,6 @@ option(VW_BUILD_GFX "Build the Vulkan renderer and everything that needs a GPU" 
 option(VW_BUILD_APPS "Build applications" ON)
 option(VW_BUILD_TESTS "Build unit tests" ON)
 
-# Фаззеры разборщиков ассетов: libFuzzer есть только у Clang, и польза от них
-# появляется лишь под санитайзерами, поэтому по умолчанию выключены и живут в
-# своём джобе CI.
 option(VW_BUILD_FUZZERS "Build libFuzzer targets for the asset parsers" OFF)
 
 if(VW_BUILD_FUZZERS AND NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
@@ -68,8 +59,6 @@ if(VW_BUILD_TESTS)
     add_subdirectory(tests)
 endif()
 
-# Отдельно от VW_BUILD_TESTS: фаззерам не нужен ни Catch2, ни всё остальное из
-# tests/, а джоб фаззинга собирает только их.
 if(VW_BUILD_FUZZERS)
     add_subdirectory(tests/fuzz)
 endif()

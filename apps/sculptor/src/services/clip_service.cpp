@@ -116,8 +116,6 @@ auto clip_service::load_clip(
         report.rig = world.system<ecs::animation_system>().check_clip(root_it->second, *clip);
     }
 
-    // Чужой клип не отвергается насовсем: перецелить его — законная работа, но
-    // делать это молча значит открыть документ, который ничего не двигает.
     if (!report.rig.ok() && !ignore_rig) {
         report.status = clip_load_status::rig_mismatch;
         return report;
@@ -150,8 +148,6 @@ auto clip_service::enter_animation_mode() -> void {
 
     save_transforms();
 
-    // Клип открывается поверх самого префаба, а не поверх объёма: внутри .voxm
-    // анимации нет, и крошки не должны делать вид, что walk.voxa лежит в голове.
     state_->ctx.leave_to(0);
     state_->ctx.enter(edit_context::clip());
 }

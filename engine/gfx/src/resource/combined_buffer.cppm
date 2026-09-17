@@ -22,16 +22,6 @@ export namespace vw::gfx {
 
 class vulkan_context;
 
-// Индексируется одним индексным буфером, общим на весь пул, чьё содержимое для
-// каждого меша одно и то же: 0,1,2,2,3,0 на квад. vertex_offset наводит
-// gl_VertexIndex на этот меш, поэтому шейдер находит свою запись по
-// gl_VertexIndex / 4, а угол — по gl_VertexIndex % 4.
-//
-// Шесть вершин, развёрнутых из gl_VertexIndex без индексного буфера, пробовались
-// первыми и дают на треть больше вершинной работы: четыре вызова на квад
-// становятся шестью, без переиспользования после трансформации. Это стоило 38%
-// мирового прохода. Общий буфер — полтора мегабайта на весь движок против 24 байт
-// на квад, во сколько обходились индексные буферы на каждый меш.
 struct draw_command {
     uint32 index_count;
     uint32 instance_count;
@@ -71,9 +61,6 @@ struct mesh_allocation {
     uint32 generation;
     uint32 ref_count;
 
-    // Квады каждого направления грани в том порядке, в каком их выдаёт мешер. По
-    // одной команде отрисовки на направление, чтобы шейдер отсева мог выбросить
-    // те, что смотрят от наблюдателя.
     std::array<uint32, 6> face_counts{};
 };
 
@@ -90,13 +77,8 @@ struct combined_buffer_stats {
 
 class combined_buffer {
 public:
-    // Камера и все каскады теней отсеиваются одним диспатчем, и по этому числу
-    // размеряются заполняемые им буферы. Оно обязано равняться числу каскадов плюс
-    // один; партиции ресурсов не видят партиций рендера, не замкнув цикл в графе
-    // импортов, поэтому согласие этих двух чисел проверяет cull_pipeline.cpp.
     static constexpr uint32 cull_pass_count = 6;
 
-    // По команде отрисовки на каждое направление грани меша.
     static constexpr uint32 faces_per_mesh = 6;
 
     explicit combined_buffer(
@@ -125,9 +107,6 @@ public:
     auto write_transform(entity ent, const mat4f& transform_matrix, const vw::spatial::aabb& bounds) -> void;
     auto free(entity ent) -> std::optional<entity>;
 
-    // По флагу на инстанс; шейдер отсева читает их до проверки фрустумом. Span
-    // покрывает инстансы с нуля, а всё за его концом считается видимым, поэтому
-    // буфер, о котором ни у кого нет мнения, рисуется целиком.
     auto write_visibility(std::span<const uint32> flags) -> void;
 
     [[nodiscard]] auto get_entity_allocation(entity ent) -> const entity_allocation&;
@@ -137,8 +116,6 @@ public:
     [[nodiscard]] auto get_aabb_buffer() const -> vk::Buffer;
     [[nodiscard]] auto get_model_matrix_buffer() const -> vk::Buffer;
     [[nodiscard]] auto get_normal_matrix_buffer() const -> vk::Buffer;
-    // Инстансов в буфере и потолок на число команд, которые проход отсева может из
-    // них произвести: по шесть на меш, по одной на направление грани.
     [[nodiscard]] auto get_instance_count() const -> uint32;
     [[nodiscard]] auto get_draw_command_count() const -> uint32;
     [[nodiscard]] auto get_culled_indirect_buffer() const -> vk::Buffer;

@@ -21,15 +21,6 @@ class spatial_system;
 class transform_system;
 class world_grid_system;
 
-// Риг — имя контракта анимации, а не список целей: цели выводятся из узлов с
-// animation_target_component, и сверка по ним остаётся настоящей проверкой.
-// Имя лежит на корне префаба и отвечает на вопрос, который по узлам не задашь:
-// «этот клип вообще про это существо?».
-// Автоматы префаба, по одному на слой. Живут на корне рядом с ригом: в файле
-// это шапка, а не тег узла, и узла у них нет. Порядок — это номера слоёв.
-//
-// Здесь ссылки, а не сами автоматы: редактору хватает ссылок, а игре автомат
-// собирает хранилище, у которого есть клипы.
 struct animation_machines_component final {
     [[nodiscard]] auto get_sources() const -> std::span<const asset::asset_ref> {
         return sources_;
@@ -104,8 +95,6 @@ struct animation_fsm_component final {
         return machines_[index];
     }
 
-    // Доска параметров одна на все слои сущности: условия в них общие — скорость
-    // и опора не бывают отдельно для локомоции и отдельно для атаки.
     [[nodiscard]] auto get_board() const -> const asset::fsm_blackboard& {
         return board_;
     }

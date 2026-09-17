@@ -213,16 +213,13 @@ auto transform_system::transform_modifier::set_transform_with_matrix(
     return *this;
 }
 
-auto transform_system::update(float32 /*dt*/) -> void {
+auto transform_system::update(float32) -> void {
     auto& reg       = world_->registry();
     auto& requested = reg.requested<transform_component>();
     if (requested.empty()) {
         return;
     }
 
-    // Глубина считается подъёмом по цепочке родителей с поиском компонента на
-    // каждом уровне, поэтому вычисляется по разу на сущность, а не дважды на
-    // сравнение.
     auto& hierarchy = world_->system<hierarchy_system>();
 
     sorted_entities_.clear();

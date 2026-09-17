@@ -11,8 +11,6 @@ asset_ref::asset_ref(
     : path_(path) {
     std::ranges::replace(path_, '\\', '/');
 
-    // Ведущие «./» и «/» стираются при сборке: ключом кеша служит сама ссылка, и
-    // два написания одного пути обязаны дать одну запись, а не две модели.
     std::size_t start = 0;
     while (start < path_.size()) {
         if (path_.compare(start, 2, "./") == 0) {

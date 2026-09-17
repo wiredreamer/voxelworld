@@ -1,10 +1,6 @@
 cmake_minimum_required(VERSION 4.0)
 project(voxelworld_tests)
 
-# На Windows Catch2 приходит из vcpkg. Санитайзерные сборки на Linux идут без
-# vcpkg и собирают его сами: предсобранная библиотека линкуется с другой
-# стандартной библиотекой и без инструментации, а смешивать это с
-# санитайзерным рантаймом нельзя.
 find_package(Catch2 3 CONFIG QUIET)
 
 if(NOT Catch2_FOUND)
@@ -21,8 +17,6 @@ endif()
 include(CTest)
 include(Catch)
 
-# Tests link the module libraries directly, never vwengine: nothing here needs
-# a GPU, and a headless configuration must not drag Vulkan into the link.
 add_executable(core_tests
     core/voxels.test.cpp
     core/color.test.cpp
@@ -124,8 +118,6 @@ vw_use_std_module(world_tests)
 
 catch_discover_tests(world_tests)
 
-# The mesher is CPU-only but lives in vw.gfx, so its tests link the graphics
-# library and are skipped in a headless configuration. They never open a device.
 if(VW_BUILD_GFX)
     add_executable(gfx_tests
         gfx/mesher.test.cpp

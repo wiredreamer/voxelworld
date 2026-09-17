@@ -39,8 +39,6 @@ auto move_entity_operation::execute() -> void {
     const auto& node_transform = world.get<ecs::transform_component>(ent);
     previous_local_            = node_transform.get_transform();
 
-    // Вырожденный родитель — нулевой масштаб — обратной матрицы не имеет, и узел
-    // тогда переезжает со своими числами как есть.
     auto local = previous_local_;
     const auto inverse =
         math::inverse_matrix(world.get<ecs::transform_component>(parent->second).get_world_matrix());

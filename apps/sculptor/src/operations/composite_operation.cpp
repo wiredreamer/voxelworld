@@ -18,8 +18,6 @@ auto composite_operation::execute() -> void {
 }
 
 auto composite_operation::undo() -> void {
-    // В обратном порядке: следующая правка могла опираться на предыдущую —
-    // ключ ложится в дорожку, которую создала первая часть.
     for (auto& part : parts_ | std::views::reverse) {
         part->undo();
     }

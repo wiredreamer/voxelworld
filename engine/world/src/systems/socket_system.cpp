@@ -8,7 +8,7 @@ namespace vw::ecs {
 socket_system::socket_system(world& w)
     : world_(&w) {}
 
-auto socket_system::update(float32 /*dt*/) -> void {}
+auto socket_system::update(float32) -> void {}
 
 auto socket_system::cleanup(
     entity ent

@@ -8,10 +8,6 @@ import vw.world;
 
 using namespace vw;
 
-// The table is what the flood asks "does this voxel emit" without dragging the
-// registry into itself. It has to agree with the registry on every entry,
-// because a voxel whose emission is written down in one place and read from the
-// other would light the world differently from how it was authored.
 TEST_CASE("the emission table mirrors the registry", "[emission]") {
     const voxel_registry registry;
     const asset::emission_table table = asset::build_emission_table(registry);
@@ -26,8 +22,6 @@ TEST_CASE("the emission table mirrors the registry", "[emission]") {
     }
 }
 
-// A voxel the catalog never registered has to read as dark rather than as
-// whatever byte happened to sit at its index.
 TEST_CASE("the emission table is dark outside the catalog", "[emission]") {
     const voxel_registry registry;
     const asset::emission_table table = asset::build_emission_table(registry);
@@ -36,9 +30,6 @@ TEST_CASE("the emission table is dark outside the catalog", "[emission]") {
     REQUIRE(table.get(voxel{voxels::world::category, 250}) == 0);
 }
 
-// A default-built table lights nothing, and the flood leans on that: the
-// convenience constructors hand one over so a sky-only column needs no registry
-// at all.
 TEST_CASE("a default table emits nothing", "[emission]") {
     const asset::emission_table table{};
 

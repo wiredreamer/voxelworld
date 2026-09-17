@@ -14,10 +14,6 @@ import vw.gfx;
 namespace vw::testbed {
 
 auto testbed_app::render_ui() -> void {
-    // Захваченный курсор всё равно двигает указатель ImGui, поэтому резкий
-    // поворот камеры сажает его на кнопку, и панель загорается под прицелом,
-    // которого там нет. NoMouse забирает указатель у ImGui вовсе, пока камера
-    // им владеет.
     ImGuiIO& io = ImGui::GetIO();
     if (camera_controller_->is_mouse_captured()) {
         io.ConfigFlags |= ImGuiConfigFlags_NoMouse;
@@ -94,7 +90,6 @@ auto testbed_app::render_ui() -> void {
 
         ImGui::Text("edits: %d", edit_clicks_);
 
-        // Что показать про содержимое сцены, знает только сама сцена.
         if (scene_ != nullptr) {
             scene_->ui();
         }
@@ -102,22 +97,12 @@ auto testbed_app::render_ui() -> void {
 
     ImGui::Separator();
 
-    // Не настройки света, а то, чем стенд его создаёт: настройки самого рендера
-    // переехали в Debug Tool движка, а поставить в мир источник умеет только
-    // стенд.
     if (ImGui::CollapsingHeader("Emitters")) {
-        // Динамическая половина того же света. Зажги, поставь лампу и наведи
-        // одно на другое: разошедшиеся затухания видно только так.
         bool torch = torch_.is_valid();
         if (ImGui::Checkbox("Carry a torch", &torch)) {
             set_torch_(torch);
         }
 
-        // В рельефе не светит ничто, поэтому без этих кнопок смотреть не на что.
-        // Обе пишут через world_grid::set_voxel — тем же путём, каким идёт
-        // правка: колонка грязнеет, пекарь заливает её снова, и чанки, чей свет
-        // сдвинулся, мешатся заново. Счётчики этой перезаливки — в Debug Tool,
-        // окно World.
         if (world_grid_ != nullptr) {
             if (ImGui::Button("Drop lamp")) {
                 drop_emitter(voxels::world::glowstone, 1);
@@ -127,9 +112,6 @@ auto testbed_app::render_ui() -> void {
                 drop_emitter(voxels::world::lava, 3);
             }
 
-            // Кнопка, которая ничего не делает и ничего не говорит, — худшее из
-            // двух: первая версия этой промахивалась мимо земли на масштаб
-            // вокселя и выглядела ровно как сломанный шейдер.
             if (!drop_status_.empty()) {
                 ImGui::TextUnformatted(drop_status_.c_str());
             }

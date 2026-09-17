@@ -14,8 +14,6 @@ namespace vw::sculptor {
 namespace {
 constexpr log::log_category lc_file{"file_service"};
 
-// Ссылка отсчитывается от корня ассетов, а рабочий каталог редактора к нему
-// отношения не имеет: на диск её переводит model_library.
 auto make_prefab_ref(std::string_view filename) -> asset::asset_ref {
     return asset::asset_ref{std::format("{}/{}", asset::dirs::prefabs, filename)};
 }
@@ -27,8 +25,6 @@ file_service::file_service(
     : engine_(&eng), state_(&state), library_(&library) {}
 
 auto file_service::save() -> bool {
-    // Имя нужно раньше записи: по нему называются и префаб, и объёмы узлов.
-    // Безымянный документ сохраняется только через «Save As».
     if (state_->file.filename.empty()) {
         return false;
     }
@@ -98,8 +94,6 @@ auto file_service::assign_missing_refs_(
         model_sys.modify(ent).set_source(ref);
         library_->adopt(ref, model_comp.get_model());
 
-        // Файла у такого объёма ещё нет, поэтому он грязный по определению —
-        // иначе первая запись префаба сошлётся в пустоту.
         state_->file.dirty_models.insert(ent);
     }
 }
@@ -123,9 +117,6 @@ auto file_service::write_dirty_models_() -> void {
             continue;
         }
 
-        // Записанный объём и есть тот, что теперь лежит по ссылке. Без этого
-        // кеш библиотеки останется с прежним: расширение модели заводит новый
-        // объём, а ссылка у узла та же.
         library_->adopt(ref, model_comp.get_model());
     }
 

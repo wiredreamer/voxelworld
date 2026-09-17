@@ -75,9 +75,6 @@ public:
     auto draw_box(const transform& transform, const vec3f& size, color col = colors::red_4) -> void;
     auto draw_box(const vec3f& position, const vec3f& size, color col = colors::red_4) -> void;
 
-    // Залитая отладочная геометрия: рисуется поверх сцены, глубину не проверяет
-    // и смешивается по альфе. Так ручка манипулятора остаётся доступной, даже
-    // когда она внутри модели, — иначе до неё не дотянуться.
     auto draw_triangle(const vec3f& a, const vec3f& b, const vec3f& c, color col = colors::red_4)
         -> void;
     auto draw_quad(
@@ -100,48 +97,31 @@ public:
     [[nodiscard]] auto get_tonemap_settings() -> tonemap_settings&;
     [[nodiscard]] auto get_block_light_settings() -> block_light_settings&;
 
-    // Один масштаб на все пятна теней кадра. Ноль выключает эффект целиком — так
-    // его и сравнивают с отсутствием.
     [[nodiscard]] auto get_blob_strength() -> float32& {
         return blob_strength_;
     }
 
-    // Сколько источников переживает отсев и доходит до попиксельного цикла.
     [[nodiscard]] auto get_max_visible_lights() -> uint32&;
 
     [[nodiscard]] auto get_cluster_settings() -> cluster_settings&;
 
-    // Что сделал отсев, кольцом кадров позже. По умолчанию выключено: дешёвая
-    // половина — это копия буфера за кадр, а полная — мегабайты.
     auto set_cluster_readback(cluster_readback_level level) -> void;
     [[nodiscard]] auto take_cluster_readback(cull_list kind) -> std::optional<cluster_readback>;
 
-    // Сетка в том виде, какой её задают камера и туман этого кадра. То, во что
-    // рассеивает компьютный проход и из чего читает фрагмент, и единственное место,
-    // где обоим сообщают одни и те же числа.
     [[nodiscard]] auto get_cluster_grid(const camera& camera) const -> spatial::cluster_grid;
     [[nodiscard]] auto get_shadow_settings() -> shadow_settings&;
 
     auto set_debug_view(debug_view view) -> void;
     [[nodiscard]] auto get_debug_view() const -> debug_view;
 
-    // Где кончается каждый каскад и что покрывает один его тексель. Читать это
-    // стоит лишь чтобы показать цену настройки теней прямо во время её кручения.
     [[nodiscard]] auto get_cascade_splits() const -> const std::array<float32, shadow_map::cascade_count>&;
     [[nodiscard]] auto get_cascade_texel_sizes() const -> const std::array<float32, shadow_map::cascade_count>&;
 
-    // Сколько точечных источников пережило отсев и попало в буфер в этом кадре —
-    // это то число, которое фрагментный шейдер обходит на каждый пиксель.
-    // Единственный честный способ отличить сцену, нагружающую цикл, от сцены, чьи
-    // источники все за камерой.
     [[nodiscard]] auto get_visible_light_count() const -> uint32;
 
     [[nodiscard]] auto get_mesh_pool() -> mesh_pool& { return mesh_pool_; }
     [[nodiscard]] auto get_mesh_pool() const -> const mesh_pool& { return mesh_pool_; }
 
-    // Отбрасывает чанки, до которых от наблюдателя не ведёт ни один открытый путь.
-    // В выключенном состоянии обход всё равно идёт и сообщает, что он скрыл бы, —
-    // так оба варианта сравниваются в одной сборке.
     auto set_chunk_cull_enabled(bool enabled) -> void {
         combined_buffer_pool_->set_chunk_cull_enabled(enabled);
     }
@@ -152,8 +132,6 @@ public:
 
     auto draw_colliders(world_type& w, color col = colors::green_4) -> void;
 
-    // Получить ImTextureID для shadow map (для отображения в ImGui::Image)
-    // В Vulkan это vk::DescriptorSet, приведенный к void*
     [[nodiscard]] auto get_shadow_map_texture_id(uint32 cascade_index = 0) const -> void*;
 
 private:
@@ -256,7 +234,6 @@ private:
     vulkan_context* context_;
     window* window_;
 
-    // Цепочка показа
     vk::SwapchainKHR swapchain_ = nullptr;
     std::vector<vk::Image> swapchain_images_;
     vk::Format swapchain_image_format_ = vk::Format::eUndefined;
@@ -264,12 +241,10 @@ private:
     vk::PresentModeKHR present_mode_   = vk::PresentModeKHR::eFifo;
     std::vector<vk::ImageView> swapchain_image_views_;
 
-    // Глубина
     vk::Image depth_image_               = nullptr;
     vk::DeviceMemory depth_image_memory_ = nullptr;
     vk::ImageView depth_image_view_      = nullptr;
 
-    // Render pass и pipeline
     vk::RenderPass render_pass_                                 = nullptr;
     vk::DescriptorSetLayout uniform_descriptor_set_layout_      = nullptr;
     vk::DescriptorSetLayout storage_descriptor_set_layout_      = nullptr;
@@ -282,16 +257,13 @@ private:
     vk::Pipeline shadow_pipeline_                               = nullptr;
     vk::PipelineLayout shadow_pipeline_layout_                  = nullptr;
 
-    // Framebuffers и команды
     std::vector<vk::Framebuffer> framebuffers_;
     std::vector<vk::CommandBuffer> command_buffers_;
 
-    // Синхронизация
     std::vector<vk::Semaphore> image_available_semaphores_;
     std::vector<vk::Semaphore> render_finished_semaphores_;
     std::vector<vk::Fence> in_flight_fences_;
 
-    // Uniform-буферы
     std::vector<std::unique_ptr<uniform_buffer>> uniform_buffers_;
     std::vector<std::unique_ptr<uniform_buffer>> shadow_uniform_buffers_;
     vk::DescriptorPool descriptor_pool_ = nullptr;
@@ -299,13 +271,11 @@ private:
     std::vector<vk::DescriptorSet> shadow_descriptor_sets_;
     std::vector<vk::DescriptorSet> shadow_map_descriptor_sets_;
 
-    // Шейдеры
     std::unique_ptr<shader> vertex_shader_;
     std::unique_ptr<shader> fragment_shader_;
     std::unique_ptr<shader> shadow_vertex_shader_;
     std::unique_ptr<shader> shadow_fragment_shader_;
 
-    // Состояние рендеринга
     uint32 current_frame_       = 0;
     uint64 frame_counter_       = 0;
     uint32 current_image_index_ = 0;
@@ -316,7 +286,6 @@ private:
 
     vk::DescriptorPool imgui_descriptor_pool_ = nullptr;
 
-    // Рендеринг примитивов
     vk::PipelineLayout debug_pipeline_layout_ = nullptr;
     vk::Pipeline debug_pipeline_              = nullptr;
     vk::Pipeline debug_solid_pipeline_        = nullptr;
@@ -327,38 +296,28 @@ private:
     std::unique_ptr<shader> debug_vertex_shader_;
     std::unique_ptr<shader> debug_fragment_shader_;
 
-    // Mesh pool для генерации мешей
     mesh_pool mesh_pool_;
     std::unordered_set<entity> pending_mesh_entities_;
 
-    // Объявлена до пула, чтобы пережить любой буфер, который тот может держать
     deletion_queue deletion_queue_;
 
-    // Combined buffer pool для indirect drawing
     std::unique_ptr<combined_buffer_pool_type> combined_buffer_pool_;
 
-    // Light buffer для point lights
     std::unique_ptr<light_buffer_type> light_buffer_;
     std::unique_ptr<light_grid> light_grid_;
     std::unique_ptr<blob_buffer> blob_buffer_;
 
-    // Palette buffer для цветов вокселей
     const voxel_registry* voxel_registry_;
     std::unique_ptr<palette_buffer> palette_buffer_;
 
-    // Отсев по фрустуму на GPU
     std::unique_ptr<cull_pipeline> cull_pipeline_;
 
-    // Shadow map для directional light
     std::unique_ptr<shadow_map> shadow_map_;
 
-    // GPU-время проходов кадра
     std::unique_ptr<gpu_timer> gpu_timer_;
 
-    // Настройки directional light
     directional_light_settings directional_light_settings_;
 
-    // Настройки тумана
     fog_settings fog_settings_;
     ambient_settings ambient_settings_;
     tonemap_settings tonemap_settings_;
@@ -367,7 +326,6 @@ private:
     float32 blob_strength_ = 1.0f;
     debug_view debug_view_ = debug_view::off;
 
-    // Статистика
     mutable renderer_stats stats_;
     uint32 draw_call_count_ = 0;
 

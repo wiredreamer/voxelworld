@@ -28,12 +28,8 @@ public:
         auto add_machine(std::size_t index, asset::animation_fsm machine) const -> void;
         auto fire_trigger(std::string_view name) const -> void;
 
-        // Параметр от приложения: встроенные система заполняет сама, а всё, чего
-        // в мире нет — счётчик прыжков, выбранное оружие, — приходит отсюда.
         auto set_parameter(std::string_view name, float32 value) const -> void;
 
-        // Объявленные в файле параметры — на доску: объявленный виден в отладке
-        // с первого кадра, а не с того, в котором игра впервые его записала.
         auto declare_parameters(const asset::voxf_data& data) const -> void;
 
     private:
@@ -51,8 +47,6 @@ public:
         auto add(asset::asset_ref ref) const -> void;
         auto remove(std::size_t index) const -> void;
 
-        // Порядок ссылок — это номера слоёв, поэтому перестановка здесь и есть
-        // «этот автомат теперь ведёт тело, а тот накладывается поверх».
         auto move(std::size_t from, std::size_t to) const -> void;
 
     private:
@@ -65,8 +59,6 @@ public:
     auto modify_machines(entity ent) -> sources_modifier;
 
 private:
-    // Встроенные параметры заполняются здесь, а не тем, кто собирает автомат: их
-    // источник — компоненты мира, и файлу про это знать незачем.
     auto fill_builtins_(entity ent, asset::fsm_blackboard& board) const -> void;
 
     world* world_;

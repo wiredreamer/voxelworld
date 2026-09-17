@@ -245,8 +245,6 @@ auto timeline_panel::render_toolbar(
     zoom_percent_ = std::clamp(zoom_percent_, 100.f, 1000.f);
 }
 
-// Управление клипами живёт в шапке таймлайна, а не в своей панели: клип и есть
-// то, что здесь правят, а панель сбоку занимала место ради пяти кнопок.
 auto timeline_panel::render_clip_controls_() -> void {
     const auto& registry = engine_->get_world().resource<asset::animation_clip_registry>();
 
@@ -328,8 +326,6 @@ auto timeline_panel::render_clip_controls_() -> void {
         }
     }
 
-    // Затухания имеют смысл только поверх чужой позы: на нижнем слое клип и так
-    // задаёт её целиком.
     if (current_layer > 0) {
         ImGui::SameLine();
         if (ImGui::SmallButton("Fade")) {
@@ -358,8 +354,6 @@ auto timeline_panel::render_clip_controls_() -> void {
     render_close_confirm_popup_();
 }
 
-// Запись ключа — единственный способ положить позу в клип, и кнопка говорит,
-// что именно произойдёт: завести ключ или переписать тот, на котором стоим.
 auto timeline_panel::render_record_controls_() -> void {
     const bool can_record = !state_->scene.selected_name.empty();
 
@@ -398,8 +392,6 @@ auto timeline_panel::render_record_controls_() -> void {
     ImGui::SetItemTooltip("Next key (%s)", std::string{keys_of(command::next_key)}.c_str());
 }
 
-// Узел без цели анимации клип адресовать не может, и записанная поза потерялась
-// бы молча. Поэтому не запрет, а предложение завести цель.
 auto timeline_panel::render_target_hint_() -> void {
     const auto& name = state_->scene.selected_name;
     if (name.empty()) {
@@ -494,8 +486,6 @@ auto timeline_panel::render_tracks() -> void {
     const ImVec2 ruler_start = ImGui::GetCursorScreenPos();
     const float ruler_width  = usable_track_width;
 
-    // Обратный перевод жеста — из точки курсора во время — считает по тем же
-    // числам, по которым нарисованы ключи.
     track_origin_x_ = ruler_start.x;
     track_scale_    = track_area_width;
 
@@ -538,9 +528,6 @@ auto timeline_panel::render_tracks() -> void {
     ImGui::EndChild();
 }
 
-// Список слева — это цели рига, а не дорожки клипа: пока узел не анимировали,
-// дорожки у него нет, и по списку дорожек до него было не добраться — а завести
-// дорожку можно только тому, кто выбран.
 auto timeline_panel::collect_rows_() const -> std::vector<row> {
     const auto& registry = engine_->get_world().resource<asset::animation_clip_registry>();
     const auto clip      = registry.get(state_->anim.selected_clip_name);
@@ -559,8 +546,6 @@ auto timeline_panel::collect_rows_() const -> std::vector<row> {
         }
     }
 
-    // Дорожки, которым в риге цели не нашлось, показываются следом: клип чужого
-    // персонажа иначе выглядел бы пустым, хотя ключи в нём есть.
     for (const auto& track : clip->get_tracks()) {
         const auto& name  = track.get_target_name();
         const bool listed = std::ranges::any_of(rows, [&name](const row& entry) {
@@ -580,8 +565,6 @@ auto timeline_panel::render_target_row_(
     const bool is_selected = state_->anim.selected_track_name == entry.name ||
         state_->scene.selected_name == entry.name;
 
-    // Приглушённо и без маркеров: ключей у цели ещё нет, а выбрать её нужно —
-    // первая же запись заведёт ей дорожку.
     ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyle().Colors[ImGuiCol_TextDisabled]);
     const auto label = std::format("  {}##target", entry.name);
     if (ImGui::Selectable(label.c_str(), is_selected)) {
@@ -621,8 +604,6 @@ auto timeline_panel::render_track_row(
     const auto node_id = std::format("{}##track", target);
     const bool opened  = ImGui::TreeNodeEx(node_id.c_str(), node_flags);
 
-    // Выбор дорожки — это выбор узла: запись ключа и манипулятор смотрят на
-    // выделение сцены, и расходиться этим двум спискам нельзя.
     if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
         state_->anim.selected_track_name = target;
         if (state_->scene.name_to_entity.contains(target)) {
@@ -1023,8 +1004,6 @@ auto timeline_panel::render_keyframe_markers(
                     color
                 );
 
-                // Призрак ключа там, куда его тянут: сам ключ до отпускания не
-                // двигается — его время уезжает в историю один раз.
                 if (key_drag_ && key_drag_moved_ && drag_key_id_ == kf.id() &&
                     drag_key_track_ == track_name && drag_key_property_ == prop) {
                     const float ghost_x =
@@ -1048,9 +1027,6 @@ auto timeline_panel::render_keyframe_markers(
                         state_->anim.selected_keyframe_id = kf.id();
                         keyframe_clicked_                 = true;
 
-                        // Курсор встаёт на выбранный ключ: правят позу того
-                        // мгновения, которое выбрали, и запись попадает в этот
-                        // же ключ, а не заводит соседний.
                         state_->anim.timeline_cursor = kf.time;
 
                         if (state_->scene.name_to_entity.contains(track_name)) {
@@ -1093,8 +1069,6 @@ auto timeline_panel::update_key_drag_(
         const float local_x = ImGui::GetMousePos().x - track_origin_x_ + scroll_offset_;
         const float time    = std::clamp((local_x / track_scale_) * clip_duration, 0.f, clip_duration);
 
-        // Порог в пару пикселей: без него обычный клик по ключу считался бы
-        // микроскопическим переносом и плодил бы шаги отмены.
         if (std::abs(ImGui::GetMouseDragDelta(ImGuiMouseButton_Left).x) > 2.f) {
             key_drag_moved_ = true;
         }

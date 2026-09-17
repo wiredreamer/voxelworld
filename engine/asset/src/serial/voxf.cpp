@@ -9,8 +9,6 @@ namespace detail {
 constexpr log::log_category voxf_lc{"voxf"};
 
 auto parse_number(std::string_view text, float32& out) -> bool {
-    // true и false — это те же ноль и единица, но в файле про grounded читается
-    // именно так, и писатель возвращает их обратно словами.
     if (text == "true") {
         out = 1.0F;
         return true;
@@ -132,8 +130,6 @@ auto split_words(std::string_view text) -> std::vector<std::string_view> {
     return words;
 }
 
-// Кривая и касательные — хвост, который дописывается по надобности: у линейного
-// перехода в файле стоит одна длительность, и читать её глазами приятнее.
 auto parse_transition(std::span<const std::string_view> words, transition& out) -> bool {
     if (words.empty() || !parse_number(words[0], out.duration)) {
         return false;
@@ -220,7 +216,6 @@ auto apply_defaults(
     const voxf_data& data, fsm_blackboard& board
 ) -> void {
     for (const auto& param : data.params) {
-        // Триггер живёт не на доске, а в наборе сработавших: значения у него нет.
         if (param.type != voxf_param_type::trigger) {
             board.set(param.name, param.value);
         }
@@ -328,8 +323,6 @@ auto voxf_serializer::write_rule_(
     }
 
     for (const auto& condition : rule.conditions) {
-        // Объявленное как bool пишется словом: «grounded == false» — то же, что
-        // «grounded == 0», но читается без сверки с объявлением.
         const auto it = std::ranges::find(data_->params, condition.parameter, &voxf_param::name);
         const bool as_bool = it != data_->params.end() && it->type == voxf_param_type::boolean;
 
@@ -408,8 +401,6 @@ auto voxf_deserializer::process_line_(
         return;
     }
 
-    // Три уровня те же, что и у .vox: шапка и состояния, теги состояния,
-    // свойства перехода.
     switch (parsed->depth) {
         case 0: process_top_(parsed->name, parsed->value); return;
         case 1: process_state_tag_(parsed->name, parsed->value); return;
@@ -467,8 +458,6 @@ auto voxf_deserializer::process_top_(
     }
 
     if (name != "state") {
-        // Словарь автомата закрыт — его целиком знает vw.asset, — поэтому
-        // незнакомый тег здесь не расширение формата, а опечатка.
         log::warn(detail::voxf_lc, "unknown top-level command: {}", name);
         return;
     }
@@ -532,7 +521,6 @@ auto voxf_deserializer::process_state_tag_(
         return;
     }
 
-    // В блоке any состояния нет, и его теги там означали бы неизвестно что.
     if (in_any_ || state_index_ == no_index) {
         log::warn(detail::voxf_lc, "tag {} is not allowed inside any", name);
         return;

@@ -43,8 +43,6 @@ auto create_entity_modal::open() -> void {
         scene.name_to_entity.contains(scene.selected_name) ? scene.selected_name : scene.root_name;
     category_ = selected_model_category(*engine_, *state_);
 
-    // Файлы перечитываются на каждом открытии: объём ложится на диск при
-    // сохранении документа, и прошлый список о нём бы не знал.
     model_files_ = collect_asset_refs(app_state::model_dir(), ".voxm");
     if (!std::ranges::contains(model_files_, model_file_)) {
         model_file_ = {};
@@ -53,7 +51,7 @@ auto create_entity_modal::open() -> void {
 }
 
 auto create_entity_modal::render(
-    float /*delta_time*/
+    float
 ) -> void {
     if (need_open_) {
         ImGui::OpenPopup("Create Entity");
@@ -131,14 +129,11 @@ auto create_entity_modal::render_parent_() -> void {
     ImGui::EndCombo();
 }
 
-// Узлы идут в порядке дерева и с его отступами: в плоском списке не видно, чей
-// `hand` имеется в виду.
 auto create_entity_modal::render_parent_option_(
     ecs::entity ent, std::size_t depth
 ) -> void {
     const auto& scene = state_->scene;
 
-    // Безымянные дети — превью сокетов: в документе их нет, и родителем им не быть.
     const auto found = scene.entity_to_name.find(ent);
     if (found == scene.entity_to_name.end()) {
         return;
@@ -224,8 +219,6 @@ auto create_entity_modal::render_model_fields_() -> void {
     }
 }
 
-// Сводка снимается с загруженного объёма. Библиотека держит его и дальше, так
-// что создание узла возьмёт этот же экземпляр, а не прочтёт файл второй раз.
 auto create_entity_modal::pick_model_file_(
     const asset::asset_ref& ref
 ) -> void {
@@ -255,14 +248,11 @@ auto create_entity_modal::render_point_fields_() -> void {
         point_kind_ = point_kind::connection;
     }
 
-    // Подписи те же, что у секций точек в инспекторе.
     const auto label = point_kind_ == point_kind::furniture ? "Category" : "Profile";
     imgui_input_text_string(label, point_tag_, label_column);
 }
 
 auto create_entity_modal::render_extras_() -> void {
-    // Отмеченное видно и в свёрнутом списке: выбор переживает закрытие окна, и
-    // компонент, поставленный прошлому узлу, иначе молча уехал бы на следующий.
     std::string chosen;
     for (const auto& drawer : default_drawers().all()) {
         if (drawer.make_add && extras_.contains(drawer.tag) &&
@@ -324,7 +314,6 @@ auto create_entity_modal::create_entity_() -> bool {
         return false;
     }
 
-    // Корень у префаба один: пока он есть, у нового узла обязан быть родитель.
     const bool becomes_root = scene.root_name.empty();
     if (!becomes_root && !scene.name_to_entity.contains(parent_name_)) {
         error_ = "Choose a parent.";

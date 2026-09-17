@@ -27,14 +27,9 @@ auto select_variant_operation::execute() -> void {
 
     previous_ = world.get<ecs::variant_slot_component>(ent).get_selected();
 
-    // Через разборщик, а не через систему: кандидатом бывает и поддерево, и
-    // читать его — работа того, у кого есть разборщик. Объём он передаст системе
-    // сам.
     asset::vox_parser_plain parser;
     ecs::vox_deserializer deserializer{world, parser, *library_};
 
-    // Отказ не молчит: вариант, который не встал, обязан быть виден — иначе
-    // список в инспекторе покажет одно, а в сцене останется другое.
     const auto result = deserializer.put_variant(ent, params_.index);
     if (!result.has_value()) {
         log::warn(

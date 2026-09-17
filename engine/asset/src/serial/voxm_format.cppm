@@ -8,14 +8,8 @@ import :serial.version;
 
 export namespace vw::asset {
 
-// 1.0 — первый формат, в котором объём живёт отдельно от дерева префаба.
-// 2.0 — номера набора для покраски стали цветами палитры, и старые номера значат
-// в нём другие цвета. Мажор поднят, чтобы файл версии 1.0 отказался читаться, а
-// не перекрасился молча.
 inline constexpr std::string_view voxm_file_version = "2.0";
 
-// Как записаны воксели. Поле стоит в шапке, чтобы двоичная запись появилась
-// позже без смены расширения и версии: читатель выберет ветку по нему.
 enum class voxm_encoding : uint8 { rle };
 
 class voxm_serializer final {
@@ -40,8 +34,6 @@ public:
     auto deserialize(const std::filesystem::path& filepath)
         -> std::expected<std::shared_ptr<model>, error_type>;
 
-    // Разбор в отрыве от файловой системы: тем же путём идёт и файл, и буфер из
-    // фаззера, и строка из теста. Ошибку открытия эта форма вернуть не может.
     auto deserialize(std::istream& input) -> std::expected<std::shared_ptr<model>, error_type>;
 
 private:
@@ -52,8 +44,6 @@ private:
     auto process_pivot_(std::istringstream& iss) -> void;
     auto process_run_(std::istringstream& iss) -> void;
 
-    // Объём нельзя создать раньше, чем прочитаны размер и набор, а пробеги идут
-    // следом за ними. Между шапкой и телом и стоит эта отложенная сборка.
     [[nodiscard]] auto ensure_model_() -> bool;
 
     model_registry* registry_;
@@ -62,8 +52,6 @@ private:
     std::shared_ptr<model> model_;
     std::optional<error_type> error_;
 
-    // Блок вне каталога чтение не рвёт — он нарисуется заглушкой, и это видно.
-    // Но сказать о нём надо один раз, а не по разу на пробег.
     std::unordered_set<uint16> unknown_voxels_;
 
     voxel_category category_{};

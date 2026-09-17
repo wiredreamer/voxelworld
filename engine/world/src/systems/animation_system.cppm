@@ -15,13 +15,10 @@ export namespace vw::ecs {
 
 class world;
 
-// Что сверка клипа с ригом нашла. Пустой риг с любой стороны — «не указан»: файл
-// старше проверки, и ругаться на него не за что.
 struct rig_report {
     std::string rig;
     std::string clip_rig;
 
-    // Дорожки, которым в дереве не нашлось цели: они не проиграются.
     std::vector<std::string> unknown_targets;
 
     [[nodiscard]] auto rig_matches() const -> bool {
@@ -118,9 +115,6 @@ public:
     auto modify_target(entity ent) -> target_modifier;
     auto modify_rig(entity ent) -> rig_modifier;
 
-    // Цели поддерева в порядке обхода сверху вниз: имена узлов с
-    // animation_target_component. Это и есть риг документа — списка целей не
-    // существует нигде, кроме самого дерева.
     [[nodiscard]] auto collect_targets(entity root_ent) const -> std::vector<std::string>;
 
     [[nodiscard]] auto check_clip(entity root_ent, const asset::animation_clip& clip) const
@@ -131,17 +125,12 @@ private:
     auto remove_active_entity(entity root_ent) -> void;
     auto build_and_cache_target_map(entity root_ent) -> void;
 
-    // Один обход на всех: карта целей теряет порядок, а панель рига и сообщение
-    // об ошибке показывают цели в том же порядке, в каком они лежат в дереве.
     [[nodiscard]] auto collect_target_list_(entity root_ent) const
         -> std::vector<std::pair<std::string, entity>>;
 
     [[nodiscard]] auto collect_target_map_(entity root_ent) const
         -> std::unordered_map<std::string, entity>;
 
-    // Дорожка без цели не рисует ошибки — она просто ничего не двигает, и это
-    // самый дорогой вид молчания. Ругаемся при привязке клипа, а не в покадровом
-    // применении, и по одному разу на имя.
     auto warn_unknown_targets_(entity root_ent) -> void;
 
     [[nodiscard]] auto get_cached_target_map(entity root_ent) const

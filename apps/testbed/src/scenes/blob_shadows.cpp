@@ -32,10 +32,6 @@ auto blob_shadows_scene::spawn_() -> void {
     const auto count = std::max(bodies_asked_, 1);
 
     if (!seeded_) {
-        // Одна модель на всех. Воксель модели — одна мировая единица, воксель
-        // рельефа — восемь, поэтому тело размером с человека это шестнадцать
-        // поперёк и сорок в высоту; построенное по числам рельефа, оно стоит в
-        // один воксель и читается крапинкой — с чего эта сцена и начиналась.
         model_ = registry.create("blob_body", voxels::palette::category, 16, 40, 16);
         model_->fill(voxels::palette::red[4]);
 
@@ -47,11 +43,6 @@ auto blob_shadows_scene::spawn_() -> void {
         seeded_ = true;
     }
 
-    // Тело, чьи колонки ещё не приехали, ждёт их, а не выбрасывается. Именно
-    // пропуск таких заставлял сцену ждать весь мир: кольцо вставало одним
-    // проходом, и первый его прогон поставил пять тел из восьми. Все числа ниже
-    // читают индекс кольца, а не порядок появления земли, поэтому кольцо
-    // получается одно и то же в любом случае.
     std::size_t keep = 0;
 
     for (std::size_t at = 0; at < pending_.size(); ++at) {
@@ -65,11 +56,6 @@ auto blob_shadows_scene::spawn_() -> void {
         const auto vz =
             static_cast<int32>(std::lround(static_cast<float32>(ring) * std::sin(angle)));
 
-        // Тело шестнадцать единиц поперёк, а воксель рельефа восемь, поэтому
-        // стоит оно на четырёх колонках, а не на одной. Посаженное по той, над
-        // которой его мерили, оно на остальных трёх может оказаться на воксель
-        // ниже и уйти в землю на четверть — плохая опора для стенда, судящего о
-        // тенях.
         std::optional<int32> surface;
         for (int32 dz = 0; dz <= 1; ++dz) {
             for (int32 dx = 0; dx <= 1; ++dx) {
@@ -89,8 +75,6 @@ auto blob_shadows_scene::spawn_() -> void {
                              .with<ecs::transform_component>()
                              .with<ecs::spatial_component>()
                              .with<ecs::model_component>()
-                             // Диск чуть шире тела, а тело шестнадцать поперёк,
-                             // то есть восемь от середины.
                              .with(ecs::blob_shadow_component{20.0f, 48.0f, 0.6f})
                              .get_entity();
 
@@ -108,15 +92,9 @@ auto blob_shadows_scene::spawn_() -> void {
             .z      = static_cast<float32>(vz) * scale,
             .ground = ground,
 
-            // От нуля до чуть больше высоты падения, вразброс по кольцу. Первое
-            // не отрывается от земли вовсе и служит контролем, последнее уходит
-            // заметно выше, поэтому и самое широкое пятно, и самое тугое стоят
-            // в одном кадре.
             .amplitude =
                 (static_cast<float32>(i) / static_cast<float32>(count)) * 1.3f * 48.0f,
 
-            // Разные скорости, иначе они поднимаются и опускаются как одно, и
-            // кадр показывает всегда одну высоту.
             .speed = 0.012f + (0.004f * static_cast<float32>(i % 4)),
             .phase = static_cast<float32>(i) * 0.9f,
         });
@@ -132,7 +110,7 @@ auto blob_shadows_scene::spawn_() -> void {
     }
 }
 
-auto blob_shadows_scene::tick(float32 /*delta_time*/) -> void {
+auto blob_shadows_scene::tick(float32) -> void {
     spawn_();
 
     if (bodies_.empty()) {

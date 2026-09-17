@@ -30,8 +30,6 @@ auto transform_value(const vec3f& position, const vec3f& rotation) -> std::strin
     );
 }
 
-// Разборщик и библиотека живут дольше десериализатора, поэтому собраны в одно
-// место: проверяется применение префаба к реестру, а не чтение файла.
 struct scene_fixture final {
     world w;
     voxel_registry voxel_types;
@@ -45,8 +43,6 @@ struct scene_fixture final {
 
 }  // namespace
 
-// Порядок узлов в файле — дело писателя, а не читателя: обход дерева при записи
-// может выдать ребёнка раньше родителя, и связь от этого теряться не должна.
 TEST_CASE("a child declared before its parent still gets attached", "[scene]") {
     scene_fixture fx;
     auto& w           = fx.w;
@@ -87,8 +83,6 @@ TEST_CASE("a parent declared before its child still gets attached", "[scene]") {
     REQUIRE(w.get<hierarchy_component>(child).get_parent() == parent);
 }
 
-// Битая ссылка на родителя не повод терять узел: он встанет в корень, о чём
-// сказано в логе, и документ откроется целиком.
 TEST_CASE("a node with a missing parent survives", "[scene]") {
     scene_fixture fx;
     auto& w           = fx.w;
@@ -105,10 +99,6 @@ TEST_CASE("a node with a missing parent survives", "[scene]") {
     REQUIRE(res.name_to_entity.contains("orphan"));
 }
 
-// Точка вращения принадлежит объёму, а не узлу: она входит в матрицу самого
-// объёма и детям не спускается. Числа взяты из assets/prefabs/m_human.vox — до
-// переезда origin стоял в узле, и родительский вычитался при спуске к ребёнку,
-// так что ошибка здесь сдвинула бы руку ровно на точку корня.
 TEST_CASE("the pivot of a parent does not move its child", "[scene]") {
     scene_fixture fx;
     auto& w      = fx.w;
@@ -150,7 +140,6 @@ TEST_CASE("the pivot of a parent does not move its child", "[scene]") {
 
     const auto ent = res.name_to_entity.at("hand_right");
 
-    // Матрица, которой рисуется объём: узел плюс собственная точка модели.
     const auto volume_matrix =
         model_matrix(w.get<transform_component>(ent), w.get<model_component>(ent));
 
@@ -161,10 +150,6 @@ TEST_CASE("the pivot of a parent does not move its child", "[scene]") {
     REQUIRE(math::approx_equal(volume_matrix, expected));
 }
 
-// Узел 3.0 не носит вокселей: он называет .voxm, и это имя обязано вернуться из
-// записи тем же. Писатель и разборщик лежат в разных модулях и расходятся молча.
-// Риг едет в мир и обратно через компонент на корне: в файле он одна строка в
-// шапке, а в мире — свойство корневой сущности, и потеряться между ними нельзя.
 TEST_CASE("a rig name survives a round trip through the world", "[scene]") {
     scene_fixture fx;
     auto& w = fx.w;
@@ -192,8 +177,6 @@ TEST_CASE("a rig name survives a round trip through the world", "[scene]") {
     REQUIRE(serializer.extract().rig == "humanoid");
 }
 
-// Автоматы стоят в шапке, а не в узле, поэтому в мир они попадают на корень —
-// иначе редактор открыл бы префаб с автоматами и сохранил его без них.
 TEST_CASE("a prefab keeps the machines it names through a round trip", "[scene]") {
     scene_fixture fx;
     auto& w = fx.w;
@@ -217,7 +200,6 @@ TEST_CASE("a prefab keeps the machines it names through a round trip", "[scene]"
     const auto root_ent = res.name_to_entity.at("root");
     REQUIRE(w.has<animation_machines_component>(root_ent));
 
-    // Порядок — это номера слоёв, и он обязан пережить и мир, и запись.
     const auto sources = w.get<animation_machines_component>(root_ent).get_sources();
     REQUIRE(sources.size() == 2);
     REQUIRE(sources[0] == asset::asset_ref{"fsm/humanoid_locomotion.voxf"});
@@ -228,8 +210,6 @@ TEST_CASE("a prefab keeps the machines it names through a round trip", "[scene]"
     REQUIRE(serializer.extract().fsm_refs == prefab.fsm_refs);
 }
 
-// Риг необязателен: у меча и стрелы его нет, и заводить компонент ради пустой
-// строки незачем — иначе в шапку поедет «rig » без имени.
 TEST_CASE("a prefab without a rig gets no rig component", "[scene]") {
     scene_fixture fx;
     auto& w = fx.w;
@@ -277,15 +257,11 @@ TEST_CASE("a model ref survives a round trip through the world", "[scene]") {
     REQUIRE(written.entities.size() == 1);
     REQUIRE(written.entities.front().value_of("model") == ref.str());
 
-    // Сверяются числа, а не их написание: поворот едет в мир кватернионом и
-    // возвращается эйлерами, у которых ноль бывает со знаком.
     std::array<float32, 9> values{};
     REQUIRE(asset::parse_floats(written.entities.front().value_of("transform"), values));
     REQUIRE(vec3f{values[0], values[1], values[2]} == body_position);
 }
 
-// Битая ссылка не повод ронять загрузку: узел встаёт без модели, о чём сказано
-// в логе, и остальной префаб открывается целиком.
 TEST_CASE("a node with a missing model still loads", "[scene]") {
     scene_fixture fx;
     auto& w           = fx.w;
@@ -308,10 +284,6 @@ TEST_CASE("a node with a missing model still loads", "[scene]") {
     REQUIRE_FALSE(w.has<model_component>(ent));
 }
 
-// Правка точки вращения двигает объём, а не перестраивает его, и заявлена она
-// обязана быть по трансформу: матрицу в буфере рендера переписывает именно эта
-// ветка. По границам это не проверить — они пересчитываются и от модели тоже,
-// поэтому мимо цели прошла бы любая из двух заявок.
 TEST_CASE("moving the pivot reports a transform change", "[scene]") {
     world w;
     auto& models = w.resource<asset::model_registry>();

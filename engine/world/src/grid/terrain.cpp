@@ -168,10 +168,6 @@ auto chunk_loader::gen_thread_function_() -> void {
         generator_->generate(ctx);
         col->set_phase(column_phase::terrain);
 
-        // Порода чанк, воздух или смесь — об этом при размещении колонки шесть раз
-        // спросят соседи, а к тому моменту таблица страниц окажется в двух
-        // килобайтах промахов кэша. Здесь она ещё в кэше потока, который её только
-        // что записал.
         for (auto& [y, cd] : col->get_all_chunk_data()) {
             static_cast<void>(cd.volume->voxels().scan_fill());
         }
@@ -318,9 +314,6 @@ auto perlin_terrain_generator::cave_field_at(
         (static_cast<float64>(wz) * f) + 241.9
     ));
 
-    // Ниже порога пещеры нет вовсе; выше поле нарастает на протяжении затухания.
-    // Поэтому край поля — это место, где ходы сужаются и кончаются, а не стена,
-    // рассекающая зал.
     const float32 near_surface = depth < params_.cave_field_surface_reach
         ? 1.0F - (static_cast<float32>(std::max(0, depth)) /
                   static_cast<float32>(std::max(1, params_.cave_field_surface_reach)))
@@ -354,8 +347,6 @@ auto perlin_terrain_generator::cave_openness_at(
     const auto y = static_cast<float64>(wy);
     const auto z = static_cast<float64>(wz);
 
-    // Залы идут этажами: полоса расширяет слагаемое залов на фиксированных высотах,
-    // отчего поле читается уровнями, а не одним комком дыр.
     const auto spacing = static_cast<float32>(std::max(1, params_.cave_level_spacing));
     const auto phase   = static_cast<float32>(wy) * 6.2831853F / spacing;
     const float32 band =
@@ -368,8 +359,6 @@ auto perlin_terrain_generator::cave_openness_at(
     const float32 cheese_open =
         (params_.cave_cheese_width * field * band) - std::abs(cheese);
 
-    // Пересечение двух полей: их общий ноль — кривая сквозь породу, а кривая — это
-    // ход. Одно поле дало бы полотно.
     const auto ft = params_.cave_tunnel_frequency;
     const auto ta = static_cast<float32>(noise3d((x * ft) + 71.5, (y * ft) + 13.7, (z * ft) + 39.1));
     const auto tb = static_cast<float32>(noise3d((x * ft) - 128.3, (y * ft) + 96.2, (z * ft) - 57.4));
@@ -378,8 +367,6 @@ auto perlin_terrain_generator::cave_openness_at(
 
     float32 open = std::max(cheese_open, tunnel_open);
 
-    // Кровля. Пещера затухает по мере подъёма к поверхности, пропорционально
-    // тому, насколько сплошная земля над ней.
     const int32 depth = surface - wy;
     const int32 reach = params_.cave_surface_margin + params_.cave_surface_fade;
 
@@ -391,7 +378,6 @@ auto perlin_terrain_generator::cave_openness_at(
         open += leak * params_.cave_entrance_lift;
     }
 
-    // Пол мира не вскрывается никогда.
     const int32 above_bottom = wy - params_.world_bottom_y;
     if (above_bottom < (params_.bedrock_thickness + 4)) {
         open -= 1.0F;
@@ -426,12 +412,6 @@ auto perlin_terrain_generator::carve_caves_(
     const int32 points = cells + 1;
     const auto plane   = static_cast<std::size_t>(points) * points;
 
-    // По одному значению на узел сетки, положительному там, где порода вскрывается.
-    // Интерполяция вместо проверки каждого вокселя и делает шум подъёмным: при шаге
-    // четыре это одна выборка из шестидесяти четырёх.
-    //
-    // Сначала спрашивается поле, и это одна выборка; только там, где оно ответило,
-    // узел платит за залы и ходы.
     std::vector<float32> open(plane * points, -1.0F);
 
     bool any_open = false;
@@ -449,15 +429,11 @@ auto perlin_terrain_generator::carve_caves_(
                 const int32 surface = profile.surface[(lx * s) + lz];
                 const int32 depth   = surface - wy;
 
-                // У поверхности протекающий участок сам себе поле, поэтому вход
-                // существует независимо от того, дотянулось ли сюда пятно.
                 const float32 leak =
                     depth < (params_.cave_surface_margin + params_.cave_surface_fade)
                     ? cave_entrance_leak_at(x0 + lx, z0 + lz)
                     : 0.0F;
 
-                // Шахта держит собственное поле до глубин, где живут пятна, поэтому
-                // вход куда-то ведёт, а не кончается ямой.
                 float32 shaft = 0.0F;
                 if (depth >= 0 && depth < params_.cave_entrance_depth) {
                     const float32 taper = 1.0F -
@@ -495,9 +471,6 @@ auto perlin_terrain_generator::carve_caves_(
 
     const auto inv = 1.0F / static_cast<float32>(stride);
 
-    // По ячейкам, а не по вокселям: через ячейку, все восемь углов которой —
-    // порода, поверхность не проходит, и её пропуск снимает сразу шестьдесят четыре
-    // вокселя. Из таких ячеек состоит большая часть чанка.
     for (int32 cy = 0; cy < cells; ++cy) {
         for (int32 cz = 0; cz < cells; ++cz) {
             for (int32 cx = 0; cx < cells; ++cx) {
@@ -658,8 +631,6 @@ auto perlin_terrain_generator::soil_depth_at(
 
     auto t = static_cast<float32>((n + 1.0) * 0.5);
 
-    // Почва сползает с крутизны и редеет с высотой. Вдвоём это оставляет гору
-    // голой, притом что слова «гора» в коде нет.
     t *= std::clamp(1.0F - (slope / params_.soil_slope_limit), 0.0F, 1.0F);
 
     if (stone > params_.soil_altitude_start) {
@@ -689,14 +660,10 @@ auto perlin_terrain_generator::rock_voxel_at(
 auto perlin_terrain_generator::voxel_at(
     int32 wy, int32 stone_top, int32 surface_top
 ) const -> voxel {
-    // По одному варианту на материал, хотя у травы и почвы их по три: разбивать
-    // поверхность вариантами имеет смысл вместе с биомами, и только связными
-    // пятнами — белый шум по вокселю разнёс бы жадное слияние верхних граней.
     if (wy > stone_top) {
         return wy == surface_top ? voxels::world::grass[0] : voxels::world::dirt[0];
     }
 
-    // Открытая порода выветривается, а достаточно высоко на ней лежит снег.
     if (wy == stone_top && surface_top == stone_top) {
         return wy > params_.snow_line ? voxels::world::snow[1] : voxels::world::stone[1];
     }
@@ -733,7 +700,6 @@ auto perlin_terrain_generator::generate(
     int32 min_cy = floor_div(params_.world_bottom_y, s);
     int32 max_cy = floor_div(profile.max_surface, s);
 
-    // Сверху вниз, как и всякий другой обход колонки.
     for (int32 cy = max_cy; cy >= min_cy; --cy) {
         generate_chunk(ctx, cy, profile);
     }
@@ -803,13 +769,8 @@ auto perlin_terrain_generator::generate_chunk(
 
     const int32 base_y = chunk_y * s;
 
-    // Один писатель на весь чанк: поколение поднимается на выходе из скоупа, а не
-    // на каждой из десятков тысяч записей.
     vw::asset::model_writer writer{*mdl};
 
-    // По страницам, а не по вокселям: тысяча вокселей породы под каждой колонкой —
-    // это одна запись на страницу и вовсе никакого цикла. Полностью выписывается
-    // только полоса, где земля действительно меняется.
     for (int32 py = 0; py < pn; ++py) {
         const int32 y0 = base_y + (py * p);
         const int32 y1 = y0 + p - 1;
@@ -857,8 +818,6 @@ auto perlin_terrain_generator::generate_chunk(
 
     carve_caves_(writer, ctx, chunk_y, profile);
 
-    // И сплошная порода, и выеденные залы сворачиваются здесь обратно в одну
-    // страничную запись; без этого глубокий мир осушает пул страниц.
     writer.compact_pages();
 
     ctx.create_chunk(chunk_y) = {

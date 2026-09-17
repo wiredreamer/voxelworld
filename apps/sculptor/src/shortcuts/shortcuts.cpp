@@ -38,8 +38,6 @@ auto is_available(
     }
 
     switch (cmd) {
-        // Манипулятор живёт поверх выбора узла: внутри объёма двигают воксели, а
-        // в автомате узлов нет вовсе.
         case command::gizmo_move:
         case command::gizmo_rotate:
         case command::gizmo_scale: return state.ctx.allows_node_select();
@@ -53,8 +51,6 @@ auto is_available(
         case command::step_back:
         case command::step_forward: return state.ctx.in_clip() && state.ui.show_timeline;
 
-        // Ключ пишется по выбранному узлу: без выбора записывать нечего, и
-        // серая строка в справке честнее, чем клавиша, которая молчит.
         case command::record_key:
         case command::record_key_all:
             return state.ctx.in_clip() && !state.anim.selected_clip_name.empty() &&

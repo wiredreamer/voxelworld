@@ -22,8 +22,6 @@ auto set_variant_candidates_operation::apply_(
 ) const -> void {
     auto& world = engine_->get_world();
 
-    // Кандидатом бывает и поддерево, поэтому через разборщик: объём он передаст
-    // системе сам.
     asset::vox_parser_plain parser;
     ecs::vox_deserializer deserializer{world, parser, *library_};
     static_cast<void>(deserializer.put_variant(ent, index));
@@ -49,10 +47,6 @@ auto set_variant_candidates_operation::execute() -> void {
     const bool moved = variants.modify(ent).set_candidates(params_.candidates);
     state_->file.has_unsaved_changes = true;
 
-    // Выбор переставили — значит, в сцене стоит кандидат, которого в списке уже
-    // нет, и его место обязан занять сосед по-настоящему. Пустой список этого не
-    // требует: объём — собственность узла, а не слота, и сносить его вместе со
-    // списком не за что.
     if (moved && !params_.candidates.empty()) {
         apply_(ent, slot.get_selected());
     }
@@ -73,8 +67,6 @@ auto set_variant_candidates_operation::undo() -> void {
     modifier.set_candidates(previous_);
     modifier.select(previous_index_);
 
-    // Правка могла подменить объём — значит, отмена обязана вернуть прежний, а
-    // не только список.
     if (!previous_.empty()) {
         apply_(ent, previous_index_);
     }

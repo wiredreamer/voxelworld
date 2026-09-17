@@ -8,9 +8,6 @@ import :state;
 
 export namespace vw::sculptor {
 
-// Что просят сделать. Команда названа, а не подсунута лямбдой: таблица обязана
-// быть constexpr-данными, которые читает и справка, и подпись на кнопке, а
-// выполнять их умеет только тот, у кого на руках сервисы, — приложение.
 enum class command : uint8 {
     undo,
     redo,
@@ -45,9 +42,6 @@ enum class command : uint8 {
     next_key,
 };
 
-// Значения те же, что у платформы: своя маска нужна лишь затем, чтобы CAPS_LOCK
-// и NUM_LOCK в сравнение не попадали — они говорят о состоянии клавиатуры, а не
-// о том, что человек держит.
 inline constexpr uint32 mod_none  = 0;
 inline constexpr uint32 mod_shift = static_cast<uint32>(plat::keyboard::mods::SHIFT);
 inline constexpr uint32 mod_ctrl  = static_cast<uint32>(plat::keyboard::mods::CTRL);
@@ -59,16 +53,11 @@ struct shortcut {
     uint32 mods = mod_none;
     command cmd = command::undo;
 
-    // Что показать человеку: раздел справки, подпись клавиши и название
-    // действия. Здесь, а не в панелях, чтобы подпись не могла разойтись с тем,
-    // что клавиша делает.
     std::string_view group;
     std::string_view keys;
     std::string_view title;
 };
 
-// Одна таблица на весь редактор: пересечения видно глазами, а не по жалобе, что
-// Alt+T заодно включает масштаб.
 inline constexpr std::array shortcuts{
     shortcut{plat::keyboard::keys::Z, mod_ctrl, command::undo, "Edit", "Ctrl+Z", "Undo"},
     shortcut{
@@ -137,18 +126,12 @@ inline constexpr std::array shortcuts{
     },
 };
 
-// Точное совпадение модификаторов: T под Alt — это «переключить таймлайн», и
-// совпадение по одной клавише молча срабатывало бы заодно масштабом.
 [[nodiscard]] auto match(const plat::key_press_event& ev) -> std::optional<command>;
 
-// Уместна ли команда там, где мы сейчас. Неуместная не выполняется и в справке
-// показана серой — обещать работу, которой в этом контексте нет, нельзя.
 [[nodiscard]] auto is_available(command cmd, const app_state& state) -> bool;
 
 [[nodiscard]] auto keys_of(command cmd) -> std::string_view;
 
-// Инструмент, который включает команда. Обратная сторона нужна панели: она
-// рисует кнопку по инструменту, а подпись берёт из таблицы.
 [[nodiscard]] auto tool_of(command cmd) -> tools;
 [[nodiscard]] auto command_for_tool(tools tool) -> command;
 

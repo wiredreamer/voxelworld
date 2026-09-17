@@ -22,8 +22,6 @@ auto children_of(world& w, entity ent) -> std::vector<entity> {
 
 }  // namespace
 
-// Перенос под другого родителя обязан убрать узел из прежнего списка детей:
-// иначе он числился бы у двух родителей, и обход дерева проходил бы его дважды.
 TEST_CASE("a new parent takes the node away from the old one", "[world][hierarchy]") {
     world w;
     auto& hierarchy = w.system<hierarchy_system>();
@@ -65,8 +63,6 @@ TEST_CASE("a child can be put at a given place among its siblings", "[world][hie
         REQUIRE(children_of(w, root) == std::vector{first, moved, last});
     }
 
-    // Место считается по списку без самого узла, а слишком большое означает «в
-    // конец»: так отмена переноса ставит узел туда, где он стоял.
     SECTION("past the end") {
         hierarchy.modify(first).set_parent(root, 99);
         REQUIRE(children_of(w, root) == std::vector{last, moved, first});

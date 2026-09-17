@@ -124,8 +124,6 @@ auto mesh_pool::sweep_orphaned_() -> void {
         return;
     }
 
-    // Курсор идёт по корзинам, а не по элементам: вставка может перехешировать
-    // таблицу между кадрами, и индекс корзины это переживёт, а итератор — нет.
     if (sweep_bucket_ >= buckets) {
         sweep_bucket_ = 0;
     }
@@ -152,8 +150,6 @@ auto mesh_pool::sweep_orphaned_() -> void {
             ++freed;
         }
 
-        // Бюджет кончился посреди корзины: остаёмся на ней и продолжим со следующего
-        // кадра.
         if (freed >= sweep_orphans_per_frame_) {
             break;
         }
@@ -176,9 +172,6 @@ auto mesh_pool::process_completed() -> void {
 
             meshes_[identity] = std::make_shared<mesh>(std::move(data));
 
-            // Соседние плоскости были нужны только чтобы построить этот меш, а
-            // прочитавший их воркер закончил. Иначе эти три килобайта на чанк лежали
-            // бы всё время, пока чанк загружен.
             if (const auto ref = chunk_refs_.find(identity); ref != chunk_refs_.end()) {
                 if (const auto chunk = ref->second.lock()) {
                     chunk->release_boundary();
@@ -261,8 +254,6 @@ auto mesh_pool::gen_thread_function() -> void {
         {
             std::unique_lock lock(gen_mutex_);
 
-            // Воркер здесь уже держит замок очереди, поэтому слить его счётчики не
-            // стоит ничего сверх.
             merge_worker_stats_(local);
 
             gen_cv_.wait(lock, [this] -> bool { return !gen_queue_.empty() || !gen_running_; });

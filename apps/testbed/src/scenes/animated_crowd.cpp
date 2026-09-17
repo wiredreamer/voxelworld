@@ -27,7 +27,7 @@ auto animated_crowd_scene::on_world_ready() -> void {
     spawned_ = true;
 }
 
-auto animated_crowd_scene::tick(float32 /*delta_time*/) -> void {
+auto animated_crowd_scene::tick(float32) -> void {
     if (bodies_.empty()) {
         return;
     }
@@ -75,9 +75,6 @@ auto animated_crowd_scene::ground_at_(
     const auto scale = static_cast<float32>(stand().voxel_scale());
     const auto& grid = stand().grid();
 
-    // Коробка тела шире вокселя рельефа, поэтому колонок под ней четыре, и
-    // садиться надо на самую высокую: посаженное по низкой, тело встречает
-    // остальные три уже под землёй.
     std::optional<int32> top;
     for (const float32 dz : {-collider_half_width, collider_half_width}) {
         for (const float32 dx : {-collider_half_width, collider_half_width}) {
@@ -91,8 +88,6 @@ auto animated_crowd_scene::ground_at_(
         }
     }
 
-    // Колонки под телом нет: высота стенда хуже своей, но лучше падения сквозь
-    // пустоту.
     return top ? static_cast<float32>(*top + 1) * scale : stand().altitude();
 }
 
@@ -105,10 +100,6 @@ auto animated_crowd_scene::make_clip_(
     for (const auto& part : parts) {
         asset::animation_track track{std::string{part.target}, 60.0f};
 
-        // Ключи несут своё место целиком: канал позиции rest замещает, а не
-        // складывается с ним (animation_system::merge_with_rest). Раньше в
-        // ключах стояли нули по x и z, и первый же кадр анимации сгонял все
-        // четыре части тела в одну точку.
         asset::animation_channel<vec3f> channel{asset::animation_property::position};
         channel.add(asset::keyframe_vec3f{0.0f, part.rest});
         channel.add(asset::keyframe_vec3f{part.peak, part.rest + vec3f{0.0f, part.lift, 0.0f}});
@@ -166,11 +157,6 @@ auto animated_crowd_scene::spawn_() -> void {
                               .with<ecs::rigid_body_component>()
                               .with<ecs::box_collider_component>()
                               .with<ecs::animation_player_component>()
-                              // Радиус от собственной ширины фигуры: с руками
-                              // она четырнадцать поперёк, значит диск чуть шире.
-                              // Высота падения — рост фигуры: на ней пятно вдвое
-                              // уже, и по ней же шейдер отличает землю под телом
-                              // от самого тела.
                               .with(ecs::blob_shadow_component{8.0f, 20.0f, 0.55f})
                               .get_entity();
 
@@ -221,9 +207,6 @@ auto animated_crowd_scene::spawn_() -> void {
 auto animated_crowd_scene::collect_report(
     gfx::report& out
 ) const -> void {
-    // Сколько тел стоит на земле — не украшение: замер начинается либо когда
-    // встали все, либо когда кончился предохранитель, и разницу между этими
-    // двумя случаями видно только здесь.
     out.section("crowd")
         .value("bodies", static_cast<uint64>(bodies_.size()))
         .value("entities", static_cast<uint64>(bodies_.size() * (1 + parts.size())))

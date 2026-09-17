@@ -12,9 +12,6 @@ struct window_callbacks;
 
 export namespace vw::plat {
 
-// Единственное окно, о котором знает движок. Ничто из оконного бэкенда не
-// доходит до этого интерфейса: сюрфейс едет непрозрачным дескриптором, поэтому
-// gfx остаётся на типах vk::, а platform их не видит вовсе.
 class window final {
 public:
     window(int32 width, int32 height, std::string_view title);
@@ -31,8 +28,6 @@ public:
 
     [[nodiscard]] auto framebuffer_size() const -> vec2i;
 
-    // Принимает VkInstance, возвращает VkSurfaceKHR — оба сырыми дескрипторами,
-    // чтобы заголовки Vulkan остались на стороне вызывающего.
     [[nodiscard]] auto create_surface(uint64 instance) const -> uint64;
 
     [[nodiscard]] static auto required_extensions() -> std::vector<const char*>;
@@ -72,7 +67,6 @@ public:
     auto minimize() const -> void;
     auto restore() const -> void;
 
-    // GLFWwindow* для бэкенда imgui, которому нужен нативный дескриптор.
     [[nodiscard]] auto native_handle() const -> void* {
         return handle_;
     }
@@ -88,8 +82,6 @@ public:
     }
 
 private:
-    // Оконный бэкенд передаёт своим колбэкам нативный дескриптор, поэтому они
-    // живут в имплементационном юните и добираются до диспетчера через это.
     friend struct detail::window_callbacks;
 
     auto on_key_(int32 key, int32 scancode, int32 mods, bool pressed, bool repeat) -> void;

@@ -7,7 +7,6 @@ import vw.gfx;
 namespace vw::testbed {
 namespace {
 
-// Точка съёмки: земля над началом координат плюс то, куда сцена просит отойти.
 auto eye(const testbed_app& stand, const camera_hint& hint) -> vec3f {
     return vec3f{hint.offset.x, stand.altitude() + hint.offset.y, hint.offset.z};
 }
@@ -35,7 +34,7 @@ const std::array<camera_entry, 5> camera_table{{
 }  // namespace
 
 auto parked_rig::drive(
-    const camera_hint& hint, float32 /*delta_time*/
+    const camera_hint& hint, float32
 ) -> void {
     auto& camera = stand().camera();
     camera.set_position(eye(stand(), hint));
@@ -43,7 +42,7 @@ auto parked_rig::drive(
 }
 
 auto spin_rig::drive(
-    const camera_hint& hint, float32 /*delta_time*/
+    const camera_hint& hint, float32
 ) -> void {
     auto& camera = stand().camera();
     camera.set_position(eye(stand(), hint));
@@ -51,11 +50,8 @@ auto spin_rig::drive(
 }
 
 auto walk_rig::drive(
-    const camera_hint& hint, float32 /*delta_time*/
+    const camera_hint& hint, float32
 ) -> void {
-    // Только когда мир вокруг старта целый. Выход с холодного старта мерил
-    // первые восемьсот кадров догона — а это не то же самое, что ходьба по уже
-    // стоящему миру, и на вид похоже на сломанный загрузчик.
     if (!stand().is_bench_ready()) {
         return;
     }
@@ -72,7 +68,7 @@ auto walk_rig::drive(
 }
 
 auto orbit_rig::drive(
-    const camera_hint& hint, float32 /*delta_time*/
+    const camera_hint& hint, float32
 ) -> void {
     if (!stand().is_bench_ready()) {
         return;
@@ -93,7 +89,7 @@ auto orbit_rig::drive(
 }
 
 auto free_rig::drive(
-    const camera_hint& /*hint*/, float32 delta_time
+    const camera_hint&, float32 delta_time
 ) -> void {
     stand().camera_controller().update(delta_time);
 }

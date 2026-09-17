@@ -78,8 +78,6 @@ TEST_CASE("a batch applies in order and raises the generation once", "[model]") 
     batch.apply_to(m);
 
     REQUIRE(m.get_identity().generation == before + 1);
-    // Последняя запись в ту же ячейку и остаётся: порядок списка — это порядок
-    // применения.
     REQUIRE(m.get_voxel(8, 0, 0) == voxels::world::stone_deep[1]);
     REQUIRE(m.get_voxel(9, 0, 0) == voxels::world::stone[0]);
 }

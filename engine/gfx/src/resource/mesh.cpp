@@ -16,9 +16,6 @@ import :vk;
 namespace vw::gfx {
 
 
-// Вдоль каких мировых осей идут две касательные каждой грани. Те же две таблицы
-// несут шейдеры: прямоугольник, упакованный одной стороной и распакованный другой,
-// обязан одинаково понимать, какая протяжённость какая.
 static constexpr std::array<int32, 6> tangent_u_axis = {2, 2, 0, 0, 0, 0};
 static constexpr std::array<int32, 6> tangent_v_axis = {1, 1, 2, 2, 1, 1};
 
@@ -35,8 +32,6 @@ auto quad::pack(
     const int32 u_axis = tangent_u_axis[normal_id];
     const int32 v_axis = tangent_v_axis[normal_id];
 
-    // На единицу меньше числа ячеек, поэтому полные 128 всё ещё влезают в семь
-    // бит. Протяжённость вдоль оси грани всегда в одну ячейку и не хранится.
     const auto span_u = static_cast<uint32>(max_pos[u_axis] - min_pos[u_axis] - 1);
     const auto span_v = static_cast<uint32>(max_pos[v_axis] - min_pos[v_axis] - 1);
 
@@ -54,9 +49,6 @@ auto quad::pack(
         (static_cast<uint32>(slot.value) << 14) |            //
         (static_cast<uint32>(corners_convex) << 24);
 
-    // Оба канала в одном слове, небо в младшей половине. Старшая была свободна —
-    // data2 держало шестнадцать бит и больше ничего, — поэтому второй канал не
-    // стоил ни смены формата, ни лишнего вершинного атрибута, ни байта геометрии.
     q.data2 = static_cast<uint32>(corners_sky) | (static_cast<uint32>(corners_block) << 16);
 
     return q;
@@ -137,9 +129,6 @@ struct face_axis_mapping {
 [[nodiscard]] auto compute_corner_light(mesh_source src, int32 x, int32 y, int32 z,
                                         int32 face) -> corner_light;
 
-// Единственная грань, для которой считается выпуклость. Боковая грань и так
-// читает свою форму по нормали, а нижняя никогда не та поверхность, по которой
-// смотрят, — остальные пять платили бы ключом слияния и ничего не показывали.
 inline constexpr int32 convex_face = 2;
 
 [[nodiscard]] auto is_face_visible(mesh_source src, int32 x, int32 y, int32 z,
@@ -165,20 +154,12 @@ auto add_quad(
     corner_light light
 ) -> void;
 
-// Один слой, сведённый к битовым строкам: что видно и что стоит перед гранью —
-// это и есть плоскость, по которой берётся затенение. Пустой слой означает, что
-// граней в нём нет вовсе, и это заменяет линейный проход по всей маске.
 struct layer_rows {
     std::array<uint64, 64> visible{};
     std::array<uint64, 64> front{};
 
-    // Слой, в котором стоят сами грани. Выпуклость выбирает его так же, как
-    // затенение выбирает плоскость перед гранью, и он всё равно уже читался ради
-    // видимости — просто не сохранялся.
     std::array<uint64, 64> own{};
 
-    // Плоскость перед гранью лежит вне чанка, поэтому каждая выборка затенения
-    // вокруг неё уходит за чанк по двум осям и читается как пустая.
     bool front_outside = false;
 };
 
@@ -299,19 +280,6 @@ auto is_solid_at(
     return false;
 }
 
-// Насколько угол грани заперт плоскостью перед ним.
-//
-// Классические три выборки: две ячейки через ребро от угла и одна по диагонали от
-// него. Два сплошных ребра запирают угол независимо от того, что за ними, поэтому
-// этот случай выписан отдельно, а не сосчитан, — именно это правило и не даёт
-// прямому углу посереть.
-//
-// Досягаемость — одна ячейка, и это намеренный предел, а не недосмотр. Взвешенное
-// ядро шириной в две ячейки было построено и замерено: оно действительно видит
-// стену через траншею шириной в три вокселя и стоит десяти процентов квадов при
-// жадном слиянии, двух третей секунды стриминга и чёткости каждого угла. Три
-// выборки — ещё и то, что позволяет получить всю грань из трёх сдвинутых строк
-// занятости ниже, куда и уходила бо́льшая часть того времени стриминга.
 [[nodiscard]] auto corner_level(bool edge_a, bool edge_b, bool diagonal) -> uint8 {
     if (edge_a && edge_b) {
         return 3;
@@ -320,12 +288,6 @@ auto is_solid_at(
            static_cast<uint8>(diagonal);
 }
 
-// Зеркало is_solid_at, и его нельзя записать как отрицание. За пределами модели,
-// когда спросить граничный срез не у кого, is_solid_at отвечает «не сплошное», и
-// для затенения это безобидная ошибка: нет перекрывающего — ничего не темнеет.
-// Выпуклость же прочтёт тот же ответ как «соседа здесь нет», а это нарисовало бы
-// яркую кайму вокруг габаритной коробки каждой модели без срезов — то есть всего в
-// редакторе. Неизвестное обязано читаться заполненным.
 [[nodiscard]] auto is_open_at(mesh_source src, vec3i p) -> bool {
     const bool ox = p.x < 0 || p.x >= src.voxels.width();
     const bool oy = p.y < 0 || p.y >= src.voxels.height();
@@ -356,10 +318,6 @@ auto is_solid_at(
     return src.has_boundary_slice(5) && !src.is_boundary_solid(5, p.x, p.y, 0);
 }
 
-// Насколько угол грани торчит из поверхности, которой принадлежит: те же три
-// выборки, что у затенения, но считаются на отсутствие и в том слое, где стоит сам
-// воксель грани, а не в слое перед ним. Отсутствие обоих рёбер — это угол-шип, и он
-// выписан отдельно по той же причине, что и прямой угол.
 [[nodiscard]] auto corner_open_level(bool open_a, bool open_b, bool open_diagonal) -> uint8 {
     if (open_a && open_b) {
         return 3;
@@ -423,15 +381,6 @@ auto compute_corner_darkness(
 }
 
 
-// Угол — это среднее по четырём ячейкам, касающимся его с освещённой стороны.
-// Сплошные не учитываются, а не считаются тёмными: их темнота — это то, ради чего
-// существует затенение, и учёт её дважды делает каждый внутренний угол чёрным.
-// Ячейка прямо перед гранью всегда воздух — иначе грань не была бы видна, — поэтому
-// в среднем всегда что-то есть.
-//
-// Деление на один, два или четыре — это сдвиг; на три — умножение. Четыре целых
-// деления на грань мешер себе позволить не может, а count бывает только одним из
-// этих значений.
 [[nodiscard]] auto average_of(int32 sum, int32 count) -> int32 {
     switch (count) {
         case 1:
@@ -453,14 +402,6 @@ auto corners_from_patch(
     const auto* sky   = src.sky_light();
     const auto* block = src.block_light();
 
-    // У чанка, освещённого насквозь одинаково — порода ниже пещер, воздух над
-    // поверхностью, — во всех углах всех граней один и тот же уровень, и для неба
-    // таковы четыре пятых чанков. Для света блоков таковы почти все: там темно
-    // везде, где не стоит лампа.
-    //
-    // Отсутствие поля вовсе означает модель, которая не является чанком мира: над
-    // ней ничего нет и ламп в ней нет, значит сверху открыто, а внутри темно.
-    // Только эта пара и оставляет модель редактора похожей на саму себя.
     const auto flat = [](const vw::asset::light_field* field, uint16 absent) -> uint16 {
         if (field == nullptr) {
             return absent;
@@ -475,11 +416,6 @@ auto corners_from_patch(
         return corner_light{.sky = flat(sky, 0xFFFFU), .block = flat(block, 0x0000U)};
     }
 
-    // Четыре угла вместе называют шестнадцать ячеек, но различных среди них только
-    // девять: центр принадлежит всем четырём, а каждая боковая — двум. Выборка
-    // читается один раз, обходом через прибавление касательных, а не пересчётом
-    // позиции на каждую ячейку, и в каждой ячейке читаются оба канала: какие ячейки
-    // открыты и где они — это для обоих один и тот же вопрос.
     std::array<int32, 9> lit_sky{};
     std::array<int32, 9> lit_block{};
     std::array<int32, 9> open{};
@@ -494,11 +430,6 @@ auto corners_from_patch(
 
             open[slot] = static_cast<int32>((open_bits >> slot) & 1U);
             if (open[slot] != 0) {
-                // level_around, а не level_at: грань на оболочке чанка читает
-                // ячейку перед собой, а та принадлежит соседу. Зажатие обратно
-                // внутрь попадает в сплошной воксель, которому грань принадлежит,
-                // а его заливка оставляет нулём — и каждая наружная грань каждого
-                // чанка выходит чёрной.
                 if (walk_sky) {
                     lit_sky[slot] = sky->level_around(cell.x, cell.y, cell.z);
                 }
@@ -534,8 +465,6 @@ auto corners_from_patch(
     };
 }
 
-// Медленный путь — для всего, у чего нет строк занятости: девять обращений к
-// вокселям ради того, что битовый путь уже знает.
 auto compute_corner_light(
     mesh_source src, int x, int y, int z, int face
 ) -> corner_light {
@@ -571,8 +500,6 @@ auto compute_corner_light(
     return corners_from_patch(src, n, u, v, open_bits);
 }
 
-// А это быстрый: плоскость перед гранью уже есть три строки бит занятости — те же
-// три, что читает ядро затенения.
 auto light_from_rows(
     mesh_source src, const layer_rows& rows, int32 u_at, int32 v_at, int x,
     int y, int z, int face
@@ -703,16 +630,13 @@ auto add_quad(
     uint8 corner_convex,
     corner_light light
 ) -> void {
-    // Из какого из двух углов каждая вершина в порядке обхода берёт свои
-    // составляющие. Та же таблица живёт в voxel.vert и shadow.vert — шесть вершин
-    // теперь разворачивает шейдер, и стороны обязаны совпадать.
     static constexpr uint8 winding_to_corner[6][4] = {
-        {0, 1, 3, 2},  // +X
-        {0, 2, 3, 1},  // -X
-        {0, 1, 3, 2},  // +Y
-        {0, 2, 3, 1},  // -Y
-        {0, 2, 3, 1},  // +Z
-        {1, 3, 2, 0},  // -Z
+        {0, 1, 3, 2},
+        {0, 2, 3, 1},
+        {0, 1, 3, 2},
+        {0, 2, 3, 1},
+        {0, 2, 3, 1},
+        {1, 3, 2, 0},
     };
 
     static constexpr uint8 corner_to_ao[4] = {0, 1, 3, 2};
@@ -726,9 +650,6 @@ auto add_quad(
         static_cast<uint8>((corner_ao >> 6) & 0x3u),
     };
 
-    // Двумя битами насквозь, а не сравнением с нулём. Выборка различает угол,
-    // задетый одним диагональным вокселем, и угол, закрытый двумя гранями, и вся
-    // разница между тенью как глубиной и тенью как контуром — именно в этом.
     uint8 ao_winding     = 0;
     uint8 convex_winding = 0;
     uint16 sky_winding   = 0;
@@ -738,16 +659,7 @@ auto add_quad(
         const uint8 ao_i     = corner_to_ao[corner_i];
         ao_winding |= static_cast<uint8>(c_ao[ao_i] << (i * 2));
 
-        // Небо и выпуклость проходят ту же перестановку, что и затенение, и обязаны
-        // её проходить: шейдер читает все три из тех же четырёх углов той же
-        // билинейной выборкой, и если одна придёт в порядке выборки, она смешает
-        // другой прямоугольник, чем две остальные.
-        //
-        // Ошибку выпуклости здесь не ловит ни один тест, и это не пробел в тестах.
-        // На +Y две таблицы складываются в тождество, а +Y — единственная грань,
-        // для которой выпуклость считается, так что переставлять тут нечего.
-        // Выписано всё равно: день, когда правило граней расширят, — не тот день,
-        // чтобы об этом вспоминать.
+        // см. docs/rendering.md#порядок-углов
         const auto level = static_cast<uint16>((light.sky >> (ao_i * 4)) & 0xFu);
         sky_winding |= static_cast<uint16>(level << (i * 4));
 
@@ -765,14 +677,11 @@ auto add_quad(
 }
 
 
-// Соседняя плоскость в той ориентации, какая нужна этой грани. Для ±Y и ±Z
-// хранимая плоскость уже разложена строками по u; ±X держит строки по y, поэтому
-// она собирается по биту — а случается это на одном слое из шестидесяти четырёх.
 auto boundary_row(
     mesh_source src, int face_direction, int v
 ) -> uint64 {
     if (!src.has_boundary_slice(face_direction)) {
-        return 0;  // no neighbour: the far side is open, every face is visible
+        return 0;
     }
 
     const auto& face = src.boundary_face(face_direction);
@@ -812,15 +721,15 @@ auto build_layer_rows(
         uint64 front = 0;
 
         switch (face_direction / 2) {
-            case 0:  // +-X: rows of z at (y = v, x = layer plane)
+            case 0:
                 own   = occupancy.zrow(v, d);
                 front = inside ? occupancy.zrow(v, nd) : boundary_row(src, face_direction, v);
                 break;
-            case 1:  // +-Y: rows of x at (y = layer plane, z = v)
+            case 1:
                 own   = occupancy.row(d, v);
                 front = inside ? occupancy.row(nd, v) : boundary_row(src, face_direction, v);
                 break;
-            default:  // +-Z: rows of x at (y = v, z = layer plane)
+            default:
                 own   = occupancy.row(v, d);
                 front = inside ? occupancy.row(v, nd) : boundary_row(src, face_direction, v);
                 break;
@@ -835,9 +744,6 @@ auto build_layer_rows(
     return any != 0;
 }
 
-// Затенение одной ячейки, прочитанное из трёх соседних битовых строк вместо
-// восьми обращений к страничному объёму. Строки сдвинуты заранее, поэтому все
-// восемь выборок вокруг ячейки — это бит u какой-нибудь из масок.
 struct corner_samples {
     uint64 edge_mu = 0;
     uint64 edge_pu = 0;
@@ -873,8 +779,6 @@ auto pack_corners(const corner_samples& s, int u) -> uint8 {
     return static_cast<uint8>(c0 | (c1 << 2) | (c2 << 4) | (c3 << 6));
 }
 
-// Те же восемь выборок, прочитанные наоборот: со строк собственного слоя грани, а
-// не слоя перед ней. Сброшенный бит — это отсутствующий сосед.
 auto pack_corners_convex(const corner_samples& s, int u) -> uint8 {
     const auto open = [u](uint64 mask) -> bool { return ((mask >> u) & 1U) == 0; };
 
@@ -900,8 +804,6 @@ auto emit_rect(
 ) -> void {
     auto [min_pos, max_pos] = axes.to_local_min_max(u_start, v_start, w, h, layer);
 
-    // Номер в наборе переводится в слот палитры здесь — один раз на выпущенный
-    // прямоугольник, по строке, снятой с реестра один раз на меш.
     add_quad(
         storage.quads,
         face_direction,
@@ -923,9 +825,6 @@ auto simple_mesh_generator::generate_mesh_data(
     std::vector<quad> quads;
     std::array<uint32, 6> face_counts{};
 
-    // Грань — самый внешний цикл, поэтому квады выходят сгруппированными по
-    // направлению, как их и так выдаёт жадный мешер. Сравнивающий тест смотрит на
-    // множество граней, а не на порядок, а группировка нужна шейдеру отсева.
     for (int face = 0; face < 6; face++) {
         const auto before = quads.size();
 
@@ -1017,10 +916,6 @@ auto strip_mesh_generator::generate_mesh_data(
             static_cast<uint32>(storage.quads.size() - before);
     }
 
-    // Перемещается, а не копируется: хранилище существует ради переиспользования, а
-    // копирование его обратно наружу стоило аллокации и memcpy всего меша на чанк.
-    // Ёмкость восстанавливает reserve в начале следующего вызова.
-    // Связность здесь не строится — эта ветка мешера её не считает.
     return mesh{std::move(storage.quads), face_counts, {}};
 }
 
@@ -1120,20 +1015,12 @@ auto greedy_mesh_generator::generate_mesh_data(
 ) -> mesh {
     storage.clear();
 
-    // Раньше здесь резервировалась четверть объёма чанка — 768 КБ на меш, занятые
-    // независимо от того, есть ли у чанка геометрия, и уезжающие в каждый готовый
-    // меш, потому что вектор перемещается наружу. Рост от маленького числа стоит
-    // одного-двух удвоений и по замерам быстрее. Оценка по предыдущему чанку
-    // пробовалась и хуже: один поверхностный чанк ставит высокую планку, которую
-    // наследует каждый пустой чанк за ним.
     constexpr std::size_t estimate = 4096;
 
     if (storage.quads.capacity() < estimate) {
         storage.quads.reserve(estimate);
     }
 
-    // Строится один раз на весь меш и читается всеми шестью направлениями. Модели,
-    // не являющиеся 64-кубами (из Sculptor), уходят на путь по ячейкам.
     if (!storage.occupancy) {
         storage.occupancy = std::make_unique<vw::asset::chunk_occupancy>();
     }
@@ -1148,11 +1035,6 @@ auto greedy_mesh_generator::generate_mesh_data(
             static_cast<uint32>(storage.quads.size() - before);
     }
 
-    // У моделей, не являющихся 64-кубами, нет ни занятости, ни чанковой координаты,
-    // поэтому в обходе связности они не участвуют никогда. Оставленные пустыми, они
-    // читались бы как «запечатанные»; один карман, открытый по всем граням, не
-    // скрывает ничего. То же подставляется, когда обход выключен и связей никто не
-    // просил.
     vw::asset::chunk_links links;
     if (opts.build_links && storage.occupancy_valid) {
         links = vw::asset::build_chunk_links(*storage.occupancy, storage.link_scratch);
@@ -1162,9 +1044,6 @@ auto greedy_mesh_generator::generate_mesh_data(
         }
     }
 
-    // Перемещается, а не копируется: хранилище существует ради переиспользования, а
-    // копирование его обратно наружу стоило аллокации и memcpy всего меша на чанк.
-    // Ёмкость восстанавливает reserve в начале следующего вызова.
     return mesh{std::move(storage.quads), face_counts, std::move(links)};
 }
 
@@ -1176,7 +1055,6 @@ auto greedy_mesh_generator::merge_and_emit_rects_bits(
     detail::layer_rows& rows,
     const std::array<uint16, 256>& slots
 ) -> void {
-    // Построчно по u, поэтому расширение серии идёт по непрерывной памяти.
     auto idx = [&](int u, int v) -> std::size_t {
         return (static_cast<std::size_t>(v) * static_cast<std::size_t>(axes.width)) +
                static_cast<std::size_t>(u);
@@ -1282,8 +1160,6 @@ auto greedy_mesh_generator::generate_face_quads(
     const voxel_registry& registry,
     mesh_options opts
 ) -> void {
-    // Строка слотов снимается один раз на грань: набор у модели один, и таблица
-    // до самого выпуска квадов больше не нужна.
     const auto& slots = registry.slot_row(src.voxels.category());
 
     detail::face_axis_mapping axes(src, face_direction);
@@ -1323,9 +1199,6 @@ auto greedy_mesh_generator::generate_face_quads(
         }
 
         if (storage.occupancy_valid) {
-            // Видимость целой строки из 64 ячеек — это один and-not, а пустой слой
-            // распознаётся вовсе без касания маски. Пишутся только те ячейки, что
-            // действительно несут грань.
             if (!detail::build_layer_rows(
                     src, *storage.occupancy, axes, face_direction, layer, rows
                 )) {
@@ -1338,10 +1211,6 @@ auto greedy_mesh_generator::generate_face_quads(
                     continue;
                 }
 
-                // Выборки затенения стоят на ячейку в стороне по u и v, поэтому
-                // ячейка на краю слоя дотягивается до соседнего чанка и остаётся на
-                // скалярном пути, который умеет туда спросить. То же и когда
-                // выбираемая плоскость целиком вне чанка.
                 const bool interior_v = v > 0 && v + 1 < axes.height;
                 const bool bit_ao     = interior_v && !rows.front_outside;
 
@@ -1351,12 +1220,6 @@ auto greedy_mesh_generator::generate_face_quads(
                     interior_v ? rows.front[v + 1] : 0
                 );
 
-                // Выпуклость читает тот же механизм сдвинутых строк, но по
-                // собственному слою — тому, в котором стоят грани, а не тому, что
-                // перед ними. Ей безразлично, вне ли чанка передняя плоскость, но
-                // флаг внутренности она всё равно разделяет: платой будет только
-                // откат на скалярный путь на граничном слое, а об одном флаге
-                // рассуждать дешевле, чем о двух.
                 const bool wants_convex = face_direction == detail::convex_face;
 
                 const auto own_samples = detail::samples_from_rows(

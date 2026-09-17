@@ -48,8 +48,6 @@ auto make_node(std::string name, std::string parent) -> asset::vox_entity_data {
 
 }  // namespace
 
-// Метаданные генератора — обычный тег на корне: после таблицы кодеков Architect
-// не требует ни своего разборщика, ни своего приложения.
 TEST_CASE("structure metadata survives a round trip", "[structure]") {
     structure_fixture fx;
 
@@ -86,8 +84,6 @@ TEST_CASE("structure metadata survives a round trip", "[structure]") {
     REQUIRE(tag->prop("size") == "M");
 }
 
-// Незаполненное поле в файл не едет: иначе у каждой структуры в шапке стояло бы
-// «tier 0», ответ, которого автор не давал.
 TEST_CASE("an unset structure field is not written", "[structure]") {
     structure_fixture fx;
 
@@ -109,8 +105,6 @@ TEST_CASE("an unset structure field is not written", "[structure]") {
     REQUIRE(tag->prop("race").empty());
 }
 
-// Точка мебели и точка стыка — узлы с трансформом и словом. Трансформ узла и
-// говорит, куда точка смотрит, поэтому направления в компоненте нет.
 TEST_CASE("furniture and connection points are ordinary nodes", "[structure]") {
     structure_fixture fx;
 
@@ -134,7 +128,6 @@ TEST_CASE("furniture and connection points are ordinary nodes", "[structure]") {
     REQUIRE(fx.w.get<furniture_point_component>(table_ent).get_category() == "table");
     REQUIRE(fx.w.get<connection_point_component>(door_ent).get_profile() == "door");
 
-    // Точка мебели не становится точкой стыка и наоборот.
     REQUIRE_FALSE(fx.w.has<connection_point_component>(table_ent));
     REQUIRE_FALSE(fx.w.has<furniture_point_component>(door_ent));
 

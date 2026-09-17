@@ -4,12 +4,6 @@ import std;
 
 import vw.core;
 
-// Общее у текстовых форматов семейства: строка — это «тег [аргумент]», а
-// глубину вложенности задаёт отступ табуляциями. Что значит тег и сколько чисел
-// в его аргументе, знает формат; здесь — разбор строки на части и словари,
-// которые иначе разошлись бы по разборщикам копиями.
-//
-// Партиция внутренняя: наружу это не интерфейс, а договор между разборщиками.
 namespace vw::asset::detail {
 
 inline auto trim(std::string_view text) -> std::string_view {
@@ -27,9 +21,6 @@ struct text_line {
     std::string_view value;
 };
 
-// Пустая строка ответа не имеет: тега в ней нет. Строка шапки приходит тегом с
-// именем «#», и её значение — вся строка целиком: версию из неё достаёт
-// read_header_version, которому нужен весь текст.
 inline auto split_line(std::string_view line) -> std::optional<text_line> {
     std::size_t depth = 0;
     while (depth < line.size() && line[depth] == '\t') {
@@ -70,8 +61,6 @@ inline auto interp_to_text(math::interpolation_type interp) -> std::string_view 
     return "linear";
 }
 
-// Неизвестное слово читается как linear: кривая — это про ощущение перехода, и
-// ломать из-за неё загрузку не за что.
 inline auto interp_from_text(std::string_view text) -> math::interpolation_type {
     if (text == "step") {
         return math::interpolation_type::step;

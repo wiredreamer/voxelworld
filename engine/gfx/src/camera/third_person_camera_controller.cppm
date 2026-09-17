@@ -27,8 +27,6 @@ struct third_person_camera_params {
     float32 collision_skin = 0.3f;
 };
 
-// Камера от третьего лица: следует за сущностью, учитывая длину штанги, смещение и
-// столкновения с вокселями.
 class third_person_camera_controller {
 public:
     using world_type = world;

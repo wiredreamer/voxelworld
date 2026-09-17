@@ -27,8 +27,6 @@ auto add_candidate_modal::open(
     entity_name_ = entity_name;
     selected_.clear();
 
-    // Объёмы и префабы в одном списке: кандидат — ссылка без поля типа, и
-    // выбирают его одинаково, а чем он окажется, скажет расширение.
     files_ = collect_asset_refs(app_state::model_dir(), ".voxm");
     files_.append_range(collect_asset_refs(app_state::prefab_dir(), ".vox"));
 }

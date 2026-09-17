@@ -10,9 +10,6 @@ auto indent(std::string& out, int32 depth) -> void {
     out.append(static_cast<std::size_t>(depth) * 2, ' ');
 }
 
-// Кавычки, обратный слэш и управляющие — всё, что JSON не пропускает сырым.
-// Имена ключей и строковые значения здесь свои, но проходят они через ту же
-// дверь, что и текст, пришедший из сцены.
 auto quote(std::string& out, std::string_view text) -> void {
     out.push_back('"');
     for (const char c : text) {

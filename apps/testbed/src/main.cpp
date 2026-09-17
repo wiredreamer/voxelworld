@@ -8,9 +8,6 @@ using namespace vw;
 
 namespace {
 
-// Что нужно знать до того, как что-либо построено: сколько кадров мерить, куда
-// писать отчёт и какой глубины делать очереди. Всё остальное читают те, кому оно
-// принадлежит: стенд — про стенд, сцена — про сцену.
 auto bench_from(const testbed::arg_reader& args) -> gfx::bench_config {
     gfx::bench_config bench;
 
@@ -52,9 +49,6 @@ auto main(int argc, char** argv) -> int {
 
     const auto wanted_scene = args.text("--scene").value_or("terrain");
 
-    // Имя, не совпавшее ни с одним известным, — ошибка со списком. Раньше оно
-    // молча давало облёт пустого рельефа, и опечатка была не ошибкой, а другой
-    // сценой: прогон проходил целиком и мерил не то, что просили.
     const auto scene = testbed::find_scene(wanted_scene, args);
     if (!scene) {
         log::error(
@@ -72,9 +66,6 @@ auto main(int argc, char** argv) -> int {
         return 1;
     }
 
-    // Без замера камера принадлежит человеку: любую сцену можно облазить руками.
-    // В замерном прогоне без ключа путь берёт сама сцена — тот, на котором в ней
-    // есть что смотреть.
     testbed::camera_factory camera;
     if (wanted_camera || !benching) {
         const auto name = wanted_camera.value_or("free");

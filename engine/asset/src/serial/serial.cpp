@@ -76,8 +76,6 @@ auto vox_parser_plain::process_line_(
         return;
     }
 
-    // Вся структура файла — в отступе: ноль табуляций это шапка и узлы, одна —
-    // тег узла, две и глубже — свойство тега.
     switch (parsed->depth) {
         case 0: process_top_(parsed->name, parsed->value); return;
         case 1: process_tag_(parsed->name, parsed->value); return;
@@ -147,8 +145,6 @@ auto vox_parser_plain::process_tag_(
 
     auto& entity = prefab_.entities[entity_index_];
 
-    // Родитель — не компонент: на нём держится дерево, и читается он до того,
-    // как хоть один тег дойдёт до мира.
     if (name == "parent") {
         entity.parent_name = std::string{value};
         tag_index_         = no_index;
@@ -503,8 +499,6 @@ auto voxa_deserializer::process_channel_(std::istringstream& iss) -> void {
         current_property_ = animation_property::scale;
         current_channel_is_quat_ = false;
     } else if (prop_name == "origin") {
-        // Точка вращения перестала быть свойством позы. В клипах прежних версий
-        // канал объявлен, но пуст, поэтому его достаточно пропустить.
         log::warn(detail::voxa_deserializer_lc, "channel 'origin' is obsolete and is skipped");
         has_current_channel_ = false;
         return;
@@ -602,8 +596,6 @@ auto asset_storage::load_prefab(
         return;
     }
 
-    // Битая ссылка загрузку не рвёт: узел останется без объёма, о чём сказано в
-    // логе библиотекой, а остальной префаб встанет целиком.
     for (const auto& ent : result->entities) {
         const auto source = ent.value_of("model");
         if (!source.empty()) {
@@ -655,8 +647,6 @@ auto asset_storage::load_fsm(
         return;
     }
 
-    // Клипы автомата — тоже его ссылки, и грузятся они здесь же: иначе первый
-    // переход в состояние нашёл бы пустой слой.
     for (const auto& state : result->states) {
         if (!state.clip.empty()) {
             static_cast<void>(load_clip(state.clip));

@@ -67,8 +67,6 @@ auto frustum::approximately_equal(
 
 namespace {
 
-// x / depth по коробке из x и диапазона глубин. Монотонно по обоим, поэтому
-// экстремумы стоят в углах и всё решают четыре деления.
 auto projected_span(
     float32 x_min, float32 x_max, float32 depth_min, float32 depth_max
 ) -> std::pair<float32, float32> {
@@ -88,11 +86,7 @@ auto tile_of(float32 pixel, float32 tile_size, int32 last) -> uint32 {
     return static_cast<uint32>(std::clamp(index, 0, last));
 }
 
-// x/depth и y/depth в тайлы, которые этот размах покрывает. Сюда приходят обе
-// формы, и последний бит каждого числа здесь — причина, по которой две
-// реализации расходятся дважды на миллион кластеров: то же произведение,
-// посчитанное в другом порядке, отличается на один ulp, и граница тайла
-// оказывается по другую его сторону.
+// см. docs/rendering.md#эталон-и-шейдер
 auto rect_of_span(
     const cluster_grid& grid, float32 x_min, float32 x_max, float32 y_min, float32 y_max
 ) -> tile_rect {
@@ -116,8 +110,6 @@ auto rect_of_span(
     const float32 pixel_y0 = ((ndc_y0 * 0.5F) + 0.5F) * height;
     const float32 pixel_y1 = ((ndc_y1 * 0.5F) + 0.5F) * height;
 
-    // Зажать до этой проверки — и весь прямоугольник стал бы краевым тайлом, а не
-    // пустотой.
     if (pixel_x1 < 0.0F || pixel_x0 > width || pixel_y1 < 0.0F || pixel_y0 > height) {
         return {};
     }
@@ -151,8 +143,6 @@ auto scatter_slice(
         return {};
     }
 
-    // Самый широкий срез по всей плите: через саму ось там, где плита её
-    // захватывает, и через ближнюю стенку в остальных случаях.
     const float32 outside = std::max(
         {0.0F, slab.near_depth - spine_far, spine_near - slab.far_depth}
     );
@@ -164,10 +154,6 @@ auto scatter_slice(
 
     const float32 radius = std::sqrt(radius_squared);
 
-    // Только та часть оси, что попадает в досягаемость плиты. Без этого зажима
-    // колонка длиной в двести единиц отдавала бы весь свой размах каждой
-    // пересекаемой плите, а тайлы между её концами не принадлежат ни одному из
-    // них.
     const vec3f along{
         shape.end_b.x - shape.end_a.x,
         shape.end_b.y - shape.end_a.y,
@@ -192,11 +178,6 @@ auto scatter_slice(
     const float32 y_near = shape.end_a.y + (t_near * along.y);
     const float32 y_far  = shape.end_a.y + (t_far * along.y);
 
-    // Захваченное плитой лежит внутри коробки, а коробка, видимая на диапазоне
-    // глубин, проецируется в экстремумы своих углов. Проецировать по одной лишь
-    // ближней стенке дешевле и неверно: центр в десяти единицах от оси попадает в
-    // десять при глубине один и в пять при глубине два, а тайлы между ними не
-    // принадлежат ни одной стенке.
     const auto [x_min, x_max] = projected_span(
         std::min(x_near, x_far) - radius, std::max(x_near, x_far) + radius, depth_min,
         depth_max

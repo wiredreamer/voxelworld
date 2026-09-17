@@ -23,8 +23,6 @@ enum face : int32 {
     pos_z = 5,
 };
 
-// Occupancy is what the mesher reads, so the tests build it directly rather
-// than going through a model: the shapes here are easier to state as bits.
 auto solid_chunk() -> asset::chunk_occupancy {
     asset::chunk_occupancy occupancy;
     for (int32 y = 0; y < side; ++y) {
@@ -41,7 +39,6 @@ auto clear_voxel(asset::chunk_occupancy& occupancy, int32 x, int32 y, int32 z) -
     occupancy.zrows[(y * side) + x] &= ~(uint64{1} << z);
 }
 
-// A straight bore of the given radius along one axis, through the middle.
 auto bore(asset::chunk_occupancy& occupancy, int32 axis, int32 radius) -> void {
     constexpr int32 mid = side / 2;
 
@@ -60,13 +57,10 @@ auto bore(asset::chunk_occupancy& occupancy, int32 axis, int32 radius) -> void {
     }
 }
 
-// The tests build shapes that run the whole width of the chunk, so the cell
-// they check is a corner one: its outward faces are the chunk's own.
 auto corner_cell(const asset::chunk_links& links) -> const asset::cell_links& {
     return links.cells[asset::chunk_links::cell_index(0, 0, 0)];
 }
 
-// Which faces the cell is open on at all, across every pocket.
 auto open_faces(const asset::cell_links& links) -> uint8 {
     uint8 faces = 0;
     for (const auto& pocket : links.pockets) {
@@ -79,7 +73,6 @@ auto open_faces(const asset::cell_links& links) -> uint8 {
     return faces;
 }
 
-// True when one single pocket reaches both faces: sight can cross the chunk.
 auto connects(const asset::cell_links& links, int32 a, int32 b) -> bool {
     return std::ranges::any_of(links.pockets, [a, b](const asset::chunk_pocket& pocket) -> bool {
         return pocket.touches(a) && pocket.touches(b);
@@ -124,8 +117,6 @@ TEST_CASE("a bore joins the two faces it runs between", "[world][links]") {
 
         const auto links = asset::build_chunk_links(occupancy);
 
-        // The bore runs through the middle of the chunk, so it passes through
-        // the cells on the far side of each axis from the corner.
         const int32 far = asset::chunk_links::cells_per_side - 1;
         const auto& cell = links.cells[
             axis == 0   ? asset::chunk_links::cell_index(0, far, far)
@@ -136,7 +127,6 @@ TEST_CASE("a bore joins the two faces it runs between", "[world][links]") {
         REQUIRE(cell.pockets.size() == 1);
         REQUIRE(connects(cell, low, high));
 
-        // A patch of the face, not the whole of it.
         REQUIRE(std::popcount(cell.pockets[0].faces[low]) <= 4);
     }
 }
@@ -148,9 +138,6 @@ TEST_CASE("crossing bores connect all four faces they reach", "[world][links]") 
 
     const auto links = asset::build_chunk_links(occupancy);
 
-    // Both bores meet in the middle of the chunk, which is the corner where
-    // all eight cells touch: that cell sees them as one pocket crossing it in
-    // two directions, and nothing in it reaches a Y face.
     const int32 far  = asset::chunk_links::cells_per_side - 1;
     const auto& cell = links.cells[asset::chunk_links::cell_index(far, far, far)];
 
@@ -163,9 +150,6 @@ TEST_CASE("crossing bores connect all four faces they reach", "[world][links]") 
 TEST_CASE("bores that miss each other stay separate", "[world][links]") {
     auto occupancy = solid_chunk();
 
-    // One along X near the bottom, one along Z near the top: they cross in
-    // plan but not in space. Both are kept clear of the boundaries between
-    // cells, where a bore would touch the face it runs along.
     for (int32 x = 0; x < side; ++x) {
         clear_voxel(occupancy, x, 10, 20);
     }
@@ -175,8 +159,6 @@ TEST_CASE("bores that miss each other stay separate", "[world][links]") {
 
     const auto links = asset::build_chunk_links(occupancy);
 
-    // The two bores run through different cells, and neither cell has a pocket
-    // reaching both an X and a Z face.
     for (const auto& cell : links.cells) {
         REQUIRE_FALSE(connects(cell, neg_x, pos_z));
         REQUIRE_FALSE(connects(cell, neg_z, pos_x));
@@ -202,16 +184,12 @@ TEST_CASE("a sealed bubble connects nothing", "[world][links]") {
 TEST_CASE("a pocket that only opens on one face crosses nothing", "[world][links]") {
     auto occupancy = solid_chunk();
 
-    // Reaches the -X face and stops well short of every other one.
     for (int32 x = 0; x < 20; ++x) {
         clear_voxel(occupancy, x, 20, 20);
     }
 
     const auto links = asset::build_chunk_links(occupancy);
 
-    // It starts on the -X face of the chunk and dies inside the first cell, so
-    // that cell is open on -X and nothing else, and no other cell is open at
-    // all.
     const auto& cell = corner_cell(links);
     REQUIRE(cell.pockets.size() == 1);
     REQUIRE(open_faces(cell) == (1U << neg_x));
@@ -224,8 +202,6 @@ TEST_CASE("a pocket that only opens on one face crosses nothing", "[world][links
 TEST_CASE("openings are placed on the face, not just counted", "[world][links]") {
     auto occupancy = solid_chunk();
 
-    // Two bores along X, far apart on the face: one near a corner, one near the
-    // opposite one.
     for (int32 x = 0; x < side; ++x) {
         clear_voxel(occupancy, x, 4, 4);
         clear_voxel(occupancy, x, 60, 60);
@@ -233,7 +209,6 @@ TEST_CASE("openings are placed on the face, not just counted", "[world][links]")
 
     const auto links = asset::build_chunk_links(occupancy);
 
-    // The two bores land in different cells of the -X face of the chunk.
     const int32 far   = asset::chunk_links::cells_per_side - 1;
     const auto& lower = links.cells[asset::chunk_links::cell_index(0, 0, 0)];
     const auto& upper = links.cells[asset::chunk_links::cell_index(0, far, far)];
@@ -247,8 +222,6 @@ TEST_CASE("openings are placed on the face, not just counted", "[world][links]")
     REQUIRE(std::popcount(first) == 1);
     REQUIRE(std::popcount(second) == 1);
 
-    // A cell on the -X side whose +X face opens only where the first bore does
-    // meets that pocket and not the other.
     asset::chunk_pocket neighbour;
     neighbour.faces[pos_x] = first;
 

@@ -23,9 +23,6 @@ auto parse_voxa(std::string_view text) {
 
 }  // namespace
 
-// Узлы взяты из assets/prefabs/m_human.vox дословно, вплоть до «-0» и
-// табуляций. Разборщик не знает ни одного из этих тегов: он видит имя, остаток
-// строки и глубину отступа, а смысл придаёт читатель.
 TEST_CASE("the vox parser reads a prefab out of a stream", "[serial]") {
     const auto prefab = parse_vox(
         "# Vox File Version 4.0\n"
@@ -66,8 +63,6 @@ TEST_CASE("the vox parser reads a prefab out of a stream", "[serial]") {
     REQUIRE(socket->prop("scale") == "0.99 0.99 0.99");
 }
 
-// Тег, которого не знает никто, обязан дойти до записи целым: иначе открыть
-// префаб сборкой без нужного компонента и сохранить — значит потерять его.
 TEST_CASE("an unknown tag is carried through untouched", "[serial]") {
     const auto first = parse_vox(
         "root body\n"
@@ -93,8 +88,6 @@ TEST_CASE("an unknown tag is carried through untouched", "[serial]") {
     REQUIRE(light->prop("range") == "12");
 }
 
-// Повтор тега — это список, и порядок в нём значим: сокеты обязаны вернуться
-// теми же и в том же порядке.
 TEST_CASE("a repeated tag is a list", "[serial]") {
     const auto prefab = parse_vox(
         "root body\n"
@@ -115,8 +108,6 @@ TEST_CASE("a repeated tag is a list", "[serial]") {
     REQUIRE(tags.back().prop("pos") == "-1 0 0");
 }
 
-// Разбор идёт построчно, и незнакомая команда — не повод бросать файл: так
-// формат остаётся расширяемым, а старый разборщик читает новый файл.
 TEST_CASE("an unknown vox command is skipped, not fatal", "[serial]") {
     const auto prefab = parse_vox(
         "root body\n"
@@ -128,9 +119,6 @@ TEST_CASE("an unknown vox command is skipped, not fatal", "[serial]") {
     REQUIRE(prefab->entities.size() == 1);
 }
 
-// Обрезанная строка — то, что приносит и оборванная запись, и правка руками.
-// Ошибкой разбора осталась только поломанная структура: свойство без тега
-// повисает в воздухе, и догадываться, к чему оно относится, разборщик не станет.
 TEST_CASE("a property without a tag is a parse error", "[serial]") {
     const auto prefab = parse_vox(
         "root body\n"
@@ -142,9 +130,6 @@ TEST_CASE("a property without a tag is a parse error", "[serial]") {
     REQUIRE(prefab.error() == asset::vox_parser::error_type::parse_error);
 }
 
-// Усечённый трансформ разборщика больше не касается: сколько чисел полагается
-// тегу, знает читатель. Строка доезжает до него как есть, и это его дело —
-// понять, что чисел мало.
 TEST_CASE("a truncated transform is not a parse error", "[serial]") {
     const auto prefab = parse_vox(
         "root body\n"
@@ -166,9 +151,6 @@ TEST_CASE("an empty vox stream yields an empty prefab", "[serial]") {
     REQUIRE(prefab->entities.empty());
 }
 
-// Разбор и запись — две половины одного формата, и держатся они только тем, что
-// лежат рядом. Поле, которое читается, но не пишется, не даёт ни ошибки, ни
-// лога: оно просто исчезает при следующем сохранении.
 TEST_CASE("a prefab survives a write and a read", "[serial]") {
     constexpr std::string_view source =
         "# Vox File Version 4.0\n"
@@ -198,8 +180,6 @@ TEST_CASE("a prefab survives a write and a read", "[serial]") {
     REQUIRE(*second == *first);
 }
 
-// Порядок ссылок на автоматы — это номера слоёв, поэтому повтор тега здесь не
-// просто список, а список упорядоченный, и запись обязана его сохранить.
 TEST_CASE("a prefab names its state machines in layer order", "[serial]") {
     constexpr std::string_view source =
         "# Vox File Version 4.0\n"
@@ -224,8 +204,6 @@ TEST_CASE("a prefab names its state machines in layer order", "[serial]") {
     REQUIRE(second->fsm_refs == first->fsm_refs);
 }
 
-// Узел без единого тега — тоже узел: пустые поля не должны превращаться в
-// строки, которые разбор потом прочтёт как настоящие.
 TEST_CASE("a bare node survives a write and a read", "[serial]") {
     const auto first = parse_vox(
         "# Vox File Version 4.0\n"
@@ -272,8 +250,6 @@ TEST_CASE("a truncated voxa keyframe is a parse error", "[serial]") {
     REQUIRE(clip.error() == asset::voxa_deserializer::error_type::parse_error);
 }
 
-// То, что перебирает фаззер, но в виде, который читается глазами: разборщик
-// обязан дойти до конца любого ввода и вернуть либо клип, либо ошибку.
 TEST_CASE("the parsers survive rubbish", "[serial]") {
     const std::array<std::string_view, 6> rubbish{
         "\0\0\0", "clip", "track", "k k k", "v v v", "root\n\n\nentity\n",
@@ -287,9 +263,6 @@ TEST_CASE("the parsers survive rubbish", "[serial]") {
     SUCCEED("neither parser crashed");
 }
 
-// Версия в шапке — единственная защита от чтения будущего формата как мусора:
-// команды у него будут другие, каждая уедет в «неизвестную», и файл откроется
-// пустым вместо внятного отказа.
 TEST_CASE("a vox file of an unsupported major version is rejected", "[serial]") {
     const auto prefab = parse_vox(
         "# Vox File Version 99.0\n"
@@ -301,9 +274,6 @@ TEST_CASE("a vox file of an unsupported major version is rejected", "[serial]") 
     REQUIRE(prefab.error() == asset::vox_parser::error_type::unsupported_version);
 }
 
-// Файл 3.1 нёс сокеты плоской строкой с позиционными числами. Читать его больше
-// нечем, и молчать об этом нельзя: без проверки версии сокет ушёл бы в тег с
-// девятью числами в значении, а префаб открылся бы наполовину.
 TEST_CASE("a vox 3.1 file is rejected by version", "[serial]") {
     const auto prefab = parse_vox(
         "# Vox File Version 3.1\n"
@@ -326,8 +296,6 @@ TEST_CASE("a vox file of the current version parses", "[serial]") {
     REQUIRE(prefab->entities.size() == 1);
 }
 
-// Младший номер поднимают при добавлении команд, а незнакомую команду разборщик
-// и так переживает: ронять из-за неё файл значило бы запретить формату расти.
 TEST_CASE("a vox file of a newer minor version parses", "[serial]") {
     const auto prefab = parse_vox(
         "# Vox File Version 4.7\n"
@@ -338,8 +306,6 @@ TEST_CASE("a vox file of a newer minor version parses", "[serial]") {
     REQUIRE(prefab.has_value());
 }
 
-// Без версии писались и файлы первых дней, и тексты в тестах, и буфер из
-// фаззера. Отказывать им — значит требовать шапку там, где её никогда не было.
 TEST_CASE("a vox file without a version header parses", "[serial]") {
     const auto prefab = parse_vox(
         "# just a comment\n"
@@ -372,9 +338,6 @@ TEST_CASE("a voxa file of the current version parses", "[serial]") {
     REQUIRE((*clip)->get_rig() == "humanoid");
 }
 
-// Риг появился в 1.1 и остался необязательным, поэтому клип 1.0 читается как
-// «риг не указан», а не отвергается: пять записанных до этого клипов никуда не
-// делись.
 TEST_CASE("a voxa file without a rig parses as one without a rig", "[serial]") {
     const auto clip = parse_voxa(
         "# Voxa File Version 1.0\n"
@@ -431,8 +394,6 @@ TEST_CASE("a voxm volume survives a round trip", "[serial]") {
     }
 }
 
-// Пробег — единственная форма записи вокселя, и строка одинаковых вокселей обязана
-// стать одной строкой файла, иначе разделение форматов не окупается.
 TEST_CASE("a voxm run collapses a row of equal voxels", "[serial]") {
     asset::model_registry registry;
 
@@ -480,8 +441,6 @@ TEST_CASE("a voxm file of an unsupported major version is rejected", "[serial]")
     REQUIRE(restored.error() == asset::voxm_deserializer::error_type::unsupported_version);
 }
 
-// Пробег за границей объёма — это испорченный файл, а не повод писать мимо
-// страниц: молча обрезать его значило бы тихо потерять часть модели.
 TEST_CASE("a voxm run outside the volume is a parse error", "[serial]") {
     asset::model_registry registry;
 
@@ -503,8 +462,6 @@ TEST_CASE("a voxm file without a size is a parse error", "[serial]") {
     REQUIRE_FALSE(restored.has_value());
 }
 
-// Блок вне каталога рвать чтение не должен: он нарисуется заглушкой, и это
-// видно сразу, а половина модели из-за одного номера пропасть не может.
 TEST_CASE("a voxm voxel outside the catalog still parses", "[serial]") {
     asset::model_registry registry;
 

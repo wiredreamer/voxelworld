@@ -24,9 +24,6 @@ public:
 
     class hierarchy_modifier {
     public:
-        // Место среди детей нового родителя: по умолчанию — в конец. Порядок детей
-        // и есть порядок узлов в файле и в дереве редактора, поэтому перенос и
-        // его отмена обязаны уметь ставить узел туда, где он стоял.
         auto set_parent(
             entity parent, std::size_t index = std::numeric_limits<std::size_t>::max()
         ) -> hierarchy_modifier&;

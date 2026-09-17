@@ -20,7 +20,7 @@ startup_modal::startup_modal(
     : engine_(&eng), state_(&state) {}
 
 auto startup_modal::render(
-    float /*delta_time*/
+    float
 ) -> void {
     if (state_->ui.need_startup_modal) {
         ImGui::OpenPopup("Welcome to Sculptor");

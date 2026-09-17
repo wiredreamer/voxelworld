@@ -2,8 +2,6 @@ module;
 
 #include <imgui.h>
 
-// Только ради ShellExecuteA ниже: на остальных системах папку открывает
-// команда, а не вызов API, и заголовков ей не нужно.
 #ifdef _WIN32
 #  define NOMINMAX
 #  define WIN32_LEAN_AND_MEAN
@@ -31,7 +29,7 @@ menu_bar::menu_bar(
     : engine_(&eng), state_(&state), op_manager_(&op_manager), file_service_(&file_svc) {}
 
 auto menu_bar::render(
-    float /*delta_time*/
+    float
 ) const -> void {
     constexpr ImGuiWindowFlags menu_window_flags =  //
         ImGuiWindowFlags_MenuBar |                  //
@@ -76,9 +74,6 @@ auto menu_bar::render(
             namespace fs = std::filesystem;
             const std::string assets_dir =
                 fs::absolute(fs::path{app_state::asset_root_name}).string();
-            // Результат отбрасывается явно: открыть папку — услуга, а не часть
-            // работы редактора, и не открывшийся проводник ничего не меняет.
-            // Явно — потому что glibc помечает system() как warn_unused_result.
 #ifdef _WIN32
             ShellExecuteA(nullptr, "open", assets_dir.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
 #elifdef __APPLE__

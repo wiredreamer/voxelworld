@@ -30,8 +30,6 @@ TEST_CASE("the page table says what a volume is made of", "[model]") {
     m.fill(voxels::world::stone[0]);
     REQUIRE(m.scan_fill() == asset::model_fill::solid);
 
-    // One voxel of air turns its page sparse, and a sparse page is a mix
-    // whatever it holds -- the cheap answer is deliberately the careful one.
     m.set_voxel(3, 3, 3, voxels::air);
     REQUIRE(m.scan_fill() == asset::model_fill::mixed);
 
@@ -55,7 +53,6 @@ TEST_CASE("six solid neighbours leave nothing to draw", "[model]") {
 
     REQUIRE_FALSE(center.boundaries_are_solid());
 
-    // Five sides walled in and the sixth open to the sky is a face to draw.
     for (int32 fd = 0; fd < 5; ++fd) {
         center.set_boundary_slice(fd, *neighbors[fd]);
     }
@@ -64,13 +61,10 @@ TEST_CASE("six solid neighbours leave nothing to draw", "[model]") {
     center.set_boundary_slice(5, *neighbors[5]);
     REQUIRE(center.boundaries_are_solid());
 
-    // Face 0 is +X, so the plane facing this chunk is the neighbour's own -X
-    // side. A single voxel of air in it is a quad the chunk owes.
     neighbors[0]->set_voxel(0, 10, 10, voxels::air);
     center.set_boundary_slice(0, *neighbors[0]);
     REQUIRE_FALSE(center.boundaries_are_solid());
 
-    // Air one voxel deeper is behind the seam and hides nothing.
     neighbors[1]->set_voxel(side - 2, 10, 10, voxels::air);
     center.set_boundary_slice(1, *neighbors[1]);
     center.set_boundary_slice(0, *solid_cube(ids, pages));
@@ -95,8 +89,6 @@ TEST_CASE("a face plane comes out of the page table", "[model]") {
     REQUIRE(m.extract_face(0, face));
     REQUIRE(std::ranges::all_of(face.rows, [](uint64 row) -> bool { return row == ~uint64{0}; }));
 
-    // Face 0 is +X, the plane at x = 63, addressed (a = y, b = z). Air one
-    // voxel short of it belongs to no face at all.
     m.set_voxel(side - 1, 5, 9, voxels::air);
     m.set_voxel(side - 2, 7, 9, voxels::air);
 
@@ -104,7 +96,6 @@ TEST_CASE("a face plane comes out of the page table", "[model]") {
     REQUIRE_FALSE(face.test(5, 9));
     REQUIRE(face.test(7, 9));
 
-    // The other five sides of the same chunk are untouched.
     for (int32 fd = 1; fd < 6; ++fd) {
         INFO("face " << fd);
         REQUIRE(m.extract_face(fd, face));
@@ -113,7 +104,6 @@ TEST_CASE("a face plane comes out of the page table", "[model]") {
         }));
     }
 
-    // Anything that is not a chunk has no neighbours to hand a plane to.
     asset::model small{ids, pages, voxels::world::category, 32, 32, 32};
     REQUIRE_FALSE(small.extract_face(0, face));
 }

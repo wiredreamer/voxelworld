@@ -44,8 +44,6 @@ auto variant_system::variant_modifier::set_candidates(
         return false;
     }
 
-    // Выбранного в новом списке нет. Место занимает сосед — тот, кто оказался на
-    // его номере, а если список кончился, последний.
     component_->selected_ = component_->candidates_.empty() ?
         0 :
         std::min(component_->selected_, component_->candidates_.size() - 1);
@@ -146,8 +144,6 @@ auto variant_system::apply(
         return std::unexpected(variant_error::load_failed);
     }
 
-    // Компонент объёма мог и не стоять: узел-слот законно заводят пустым, а
-    // объём приезжает с первым выбранным кандидатом.
     world_->modify(ent).with<model_component>();
     world_->system<model_system>().modify(ent).set_model(*loaded, ref);
 
@@ -157,7 +153,7 @@ auto variant_system::apply(
 }
 
 auto variant_system::update(
-    float32 /*dt*/
+    float32
 ) -> void {}
 
 }  // namespace vw::ecs

@@ -15,8 +15,6 @@ arena_app::arena_app(
     gfx::engine& eng
 )
     : app{eng}
-    // Корень ассетов у игры — папка assets рядом с исполняемым файлом: ссылки
-    // внутри префабов те же, что у редактора, а корень у каждого свой.
     , model_library_(
           eng.get_world().resource<asset::model_registry>(), eng.get_voxel_registry(), "assets"
       )

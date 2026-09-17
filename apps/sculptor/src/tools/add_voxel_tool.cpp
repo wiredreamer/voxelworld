@@ -16,7 +16,7 @@ add_voxel_tool::add_voxel_tool(
     : engine_(&eng), state_(&st), op_manager_(&op_manager) {}
 
 auto add_voxel_tool::render(
-    float /*delta_time*/
+    float
 ) -> void {
     const bool is_hovered = hovered_voxel_ != vec3i{-1, -1, -1};
     const bool has_edited_entity =
@@ -63,11 +63,11 @@ auto add_voxel_tool::render(
 }
 
 auto add_voxel_tool::on_key_press(
-    const plat::key_press_event& /*ev*/
+    const plat::key_press_event&
 ) -> void {}
 
 auto add_voxel_tool::on_mouse_move(
-    const plat::mouse_move_event& /*ev*/
+    const plat::mouse_move_event&
 ) -> void {
     update_hovered_voxel_();
 }
@@ -141,7 +141,7 @@ auto add_voxel_tool::on_mouse_press(
 }
 
 auto add_voxel_tool::on_mouse_release(
-    const plat::mouse_release_event& /*ev*/
+    const plat::mouse_release_event&
 ) -> void {}
 
 auto add_voxel_tool::on_activate() -> void {

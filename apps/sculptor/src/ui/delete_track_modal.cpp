@@ -27,7 +27,7 @@ auto delete_track_modal::open(
 }
 
 auto delete_track_modal::render(
-    float /*delta_time*/
+    float
 ) -> void {
     if (need_open_) {
         ImGui::OpenPopup("Delete Track?");

@@ -54,9 +54,6 @@ constexpr std::array cpu_stages{
     stage_desc{"grid_staged", [](const frame_sample& s) -> float32 { return static_cast<float32>(s.grid.staged_count); }},
 };
 
-// Каждая система мира отдельной строкой: world_update меряет их сумму, а имя
-// той, что съела кадр, видно только здесь. Порядок и имена берутся из кортежа
-// систем, поэтому новая система попадает в отчёт сама.
 template <std::size_t I>
 constexpr auto system_stage_desc() -> stage_desc {
     return {
@@ -65,7 +62,7 @@ constexpr auto system_stage_desc() -> stage_desc {
     };
 }
 
-constexpr auto system_stages = []<std::size_t... Is>(std::index_sequence<Is...> /*unused*/) {
+constexpr auto system_stages = []<std::size_t... Is>(std::index_sequence<Is...>) {
     return std::array<stage_desc, sizeof...(Is)>{system_stage_desc<Is>()...};
 }(std::make_index_sequence<ecs::world_system_count>{});
 
@@ -162,8 +159,6 @@ auto frame_recorder::report() const -> std::string {
         write_row(stage);
     }
 
-    // Стадии CPU меряют запись команд, а эти — выполнение. Показываются порознь,
-    // потому что складывать и сравнивать их нельзя.
     if (!samples_.front().render.gpu.supported) {
         std::format_to(sink, "\ngpu timestamps: unsupported on this device\n");
         return out;

@@ -21,7 +21,7 @@ breadcrumb_bar::breadcrumb_bar(
     : engine_(&eng), state_(&st), clip_service_(&clip_svc) {}
 
 auto breadcrumb_bar::render(
-    float /*delta_time*/
+    float
 ) -> void {
     if (state_->file.filename.empty() && state_->ctx.in_prefab()) {
         return;
@@ -31,8 +31,6 @@ auto breadcrumb_bar::render(
 
     const auto& stack = state_->ctx.stack;
 
-    // Корень — сам документ, и он кликабелен, даже когда стек пуст: так видно,
-    // что крошки это путь, а не заголовок.
     const std::string& document =
         state_->file.filename.empty() ? std::string{"untitled"} : state_->file.filename;
 
@@ -64,9 +62,6 @@ auto breadcrumb_bar::leave_to_(
         drops_clip = drops_clip || stack[i].kind == edit_kind::clip;
     }
 
-    // Выход из клипа — это не только снятие контекста: слои останавливаются, а
-    // поза возвращается к той, что лежит в префабе. Сам клип при этом остаётся
-    // открытым, и вернуться к нему можно из меню.
     if (drops_clip) {
         clip_service_->exit_animation_mode();
         state_->ui.show_timeline = false;
@@ -93,9 +88,6 @@ auto breadcrumb_bar::label_of_(
         return ctx.node_name;
     }
 
-    // Имя файла объёма берётся из мира, а не из контекста: у нового узла ссылки
-    // ещё нет, а после первой записи она появляется, и крошка обязана это
-    // показать, не заставляя выходить и заходить снова.
     const auto it = state_->scene.name_to_entity.find(ctx.node_name);
     if (it != state_->scene.name_to_entity.end()) {
         const auto& world = engine_->get_world();

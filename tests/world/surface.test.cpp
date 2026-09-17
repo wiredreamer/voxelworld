@@ -12,9 +12,6 @@ using namespace vw::ecs;
 
 namespace {
 
-// One generated column, addressed by world height instead of by chunk. Caves
-// are switched off in every test here: what is under examination is the stack
-// of materials, and a chamber cut through it only adds noise.
 class sampled_column {
 public:
     static constexpr int32 chunk = 64;
@@ -56,8 +53,6 @@ public:
         return it->second->get_voxel(x, wy - (cy * chunk), z);
     }
 
-    // The highest voxel that is not air, or bottom() - 1 when the column is
-    // empty all the way down.
     [[nodiscard]] auto surface_of(int32 x, int32 z) const -> int32 {
         for (int32 wy = max_y_; wy >= min_y_; --wy) {
             if (id_at(x, wy, z) != voxels::air) {
@@ -73,8 +68,6 @@ private:
     int32 max_y_ = std::numeric_limits<int32>::lowest();
 };
 
-// Caves off: these tests are about the layers of the ground, and a cave through
-// them is a hole the assertions would read as a missing layer.
 auto settled_params() -> perlin_terrain_generator::params {
     perlin_terrain_generator::params p{};
     p.caves = false;
@@ -107,8 +100,6 @@ TEST_CASE("ground is layers, not paint", "[world][surface]") {
             INFO("column " << x << "," << z << " surface at " << surface);
             REQUIRE(surface >= p.world_bottom_y);
 
-            // Nothing above the surface, and no holes under it: with caves off
-            // the rock is unbroken from the floor up.
             REQUIRE(column.id_at(x, surface + 1, z) == voxels::air);
 
             bool unbroken = true;
@@ -122,29 +113,22 @@ TEST_CASE("ground is layers, not paint", "[world][surface]") {
             if (crown == voxels::world::grass[0]) {
                 ++with_soil;
 
-                // Exactly one voxel of turf, and soil under it -- or, where the
-                // soil is a single voxel deep, weathered rock straight away.
                 REQUIRE(column.id_at(x, surface - 1, z) != voxels::world::grass[0]);
                 const auto under = column.id_at(x, surface - 1, z);
                 REQUIRE((under == voxels::world::dirt[0] || under == voxels::world::stone[0]));
                 continue;
             }
 
-            // Rock in the open: soil slid off or the altitude is too high for
-            // it. Snow only above the line.
             REQUIRE((crown == voxels::world::stone[1] || crown == voxels::world::snow[1]));
             if (crown == voxels::world::snow[1]) {
                 REQUIRE(surface > p.snow_line);
             }
             ++bare_rock;
 
-            // No soil hiding under bare rock.
             REQUIRE(column.id_at(x, surface - 1, z) != voxels::world::dirt[0]);
         }
     }
 
-    // The one column is not a special case either way: this patch of the map
-    // has both kinds of ground on it.
     INFO("soil columns " << with_soil << ", bare rock " << bare_rock);
     REQUIRE(with_soil > 0);
     REQUIRE(bare_rock > 0);
@@ -164,8 +148,6 @@ TEST_CASE("rock changes with absolute depth", "[world][surface]") {
         voxel expected;
     };
 
-    // Read at heights that cannot be anywhere near the surface, so only the
-    // depth rule decides.
     for (const auto& [wy, expected] : {
              probe{p.world_bottom_y, voxels::world::bedrock},
              probe{p.world_bottom_y + p.bedrock_thickness - 1, voxels::world::bedrock},
@@ -187,9 +169,6 @@ TEST_CASE("soil settles by slope, not by a mountain rule", "[world][surface]") {
     asset::model_identity_pool identity_pool;
     asset::page_pool pages;
 
-    // With the slope limit wide open the same terrain keeps its soil, which is
-    // what says the bare ground above is the slope talking and not the height
-    // field having no room for soil in the first place.
     p.soil_slope_limit  = 1.0e6F;
     p.soil_altitude_end = 1000;
 

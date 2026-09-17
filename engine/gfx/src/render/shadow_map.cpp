@@ -14,7 +14,6 @@ shadow_map::shadow_map(
     vulkan_context& context, uint32 size
 )
     : context_(&context), size_(size) {
-    // Инициализируем матрицы единичными
     for (auto& matrix : light_space_matrices_) {
         matrix = math::identity_matrix();
     }
@@ -96,7 +95,6 @@ auto shadow_map::create_shadow_map_image() -> void {
         "bind shadow map memory"
     );
 
-    // Создаем array view для использования в шейдерах
     vk::ImageViewCreateInfo array_view_info{};
     array_view_info.image                           = shadow_image_;
     array_view_info.viewType                        = vk::ImageViewType::e2DArray;
@@ -111,7 +109,6 @@ auto shadow_map::create_shadow_map_image() -> void {
         context_->get_device().createImageView(array_view_info), "create shadow map array view"
     );
 
-    // Создаем отдельные 2D views для каждого каскада (для debug отображения и framebuffers)
     for (uint32 i = 0; i < cascade_count; ++i) {
         vk::ImageViewCreateInfo view_info{};
         view_info.image                           = shadow_image_;
@@ -130,10 +127,6 @@ auto shadow_map::create_shadow_map_image() -> void {
 }
 
 auto shadow_map::create_sampler() -> void {
-    // Линейная фильтрация на сравнивающем сэмплере — это бесплатный аппаратный PCF:
-    // одна выборка становится взвешенным средним четырёх сравнений вместо одного.
-    // Ближайшая давала двоичный край, квантованный по сетке текселей, а это половина
-    // того, что читалось как зубцы.
     vk::SamplerCreateInfo sampler_info{};
     sampler_info.magFilter               = vk::Filter::eLinear;
     sampler_info.minFilter               = vk::Filter::eLinear;
@@ -252,26 +245,6 @@ auto shadow_map::update(
 ) -> void {
     const vec3f light_dir = math::normalize(light_direction);
 
-    // Разбиения идут геометрической прогрессией: каждый каскад — одно и то же
-    // кратное предыдущего.
-    //
-    // На границе каскадов видно это отношение и больше ничего. Тексель тени — это
-    // фиксированная доля дальности своего каскада, а экранный пиксель растёт с
-    // глубиной, поэтому лесенка на краю тени хуже всего у ближнего края каскада —
-    // ровно на это отношение — и оседает до двух пикселей у дальнего. Равные
-    // отношения делают этот худший случай одинаковым везде и не оставляют ступени
-    // на переходе.
-    //
-    // Практическая схема разбиений, которую это заменяет, распределяет по
-    // [near, far], а near здесь — десятая доля единицы, шесть миллиметров. Её
-    // логарифмическая половина тратит всё на первый метр, а равномерная выглаживает
-    // остаток, поэтому при lambda 0,9 отношения выходили 2,3, 2,8 и 6,1: последний
-    // каскад начинался с лесенки в двенадцать пикселей против двух по ту сторону
-    // шва.
-    //
-    // Первое разбиение — это расстояние, а не доля: его задаёт то, насколько близко
-    // стоит ближайшее, чему нужна резкая тень, а всё остальное следует из него и
-    // дальности теней.
     const float cam_near   = camera.get_near();
     const float cam_far    = camera.get_far();
     const float shadow_far = std::min(settings_.distance, cam_far);
@@ -298,15 +271,12 @@ auto shadow_map::update(
 
     const float shadow_dist = shadow_far - cam_near;
 
-    // Вычисляем inverse view-projection матрицу камеры
     auto cam_proj =
         math::perspective_matrix(camera.get_fov(), camera.get_aspect_ratio(), cam_near, shadow_far);
     auto cam_view   = camera.get_view_matrix();
     auto inv_result = math::inverse_matrix(cam_proj * cam_view);
     auto inv_cam    = inv_result.value_or(math::identity_matrix());
 
-    // Геометрия всех каскадов считается до решения о перерисовке: выбор
-    // раскладывает их по кадрам и потому должен видеть все четыре сразу.
     std::array<std::array<vec3f, 8>, cascade_count> cascade_corners{};
     std::array<vec3f, cascade_count> centers{};
     std::array<float32, cascade_count> radii{};
@@ -339,17 +309,6 @@ auto shadow_map::update(
             frustum_corners[i]     = frustum_corners[i] + dist * (last_cascade_split / shadow_dist);
         }
 
-        // Центрируется на камере, а не на середине среза. Середина среза стоит
-        // далеко по оси взгляда, поэтому поворот на месте водит её по широкой
-        // окружности, и все каскады разом выходят за свой запас — замерено как
-        // четыре перерисованных каскада на каждом восьмом кадре и вдвое более
-        // длинный кадр в этот момент. Вокруг камеры при повороте не движется ничто;
-        // устаревание каскада вызывает только ходьба.
-        //
-        // Шар обязан доставать до дальних углов среза, а не только до своих, а это
-        // примерно 1,6 радиуса. Это разрешение, заплаченное за кадр без рывка, и те
-        // же 1,6 стоило бы простое расширение запаса — которое сделало бы
-        // перерисовки реже, а не убрало бы их.
         const vec3 frustum_center = camera.get_position();
 
         float radius = 0.0f;
@@ -365,25 +324,6 @@ auto shadow_map::update(
         last_cascade_split = cascade_split;
     }
 
-    // Каскад устарел, когда солнце повернулось с момента, как нарисовали *его*.
-    // Меряется относительно направления, с которым каскад был нарисован, а не
-    // направления прошлого кадра: сравнение кадра с кадром и перезапись эталона
-    // каждый кадр не давали накопиться ничему, и солнце, проходящее сутки за две
-    // минуты при шестистах кадрах в секунду, не переступало вообще никакого
-    // фиксированного порога.
-    //
-    // Поворот делает с каскадом вот что: вращает его решётку текселей вокруг
-    // собственного центра, и точка на ободе смещается на radius * turn. Ограничение
-    // этого в текселях ограничивает, какая доля лесенки растеризуется иначе за один
-    // шаг, — и именно эта переквантизация видна как прыжки теней, куда сильнее, чем
-    // их настоящее движение. Отбрасывающий тень объект высотой в десятки единиц, так
-    // что сама тень уезжает на долю текселя за шаг.
-    //
-    // Поскольку тексель равен 2 * radius * (1 + pad) / size, радиус сокращается: угол
-    // выходит одинаковым для всех каскадов. В этом и смысл. Ограничение движения
-    // *тени* вместо этого сажало плечо рычага на дальность броска света, тысячу
-    // единиц, и оставляло дальние каскады в пятьдесят раз свободнее — их
-    // перерисовывали 50 кадров из 600, и каждый раз они прыгали на целую решётку.
     for (uint32 i = 0; i < cascade_count; ++i) {
         const float32 turn = math::length(light_dir - drawn_light_dirs_[i]);
         const float32 threshold =
@@ -426,22 +366,11 @@ auto shadow_map::select_cascades_(
         const float32 drift = math::length(centers[i] - drawn_centers_[i]);
         const float32 reach = radii[i] > 0.0f ? drift / radii[i] : 0.0f;
 
-        // Выход за покрытие считается срочным, а не безусловным. При движении вперёд
-        // каскады выходят за свой запас с разницей в считаные кадры, и отрисовка
-        // всех четырёх в одном кадре давала две миллисекунды теневого прохода при
-        // кадре в одну. Каскад, подождавший кадр, этот кадр устарел на дальнем краю
-        // своего среза; всплеск же виден каждый раз.
         const bool stale = reach > cascade_padding_ratio_ || radii[i] > drawn_radii_[i];
 
         if (stale) {
             priority[i] = 100.0f + reach;
         } else if ((dirty_mask_ & bit) != 0) {
-            // Сначала тот, кто ждёт дольше. Раньше все грязные каскады получали
-            // одинаковый вес, а поиск ниже оставляет первый из равной пары, поэтому
-            // неподвижная камера под поворачивающимся солнцем каждый кадр отдавала
-            // весь бюджет каскадам 0 и 1: замерено 600 перерисовок из 600 для этих
-            // двух против 4 для остальных. Всё за первым разбиением стояло на месте,
-            // и читается это как замёрзшие тени.
             priority[i] = 1.0f + reach +
                           (static_cast<float32>(std::min(frames_waited_[i], 1000U)) * 0.001f);
         } else if (reach > cascade_trigger_ratio_) {
@@ -523,8 +452,6 @@ auto shadow_map::build_cascade_matrix_(
         max_z   = std::max(max_z, lv.z);
     }
 
-    // Глубине нужен тот же запас, что и размерам: отрезок дрейфует и вдоль света, а
-    // за ближней его стороной уже стоит shadow_dist отбрасывающих тень объектов.
     const float ortho_near = std::max(-max_z - shadow_dist, 0.001f);
     const float ortho_far  = -min_z + (radius * cascade_padding_ratio_);
 

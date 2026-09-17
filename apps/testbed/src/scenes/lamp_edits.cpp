@@ -40,7 +40,7 @@ auto lamp_edits_scene::start_() -> void {
     bake_base_ms_          = light_stats.bake_ms;
 }
 
-auto lamp_edits_scene::tick(float32 /*delta_time*/) -> void {
+auto lamp_edits_scene::tick(float32) -> void {
     if (!stand().is_bench_ready()) {
         return;
     }
@@ -51,11 +51,6 @@ auto lamp_edits_scene::tick(float32 /*delta_time*/) -> void {
 
     const int32 scale = stand().voxel_scale();
 
-    // Один эмиттер за шаг по сетке над поверхностью, с таким шагом, чтобы лужи
-    // света перекрывались: лампа достаёт на четырнадцать вокселей, а стоят они
-    // через четыре, поэтому каждая поверхность в квадрате оказывается внутри
-    // чьего-нибудь градиента. Лампа с чистой землёй вокруг оценила бы лучший
-    // случай, а освещённое подземелье выглядит не так.
     for (int32 done = 0; done < per_frame_ && cursor_ < cells; ++cursor_) {
         const int32 ix = cursor_ % side;
         const int32 iz = cursor_ / side;
@@ -68,9 +63,6 @@ auto lamp_edits_scene::tick(float32 /*delta_time*/) -> void {
             continue;
         }
 
-        // На воксель над землёй, чтобы новый всегда ложился в воздух и оба
-        // прогона делали одну и ту же геометрическую работу, каким бы он ни
-        // оказался.
         stand().grid().set_voxel(
             {vx * scale, (*surface + 1) * scale, vz * scale},
             inert_ ? voxels::world::stone[1] : voxels::world::glowstone

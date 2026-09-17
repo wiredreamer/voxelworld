@@ -31,8 +31,6 @@ struct entity final {
 
 inline constexpr entity invalid_entity = entity{};
 
-// Дескрипторы сущностей с меткой поколения: индекс переиспользуется только с
-// увеличенным поколением, поэтому устаревший дескриптор остаётся распознаваемым.
 class entity_pool final {
 public:
     static constexpr uint32 default_capacity = 1024;
