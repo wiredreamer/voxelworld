@@ -16,7 +16,7 @@ auto setup_world_grid(gfx::engine& engine) -> world_setup_result {
     auto& registry = world.resource<asset::model_registry>();
 
     ecs::perlin_terrain_generator::params params{
-        .voxel_scale = 16,
+        .world_units_per_voxel = 16,
     };
 
     auto generator = std::make_unique<ecs::perlin_terrain_generator>(
@@ -24,7 +24,7 @@ auto setup_world_grid(gfx::engine& engine) -> world_setup_result {
     );
 
     auto& gs = world.system<ecs::world_grid_system>();
-    gs.set_grid(std::make_unique<ecs::world_grid>(world, params.voxel_scale));
+    gs.set_grid(std::make_unique<ecs::world_grid>(world, params.world_units_per_voxel));
     gs.set_loader(std::make_unique<ecs::chunk_loader>(std::move(generator)));
 
     return {.generator_params = params};

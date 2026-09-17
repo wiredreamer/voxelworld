@@ -59,7 +59,7 @@ auto dummy_enemy::try_place() -> void {
     }
 
     const auto grid    = engine_.get_world().system<ecs::world_grid_system>().grid();
-    const auto vs      = grid->voxel_scale();
+    const auto vs      = grid->world_units_per_voxel();
     const auto surface = grid->get_surface_voxel_y(
         static_cast<int32>(spawn_xz_.x / vs), static_cast<int32>(spawn_xz_.y / vs)
     );

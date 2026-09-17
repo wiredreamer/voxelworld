@@ -127,7 +127,7 @@ struct cave_stats {
 };
 
 constexpr vec3i arena_body_units{12, 28, 12};
-constexpr int32 world_units_per_voxel = perlin_terrain_generator::params{}.voxel_scale;
+constexpr int32 world_units_per_voxel = perlin_terrain_generator::params{}.world_units_per_voxel;
 
 [[nodiscard]] constexpr auto voxels_covering(int32 world_units) -> int32 {
     return (world_units + world_units_per_voxel - 1) / world_units_per_voxel;

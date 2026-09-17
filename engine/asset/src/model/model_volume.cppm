@@ -22,7 +22,7 @@ public:
         int32 width,
         int32 height,
         int32 depth,
-        int32 voxel_scale = 1
+        int32 world_units_per_voxel = 1
     );
     ~model();
 
@@ -128,8 +128,8 @@ public:
         return vec3i{width_, height_, depth_};
     }
 
-    [[nodiscard]] auto voxel_scale() const -> int32 {
-        return voxel_scale_;
+    [[nodiscard]] auto world_units_per_voxel() const -> int32 {
+        return world_units_per_voxel_;
     }
 
     [[nodiscard]] auto pivot() const -> const vec3f& {
@@ -229,7 +229,7 @@ private:
     page_pool* pool_ptr_;
     voxel_category category_;
     int32 width_{0}, height_{0}, depth_{0};
-    int32 voxel_scale_{1};
+    int32 world_units_per_voxel_{1};
     vec3f pivot_{0.0F, 0.0F, 0.0F};
     int32 pages_x_{0}, pages_y_{0}, pages_z_{0};
     std::vector<page_entry> pages_;

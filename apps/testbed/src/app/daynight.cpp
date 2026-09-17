@@ -120,7 +120,7 @@ auto testbed_app::tick_torch_(const vec3f& at) -> void {
     world.system<ecs::transform_system>().modify(torch_).set_position(at);
 
     const auto& lamp = get_engine().get_renderer().get_block_light_settings();
-    const auto scale = static_cast<float32>(generator_params_.voxel_scale);
+    const auto scale = static_cast<float32>(generator_params_.world_units_per_voxel);
 
     world.system<ecs::light_system>()
         .modify(torch_)

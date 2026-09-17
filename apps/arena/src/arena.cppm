@@ -50,7 +50,7 @@ public:
     auto operator=(player&&) -> player&      = delete;
 
     auto update(const gfx::player_input_state& input) -> void;
-    auto try_place(float32 voxel_scale) -> void;
+    auto try_place(float32 world_units_per_voxel) -> void;
     auto toggle_sword() -> void;
 
     [[nodiscard]] auto get_entity() const -> ecs::entity;

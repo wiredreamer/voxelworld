@@ -13,7 +13,7 @@ export namespace vw::ecs {
 
 class world_grid {
 public:
-    explicit world_grid(world& w, int32 voxel_scale = 8);
+    explicit world_grid(world& w, int32 world_units_per_voxel = 8);
     ~world_grid() = default;
 
     world_grid(const world_grid&)                    = delete;
@@ -48,7 +48,7 @@ public:
 
     [[nodiscard]] auto take_light_dirty() -> std::vector<vec2i>;
 
-    [[nodiscard]] auto voxel_scale() const -> int32;
+    [[nodiscard]] auto world_units_per_voxel() const -> int32;
 
     template <typename F>
     auto for_each_chunk(F&& f) const -> void {
@@ -65,7 +65,7 @@ private:
     auto mark_light_dirty_(vec3i chunk_coord, vec3i local) -> void;
 
     world* world_;
-    int32 voxel_scale_{1};
+    int32 world_units_per_voxel_{1};
     std::unordered_map<vec3i, std::unique_ptr<chunk>> chunks_;
     std::unordered_map<vec2i, std::vector<int32>> column_chunks_;
     std::unordered_set<vec2i> light_dirty_;

@@ -132,14 +132,14 @@ auto page_pool::ensure_capacity_(uint32 index) -> void {
 }
 
 model::model(model_identity_pool& identity_pool, page_pool& pool, voxel_category category,
-             int32 width, int32 height, int32 depth, int32 voxel_scale)
+             int32 width, int32 height, int32 depth, int32 world_units_per_voxel)
     : identity_pool_(&identity_pool)
     , pool_ptr_(&pool)
     , category_(category)
     , width_(width)
     , height_(height)
     , depth_(depth)
-    , voxel_scale_(voxel_scale)
+    , world_units_per_voxel_(world_units_per_voxel)
     , pages_x_((width + page_size - 1) / page_size)
     , pages_y_((height + page_size - 1) / page_size)
     , pages_z_((depth + page_size - 1) / page_size) {
@@ -164,7 +164,7 @@ model::model(model&& other) noexcept
     , width_(other.width_)
     , height_(other.height_)
     , depth_(other.depth_)
-    , voxel_scale_(other.voxel_scale_)
+    , world_units_per_voxel_(other.world_units_per_voxel_)
     , pivot_(other.pivot_)
     , pages_x_(other.pages_x_)
     , pages_y_(other.pages_y_)
@@ -192,7 +192,7 @@ auto model::operator=(model&& other) noexcept -> model& {
         width_               = other.width_;
         height_              = other.height_;
         depth_               = other.depth_;
-        voxel_scale_         = other.voxel_scale_;
+        world_units_per_voxel_         = other.world_units_per_voxel_;
         pivot_               = other.pivot_;
         pages_x_             = other.pages_x_;
         pages_y_             = other.pages_y_;

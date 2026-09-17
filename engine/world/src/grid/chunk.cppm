@@ -16,7 +16,7 @@ public:
     static constexpr int32 volume = size * size * size;
 
     chunk(world& w, vec3i coord, std::shared_ptr<asset::chunk_volume> content,
-          int32 voxel_scale = 1);
+          int32 world_units_per_voxel = 1);
     ~chunk();
 
     chunk(const chunk&)                    = delete;
@@ -52,7 +52,7 @@ private:
 
     world* world_;
     vec3i coord_{};
-    int32 voxel_scale_{1};
+    int32 world_units_per_voxel_{1};
     entity ent_;
     std::shared_ptr<asset::chunk_volume> volume_;
     asset::model_fill fill_ = asset::model_fill::mixed;

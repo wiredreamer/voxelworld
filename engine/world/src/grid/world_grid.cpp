@@ -7,9 +7,9 @@ import vw.asset;
 namespace vw::ecs {
 
 world_grid::world_grid(
-    world& w, int32 voxel_scale
+    world& w, int32 world_units_per_voxel
 )
-    : world_(&w), voxel_scale_(voxel_scale) {}
+    : world_(&w), world_units_per_voxel_(world_units_per_voxel) {}
 
 auto world_grid::get_voxel(
     vec3i world_pos
@@ -20,7 +20,7 @@ auto world_grid::get_voxel(
         return voxels::air;
     }
     auto lc = world_to_local_coord(world_pos);
-    return it->second->get_voxel(lc / voxel_scale_);
+    return it->second->get_voxel(lc / world_units_per_voxel_);
 }
 
 auto world_grid::set_voxel(
@@ -31,7 +31,7 @@ auto world_grid::set_voxel(
     if (it == chunks_.end()) {
         return;
     }
-    const auto lc = world_to_local_coord(world_pos) / voxel_scale_;
+    const auto lc = world_to_local_coord(world_pos) / world_units_per_voxel_;
     it->second->set_voxel(lc, v);
 
     mark_light_dirty_(cc, lc);
@@ -204,7 +204,7 @@ auto world_grid::place_chunk(
 ) -> chunk* {
     auto [it, inserted] = chunks_.emplace(
         chunk_coord,
-        std::make_unique<chunk>(*world_, chunk_coord, std::move(volume), voxel_scale_)
+        std::make_unique<chunk>(*world_, chunk_coord, std::move(volume), world_units_per_voxel_)
     );
 
     if (inserted && it->second->is_drawn()) {
@@ -240,14 +240,14 @@ auto world_grid::unload_column(
     }
 }
 
-auto world_grid::voxel_scale() const -> int32 {
-    return voxel_scale_;
+auto world_grid::world_units_per_voxel() const -> int32 {
+    return world_units_per_voxel_;
 }
 
 auto world_grid::world_to_chunk_coord(
     vec3i world_pos
 ) const -> vec3i {
-    const int32 s = chunk::size * voxel_scale_;
+    const int32 s = chunk::size * world_units_per_voxel_;
     return {
         world_pos.x >= 0 ? world_pos.x / s : (world_pos.x - s + 1) / s,
         world_pos.y >= 0 ? world_pos.y / s : (world_pos.y - s + 1) / s,
@@ -258,14 +258,14 @@ auto world_grid::world_to_chunk_coord(
 auto world_grid::world_to_local_coord(
     vec3i world_pos
 ) const -> vec3i {
-    const int32 s = chunk::size * voxel_scale_;
+    const int32 s = chunk::size * world_units_per_voxel_;
     return {((world_pos.x % s) + s) % s, ((world_pos.y % s) + s) % s, ((world_pos.z % s) + s) % s};
 }
 
 auto world_grid::chunk_to_world_coord(
     vec3i chunk_coord
 ) const -> vec3i {
-    const int32 s = chunk::size * voxel_scale_;
+    const int32 s = chunk::size * world_units_per_voxel_;
     return {chunk_coord.x * s, chunk_coord.y * s, chunk_coord.z * s};
 }
 

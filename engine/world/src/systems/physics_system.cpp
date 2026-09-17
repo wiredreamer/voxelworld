@@ -116,7 +116,7 @@ auto physics_system::are_chunks_loaded(
     const vec3f& position, const vec3f& extents
 ) const -> bool {
     auto* grid = world_->system<world_grid_system>().grid();
-    const auto vs = static_cast<float32>(grid->voxel_scale());
+    const auto vs = static_cast<float32>(grid->world_units_per_voxel());
     auto half = extents * 0.5f;
 
     auto min_world = vec3i{
@@ -148,8 +148,8 @@ auto physics_system::resolve_box_voxel(
     vec3f center, const vec3f& half_extents, vec3f& velocity
 ) const -> collision_result {
     auto* grid = world_->system<world_grid_system>().grid();
-    auto vs = static_cast<float32>(grid->voxel_scale());
-    auto vs_i = grid->voxel_scale();
+    auto vs = static_cast<float32>(grid->world_units_per_voxel());
+    auto vs_i = grid->world_units_per_voxel();
     bool grounded = false;
 
     vec3i cached_coord{std::numeric_limits<int32>::min(), 0, 0};

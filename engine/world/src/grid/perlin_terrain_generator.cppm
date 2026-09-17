@@ -12,7 +12,7 @@ class perlin_terrain_generator final : public terrain_generator {
 public:
     struct params {
         uint32 seed       = 42;
-        int32 voxel_scale = 8;
+        int32 world_units_per_voxel = 8;
 
         int32 world_bottom_y = -448;
 

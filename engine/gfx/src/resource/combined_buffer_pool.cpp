@@ -487,7 +487,7 @@ auto combined_buffer_pool::update_chunk_visibility_(
         ((hi.x + 1) * per_side) - 1, ((hi.y + 1) * per_side) - 1,
         ((hi.z + 1) * per_side) - 1};
 
-    const int32 scaled_cell = cell_voxels * grid->voxel_scale();
+    const int32 scaled_cell = cell_voxels * grid->world_units_per_voxel();
     const auto cell_of      = [scaled_cell](int32 world) -> int32 {
         return world >= 0 ? world / scaled_cell : (world - scaled_cell + 1) / scaled_cell;
     };
@@ -534,7 +534,7 @@ auto combined_buffer_pool::update_chunk_visibility_(
             return to_chunk(cell.y) > it->second;
         },
         [&](const vw::asset::chunk_pocket& pocket) -> bool {
-            const int32 voxels = grid->voxel_scale();
+            const int32 voxels = grid->world_units_per_voxel();
             const auto local   = [&](int32 world, int32 cell) -> int32 {
                 return (world / voxels) - (cell * vw::asset::chunk_links::cell_size);
             };

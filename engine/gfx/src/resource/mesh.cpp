@@ -98,7 +98,7 @@ namespace detail {
 struct face_axis_mapping {
     int32 width, height, depth;
     face_direction face;
-    int32 voxel_scale;
+    int32 world_units_per_voxel;
 
     face_axis_mapping(mesh_source src, face_direction direction);
 
@@ -179,7 +179,7 @@ auto emit_rect(
 face_axis_mapping::face_axis_mapping(
     mesh_source src, face_direction direction
 )
-    : face(direction), voxel_scale(src.voxels.voxel_scale()) {
+    : face(direction), world_units_per_voxel(src.voxels.world_units_per_voxel()) {
     switch (axis_of(direction)) {
         case 0:
             width  = src.voxels.depth();

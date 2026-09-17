@@ -18,7 +18,7 @@ namespace vw::testbed {
         return std::nullopt;
     }
 
-    const auto scale   = static_cast<float32>(generator_params_.voxel_scale);
+    const auto scale   = static_cast<float32>(generator_params_.world_units_per_voxel);
     const auto& camera = get_engine().get_camera();
 
     const vec3f eye = camera.get_position();
@@ -58,9 +58,9 @@ namespace vw::testbed {
 
     for (int32 i = 0; i < reach_voxels_; ++i) {
         const vec3i world{
-            at.x * generator_params_.voxel_scale,
-            at.y * generator_params_.voxel_scale,
-            at.z * generator_params_.voxel_scale,
+            at.x * generator_params_.world_units_per_voxel,
+            at.y * generator_params_.world_units_per_voxel,
+            at.z * generator_params_.world_units_per_voxel,
         };
 
         if (!world_grid_->get_voxel(world).is_empty()) {
@@ -99,7 +99,7 @@ auto testbed_app::draw_hover_() -> void {
         return;
     }
 
-    const auto scale = static_cast<float32>(generator_params_.voxel_scale);
+    const auto scale = static_cast<float32>(generator_params_.world_units_per_voxel);
     auto& renderer   = get_engine().get_renderer();
 
     const auto outline = [&](vec3i cell, color clr) {
@@ -128,7 +128,7 @@ auto testbed_app::apply_tool_() -> void {
         return;
     }
 
-    const int32 scale  = generator_params_.voxel_scale;
+    const int32 scale  = generator_params_.world_units_per_voxel;
     const bool placing = tool_ == edit_tool::place;
     const vec3i cell   = placing ? hovered_->empty_voxel_pos : hovered_->solid_voxel_pos;
 
@@ -141,7 +141,7 @@ auto testbed_app::apply_tool_() -> void {
 }
 
 auto testbed_app::drop_emitter(voxel id, int32 radius) -> void {
-    const int32 scale = generator_params_.voxel_scale;
+    const int32 scale = generator_params_.world_units_per_voxel;
 
     const auto floor_div = [](int32 a, int32 b) -> int32 {
         return a >= 0 ? a / b : (a - b + 1) / b;

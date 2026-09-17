@@ -7,11 +7,11 @@ import vw.asset;
 namespace vw::ecs {
 
 chunk::chunk(
-    world& w, vec3i coord, std::shared_ptr<asset::chunk_volume> content, int32 voxel_scale
+    world& w, vec3i coord, std::shared_ptr<asset::chunk_volume> content, int32 world_units_per_voxel
 )
     : world_(&w)
     , coord_(coord)
-    , voxel_scale_(voxel_scale)
+    , world_units_per_voxel_(world_units_per_voxel)
     , ent_(invalid_entity)
     , volume_(std::move(content))
     , fill_(volume_->voxels().scan_fill()) {
@@ -42,12 +42,12 @@ auto chunk::create_entity_() -> void {
         .get_entity();
 
     auto world_pos = vec3f{
-        static_cast<float32>(coord_.x * size * voxel_scale_),
-        static_cast<float32>(coord_.y * size * voxel_scale_),
-        static_cast<float32>(coord_.z * size * voxel_scale_)
+        static_cast<float32>(coord_.x * size * world_units_per_voxel_),
+        static_cast<float32>(coord_.y * size * world_units_per_voxel_),
+        static_cast<float32>(coord_.z * size * world_units_per_voxel_)
     };
 
-    auto vs = static_cast<float32>(voxel_scale_);
+    auto vs = static_cast<float32>(world_units_per_voxel_);
     w.system<transform_system>().modify(ent_)
         .set_position(world_pos)
         .set_scale({vs, vs, vs});
@@ -75,7 +75,7 @@ chunk::chunk(
 ) noexcept
     : world_(other.world_)
     , coord_(other.coord_)
-    , voxel_scale_(other.voxel_scale_)
+    , world_units_per_voxel_(other.world_units_per_voxel_)
     , ent_(other.ent_)
     , volume_(std::move(other.volume_))
     , fill_(other.fill_)
@@ -93,7 +93,7 @@ auto chunk::operator=(
         }
         world_       = other.world_;
         coord_       = other.coord_;
-        voxel_scale_ = other.voxel_scale_;
+        world_units_per_voxel_ = other.world_units_per_voxel_;
         ent_             = other.ent_;
         volume_          = std::move(other.volume_);
         fill_            = other.fill_;

@@ -113,7 +113,7 @@ auto light_at(world_grid& grid, vec3i world_pos) -> std::optional<int32> {
         return std::nullopt;
     }
 
-    return light->level_at(grid.world_to_local_coord(world_pos) / grid.voxel_scale());
+    return light->level_at(grid.world_to_local_coord(world_pos) / grid.world_units_per_voxel());
 }
 
 auto solid_shaft_site(world_grid& grid, vec2i column, int32 depth) -> std::optional<vec3i> {
@@ -122,7 +122,7 @@ auto solid_shaft_site(world_grid& grid, vec2i column, int32 depth) -> std::optio
         return std::nullopt;
     }
 
-    const int32 scale = grid.voxel_scale();
+    const int32 scale = grid.world_units_per_voxel();
     const int32 span  = chunk::size * scale;
     const int32 top   = ((levels.back() + 1) * span) - scale;
     const int32 floor = levels.front() * span;
@@ -306,7 +306,7 @@ TEST_CASE("digging a seam tells both sides", "[world][grid]") {
 
     constexpr int32 last = chunk::size - 1;
     const vec3i local{last, 20, 30};
-    const auto scale = grid.voxel_scale();
+    const auto scale = grid.world_units_per_voxel();
     const auto world_pos =
         grid.chunk_to_world_coord(*target) + (local * scale);
 
@@ -381,7 +381,7 @@ TEST_CASE("digging to the sky relights the shaft", "[world][grid]") {
 
     auto& gs         = w.system<world_grid_system>();
     auto& grid       = *gs.grid();
-    const int32 scale = grid.voxel_scale();
+    const int32 scale = grid.world_units_per_voxel();
 
     constexpr int32 depth = 20;
 
@@ -443,7 +443,7 @@ TEST_CASE("digging in the dark relights nothing", "[world][grid]") {
     const auto columns_before = stats.relit_columns;
 
     const vec3i at =
-        grid.chunk_to_world_coord(*target) + (vec3i{32, 32, 32} * grid.voxel_scale());
+        grid.chunk_to_world_coord(*target) + (vec3i{32, 32, 32} * grid.world_units_per_voxel());
 
     REQUIRE_FALSE(grid.get_voxel(at).is_empty());
     grid.set_voxel(at, voxels::air);

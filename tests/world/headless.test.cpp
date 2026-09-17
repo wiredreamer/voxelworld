@@ -162,12 +162,12 @@ TEST_CASE("voxel scale reaches the bounds once", "[world]") {
     world w;
     auto& models = w.resource<asset::model_registry>();
 
-    constexpr int32 voxel_scale = 16;
+    constexpr int32 world_units_per_voxel = 16;
     constexpr int32 side        = 4;
 
     auto model = std::make_shared<asset::model>(
         models.get_identity_pool(), models.get_page_pool(), voxels::world::category, side,
-        side, side, voxel_scale
+        side, side, world_units_per_voxel
     );
     model->fill(voxels::world::grass[0]);
 
@@ -176,17 +176,17 @@ TEST_CASE("voxel scale reaches the bounds once", "[world]") {
     w.modify(ent).with<spatial_component>();
     w.system<transform_system>().modify(ent).set_scale(
         vec3f{
-            static_cast<float32>(voxel_scale),
-            static_cast<float32>(voxel_scale),
-            static_cast<float32>(voxel_scale)
+            static_cast<float32>(world_units_per_voxel),
+            static_cast<float32>(world_units_per_voxel),
+            static_cast<float32>(world_units_per_voxel)
         }
     );
     w.update(0.016F);
 
     const auto bounds = w.get<spatial_component>(ent).get_bounds();
-    REQUIRE(bounds.size().x == static_cast<float32>(side * voxel_scale));
-    REQUIRE(bounds.size().y == static_cast<float32>(side * voxel_scale));
-    REQUIRE(bounds.size().z == static_cast<float32>(side * voxel_scale));
+    REQUIRE(bounds.size().x == static_cast<float32>(side * world_units_per_voxel));
+    REQUIRE(bounds.size().y == static_cast<float32>(side * world_units_per_voxel));
+    REQUIRE(bounds.size().z == static_cast<float32>(side * world_units_per_voxel));
 }
 
 TEST_CASE("a model outranks a collider when an entity has both", "[world]") {

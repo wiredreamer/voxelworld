@@ -14,14 +14,14 @@ auto testbed_app::setup_world_grid() -> void {
     auto& world = get_engine().get_world();
 
     generator_params_ = {
-        .voxel_scale = 8,
+        .world_units_per_voxel = 8,
     };
     auto& registry = world.resource<asset::model_registry>();
     auto generator = std::make_unique<ecs::perlin_terrain_generator>(
         registry.get_identity_pool(), registry.get_page_pool(), generator_params_);
     generator_  = generator.get();
     auto grid   = std::make_unique<ecs::world_grid>(
-        world, generator_params_.voxel_scale
+        world, generator_params_.world_units_per_voxel
     );
     world_grid_  = grid.get();
     auto loader  = std::make_unique<ecs::chunk_loader>(
@@ -66,7 +66,7 @@ auto testbed_app::try_place_camera() -> void {
         return;
     }
 
-    auto scale    = static_cast<float32>(generator_params_.voxel_scale);
+    auto scale    = static_cast<float32>(generator_params_.world_units_per_voxel);
     float32 cam_y = static_cast<float32>(*highest + eye_height) * scale;
     get_engine().get_camera().set_position({0.0f, cam_y, 0.0f});
     bench_altitude_ = cam_y;

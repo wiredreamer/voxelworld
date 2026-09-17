@@ -83,7 +83,7 @@ public:
     }
 
     [[nodiscard]] auto world_units_per_voxel() const -> int32 {
-        return generator_params_.voxel_scale;
+        return generator_params_.world_units_per_voxel;
     }
 
     [[nodiscard]] auto altitude() const -> float32 {

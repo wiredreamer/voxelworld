@@ -142,7 +142,7 @@ auto player::update(
 }
 
 auto player::try_place(
-    float32 voxel_scale
+    float32 world_units_per_voxel
 ) -> void {
     if (placed_) {
         return;
@@ -154,7 +154,7 @@ auto player::try_place(
         return;
     }
 
-    float32 spawn_y = (static_cast<float32>(*surface) + 6.0f) * voxel_scale;
+    float32 spawn_y = (static_cast<float32>(*surface) + 6.0f) * world_units_per_voxel;
 
     engine_.get_world()
         .system<ecs::transform_system>()

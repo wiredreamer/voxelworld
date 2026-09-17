@@ -761,7 +761,7 @@ auto perlin_terrain_generator::generate_chunk(
 
     auto mdl = std::make_shared<vw::asset::model>(
         *identity_pool_, *page_pool_, vw::voxels::world::category, s, s, s,
-        params_.voxel_scale
+        params_.world_units_per_voxel
     );
 
     constexpr int32 p  = column_profile::page;
