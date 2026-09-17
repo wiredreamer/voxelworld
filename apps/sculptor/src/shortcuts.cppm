@@ -23,6 +23,7 @@ enum class command : uint8 {
     tool_paint,
     tool_color_picker,
     tool_move_pivot,
+    tool_pose,
 
     gizmo_move,
     gizmo_rotate,
@@ -83,6 +84,7 @@ inline constexpr std::array shortcuts{
         plat::keyboard::keys::V, mod_none, command::tool_color_picker, "Tools", "V", "Color picker"
     },
     shortcut{plat::keyboard::keys::G, mod_none, command::tool_move_pivot, "Tools", "G", "Move pivot"},
+    shortcut{plat::keyboard::keys::P, mod_none, command::tool_pose, "Tools", "P", "Pose"},
 
     shortcut{plat::keyboard::keys::E, mod_none, command::gizmo_move, "Gizmo", "E", "Move"},
     shortcut{plat::keyboard::keys::R, mod_none, command::gizmo_rotate, "Gizmo", "R", "Rotate"},

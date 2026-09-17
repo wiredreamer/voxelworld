@@ -83,6 +83,7 @@ auto tool_of(
         case command::tool_paint: return tools::paint_voxel;
         case command::tool_color_picker: return tools::color_picker;
         case command::tool_move_pivot: return tools::move_pivot;
+        case command::tool_pose: return tools::pose;
         default: return tools::invalid;
     }
 }
@@ -97,7 +98,7 @@ auto command_for_tool(
         case tools::paint_voxel: return command::tool_paint;
         case tools::color_picker: return command::tool_color_picker;
         case tools::move_pivot: return command::tool_move_pivot;
-        case tools::pose:
+        case tools::pose: return command::tool_pose;
         case tools::invalid: break;
     }
     return std::nullopt;
