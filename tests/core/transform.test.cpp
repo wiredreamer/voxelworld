@@ -105,3 +105,58 @@ TEST_CASE("transform calc_matrix", "[transform]") {
         REQUIRE(math::approx_equal(m, expected));
     }
 }
+
+TEST_CASE("transform from_matrix reverses calc_matrix", "[transform]") {
+    // Поворот сверяется матрицей, а не кватернионом: q и -q — один и тот же
+    // поворот, и сравнение компонент ругалось бы на верный ответ.
+    const auto round_trips = [](const vec3f& position, const vec3f& euler, const vec3f& scale) {
+        transform source;
+        source.set_position(position);
+        source.set_rotation_euler(euler);
+        source.set_scale(scale);
+
+        const auto restored = transform::from_matrix(source.calc_matrix());
+
+        REQUIRE(math::approx_equal(restored.get_position(), position, 1e-4f));
+        REQUIRE(math::approx_equal(restored.calc_matrix(), source.calc_matrix(), 1e-4f));
+    };
+
+    SECTION("identity") {
+        round_trips(vec3f{}, vec3f{}, vec3f{1.0f, 1.0f, 1.0f});
+    }
+
+    SECTION("general pose") {
+        round_trips(vec3f{1.0f, -2.0f, 3.5f}, vec3f{0.3f, -1.1f, 0.7f}, vec3f{2.0f, 0.5f, 3.0f});
+    }
+
+    // Половина оборота вокруг каждой оси обнуляет след матрицы и уводит разбор
+    // в ветки по наибольшей диагонали.
+    SECTION("half turns take every branch") {
+        round_trips(vec3f{}, vec3f{math::pi, 0.0f, 0.0f}, vec3f{1.0f, 1.0f, 1.0f});
+        round_trips(vec3f{}, vec3f{0.0f, math::pi, 0.0f}, vec3f{1.0f, 1.0f, 1.0f});
+        round_trips(vec3f{}, vec3f{0.0f, 0.0f, math::pi}, vec3f{1.0f, 1.0f, 1.0f});
+    }
+
+    SECTION("a mirrored scale survives") {
+        round_trips(vec3f{0.0f, 1.0f, 0.0f}, vec3f{0.2f, 0.4f, 0.0f}, vec3f{-1.0f, 2.0f, 1.0f});
+    }
+}
+
+TEST_CASE("a node keeps its world pose under a new parent", "[transform]") {
+    transform parent;
+    parent.set_position(vec3f{10.0f, 0.0f, -4.0f});
+    parent.set_rotation_euler(vec3f{0.0f, 0.8f, 0.0f});
+    parent.set_scale(vec3f{2.0f, 2.0f, 2.0f});
+
+    transform child;
+    child.set_position(vec3f{3.0f, 5.0f, 1.0f});
+    child.set_rotation_euler(vec3f{0.4f, 0.0f, -0.2f});
+
+    const auto world_pose = child.calc_matrix();
+    const auto inverse    = math::inverse_matrix(parent.calc_matrix());
+    REQUIRE(inverse.has_value());
+
+    const auto local = transform::from_matrix(*inverse * world_pose);
+
+    REQUIRE(math::approx_equal(parent.calc_matrix() * local.calc_matrix(), world_pose, 1e-4f));
+}
