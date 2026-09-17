@@ -215,6 +215,40 @@ auto keyframe_service::modify_keyframe(
     execute_parts_(place_keyframe_(track_name, property, new_keyframe, old_keyframe, true));
 }
 
+auto keyframe_service::preview_keyframe(
+    const std::string& track_name, asset::animation_property property,
+    const keyframe_value& keyframe
+) -> void {
+    const auto& registry = engine_->get_world().resource<asset::animation_clip_registry>();
+    const auto clip      = registry.get(state_->anim.selected_clip_name);
+    if (!clip) {
+        return;
+    }
+
+    auto* track = clip->get_track_mut(track_name);
+    if (!track) {
+        return;
+    }
+
+    auto* channel_var = track->get_channel_mut(property);
+    if (!channel_var) {
+        return;
+    }
+
+    const uint32 id = std::visit([](const auto& kf) -> uint32 { return kf.id(); }, keyframe);
+
+    if (property == asset::animation_property::rotation) {
+        auto& channel = std::get<asset::animation_channel<quat>>(*channel_var);
+        channel.replace(id, std::get<asset::keyframe_quat>(keyframe));
+    } else {
+        auto& channel = std::get<asset::animation_channel<vec3f>>(*channel_var);
+        channel.replace(id, std::get<asset::keyframe_vec3f>(keyframe));
+    }
+
+    track->mark_dirty();
+    state_->anim.need_apply_pose = true;
+}
+
 auto keyframe_service::has_key_at_cursor() const -> bool {
     if (state_->scene.selected_name.empty()) {
         return false;

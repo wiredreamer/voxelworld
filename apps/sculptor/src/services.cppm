@@ -109,6 +109,11 @@ public:
         const keyframe_value& old_keyframe, const keyframe_value& new_keyframe
     ) -> void;
 
+    auto preview_keyframe(
+        const std::string& track_name, asset::animation_property property,
+        const keyframe_value& keyframe
+    ) -> void;
+
 private:
     [[nodiscard]] auto place_keyframe_(
         const std::string& track_name, asset::animation_property property,

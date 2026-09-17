@@ -76,12 +76,17 @@ auto keyframe_properties_panel::render(
                 ImGui::PushItemWidth(80.f);
                 ImGui::DragFloat("##Time_kf", &new_time, 0.01f, 0.f, 100.f, "%.3f");
                 ImGui::PopItemWidth();
+                bool drag_started  = ImGui::IsItemActivated();
+                bool drag_finished = ImGui::IsItemDeactivatedAfterEdit();
 
                 bool value_changed = false;
                 auto new_value     = kf.value;
 
                 if constexpr (std::is_same_v<value_type, vec3f>) {
-                    value_changed = imgui_drag_vec3f("Value", new_value, 110.f);
+                    const auto edit = imgui_drag_vec3f("Value", new_value, 110.f);
+                    value_changed   = edit.changed;
+                    drag_started |= edit.started;
+                    drag_finished |= edit.finished;
                 } else if constexpr (std::is_same_v<value_type, quat>) {
                     vec3f euler = math::quat_to_euler(kf.value);
                     vec3f euler_deg{
@@ -89,7 +94,10 @@ auto keyframe_properties_panel::render(
                         math::degrees(euler.y),
                         math::degrees(euler.z),
                     };
-                    if (imgui_drag_vec3f("Value", euler_deg, 110.f)) {
+                    const auto edit = imgui_drag_vec3f("Value", euler_deg, 110.f);
+                    drag_started |= edit.started;
+                    drag_finished |= edit.finished;
+                    if (edit.changed) {
                         vec3f euler_rad{
                             math::radians(euler_deg.x),
                             math::radians(euler_deg.y),
@@ -124,6 +132,8 @@ auto keyframe_properties_panel::render(
                 ImGui::PushItemWidth(80.f);
                 tangent_changed |=
                     ImGui::DragFloat("##TangentIn_kf", &new_tangent_in, 0.01f, 0.f, 1.f, "%.2f");
+                drag_started |= ImGui::IsItemActivated();
+                drag_finished |= ImGui::IsItemDeactivatedAfterEdit();
                 ImGui::PopItemWidth();
 
                 ImGui::AlignTextToFramePadding();
@@ -132,23 +142,60 @@ auto keyframe_properties_panel::render(
                 ImGui::PushItemWidth(80.f);
                 tangent_changed |=
                     ImGui::DragFloat("##TangentOut_kf", &new_tangent_out, 0.01f, 0.f, 1.f, "%.2f");
+                drag_started |= ImGui::IsItemActivated();
+                drag_finished |= ImGui::IsItemDeactivatedAfterEdit();
                 ImGui::PopItemWidth();
 
-                bool time_changed = std::abs(new_time - kf.time) > 0.0001f;
+                const bool time_changed = std::abs(new_time - kf.time) > 0.0001f;
 
-                if (time_changed || value_changed || interp_changed || tangent_changed) {
-                    kf_type new_kf;
-                    new_kf.time        = new_time;
-                    new_kf.value       = value_changed ? new_value : kf.value;
-                    new_kf.interp      = static_cast<math::interpolation_type>(interp_idx);
-                    new_kf.tangent_in  = new_tangent_in;
-                    new_kf.tangent_out = new_tangent_out;
+                if (dragging_ && dragged_keyframe_id_ != kf.id()) {
+                    dragging_ = false;
+                }
+                if (drag_started && !dragging_) {
+                    dragging_             = true;
+                    dragged_keyframe_id_  = kf.id();
+                    keyframe_before_drag_ = keyframe_value(old_kf);
+                }
 
+                kf_type edited_kf     = old_kf;
+                edited_kf.time        = new_time;
+                edited_kf.value       = value_changed ? new_value : kf.value;
+                edited_kf.interp      = static_cast<math::interpolation_type>(interp_idx);
+                edited_kf.tangent_in  = new_tangent_in;
+                edited_kf.tangent_out = new_tangent_out;
+
+                const bool changed =
+                    time_changed || value_changed || interp_changed || tangent_changed;
+
+                if (changed) {
+                    if (dragging_) {
+                        keyframe_service_->preview_keyframe(
+                            state_->anim.selected_track_name,
+                            state_->anim.selected_property,
+                            keyframe_value(edited_kf)
+                        );
+                    } else {
+                        keyframe_service_->modify_keyframe(
+                            state_->anim.selected_track_name,
+                            state_->anim.selected_property,
+                            keyframe_value(old_kf),
+                            keyframe_value(edited_kf)
+                        );
+                    }
+                }
+
+                if (drag_finished && dragging_) {
+                    dragging_ = false;
+                    keyframe_service_->preview_keyframe(
+                        state_->anim.selected_track_name,
+                        state_->anim.selected_property,
+                        keyframe_before_drag_
+                    );
                     keyframe_service_->modify_keyframe(
                         state_->anim.selected_track_name,
                         state_->anim.selected_property,
-                        keyframe_value(old_kf),
-                        keyframe_value(new_kf)
+                        keyframe_before_drag_,
+                        keyframe_value(edited_kf)
                     );
                 }
 
@@ -175,6 +222,5 @@ auto keyframe_properties_panel::render(
 
     end_panel(*state_, panel_slot::right);
 }
-
 
 }  // namespace vw::sculptor

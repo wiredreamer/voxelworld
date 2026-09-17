@@ -204,7 +204,13 @@ auto imgui_input_int_left(std::string_view label, int* value) -> bool;
 
 auto imgui_clamp_window_pos_to_viewport() -> void;
 
-auto imgui_drag_vec3f(std::string_view label, vec3f& vec, float label_offset = 60.f) -> bool;
+struct drag_edit {
+    bool changed  = false;
+    bool started  = false;
+    bool finished = false;
+};
+
+auto imgui_drag_vec3f(std::string_view label, vec3f& vec, float label_offset = 60.f) -> drag_edit;
 
 [[nodiscard]] auto edited_model_category(gfx::engine& eng, const app_state& state)
     -> voxel_category;
@@ -548,6 +554,10 @@ private:
     app_state* state_;
     operation_manager* op_manager_;
     keyframe_service* keyframe_service_;
+
+    bool dragging_                = false;
+    uint32 dragged_keyframe_id_   = asset::invalid_keyframe_id;
+    keyframe_value keyframe_before_drag_;
 };
 
 }  // namespace vw::sculptor

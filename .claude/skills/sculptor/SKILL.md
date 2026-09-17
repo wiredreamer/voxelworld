@@ -168,6 +168,15 @@ Time в `keyframe_properties_panel`. Новый путь зовёт `set_keyfram
 
 ## UI и ImGui
 
+**Жест — одна операция.** Пока тянут ползунок или манипулятор, правь документ
+предпросмотром, а в историю клади одну операцию на весь жест: на отпускании
+верни состояние, каким оно было до жеста, и выполни операцию с итоговым
+значением. Иначе каждый кадр перетаскивания уходит в undo отдельным шагом.
+Образцы: `gizmo::on_mouse_release`, `timeline_panel::update_key_drag_` и
+`keyframe_properties_panel` (`keyframe_service::preview_keyframe` на кадрах
+жеста, `modify_keyframe` на `ImGui::IsItemDeactivatedAfterEdit`). Начало и конец
+жеста у полей `vec3f` отдаёт `imgui_drag_vec3f` в `drag_edit`.
+
 **Структурную операцию исполняй после обхода.** Внутри цикла по виджетам только
 запоминай намерение, а `op_manager.execute` зови после цикла. Образцы:
 `entity_tree_panel::pending_move_`, `picked`/`dropped` в drawer варианта

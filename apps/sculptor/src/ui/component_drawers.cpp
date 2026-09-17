@@ -70,14 +70,14 @@ auto register_transform(component_drawer_registry& drawers) -> void {
         const auto& transform_comp = in.engine.get_world().get<ecs::transform_component>(in.ent);
 
         vec3f position = transform_comp.get_position();
-        if (imgui_drag_vec3f("Pos", position, label_column)) {
+        if (imgui_drag_vec3f("Pos", position, label_column).changed) {
             auto next = transform_comp.get_transform();
             next.set_position(position);
             commit_transform(in, next);
         }
 
         auto& degrees = rotation_of(transform_comp, in.node_name);
-        if (imgui_drag_vec3f("Rot", degrees, label_column)) {
+        if (imgui_drag_vec3f("Rot", degrees, label_column).changed) {
             auto next = transform_comp.get_transform();
             next.set_rotation_euler(
                 vec3f{
@@ -88,7 +88,7 @@ auto register_transform(component_drawer_registry& drawers) -> void {
         }
 
         vec3f scale = transform_comp.get_scale();
-        if (imgui_drag_vec3f("Scale", scale, label_column)) {
+        if (imgui_drag_vec3f("Scale", scale, label_column).changed) {
             auto next = transform_comp.get_transform();
             next.set_scale(scale);
             commit_transform(in, next);
@@ -147,7 +147,7 @@ auto register_model(component_drawer_registry& drawers) -> void {
         if (!in.state.ctx.allows_volume_edit()) {
             field_label("Pivot");
             ImGui::TextDisabled("%.1f %.1f %.1f", pivot.x, pivot.y, pivot.z);
-        } else if (imgui_drag_vec3f("Pivot", pivot, label_column)) {
+        } else if (imgui_drag_vec3f("Pivot", pivot, label_column).changed) {
             in.ops.execute(
                 std::make_unique<set_pivot_operation>(
                     in.engine, in.state,

@@ -150,8 +150,8 @@ auto imgui_clamp_window_pos_to_viewport() -> void {
     }
 }
 
-auto imgui_drag_vec3f(std::string_view label, vec3f& vec, float label_offset) -> bool {
-    bool changed = false;
+auto imgui_drag_vec3f(std::string_view label, vec3f& vec, float label_offset) -> drag_edit {
+    drag_edit edit;
 
     const auto field_id = std::format("##drag_vec3f_{}", label);
     ImGui::PushID(field_id.c_str());
@@ -161,22 +161,28 @@ auto imgui_drag_vec3f(std::string_view label, vec3f& vec, float label_offset) ->
     ImGui::SameLine(label_offset);
 
     ImGui::PushItemWidth(80.0f);
-    changed |= ImGui::DragFloat(std::format("##{}X", label).c_str(), &vec.x, 0.1f, 0, 0, "%.4f");
+    edit.changed |= ImGui::DragFloat(std::format("##{}X", label).c_str(), &vec.x, 0.1f, 0, 0, "%.4f");
+    edit.started |= ImGui::IsItemActivated();
+    edit.finished |= ImGui::IsItemDeactivatedAfterEdit();
     ImGui::PopItemWidth();
     ImGui::SameLine();
 
     ImGui::PushItemWidth(80.0f);
-    changed |= ImGui::DragFloat(std::format("##{}Y", label).c_str(), &vec.y, 0.1f, 0, 0, "%.4f");
+    edit.changed |= ImGui::DragFloat(std::format("##{}Y", label).c_str(), &vec.y, 0.1f, 0, 0, "%.4f");
+    edit.started |= ImGui::IsItemActivated();
+    edit.finished |= ImGui::IsItemDeactivatedAfterEdit();
     ImGui::PopItemWidth();
     ImGui::SameLine();
 
     ImGui::PushItemWidth(80.0f);
-    changed |= ImGui::DragFloat(std::format("##{}Z", label).c_str(), &vec.z, 0.1f, 0, 0, "%.4f");
+    edit.changed |= ImGui::DragFloat(std::format("##{}Z", label).c_str(), &vec.z, 0.1f, 0, 0, "%.4f");
+    edit.started |= ImGui::IsItemActivated();
+    edit.finished |= ImGui::IsItemDeactivatedAfterEdit();
     ImGui::PopItemWidth();
 
     ImGui::PopID();
 
-    return changed;
+    return edit;
 }
 
 auto edited_model_category(
