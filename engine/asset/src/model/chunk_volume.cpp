@@ -5,7 +5,7 @@ import vw.core;
 
 namespace vw::asset {
 
-auto chunk_volume::set_boundary_slice(int32 face_direction, const model& neighbor) -> void {
+auto chunk_volume::set_boundary_slice(face_direction face, const model& neighbor) -> void {
     constexpr int32 side = face_occupancy::side;
 
     if (neighbor.width() != side || neighbor.height() != side || neighbor.depth() != side) {
@@ -16,38 +16,31 @@ auto chunk_volume::set_boundary_slice(int32 face_direction, const model& neighbo
         boundary_ = std::make_unique<model_boundary>();
     }
 
-    auto& face = boundary_->faces[face_direction];
+    auto& plane = boundary_->faces[face];
 
     switch (neighbor.scan_fill()) {
         case model_fill::solid:
-            face.rows.fill(~uint64{0});
+            plane.rows.fill(~uint64{0});
             break;
         case model_fill::air:
-            face.clear();
+            plane.clear();
             break;
         case model_fill::mixed:
-            static_cast<void>(neighbor.extract_face(face_direction ^ 1, face));
+            static_cast<void>(neighbor.extract_face(opposite(face), plane));
             break;
     }
 
-    boundary_->valid |= static_cast<uint8>(1U << face_direction);
+    boundary_->valid |= face_bit(face);
 }
 
-auto chunk_volume::is_boundary_solid(int32 face_direction, int32 x, int32 y, int32 z) const
+auto chunk_volume::is_boundary_solid(face_direction face, int32 x, int32 y, int32 z) const
     -> bool {
-    const auto& face = boundary_->faces[face_direction];
-    switch (face_direction / 2) {
-        case 0:
-            return face.test(y, z);
-        case 1:
-            return face.test(x, z);
-        default:
-            return face.test(x, y);
-    }
+    const vec2i on_plane = project_onto_face_plane(face, vec3i{x, y, z});
+    return boundary_->faces[face].test(on_plane.x, on_plane.y);
 }
 
 auto chunk_volume::boundaries_are_solid() const -> bool {
-    if (boundary_ == nullptr || boundary_->valid != 0x3F) {
+    if (boundary_ == nullptr || boundary_->valid != all_faces_mask) {
         return false;
     }
 

@@ -33,6 +33,29 @@ struct fog_data {
     alignas(4) uint32 enabled;
 };
 
+struct corner_shading_data {
+    alignas(4) float32 ao_strength;
+    alignas(4) float32 ao_curve;
+    alignas(4) float32 convex_strength;
+    alignas(4) float32 convex_curve;
+};
+
+struct cluster_data {
+    alignas(4) float32 z_scale;
+    alignas(4) float32 z_bias;
+    alignas(4) float32 tile_size;
+    alignas(4) float32 slices;
+
+    alignas(4) uint32 tiles_x;
+    alignas(4) uint32 tiles_y;
+    alignas(4) uint32 cap;
+    alignas(4) uint32 enabled;
+};
+
+static_assert(sizeof(corner_shading_data) == 16);
+static_assert(offsetof(cluster_data, tiles_x) == 16);
+static_assert(sizeof(cluster_data) == 32);
+
 struct uniform_buffer_object {
     alignas(16) float32 view[16]{};
     alignas(16) float32 projection[16]{};
@@ -43,9 +66,7 @@ struct uniform_buffer_object {
     alignas(16) vec4f ambient_sky;
     alignas(16) vec4f ambient_ground;
 
-    // x: насколько проседает полностью закрытый угол, y: кривая затенения;
-    // z: насколько поднимается торчащий угол, w: его кривая.
-    alignas(16) vec4f ao_params;
+    alignas(16) corner_shading_data corner_shading;
 
     alignas(16) vec4f cave_ambient;
 
@@ -65,17 +86,13 @@ struct uniform_buffer_object {
 
     alignas(4) float32 blob_strength{1.0f};
 
-    // Фроксельная сетка; в конце блока по причине, изложенной ниже. x: z_scale,
-    // y: z_bias, z: размер тайла в пикселях, w: число срезов.
-    alignas(16) vec4f cluster_params{};
-
-    // x: тайлов по горизонтали, y: по вертикали, z: предел списка одного кластера,
-    // w: 1, когда фрагмент читает этот список, и 0, когда обходит все источники.
-    alignas(16) vec4<uint32> cluster_dims{};
+    alignas(16) cluster_data clusters{};
 
     alignas(16) vec4<uint32> blob_dims{};
 };
 
+static_assert(offsetof(uniform_buffer_object, corner_shading) == 640);
+static_assert(offsetof(uniform_buffer_object, cave_ambient) == 656);
 static_assert(offsetof(uniform_buffer_object, sky_params) == 672);
 static_assert(offsetof(uniform_buffer_object, lamp_params) == 688);
 static_assert(offsetof(uniform_buffer_object, glow_params) == 704);
@@ -84,8 +101,7 @@ static_assert(offsetof(uniform_buffer_object, point_lights_count) == 736);
 static_assert(offsetof(uniform_buffer_object, debug_view) == 740);
 static_assert(offsetof(uniform_buffer_object, fog) == 752);
 static_assert(offsetof(uniform_buffer_object, blob_strength) == 784);
-static_assert(offsetof(uniform_buffer_object, cluster_params) == 800);
-static_assert(offsetof(uniform_buffer_object, cluster_dims) == 816);
+static_assert(offsetof(uniform_buffer_object, clusters) == 800);
 static_assert(offsetof(uniform_buffer_object, blob_dims) == 832);
 static_assert(sizeof(uniform_buffer_object) == 848);
 

@@ -50,11 +50,15 @@ public:
         return height_;
     }
 
-    // x и z адресуют среднюю колонку, 0..63; y считается вверх от низа.
-    [[nodiscard]] auto level_at(int32 x, int32 y, int32 z,
-                                light_channel channel = light_channel::sky) const -> uint8 {
-        const uint8 byte =
-            buffers_.levels[static_cast<std::size_t>(index_(x + apron, y, z + apron))];
+    [[nodiscard]] auto level_at(
+        int32 middle_column_x,
+        int32 y_from_bottom,
+        int32 middle_column_z,
+        light_channel channel = light_channel::sky
+    ) const -> uint8 {
+        const uint8 byte = buffers_.levels[static_cast<std::size_t>(
+            index_(middle_column_x + apron, y_from_bottom, middle_column_z + apron)
+        )];
         return static_cast<uint8>((byte >> shift_of(channel)) & 0x0FU);
     }
 

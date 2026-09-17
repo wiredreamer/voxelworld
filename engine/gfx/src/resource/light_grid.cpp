@@ -145,7 +145,8 @@ auto light_grid::cap_of(cull_list kind) const -> uint32 {
 }
 
 auto light_grid::counts_size_() const -> vk::DeviceSize {
-    return static_cast<vk::DeviceSize>(cluster_count_ + 1) * sizeof(uint32);
+    return (static_cast<vk::DeviceSize>(cluster_count_) * sizeof(uint32)) +
+           sizeof(cluster_readback::overflow_count);
 }
 
 auto light_grid::indices_size_(cull_list kind) const -> vk::DeviceSize {
@@ -310,8 +311,11 @@ auto light_grid::harvest_(
     const auto clusters = static_cast<std::size_t>(lf.pending.grid.cluster_count());
 
     if (lf.counts_host) {
-        lf.pending.counts.resize(clusters + 1);
-        lf.counts_host->copy_to(lf.pending.counts.data(), (clusters + 1) * sizeof(uint32));
+        const std::size_t cluster_counts_bytes = clusters * sizeof(uint32);
+
+        lf.pending.cluster_counts.resize(clusters);
+        lf.counts_host->copy_to(lf.pending.cluster_counts.data(), cluster_counts_bytes);
+        lf.counts_host->copy_to_struct(lf.pending.overflow_count, cluster_counts_bytes);
     }
 
     if (lf.indices_host) {
@@ -329,33 +333,26 @@ auto light_grid::harvest_(
 auto light_grid::write_params_(
     cull_list kind, const mat4f& view, uint32 sphere_count, uint32 frame_index
 ) -> void {
-    light_cull_ubo ubo{};
+    light_cull_ubo ubo{
+        .z_scale       = grid_.z_scale(),
+        .z_bias        = grid_.z_bias(),
+        .tile_size     = static_cast<float32>(grid_.tile_size),
+        .slices        = static_cast<float32>(grid_.slices),
+        .near_depth    = grid_.near_depth,
+        .far_depth     = grid_.far_depth,
+        .proj_x        = grid_.proj_x,
+        .proj_y        = grid_.proj_y,
+        .screen_width  = static_cast<float32>(grid_.screen_width),
+        .screen_height = static_cast<float32>(grid_.screen_height),
+        .tiles_x       = static_cast<float32>(grid_.tiles_x()),
+        .tiles_y       = static_cast<float32>(grid_.tiles_y()),
+        .cap           = cap_of(kind),
+        .shape_count   = sphere_count,
+        .cluster_count = cluster_count_,
+        .list          = kind,
+    };
 
     std::memcpy(ubo.view, view.cptr(), sizeof(mat4f));
-
-    ubo.cluster_params = vec4f{
-        grid_.z_scale(),
-        grid_.z_bias(),
-        static_cast<float32>(grid_.tile_size),
-        static_cast<float32>(grid_.slices),
-    };
-
-    ubo.cluster_extent = vec4f{
-        grid_.near_depth,
-        grid_.far_depth,
-        grid_.proj_x,
-        grid_.proj_y,
-    };
-
-    ubo.screen_dims = vec4f{
-        static_cast<float32>(grid_.screen_width),
-        static_cast<float32>(grid_.screen_height),
-        static_cast<float32>(grid_.tiles_x()),
-        static_cast<float32>(grid_.tiles_y()),
-    };
-
-    ubo.cull_dims =
-        vec4<uint32>{cap_of(kind), sphere_count, cluster_count_, static_cast<uint32>(kind)};
 
     params_ubos_[params_slot_(kind, frame_index)]->copy_from_struct(ubo);
 }
@@ -483,17 +480,17 @@ auto light_grid::dispatch(
         }
     }
 
-    auto to_view = [&view](const vec4f& point) -> vec3f {
+    auto to_view_depth = [&view](const vec4f& point) -> spatial::view_depth_point {
         const vec4f in_view = view * vec4f{point.x, point.y, point.z, 1.0F};
 
-        return vec3f{in_view.x, in_view.y, -in_view.z};
+        return spatial::view_depth_point{.x = in_view.x, .y = in_view.y, .depth = -in_view.z};
     };
 
     cluster_readback& sources = snapshot_(cull_list::sources, frame_index);
 
     sources.columns.reserve(lights.size());
     for (const point_light_data& light : lights) {
-        const vec3f at = to_view(light.position);
+        const spatial::view_depth_point at = to_view_depth(light.position);
 
         sources.columns.push_back(spatial::view_capsule{
             .end_a = at, .end_b = at, .radius = light.range,
@@ -505,8 +502,8 @@ auto light_grid::dispatch(
     bodies.columns.reserve(blobs.size());
     for (const blob_data& blob : blobs) {
         bodies.columns.push_back(spatial::view_capsule{
-            .end_a  = to_view(blob.cull_a),
-            .end_b  = to_view(blob.cull_b),
+            .end_a  = to_view_depth(blob.cull_a),
+            .end_b  = to_view_depth(blob.cull_b),
             .radius = blob.cull_a.w,
         });
     }

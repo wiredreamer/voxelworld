@@ -133,8 +133,8 @@ auto scatter_slice(
 ) -> tile_rect {
     const depth_range slab = grid.z_range_of(slice);
 
-    const float32 spine_near = std::min(shape.end_a.z, shape.end_b.z);
-    const float32 spine_far  = std::max(shape.end_a.z, shape.end_b.z);
+    const float32 spine_near = std::min(shape.end_a.depth, shape.end_b.depth);
+    const float32 spine_far  = std::max(shape.end_a.depth, shape.end_b.depth);
 
     const float32 depth_min = std::max(slab.near_depth, spine_near - shape.radius);
     const float32 depth_max = std::min(slab.far_depth, spine_far + shape.radius);
@@ -154,29 +154,27 @@ auto scatter_slice(
 
     const float32 radius = std::sqrt(radius_squared);
 
-    const vec3f along{
-        shape.end_b.x - shape.end_a.x,
-        shape.end_b.y - shape.end_a.y,
-        shape.end_b.z - shape.end_a.z,
-    };
+    const float32 along_x     = shape.end_b.x - shape.end_a.x;
+    const float32 along_y     = shape.end_b.y - shape.end_a.y;
+    const float32 along_depth = shape.end_b.depth - shape.end_a.depth;
 
     float32 t_near = 0.0F;
     float32 t_far  = 1.0F;
 
-    if (std::abs(along.z) > 1.0e-6F) {
+    if (std::abs(along_depth) > 1.0e-6F) {
         const float32 first =
-            (slab.near_depth - shape.radius - shape.end_a.z) / along.z;
+            (slab.near_depth - shape.radius - shape.end_a.depth) / along_depth;
         const float32 second =
-            (slab.far_depth + shape.radius - shape.end_a.z) / along.z;
+            (slab.far_depth + shape.radius - shape.end_a.depth) / along_depth;
 
         t_near = std::clamp(std::min(first, second), 0.0F, 1.0F);
         t_far  = std::clamp(std::max(first, second), 0.0F, 1.0F);
     }
 
-    const float32 x_near = shape.end_a.x + (t_near * along.x);
-    const float32 x_far  = shape.end_a.x + (t_far * along.x);
-    const float32 y_near = shape.end_a.y + (t_near * along.y);
-    const float32 y_far  = shape.end_a.y + (t_far * along.y);
+    const float32 x_near = shape.end_a.x + (t_near * along_x);
+    const float32 x_far  = shape.end_a.x + (t_far * along_x);
+    const float32 y_near = shape.end_a.y + (t_near * along_y);
+    const float32 y_far  = shape.end_a.y + (t_far * along_y);
 
     const auto [x_min, x_max] = projected_span(
         std::min(x_near, x_far) - radius, std::max(x_near, x_far) + radius, depth_min,
@@ -207,8 +205,8 @@ auto cluster_lights::clear() -> void {
 auto cluster_lights::add(
     uint32 index, const view_capsule& shape
 ) -> void {
-    const float32 nearest  = std::min(shape.end_a.z, shape.end_b.z) - shape.radius;
-    const float32 farthest = std::max(shape.end_a.z, shape.end_b.z) + shape.radius;
+    const float32 nearest  = std::min(shape.end_a.depth, shape.end_b.depth) - shape.radius;
+    const float32 farthest = std::max(shape.end_a.depth, shape.end_b.depth) + shape.radius;
 
     if (farthest < grid_.near_depth || nearest > grid_.far_depth) {
         return;
@@ -257,7 +255,8 @@ auto cluster_lights::lights_of(
 
 auto check_clusters(
     const cluster_lights& reference,
-    std::span<const uint32> counts,
+    std::span<const uint32> cluster_counts,
+    uint32 overflow_count,
     std::span<const uint32> indices
 ) -> cluster_check {
     const cluster_grid& grid  = reference.get_grid();
@@ -266,7 +265,7 @@ auto check_clusters(
 
     cluster_check result{};
 
-    if (counts.size() < static_cast<std::size_t>(cluster_count) + 1 ||
+    if (cluster_counts.size() < cluster_count ||
         indices.size() < static_cast<std::size_t>(cluster_count) * cap) {
         result.count_mismatches = cluster_count;
         return result;
@@ -281,7 +280,7 @@ auto check_clusters(
         ++result.clusters_compared;
 
         const uint32 expected = reference.count_of(cluster);
-        const uint32 actual   = counts[cluster];
+        const uint32 actual   = cluster_counts[cluster];
 
         if (expected != actual) {
             if (result.count_mismatches == 0 && result.set_mismatches == 0) {
@@ -317,7 +316,7 @@ auto check_clusters(
         }
     }
 
-    result.overflow_matches = counts[cluster_count] == reference.get_overflow_count();
+    result.overflow_matches = overflow_count == reference.get_overflow_count();
 
     return result;
 }

@@ -56,7 +56,7 @@ auto testbed_app::try_place_camera() -> void {
     std::optional<int32> highest;
     for (int32 x = -probe_radius; x <= probe_radius; x += probe_step) {
         for (int32 z = -probe_radius; z <= probe_radius; z += probe_step) {
-            if (const auto h = world_grid_->get_surface_y(x, z)) {
+            if (const auto h = world_grid_->get_surface_voxel_y(x, z)) {
                 highest = highest ? std::max(*highest, *h) : *h;
             }
         }

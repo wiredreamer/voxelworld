@@ -298,10 +298,10 @@ auto entity_tree_panel::plan_move_(
     std::vector<ecs::entity> siblings = children;
     std::erase(siblings, dragged_it->second);
 
-    std::size_t index = siblings.size();
+    std::size_t index_among_other_children = siblings.size();
     if (place != drop_place::inside) {
         const auto at = std::ranges::find(siblings, target_it->second);
-        index = static_cast<std::size_t>(std::distance(siblings.begin(), at)) +
+        index_among_other_children = static_cast<std::size_t>(std::distance(siblings.begin(), at)) +
             (place == drop_place::after ? 1 : 0);
     }
 
@@ -309,15 +309,15 @@ auto entity_tree_panel::plan_move_(
         const auto current = static_cast<std::size_t>(
             std::distance(children.begin(), std::ranges::find(children, dragged_it->second))
         );
-        if (current == index) {
+        if (current == index_among_other_children) {
             return std::nullopt;
         }
     }
 
     return move_entity_params{
-        .name        = dragged,
-        .parent_name = parent_name->second,
-        .index       = index,
+        .name                       = dragged,
+        .parent_name                = parent_name->second,
+        .index_among_other_children = index_among_other_children,
     };
 }
 

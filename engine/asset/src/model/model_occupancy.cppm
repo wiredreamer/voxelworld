@@ -26,7 +26,7 @@ struct face_occupancy {
 };
 
 struct model_boundary {
-    std::array<face_occupancy, 6> faces{};
+    per_face<face_occupancy> faces{};
     uint8 valid = 0;
 };
 
@@ -63,11 +63,9 @@ struct chunk_occupancy {
 };
 
 struct chunk_pocket {
-    static constexpr int32 face_count = 6;
-    static constexpr int32 face_span  = 8;
+    static constexpr int32 face_span = 8;
 
-    // Порядок граней: -X, +X, -Y, +Y, -Z, +Z. Противоположная грани — face ^ 1.
-    std::array<uint64, face_count> faces{};
+    per_face<uint64> faces{};
 
     static constexpr int32 volume_span = 4;
     uint64 volume = 0;
@@ -82,17 +80,17 @@ struct chunk_pocket {
         return (volume & volume_bit(x, y, z, block)) != 0;
     }
 
-    [[nodiscard]] auto touches(int32 face) const -> bool {
+    [[nodiscard]] auto touches(face_direction face) const -> bool {
         return faces[face] != 0;
     }
 
-    [[nodiscard]] auto meets(const chunk_pocket& other, int32 face) const -> bool {
-        return (faces[face] & other.faces[face ^ 1]) != 0;
+    [[nodiscard]] auto meets(const chunk_pocket& other, face_direction face) const -> bool {
+        return (faces[face] & other.faces[opposite(face)]) != 0;
     }
 
     [[nodiscard]] static auto wide_open() -> chunk_pocket {
         chunk_pocket pocket;
-        pocket.faces.fill(~uint64{0});
+        std::ranges::fill(pocket.faces, ~uint64{0});
         return pocket;
     }
 };

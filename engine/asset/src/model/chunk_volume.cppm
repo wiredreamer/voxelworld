@@ -25,17 +25,17 @@ public:
         return voxels_;
     }
 
-    auto set_boundary_slice(int32 face_direction, const model& neighbor) -> void;
+    auto set_boundary_slice(face_direction face, const model& neighbor) -> void;
 
-    [[nodiscard]] auto get_boundary_face(int32 face_direction) const -> const face_occupancy& {
-        return boundary_->faces[face_direction];
+    [[nodiscard]] auto get_boundary_face(face_direction face) const -> const face_occupancy& {
+        return boundary_->faces[face];
     }
 
-    [[nodiscard]] auto has_boundary_slice(int32 face_direction) const -> bool {
-        return boundary_ != nullptr && (boundary_->valid & (1U << face_direction)) != 0;
+    [[nodiscard]] auto has_boundary_slice(face_direction face) const -> bool {
+        return boundary_ != nullptr && (boundary_->valid & face_bit(face)) != 0;
     }
 
-    [[nodiscard]] auto is_boundary_solid(int32 face_direction, int32 x, int32 y, int32 z) const
+    [[nodiscard]] auto is_boundary_solid(face_direction face, int32 x, int32 y, int32 z) const
         -> bool;
 
     [[nodiscard]] auto boundaries_are_solid() const -> bool;

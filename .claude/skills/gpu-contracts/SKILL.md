@@ -20,20 +20,25 @@ std430 нет диагностики на расхождение: ошибки �
 
 ## Кадровый uniform
 
-- **C++:** `uniform_buffer_object`, `directional_light_data`, `fog_data` —
+- **C++:** `uniform_buffer_object`, `directional_light_data`, `fog_data`,
+  `corner_shading_data`, `cluster_data` —
   `engine/gfx/src/render/render_uniforms.cppm`; заполняет
   `renderer::update_uniform_buffer` (`render/renderer.cpp`).
-- **GLSL:** `UniformBufferObject` в `shaders/voxel.frag` — полная копия.
-  `voxel.vert` и `debug.vert` держат урезанный префикс.
-- **Менять вместе:** порядок, тип и выравнивание каждого поля; смысл каждой
-  компоненты `vec4`-параметров (`ao_params`, `sky_params`, `lamp_params`,
-  `glow_params`, `tonemap_params`, `cluster_params`, `cluster_dims`, `blob_dims`)
-  — он виден только там, где пишут, и там, где читают.
-- **Сторож:** `static_assert(offsetof(...))` и `sizeof == 848` под структурой.
-  Шейдер они не видят: сдвинул поле в C++ — сборка встала, это и есть момент
-  сдвинуть его в `voxel.frag`. Сдвиг только в шейдере не ловит ничто.
+- **GLSL:** `UniformBufferObject` с вложенными `CornerShadingData` и
+  `ClusterData` в `shaders/voxel.frag` — полная копия. `voxel.vert` и
+  `debug.vert` объявляют только `view` и `proj`.
+- **Менять вместе:** порядок, тип и выравнивание каждого поля, включая поля
+  вложенных `corner_shading` и `clusters`; смысл каждой компоненты
+  `vec4`-параметров (`sky_params`, `lamp_params`, `glow_params`,
+  `tonemap_params`, `blob_dims`) — он виден только там, где пишут, и там, где
+  читают.
+- **Сторож:** `static_assert(offsetof(...))` на каждое поле от `corner_shading`
+  (640) до `blob_dims` (832), включая `cave_ambient` (656) и `clusters` (800),
+  `sizeof == 848` под структурой и размеры вложенных `corner_shading_data` и
+  `cluster_data`. Шейдер они не видят: сдвинул поле в C++ — сборка встала, это и
+  есть момент сдвинуть его в `voxel.frag`. Сдвиг только в шейдере не ловит ничто.
 - **Если разошлись:** неверные пиксели без единой ошибки; а если на чужое место
-  попала граница цикла (`point_lights_count`, `cluster_dims.z`, `blob_dims`) —
+  попала граница цикла (`point_lights_count`, `clusters.cap`, `blob_dims`) —
   зависшее устройство.
 
 Правила:
@@ -45,10 +50,7 @@ std430 нет диагностики на расхождение: ошибки �
   `alignas(4)`. Скаляр сразу за `vec3` ложится в последние четыре байта его
   слота (так стоят `color` и `intensity`). Логическое поле — `uint32`, не
   `bool` (`fog.enabled`).
-- Урезанные копии верны не до конца. В `voxel.vert` после `ao_params` объявлен
-  `point_lights_count` — на смещении 656, где в C++ `cave_ambient` (настоящий
-  стоит на 736). В `debug.vert` полей `lightPos`/`lightColor` в C++ нет вовсе.
-  Оба шейдера читают только `view`/`proj`. Понадобилось поле в вершинной
+- Вершинным шейдерам нужны только `view`/`proj`. Понадобилось поле в вершинной
   стадии — скопируй префикс из `voxel.frag` целиком до этого поля.
 - Новый режим отладки: значение в конец `enum class debug_view` и имя в
   `debug_view_names` (`render/render_settings.cppm`), ветка
@@ -60,8 +62,8 @@ std430 нет диагностики на расхождение: ошибки �
   `directional_light_data`, `shadow_uniform_buffer_object`,
   `shadow_push_constant_data` (`render_uniforms.cppm`); `cull_plane_count`
   (`render/cull_pipeline.cppm`).
-- **GLSL:** `const int SHADOW_CASCADES = 5` в `voxel.frag`, `voxel.vert`,
-  `shadow.vert`; `vec4 planes[36]` в `cull.comp` — это (каскады + 1) × 6;
+- **GLSL:** `const int SHADOW_CASCADES = 5` в `voxel.frag` и `shadow.vert`;
+  `vec4 planes[36]` в `cull.comp` — это (каскады + 1) × 6;
   `ShadowUniformBufferObject` и `ShadowPushConstants` в `shadow.vert`.
 - **Менять вместе:** число каскадов во всех местах, включая литерал 36.
 - **`#define SHADOW_ENABLED 0` в `voxel.frag` убирает чтение, но не раскладку.**
@@ -88,7 +90,8 @@ std430 нет диагностики на расхождение: ошибки �
   `fragLightMask` и у блочного света в старших.
 - **Копия в тестах:** `unpack_min`, `unpack_max`, `unpack_normal`,
   `unpack_slot`, `unpack_sky`, `unpack_lamp`, `unpack_ao`, `unpack_convex` в
-  `tests/gfx/mesher.test.cpp`.
+  `tests/gfx/mesher.test.cpp` — собственный повтор разбора `voxel.vert`
+  литеральными сдвигами и масками, а не обращение к `quad`.
 - **Менять вместе:** сдвиг и маску каждого поля во всех трёх местах. Ширина
   слота вокселя (10 бит, `0x3FF` в `voxel.vert`) — это `voxel_slot_capacity`
   (`engine/core/src/voxels/voxels.cppm`). Координата — 7 бит (0…127),
@@ -104,13 +107,14 @@ std430 нет диагностики на расхождение: ошибки �
 
 ## Оси касательных
 
-- **C++:** `tangent_u_axis`/`tangent_v_axis` для `quad::pack` и те же оси
-  векторами `ao_tangent_u`/`ao_tangent_v`, по которым мешер считает углы, —
-  оба в `mesh.cpp`.
+- **C++:** `quad::tangent_u_axis`/`tangent_v_axis` (`resource/meshing.cppm`)
+  для `quad::pack` и те же оси векторами `ao_tangent_u`/`ao_tangent_v` в
+  `mesh.cpp`, по которым мешер считает углы.
 - **GLSL:** `TANGENT_U_AXIS`/`TANGENT_V_AXIS` и `unpackMax` в `voxel.vert` и
   `shadow.vert`.
-- **Копия в тестах:** `u_axis`/`v_axis` внутри `unpack_max`
-  (`mesher.test.cpp`).
+- **Копия в тестах:** `voxel_vert_tangent_u_axis`/`voxel_vert_tangent_v_axis` в
+  `mesher.test.cpp` — копия таблиц шейдера для `unpack_max`: упаковку мешера
+  сверяет с контрактом `voxel.vert`, независимо от таблиц `quad`.
 - **Сторож:** тесты `[mesh]` сверяют с `quad::pack` только копию в тесте.
 - **Если разошлись:** протяжённости меняются местами, прямоугольник повёрнут на
   четверть оборота — дыры и нахлёсты на неквадратных гранях.
@@ -149,7 +153,9 @@ std430 нет диагностики на расхождение: ошибки �
 
 ## Номер грани: +X, −X, +Y, −Y, +Z, −Z
 
-Номера 0…5 значат одно и то же везде: `ao_normal` (`mesh.cpp`); порядок квадов и
+Номера 0…5 — значения `vw::face_direction`
+(`engine/core/src/voxels/face_direction.cppm`), и значат они одно и то же везде:
+`offset_of(face)` и таблицы `per_face` мешера; порядок квадов и
 `mesh::face_counts`; команда на грань `instance * 6 + face` в
 `write_draw_command_`; `NORMALS` в `voxel.vert`; ось грани `normal_id >> 1` в
 `unpackMax`; `faces_away` в `cull.comp` (0 → `eye.x <= bmin.x`, …);
@@ -207,11 +213,13 @@ std430 нет диагностики на расхождение: ошибки �
   `cull_a`/`cull_b` читают `light_cull.comp` и эталон в `light_grid::dispatch`,
   остальное — `blobShadow` в `voxel.frag`.
 - `light_cull_ubo` (`light_buffer.cppm`, пишет `light_grid::write_params_`) ↔
-  `CullParams` в `light_cull.comp`; `cull_dims.w` — значение `cull_list`
-  (0 источники, 1 тела).
-- **Сторож:** `static_assert` нет ни на одной из этих структур. Позицию,
-  `range` и `cull_*` косвенно сверяет `--verify-lights=N`; цвет, силу и
-  `params` — только картинка.
+  `CullParams` в `light_cull.comp`, поля с теми же именами; `list` — значение
+  `cull_list` (там же: 0 источники, 1 тела), шейдер сравнивает его с
+  `cull_list_sources`.
+- **Сторож:** у `light_cull_ubo` — `static_assert` на смещения `z_scale`,
+  `near_depth`, `screen_width`, `cap`, `list` и `sizeof == 128`; у
+  `point_light_data` и `blob_data` их нет. Позицию, `range` и `cull_*` косвенно
+  сверяет `--verify-lights=N`; цвет, силу и `params` — только картинка.
 - **Если разошлись:** свет не там или его нет, пятна не под телами; сдвинутый
   `range` даёт пустые или переполненные списки кластеров.
 - Буферы растут по кадру в полёте, и дескриптор переписывается только у
@@ -227,24 +235,25 @@ std430 нет диагностики на расхождение: ошибки �
 
 - **Номер кластера** `((slice * tiles_y) + tile_y) * tiles_x + tile_x`:
   `cluster_grid::cluster_index`, `clusterOf`, `main` в `light_cull.comp`.
-- **Срез:** `cluster_params` = (`z_scale`, `z_bias`, `tile_size`, `slices`)
-  пишут и `update_uniform_buffer`, и `write_params_`; `slice_of` ↔ `clusterOf`,
-  `z_range_of` ↔ `slab_near`/`slab_far` в `light_cull.comp`.
+- **Срез:** `z_scale`, `z_bias`, `tile_size`, `slices` пишутся дважды — в
+  `clusters` кадрового uniform (`update_uniform_buffer`) и в одноимённые поля
+  `light_cull_ubo` (`write_params_`); `slice_of` ↔ `clusterOf`, `z_range_of` ↔
+  `slab_near`/`slab_far` в `light_cull.comp`.
 - **Глубина вида положительна перед камерой:** `viewDepth = -(view * p).z` в
-  `voxel.vert`, `forwards` в `light_cull.comp`, `to_view` в
-  `light_grid::dispatch`.
+  `voxel.vert`, `to_view_depth` в `light_cull.comp` и в `light_grid::dispatch`.
 - **Список кластера** — `indices[cluster * cap + n]`. `cap` пишется дважды:
-  `cluster_dims.z`/`blob_dims.x` кадрового uniform и `cull_dims.x` параметров
-  отсева — оба из `cluster_settings` одного кадра. Разойдутся — фрагмент читает
-  чужие ячейки.
+  `clusters.cap`/`blob_dims.x` кадрового uniform и `cap` параметров отсева — оба
+  из `cluster_settings` одного кадра. Разойдутся — фрагмент читает чужие ячейки.
 - **Счётчиков `cluster_count + 1`** (`light_grid::counts_size_`): последний —
-  счёт переполнений. `light_cull.comp` пишет его в `counts[cull_dims.z]`, где
-  `cull_dims.z` = `cluster_count`; его же ждут `cluster_readback::counts`,
-  `spatial::check_clusters` и `cluster_probe::account_` в testbed. Счётчик за
+  счёт переполнений. `light_cull.comp` пишет его в `counts[overflow_slot]`, где
+  `overflow_slot` = `params.cluster_count`, а `light_grid::harvest_` при вычитке
+  делит буфер на `cluster_readback::cluster_counts` и `overflow_count`. О
+  хвостовом слоте знают только эти трое: `spatial::check_clusters` и
+  `cluster_probe::account_` в testbed получают две части порознь. Счётчик за
   пределом не зажимается, поэтому фрагмент берёт `min(count, cap)` — не убирай.
 - **Диспетчеризация:** `dispatch(shape_count, slices, 1)` в
   `light_grid::record_` ↔ `gl_WorkGroupID.x` — фигура, `.y` — срез.
-- **`cluster_dims.w`** (`cluster_settings::enabled`): 0 — фрагмент без сетки
+- **`clusters.enabled`** (`cluster_settings::enabled`): 0 — фрагмент без сетки
   обходит все `point_lights_count` источников и `blob_dims.y` тел. Оба пути
   держатся, чтобы картинку можно было сверить (`--no-clusters`).
 - **Сторож:** тесты `[cluster]` в `tests/core/cluster_grid.test.cpp` — только
@@ -257,15 +266,17 @@ std430 нет диагностики на расхождение: ошибки �
 
 ## Палитра
 
-- **C++:** `palette_buffer` (`resource/palette_buffer.cpp`) — `vec4` на тип в
-  порядке `voxel_registry::all()`: rgb — цвет через `palette_gamma`,
-  a — `material.glow / 255`.
-- **GLSL:** `PaletteBuffer` (`set = 4`) в `voxel.vert` по индексу
-  `(data1 >> 14) & 0x3FF`, то есть по слоту вокселя; `voxel.frag` умножает
-  `fragColor.a` на `glow_params.x`.
+- **C++:** `palette_buffer` (`resource/palette_buffer.cpp`) — запись
+  `palette_entry` на тип в порядке `voxel_registry::all()`: `color` — цвет через
+  `palette_gamma`, `glow` — `material.glow / 255`.
+- **GLSL:** `PaletteBuffer` (`set = 4`) из `PaletteEntry` (`vec3 color`,
+  `float glow`) в `voxel.vert` по индексу `(data1 >> 14) & 0x3FF`, то есть по
+  слоту вокселя; `glow` уходит в `fragGlow` (location 2, component 3), и
+  `voxel.frag` умножает его на `glow_params.x`.
 - **Менять вместе:** номер в `all()` обязан совпадать со слотом (сторож —
-  `slots are dense and within the quad's ten bits`); альфа — свечение, а не
-  прозрачность.
+  `slots are dense and within the quad's ten bits`); раскладку `palette_entry`
+  и `PaletteEntry` — `glow` в последних четырёх байтах слота `color`, 16 байт
+  на запись (сторож — `static_assert` в `palette_buffer.cpp`).
 - **Если разошлись:** чужие цвета, светится не то.
 
 ## Наборы и вершинный вход

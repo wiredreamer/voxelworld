@@ -142,7 +142,7 @@ public:
 
     auto compact_pages() -> uint32;
 
-    [[nodiscard]] auto extract_face(int32 face_direction, face_occupancy& out) const -> bool;
+    [[nodiscard]] auto extract_face(face_direction face, face_occupancy& out) const -> bool;
 
     [[nodiscard]] auto scan_fill() const -> model_fill;
 

@@ -191,17 +191,20 @@ struct cluster_grid {
     }
 };
 
+struct view_depth_point {
+    float32 x;
+    float32 y;
+    float32 depth;
+};
+
 struct view_sphere {
-    // x и y в пространстве вида; z — глубина вдоль оси взгляда, положительная
-    // перед камерой. Шейдер приходит сюда с -(view * world).z: знак
-    // переворачивается один раз, здесь, а не в каждом сравнении ниже.
-    vec3f center;
+    view_depth_point center;
     float32 radius;
 };
 
 struct view_capsule {
-    vec3f end_a;
-    vec3f end_b;
+    view_depth_point end_a;
+    view_depth_point end_b;
     float32 radius;
 };
 
@@ -295,7 +298,10 @@ struct cluster_check {
 };
 
 [[nodiscard]] auto check_clusters(
-    const cluster_lights& reference, std::span<const uint32> counts, std::span<const uint32> indices
+    const cluster_lights& reference,
+    std::span<const uint32> cluster_counts,
+    uint32 overflow_count,
+    std::span<const uint32> indices
 ) -> cluster_check;
 
 inline ray::ray(

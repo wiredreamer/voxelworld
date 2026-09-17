@@ -20,15 +20,13 @@ public:
     using page_type = std::array<uint8, page_bytes>;
 
     struct boundary_light {
-        static constexpr int32 face_count = 6;
+        per_face<uint8> uniform{};
+        per_face<std::vector<uint8>> packed{};
 
-        std::array<uint8, face_count> uniform{};
-        std::array<std::vector<uint8>, face_count> packed{};
-
-        [[nodiscard]] auto level_at(int32 face, int32 a, int32 b) const -> uint8 {
-            const auto& plane = packed[static_cast<std::size_t>(face)];
+        [[nodiscard]] auto level_at(face_direction face, int32 a, int32 b) const -> uint8 {
+            const auto& plane = packed[face];
             if (plane.empty()) {
-                return uniform[static_cast<std::size_t>(face)];
+                return uniform[face];
             }
 
             const int32 at   = (a * side) + b;
@@ -88,12 +86,18 @@ public:
         const auto clamp = [](int32 v) -> int32 { return std::clamp(v, 0, side - 1); };
 
         if (x < 0 || x >= side) {
-            return around_.level_at(x < 0 ? 1 : 0, clamp(y), clamp(z));
+            return around_.level_at(
+                x < 0 ? face_direction::neg_x : face_direction::pos_x, clamp(y), clamp(z)
+            );
         }
         if (y < 0 || y >= side) {
-            return around_.level_at(y < 0 ? 3 : 2, clamp(x), clamp(z));
+            return around_.level_at(
+                y < 0 ? face_direction::neg_y : face_direction::pos_y, clamp(x), clamp(z)
+            );
         }
-        return around_.level_at(z < 0 ? 5 : 4, clamp(x), clamp(y));
+        return around_.level_at(
+            z < 0 ? face_direction::neg_z : face_direction::pos_z, clamp(x), clamp(y)
+        );
     }
 
     [[nodiscard]] auto is_uniform() const -> bool {

@@ -28,7 +28,7 @@ auto blob_shadows_scene::spawn_() -> void {
     auto& transform_sys = world.system<ecs::transform_system>();
     auto& model_sys     = world.system<ecs::model_system>();
 
-    const auto scale = static_cast<float32>(stand().voxel_scale());
+    const auto scale = static_cast<float32>(stand().world_units_per_voxel());
     const auto count = std::max(bodies_asked_, 1);
 
     if (!seeded_) {
@@ -59,7 +59,7 @@ auto blob_shadows_scene::spawn_() -> void {
         std::optional<int32> surface;
         for (int32 dz = 0; dz <= 1; ++dz) {
             for (int32 dx = 0; dx <= 1; ++dx) {
-                const auto column = stand().grid().get_surface_y(vx + dx, vz + dz);
+                const auto column = stand().grid().get_surface_voxel_y(vx + dx, vz + dz);
                 if (column && (!surface || *column > *surface)) {
                     surface = column;
                 }

@@ -58,7 +58,8 @@ world`, `platform` стоит между `core` и `gfx`. `vw.asset` и `vw.worl
 `:scene`, `:resource`, `:render`, `:renderer`, `:debug`, `:gpu_buffers`).
 
 - **`vw.core`**: `:types`, `:vector`, `:matrix`, `:transform`, `:math`, `:color`,
-  `:voxels` и `:voxels.catalog` (механика и сам каталог), `:timing`, `:log`,
+  `:voxels`, `:voxels.catalog` и `:voxels.face_direction` (механика, сам каталог
+  и направления граней), `:timing`, `:log`,
   `:spatial` (aabb, plane, ray, frustum — они взаимно зависимы).
 - **`vw.asset`**: `:model.*` (identity, occupancy, links, light_channel,
   light_field, volume, edit, chunk), `:anim.*` (keyframe, channel, clip, fsm),

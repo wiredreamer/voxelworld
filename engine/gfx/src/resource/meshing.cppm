@@ -15,6 +15,9 @@ struct layer_rows;
 export namespace vw::gfx {
 
 struct quad {
+    static constexpr per_face<int32> tangent_u_axis{2, 2, 0, 0, 0, 0};
+    static constexpr per_face<int32> tangent_v_axis{1, 1, 2, 2, 1, 1};
+
     uint32 data0 = 0;
     uint32 data1 = 0;
     uint32 data2 = 0;
@@ -22,7 +25,7 @@ struct quad {
     quad() = default;
 
     [[nodiscard]] static auto pack(
-        vec3i min_pos, vec3i max_pos, uint8 normal_id, voxel_slot slot, uint8 corners_ao,
+        vec3i min_pos, vec3i max_pos, face_direction face, voxel_slot slot, uint8 corners_ao,
         uint8 corners_convex, uint16 corners_sky, uint16 corners_block
     ) -> quad;
 
@@ -53,18 +56,18 @@ struct mesh_source {
     const vw::asset::model& voxels;
     const vw::asset::chunk_volume* chunk = nullptr;
 
-    [[nodiscard]] auto has_boundary_slice(int32 face_direction) const -> bool {
-        return chunk != nullptr && chunk->has_boundary_slice(face_direction);
+    [[nodiscard]] auto has_boundary_slice(face_direction face) const -> bool {
+        return chunk != nullptr && chunk->has_boundary_slice(face);
     }
 
-    [[nodiscard]] auto is_boundary_solid(int32 face_direction, int32 x, int32 y, int32 z) const
+    [[nodiscard]] auto is_boundary_solid(face_direction face, int32 x, int32 y, int32 z) const
         -> bool {
-        return chunk->is_boundary_solid(face_direction, x, y, z);
+        return chunk->is_boundary_solid(face, x, y, z);
     }
 
-    [[nodiscard]] auto boundary_face(int32 face_direction) const
+    [[nodiscard]] auto boundary_face(face_direction face) const
         -> const vw::asset::face_occupancy& {
-        return chunk->get_boundary_face(face_direction);
+        return chunk->get_boundary_face(face);
     }
 
     [[nodiscard]] auto sky_light() const -> const vw::asset::light_field* {
@@ -92,7 +95,7 @@ private:
         int32 x,
         int32 y,
         int32 z,
-        int32 face_direction,
+        face_direction face,
         voxel voxel_id,
         const voxel_registry& registry,
         mesh_options opts
@@ -101,7 +104,7 @@ private:
     [[nodiscard]]
     static auto is_face_visible(
         mesh_source src, int32 x, int32 y, int32 z,
-        int32 face_direction
+        face_direction face
     ) -> bool;
 };
 
@@ -159,7 +162,7 @@ private:
         mesh_generation_storage& storage,
         mesh_source src,
         const detail::face_axis_mapping& axes,
-        int32 face_direction,
+        face_direction face,
         int32 layer,
         const voxel_registry& registry,
         mesh_options opts
@@ -168,7 +171,7 @@ private:
     static auto generate_face_quads(
         mesh_generation_storage& storage,
         mesh_source src,
-        int32 face_direction,
+        face_direction face,
         const voxel_registry& registry,
         mesh_options opts
     ) -> void;
@@ -188,7 +191,7 @@ private:
     static auto merge_and_emit_rects_bits(
         mesh_generation_storage& storage,
         const detail::face_axis_mapping& axes,
-        int32 face_direction,
+        face_direction face,
         int32 layer,
         detail::layer_rows& rows,
         const std::array<uint16, 256>& slots
@@ -198,7 +201,7 @@ private:
         mesh_generation_storage& storage,
         mesh_source src,
         const detail::face_axis_mapping& axes,
-        int32 face_direction,
+        face_direction face,
         int32 layer,
         const voxel_registry& registry,
         mesh_options opts
@@ -207,7 +210,7 @@ private:
     static auto generate_face_quads(
         mesh_generation_storage& storage,
         mesh_source src,
-        int32 face_direction,
+        face_direction face,
         const voxel_registry& registry,
         mesh_options opts
     ) -> void;

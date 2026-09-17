@@ -46,33 +46,37 @@ TEST_CASE("six solid neighbours leave nothing to draw", "[model]") {
     voxels->fill(voxels::world::stone[0]);
     asset::chunk_volume center{voxels};
 
-    std::array<std::unique_ptr<asset::model>, 6> neighbors;
+    per_face<std::unique_ptr<asset::model>> neighbors;
     for (auto& n : neighbors) {
         n = solid_cube(ids, pages);
     }
 
     REQUIRE_FALSE(center.boundaries_are_solid());
 
-    for (int32 fd = 0; fd < 5; ++fd) {
-        center.set_boundary_slice(fd, *neighbors[fd]);
+    constexpr auto last_face = face_direction::neg_z;
+
+    for (const face_direction face : all_face_directions) {
+        if (face != last_face) {
+            center.set_boundary_slice(face, *neighbors[face]);
+        }
     }
     REQUIRE_FALSE(center.boundaries_are_solid());
 
-    center.set_boundary_slice(5, *neighbors[5]);
+    center.set_boundary_slice(last_face, *neighbors[last_face]);
     REQUIRE(center.boundaries_are_solid());
 
-    neighbors[0]->set_voxel(0, 10, 10, voxels::air);
-    center.set_boundary_slice(0, *neighbors[0]);
+    neighbors[face_direction::pos_x]->set_voxel(0, 10, 10, voxels::air);
+    center.set_boundary_slice(face_direction::pos_x, *neighbors[face_direction::pos_x]);
     REQUIRE_FALSE(center.boundaries_are_solid());
 
-    neighbors[1]->set_voxel(side - 2, 10, 10, voxels::air);
-    center.set_boundary_slice(1, *neighbors[1]);
-    center.set_boundary_slice(0, *solid_cube(ids, pages));
+    neighbors[face_direction::neg_x]->set_voxel(side - 2, 10, 10, voxels::air);
+    center.set_boundary_slice(face_direction::neg_x, *neighbors[face_direction::neg_x]);
+    center.set_boundary_slice(face_direction::pos_x, *solid_cube(ids, pages));
     REQUIRE(center.boundaries_are_solid());
 
     center.release_boundary();
     REQUIRE_FALSE(center.boundaries_are_solid());
-    REQUIRE_FALSE(center.has_boundary_slice(0));
+    REQUIRE_FALSE(center.has_boundary_slice(face_direction::pos_x));
 }
 
 TEST_CASE("a face plane comes out of the page table", "[model]") {
@@ -82,28 +86,31 @@ TEST_CASE("a face plane comes out of the page table", "[model]") {
     asset::model m{ids, pages, voxels::world::category, side, side, side};
     asset::face_occupancy face;
 
-    REQUIRE(m.extract_face(0, face));
+    REQUIRE(m.extract_face(face_direction::pos_x, face));
     REQUIRE(std::ranges::all_of(face.rows, [](uint64 row) -> bool { return row == 0; }));
 
     m.fill(voxels::world::stone[0]);
-    REQUIRE(m.extract_face(0, face));
+    REQUIRE(m.extract_face(face_direction::pos_x, face));
     REQUIRE(std::ranges::all_of(face.rows, [](uint64 row) -> bool { return row == ~uint64{0}; }));
 
     m.set_voxel(side - 1, 5, 9, voxels::air);
     m.set_voxel(side - 2, 7, 9, voxels::air);
 
-    REQUIRE(m.extract_face(0, face));
+    REQUIRE(m.extract_face(face_direction::pos_x, face));
     REQUIRE_FALSE(face.test(5, 9));
     REQUIRE(face.test(7, 9));
 
-    for (int32 fd = 1; fd < 6; ++fd) {
-        INFO("face " << fd);
-        REQUIRE(m.extract_face(fd, face));
+    for (const face_direction direction : all_face_directions) {
+        if (direction == face_direction::pos_x) {
+            continue;
+        }
+        INFO("face " << static_cast<int32>(direction));
+        REQUIRE(m.extract_face(direction, face));
         REQUIRE(std::ranges::all_of(face.rows, [](uint64 row) -> bool {
             return row == ~uint64{0};
         }));
     }
 
     asset::model small{ids, pages, voxels::world::category, 32, 32, 32};
-    REQUIRE_FALSE(small.extract_face(0, face));
+    REQUIRE_FALSE(small.extract_face(face_direction::pos_x, face));
 }

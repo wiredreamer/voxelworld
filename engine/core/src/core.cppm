@@ -11,3 +11,4 @@ export import :math;
 export import :spatial;
 export import :voxels;
 export import :voxels.catalog;
+export import :voxels.face_direction;

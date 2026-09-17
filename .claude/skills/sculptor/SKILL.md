@@ -149,7 +149,7 @@ undo и redo, а выделение не трогает. Вход и выход 
 
 **На одно мгновение — один ключ.** `animation_channel::add` и `replace`
 сортируют ключи нестабильным `std::sort`, и `evaluate` при равном времени берёт
-любой. Единственность в пределах `key_epsilon` (`1e-3`,
+любой. Единственность в пределах `same_instant_tolerance_seconds` (`1e-3`,
 `services/keyframe_service.cpp`) держит только редактор:
 - `record_pose` переписывает ключ на том же времени через
   `modify_keyframe_operation`;

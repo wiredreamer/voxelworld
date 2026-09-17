@@ -1635,11 +1635,11 @@ auto renderer::update_uniform_buffer(
         0.0f
     };
 
-    ubo.ao_params = vec4f{
-        ambient_settings_.ao_strength,
-        ambient_settings_.ao_curve,
-        ambient_settings_.convex_strength,
-        ambient_settings_.convex_curve
+    ubo.corner_shading = corner_shading_data{
+        .ao_strength     = ambient_settings_.ao_strength,
+        .ao_curve        = ambient_settings_.ao_curve,
+        .convex_strength = ambient_settings_.convex_strength,
+        .convex_curve    = ambient_settings_.convex_curve,
     };
 
     ubo.cave_ambient = vec4f{
@@ -1673,18 +1673,15 @@ auto renderer::update_uniform_buffer(
 
     const spatial::cluster_grid grid = get_cluster_grid(camera);
 
-    ubo.cluster_params = vec4f{
-        grid.z_scale(),
-        grid.z_bias(),
-        static_cast<float32>(grid.tile_size),
-        static_cast<float32>(grid.slices),
-    };
-
-    ubo.cluster_dims = vec4<uint32>{
-        grid.tiles_x(),
-        grid.tiles_y(),
-        cluster_settings_.cap,
-        cluster_settings_.enabled ? 1u : 0u,
+    ubo.clusters = cluster_data{
+        .z_scale   = grid.z_scale(),
+        .z_bias    = grid.z_bias(),
+        .tile_size = static_cast<float32>(grid.tile_size),
+        .slices    = static_cast<float32>(grid.slices),
+        .tiles_x   = grid.tiles_x(),
+        .tiles_y   = grid.tiles_y(),
+        .cap       = cluster_settings_.cap,
+        .enabled   = cluster_settings_.enabled ? 1u : 0u,
     };
 
     ubo.fog.color         = fog_settings_.color;

@@ -15,9 +15,9 @@ chunk::chunk(
     , ent_(invalid_entity)
     , volume_(std::move(content))
     , fill_(volume_->voxels().scan_fill()) {
-    for (int32 fd = 0; fd < 6; ++fd) {
-        if (volume_->has_boundary_slice(fd)) {
-            known_neighbors_ |= static_cast<uint8>(1U << fd);
+    for (const face_direction face : all_face_directions) {
+        if (volume_->has_boundary_slice(face)) {
+            known_neighbors_ |= face_bit(face);
         }
     }
 

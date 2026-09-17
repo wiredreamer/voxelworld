@@ -486,8 +486,8 @@ auto timeline_panel::render_tracks() -> void {
     const ImVec2 ruler_start = ImGui::GetCursorScreenPos();
     const float ruler_width  = usable_track_width;
 
-    track_origin_x_ = ruler_start.x;
-    track_scale_    = track_area_width;
+    track_area_screen_x_ = ruler_start.x;
+    track_area_width_    = track_area_width;
 
     render_time_ruler(vec2f{ruler_start.x, ruler_start.y}, ruler_width, track_area_width, clip_duration);
     ImGui::NextColumn();
@@ -1062,12 +1062,12 @@ auto timeline_panel::update_key_drag_(
     }
 
     if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
-        if (track_scale_ <= 0.f) {
+        if (track_area_width_ <= 0.f) {
             return;
         }
 
-        const float local_x = ImGui::GetMousePos().x - track_origin_x_ + scroll_offset_;
-        const float time    = std::clamp((local_x / track_scale_) * clip_duration, 0.f, clip_duration);
+        const float local_x = ImGui::GetMousePos().x - track_area_screen_x_ + scroll_offset_;
+        const float time    = std::clamp((local_x / track_area_width_) * clip_duration, 0.f, clip_duration);
 
         if (std::abs(ImGui::GetMouseDragDelta(ImGuiMouseButton_Left).x) > 2.f) {
             key_drag_moved_ = true;

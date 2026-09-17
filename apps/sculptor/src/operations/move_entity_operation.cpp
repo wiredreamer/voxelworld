@@ -46,7 +46,7 @@ auto move_entity_operation::execute() -> void {
         local = transform::from_matrix(*inverse * node_transform.get_world_matrix());
     }
 
-    place_(parent->second, params_.index, local);
+    place_(parent->second, params_.index_among_other_children, local);
 }
 
 auto move_entity_operation::undo() -> void {

@@ -19,7 +19,7 @@ auto cluster_probe::collect(gfx::renderer& renderer, bool measuring) -> void {
 auto cluster_probe::account_(gfx::cull_list kind, const gfx::cluster_readback& frame) -> void {
     const uint32 clusters = frame.grid.cluster_count();
 
-    if (frame.counts.size() < static_cast<std::size_t>(clusters) + 1) {
+    if (frame.cluster_counts.size() < clusters) {
         return;
     }
 
@@ -34,7 +34,7 @@ auto cluster_probe::account_(gfx::cull_list kind, const gfx::cluster_readback& f
     uint32 peak        = 0;
 
     for (uint32 cluster = 0; cluster < clusters; ++cluster) {
-        const uint32 listed = frame.counts[cluster];
+        const uint32 listed = frame.cluster_counts[cluster];
 
         assignments += listed;
         lit += (listed > 0) ? 1 : 0;
@@ -45,7 +45,7 @@ auto cluster_probe::account_(gfx::cull_list kind, const gfx::cluster_readback& f
     counted.lit += lit;
     counted.peak = std::max(counted.peak, peak);
 
-    const uint32 overflow = frame.counts[clusters];
+    const uint32 overflow = frame.overflow_count;
 
     counted.overflow += overflow;
     counted.overflow_frames += (overflow > 0) ? 1 : 0;
@@ -73,7 +73,9 @@ auto cluster_probe::verify_frame_(gfx::cull_list kind, const gfx::cluster_readba
         reference->add(static_cast<uint32>(i), frame.columns[i]);
     }
 
-    const auto check = spatial::check_clusters(*reference, frame.counts, frame.indices);
+    const auto check = spatial::check_clusters(
+        *reference, frame.cluster_counts, frame.overflow_count, frame.indices
+    );
 
     tally& counted = tally_[slot];
 

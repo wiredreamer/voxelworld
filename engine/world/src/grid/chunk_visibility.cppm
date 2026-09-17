@@ -11,25 +11,11 @@ export namespace vw::ecs {
 
 class world;
 
-// Направления в порядке, которым пользуется chunk_links: -X, +X, -Y, +Y, -Z, +Z.
-// Противоположное направлению — его пара, то есть d ^ 1.
-inline constexpr std::array<vec3i, 6> chunk_face_offsets{
-    vec3i{-1, 0, 0}, vec3i{1, 0, 0}, vec3i{0, -1, 0},
-    vec3i{0, 1, 0},  vec3i{0, 0, -1}, vec3i{0, 0, 1},
-};
-
-inline constexpr std::array<vec3i, 6> boundary_face_offsets{
-    vec3i{1, 0, 0},  vec3i{-1, 0, 0}, vec3i{0, 1, 0},
-    vec3i{0, -1, 0}, vec3i{0, 0, 1},  vec3i{0, 0, -1},
-};
-
 template <typename LinksAt, typename IsSky, typename StartsIn, typename Visit>
 auto walk_visible_chunks(
     vec3i origin, vec3i lo, vec3i hi, LinksAt&& links_at, IsSky&& is_sky, StartsIn&& starts_in,
     Visit&& visit
 ) -> void {
-    constexpr int32 face_count = asset::chunk_pocket::face_count;
-
     static const asset::chunk_pocket open_pocket = asset::chunk_pocket::wide_open();
 
     constexpr uint64 seen_bit = uint64{1} << 63;
@@ -80,12 +66,12 @@ auto walk_visible_chunks(
         }
         const auto& pocket = pockets[static_cast<std::size_t>(pocket_index)];
 
-        for (int32 face = 0; face < face_count; ++face) {
+        for (const face_direction face : all_face_directions) {
             if (!pocket.touches(face)) {
                 continue;
             }
 
-            const vec3i next = coord + chunk_face_offsets[face];
+            const vec3i next = coord + offset_of(face);
             if (next.x < lo.x || next.y < lo.y || next.z < lo.z || next.x > hi.x ||
                 next.y > hi.y || next.z > hi.z) {
                 continue;

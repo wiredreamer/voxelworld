@@ -12,22 +12,15 @@ using namespace vw::ecs;
 
 namespace {
 
-enum face : int32 {
-    neg_x = 0,
-    pos_x = 1,
-    neg_y = 2,
-    pos_y = 3,
-    neg_z = 4,
-    pos_z = 5,
-};
+using enum face_direction;
 
 auto sealed() -> asset::cell_links {
     return asset::cell_links{};
 }
 
-auto pocket_of(std::initializer_list<int32> faces) -> asset::chunk_pocket {
+auto pocket_of(std::initializer_list<face_direction> faces) -> asset::chunk_pocket {
     asset::chunk_pocket pocket;
-    for (const int32 face : faces) {
+    for (const face_direction face : faces) {
         pocket.faces[face] = ~uint64{0};
     }
     return pocket;
@@ -39,7 +32,8 @@ auto wide_open() -> asset::cell_links {
     return links;
 }
 
-auto joins(std::initializer_list<std::pair<int32, int32>> pairs) -> asset::cell_links {
+auto joins(std::initializer_list<std::pair<face_direction, face_direction>> pairs)
+    -> asset::cell_links {
     asset::cell_links links;
     for (const auto& [a, b] : pairs) {
         links.pockets.push_back(pocket_of({a, b}));

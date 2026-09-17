@@ -843,11 +843,8 @@ private:
     bool keyframe_clicked_      = false;
     bool need_keyframe_menu_    = false;
 
-    // Где на экране лежит нулевое время дорожек и сколько в секунде пикселей:
-    // считается при отрисовке и читается жестом, которому нужен обратный
-    // перевод — из точки курсора во время.
-    float32 track_origin_x_ = 0.f;
-    float32 track_scale_    = 0.f;
+    float32 track_area_screen_x_ = 0.f;
+    float32 track_area_width_    = 0.f;
 
     bool key_drag_        = false;
     bool key_drag_moved_  = false;

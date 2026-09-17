@@ -67,6 +67,8 @@ private:
 auto sub_links(
     const asset::chunk_occupancy& occupancy, vec3i origin, int32 size
 ) -> asset::cell_links {
+    using enum face_direction;
+
     const auto solid = [&](int32 x, int32 y, int32 z) -> bool {
         return occupancy.test(origin.x + x, origin.y + y, origin.z + z);
     };
@@ -100,18 +102,18 @@ auto sub_links(
                     const auto p = stack.back();
                     stack.pop_back();
 
-                    if (p.x == 0) pocket.faces[0] |= block_bit(p.y, p.z);
-                    if (p.x == size - 1) pocket.faces[1] |= block_bit(p.y, p.z);
-                    if (p.y == 0) pocket.faces[2] |= block_bit(p.x, p.z);
-                    if (p.y == size - 1) pocket.faces[3] |= block_bit(p.x, p.z);
-                    if (p.z == 0) pocket.faces[4] |= block_bit(p.x, p.y);
-                    if (p.z == size - 1) pocket.faces[5] |= block_bit(p.x, p.y);
+                    if (p.x == 0) pocket.faces[neg_x] |= block_bit(p.y, p.z);
+                    if (p.x == size - 1) pocket.faces[pos_x] |= block_bit(p.y, p.z);
+                    if (p.y == 0) pocket.faces[neg_y] |= block_bit(p.x, p.z);
+                    if (p.y == size - 1) pocket.faces[pos_y] |= block_bit(p.x, p.z);
+                    if (p.z == 0) pocket.faces[neg_z] |= block_bit(p.x, p.y);
+                    if (p.z == size - 1) pocket.faces[pos_z] |= block_bit(p.x, p.y);
                     pocket.volume |= asset::chunk_pocket::volume_bit(
                         p.x, p.y, p.z, std::max(1, size / asset::chunk_pocket::volume_span)
                     );
 
-                    for (const auto& d : ecs::chunk_face_offsets) {
-                        const vec3i n{p.x + d.x, p.y + d.y, p.z + d.z};
+                    for (const face_direction face : all_face_directions) {
+                        const vec3i n = p + offset_of(face);
                         if (n.x < 0 || n.y < 0 || n.z < 0 || n.x >= size || n.y >= size ||
                             n.z >= size) {
                             continue;
@@ -337,8 +339,8 @@ TEST_CASE("how much of the cave system the sky can reach", "[world][culling][.sw
             ++reached_underground;
         }
 
-        for (const auto& d : ecs::chunk_face_offsets) {
-            const vec3i n{p.x + d.x, p.y + d.y, p.z + d.z};
+        for (const face_direction face : all_face_directions) {
+            const vec3i n = p + offset_of(face);
             if (n.x < 0 || n.y < 0 || n.z < 0 || n.x >= size_x || n.y >= size_y ||
                 n.z >= size_z) {
                 continue;
@@ -394,7 +396,7 @@ TEST_CASE("engine pockets agree with a voxel flood fill", "[world][culling][.swe
                         continue;
                     }
 
-                    for (int32 face = 0; face < asset::chunk_pocket::face_count; ++face) {
+                    for (const face_direction face : all_face_directions) {
                         uint64 a = 0;
                         uint64 b = 0;
                         for (const auto& pocket : reference.pockets) a |= pocket.faces[face];

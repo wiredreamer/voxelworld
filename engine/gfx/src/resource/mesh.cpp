@@ -15,22 +15,18 @@ import :vk;
 
 namespace vw::gfx {
 
-
-static constexpr std::array<int32, 6> tangent_u_axis = {2, 2, 0, 0, 0, 0};
-static constexpr std::array<int32, 6> tangent_v_axis = {1, 1, 2, 2, 1, 1};
-
 auto quad::pack(
     vec3i min_pos,
     vec3i max_pos,
-    uint8 normal_id,
+    face_direction face,
     voxel_slot slot,
     uint8 corners_ao,
     uint8 corners_convex,
     uint16 corners_sky,
     uint16 corners_block
 ) -> quad {
-    const int32 u_axis = tangent_u_axis[normal_id];
-    const int32 v_axis = tangent_v_axis[normal_id];
+    const int32 u_axis = tangent_u_axis[face];
+    const int32 v_axis = tangent_v_axis[face];
 
     const auto span_u = static_cast<uint32>(max_pos[u_axis] - min_pos[u_axis] - 1);
     const auto span_v = static_cast<uint32>(max_pos[v_axis] - min_pos[v_axis] - 1);
@@ -40,7 +36,7 @@ auto quad::pack(
         (static_cast<uint32>(min_pos.x) & 0x7Fu) |          //
         ((static_cast<uint32>(min_pos.y) & 0x7Fu) << 7) |   //
         ((static_cast<uint32>(min_pos.z) & 0x7Fu) << 14) |  //
-        ((static_cast<uint32>(normal_id) & 0x7u) << 21) |   //
+        ((static_cast<uint32>(face) & 0x7u) << 21) |        //
         (static_cast<uint32>(corners_ao) << 24);
 
     q.data1 =                                               //
@@ -78,16 +74,7 @@ auto quad::get_attribute_descriptions() -> std::vector<vk::VertexInputAttributeD
 }
 
 
-static constexpr std::array<vec3i, 6> ao_normal = {
-    vec3i{1, 0, 0},
-    vec3i{-1, 0, 0},
-    vec3i{0, 1, 0},
-    vec3i{0, -1, 0},
-    vec3i{0, 0, 1},
-    vec3i{0, 0, -1},
-};
-
-static constexpr std::array<vec3i, 6> ao_tangent_u = {
+static constexpr per_face<vec3i> ao_tangent_u = {
     vec3i{0, 0, 1},
     vec3i{0, 0, 1},
     vec3i{1, 0, 0},
@@ -96,7 +83,7 @@ static constexpr std::array<vec3i, 6> ao_tangent_u = {
     vec3i{1, 0, 0},
 };
 
-static constexpr std::array<vec3i, 6> ao_tangent_v = {
+static constexpr per_face<vec3i> ao_tangent_v = {
     vec3i{0, 1, 0},
     vec3i{0, 1, 0},
     vec3i{0, 0, 1},
@@ -110,10 +97,10 @@ namespace detail {
 
 struct face_axis_mapping {
     int32 width, height, depth;
-    int32 face_direction;
+    face_direction face;
     int32 voxel_scale;
 
-    face_axis_mapping(mesh_source src, int32 face_dir);
+    face_axis_mapping(mesh_source src, face_direction direction);
 
     [[nodiscard]] auto to_model_coords(int32 u, int32 v, int32 layer) const
         -> std::tuple<int32, int32, int32>;
@@ -123,29 +110,29 @@ struct face_axis_mapping {
 };
 
 [[nodiscard]] auto compute_corner_darkness(mesh_source src, int32 x, int32 y, int32 z,
-                                           int32 face) -> uint8;
+                                           face_direction face) -> uint8;
 [[nodiscard]] auto compute_corner_convexity(mesh_source src, int32 x, int32 y, int32 z,
-                                            int32 face) -> uint8;
+                                            face_direction face) -> uint8;
 [[nodiscard]] auto compute_corner_light(mesh_source src, int32 x, int32 y, int32 z,
-                                        int32 face) -> corner_light;
+                                        face_direction face) -> corner_light;
 
-inline constexpr int32 convex_face = 2;
+inline constexpr face_direction convex_face = face_direction::pos_y;
 
 [[nodiscard]] auto is_face_visible(mesh_source src, int32 x, int32 y, int32 z,
-                                   int32 face_direction) -> bool;
+                                   face_direction face) -> bool;
 
 auto build_face_mask(
     mesh_generation_storage& storage,
     mesh_source src,
     const face_axis_mapping& axes,
-    int32 face_direction,
+    face_direction face,
     int32 layer,
     mesh_options opts
 ) -> void;
 
 auto add_quad(
     std::vector<quad>& quads,
-    int32 face_direction,
+    face_direction face,
     vec3i min_pos,
     vec3i max_pos,
     voxel_slot slot,
@@ -165,13 +152,13 @@ struct layer_rows {
 
 [[nodiscard]] auto light_from_rows(mesh_source src, const layer_rows& rows,
                                    int32 u_at, int32 v_at, int32 x, int32 y, int32 z,
-                                   int32 face) -> corner_light;
+                                   face_direction face) -> corner_light;
 
 [[nodiscard]] auto build_layer_rows(
     mesh_source src,
     const vw::asset::chunk_occupancy& occupancy,
     const face_axis_mapping& axes,
-    int32 face_direction,
+    face_direction face,
     int32 layer,
     layer_rows& out
 ) -> bool;
@@ -179,7 +166,7 @@ struct layer_rows {
 auto emit_rect(
     mesh_generation_storage& storage,
     const face_axis_mapping& axes,
-    int32 face_direction,
+    face_direction face,
     int32 layer,
     int32 u_start,
     int32 v_start,
@@ -190,10 +177,10 @@ auto emit_rect(
 ) -> void;
 
 face_axis_mapping::face_axis_mapping(
-    mesh_source src, int face_dir
+    mesh_source src, face_direction direction
 )
-    : face_direction(face_dir), voxel_scale(src.voxels.voxel_scale()) {
-    switch (face_dir / 2) {
+    : face(direction), voxel_scale(src.voxels.voxel_scale()) {
+    switch (axis_of(direction)) {
         case 0:
             width  = src.voxels.depth();
             height = src.voxels.height();
@@ -215,8 +202,8 @@ face_axis_mapping::face_axis_mapping(
 [[nodiscard]] auto face_axis_mapping::to_model_coords(
     int u, int v, int layer
 ) const -> std::tuple<int, int, int> {
-    int d = (face_direction % 2 == 0) ? layer : depth - 1 - layer;
-    switch (face_direction / 2) {
+    int d = is_positive(face) ? layer : depth - 1 - layer;
+    switch (axis_of(face)) {
         case 0:
             return {d, v, u};
         case 1:
@@ -229,12 +216,12 @@ face_axis_mapping::face_axis_mapping(
 [[nodiscard]] auto face_axis_mapping::to_local_min_max(
     int u, int v, int w, int h, int layer
 ) const -> std::pair<vec3i, vec3i> {
-    int d_lo = (face_direction % 2 == 0) ? layer : depth - 1 - layer;
+    int d_lo = is_positive(face) ? layer : depth - 1 - layer;
     int d_hi = d_lo + 1;
     int u_hi = u + w;
     int v_hi = v + h;
 
-    switch (face_direction / 2) {
+    switch (axis_of(face)) {
         case 0:
             return {{d_lo, v, u}, {d_hi, v_hi, u_hi}};
         case 1:
@@ -258,23 +245,25 @@ auto is_solid_at(
         return false;
     }
 
-    if (p.x >= src.voxels.width() && src.has_boundary_slice(0)) {
-        return src.is_boundary_solid(0, 0, p.y, p.z);
+    using enum face_direction;
+
+    if (p.x >= src.voxels.width() && src.has_boundary_slice(pos_x)) {
+        return src.is_boundary_solid(pos_x, 0, p.y, p.z);
     }
-    if (p.x < 0 && src.has_boundary_slice(1)) {
-        return src.is_boundary_solid(1, 0, p.y, p.z);
+    if (p.x < 0 && src.has_boundary_slice(neg_x)) {
+        return src.is_boundary_solid(neg_x, 0, p.y, p.z);
     }
-    if (p.y >= src.voxels.height() && src.has_boundary_slice(2)) {
-        return src.is_boundary_solid(2, p.x, 0, p.z);
+    if (p.y >= src.voxels.height() && src.has_boundary_slice(pos_y)) {
+        return src.is_boundary_solid(pos_y, p.x, 0, p.z);
     }
-    if (p.y < 0 && src.has_boundary_slice(3)) {
-        return src.is_boundary_solid(3, p.x, 0, p.z);
+    if (p.y < 0 && src.has_boundary_slice(neg_y)) {
+        return src.is_boundary_solid(neg_y, p.x, 0, p.z);
     }
-    if (p.z >= src.voxels.depth() && src.has_boundary_slice(4)) {
-        return src.is_boundary_solid(4, p.x, p.y, 0);
+    if (p.z >= src.voxels.depth() && src.has_boundary_slice(pos_z)) {
+        return src.is_boundary_solid(pos_z, p.x, p.y, 0);
     }
-    if (p.z < 0 && src.has_boundary_slice(5)) {
-        return src.is_boundary_solid(5, p.x, p.y, 0);
+    if (p.z < 0 && src.has_boundary_slice(neg_z)) {
+        return src.is_boundary_solid(neg_z, p.x, p.y, 0);
     }
 
     return false;
@@ -300,22 +289,24 @@ auto is_solid_at(
         return false;
     }
 
+    using enum face_direction;
+
     if (p.x >= src.voxels.width()) {
-        return src.has_boundary_slice(0) && !src.is_boundary_solid(0, 0, p.y, p.z);
+        return src.has_boundary_slice(pos_x) && !src.is_boundary_solid(pos_x, 0, p.y, p.z);
     }
     if (p.x < 0) {
-        return src.has_boundary_slice(1) && !src.is_boundary_solid(1, 0, p.y, p.z);
+        return src.has_boundary_slice(neg_x) && !src.is_boundary_solid(neg_x, 0, p.y, p.z);
     }
     if (p.y >= src.voxels.height()) {
-        return src.has_boundary_slice(2) && !src.is_boundary_solid(2, p.x, 0, p.z);
+        return src.has_boundary_slice(pos_y) && !src.is_boundary_solid(pos_y, p.x, 0, p.z);
     }
     if (p.y < 0) {
-        return src.has_boundary_slice(3) && !src.is_boundary_solid(3, p.x, 0, p.z);
+        return src.has_boundary_slice(neg_y) && !src.is_boundary_solid(neg_y, p.x, 0, p.z);
     }
     if (p.z >= src.voxels.depth()) {
-        return src.has_boundary_slice(4) && !src.is_boundary_solid(4, p.x, p.y, 0);
+        return src.has_boundary_slice(pos_z) && !src.is_boundary_solid(pos_z, p.x, p.y, 0);
     }
-    return src.has_boundary_slice(5) && !src.is_boundary_solid(5, p.x, p.y, 0);
+    return src.has_boundary_slice(neg_z) && !src.is_boundary_solid(neg_z, p.x, p.y, 0);
 }
 
 [[nodiscard]] auto corner_open_level(bool open_a, bool open_b, bool open_diagonal) -> uint8 {
@@ -327,7 +318,7 @@ auto is_solid_at(
 }
 
 [[nodiscard]] auto compute_corner_convexity(
-    mesh_source src, int x, int y, int z, int face
+    mesh_source src, int x, int y, int z, face_direction face
 ) -> uint8 {
     if (face != convex_face) {
         return 0;
@@ -356,9 +347,9 @@ auto is_solid_at(
 }
 
 auto compute_corner_darkness(
-    mesh_source src, int x, int y, int z, int face
+    mesh_source src, int x, int y, int z, face_direction face
 ) -> uint8 {
-    const vec3i n = vec3i{x, y, z} + ao_normal[face];
+    const vec3i n = vec3i{x, y, z} + offset_of(face);
     const vec3i u = ao_tangent_u[face];
     const vec3i v = ao_tangent_v[face];
 
@@ -394,10 +385,19 @@ auto compute_corner_darkness(
     }
 }
 
-// Бит i в open_bits — это ячейка (du, dv) = (i % 3 - 1, i / 3 - 1), выставленный
-// там, где эта ячейка воздух. Бит 4, центр, выставлен всегда.
+[[nodiscard]] constexpr auto patch_slot(int32 du, int32 dv) -> std::size_t {
+    return static_cast<std::size_t>(((dv + 1) * 3) + (du + 1));
+}
+
+[[nodiscard]] constexpr auto patch_bit(int32 du, int32 dv) -> uint32 {
+    return 1U << patch_slot(du, dv);
+}
+
+constexpr std::size_t front_cell_slot = patch_slot(0, 0);
+constexpr uint32 front_cell_bit       = patch_bit(0, 0);
+
 auto corners_from_patch(
-    mesh_source src, vec3i n, vec3i u, vec3i v, uint32 open_bits
+    mesh_source src, vec3i n, vec3i u, vec3i v, uint32 open_patch
 ) -> corner_light {
     const auto* sky   = src.sky_light();
     const auto* block = src.block_light();
@@ -422,13 +422,13 @@ auto corners_from_patch(
 
     vec3i row = n - u - v;
 
-    for (int32 dv = 0; dv < 3; ++dv) {
+    for (int32 dv = -1; dv <= 1; ++dv) {
         vec3i cell = row;
 
-        for (int32 du = 0; du < 3; ++du) {
-            const auto slot = static_cast<std::size_t>((dv * 3) + du);
+        for (int32 du = -1; du <= 1; ++du) {
+            const auto slot = patch_slot(du, dv);
 
-            open[slot] = static_cast<int32>((open_bits >> slot) & 1U);
+            open[slot] = (open_patch & patch_bit(du, dv)) != 0 ? 1 : 0;
             if (open[slot] != 0) {
                 if (walk_sky) {
                     lit_sky[slot] = sky->level_around(cell.x, cell.y, cell.z);
@@ -445,16 +445,20 @@ auto corners_from_patch(
     }
 
     const auto pack_corners = [&](const std::array<int32, 9>& lit) -> uint16 {
-        const auto corner = [&](std::size_t a, std::size_t b, std::size_t c) -> uint16 {
-            const int32 sum   = lit[4] + lit[a] + lit[b] + lit[c];
-            const int32 count = 1 + open[a] + open[b] + open[c];
+        const auto corner = [&](int32 du, int32 dv) -> uint16 {
+            const std::size_t along_u  = patch_slot(du, 0);
+            const std::size_t along_v  = patch_slot(0, dv);
+            const std::size_t diagonal = patch_slot(du, dv);
+
+            const int32 sum   = lit[front_cell_slot] + lit[along_u] + lit[along_v] + lit[diagonal];
+            const int32 count = 1 + open[along_u] + open[along_v] + open[diagonal];
             return static_cast<uint16>(average_of(sum, count));
         };
 
-        const uint16 c0 = corner(0, 1, 3);
-        const uint16 c1 = corner(1, 2, 5);
-        const uint16 c2 = corner(5, 7, 8);
-        const uint16 c3 = corner(3, 6, 7);
+        const uint16 c0 = corner(-1, -1);
+        const uint16 c1 = corner(1, -1);
+        const uint16 c2 = corner(1, 1);
+        const uint16 c3 = corner(-1, 1);
 
         return static_cast<uint16>(c0 | (c1 << 4) | (c2 << 8) | (c3 << 12));
     };
@@ -466,18 +470,17 @@ auto corners_from_patch(
 }
 
 auto compute_corner_light(
-    mesh_source src, int x, int y, int z, int face
+    mesh_source src, int x, int y, int z, face_direction face
 ) -> corner_light {
-    const vec3i n = vec3i{x, y, z} + ao_normal[face];
+    const vec3i n = vec3i{x, y, z} + offset_of(face);
     const vec3i u = ao_tangent_u[face];
     const vec3i v = ao_tangent_v[face];
 
-    uint32 open_bits = 1U << 4;
+    uint32 open_patch = front_cell_bit;
 
     for (int32 dv = -1; dv <= 1; ++dv) {
         for (int32 du = -1; du <= 1; ++du) {
-            const auto slot = static_cast<uint32>(((dv + 1) * 3) + (du + 1));
-            if (slot == 4) {
+            if (du == 0 && dv == 0) {
                 continue;
             }
 
@@ -493,49 +496,46 @@ auto compute_corner_light(
                 at = at + v;
             }
 
-            open_bits |= is_solid_at(src, at) ? 0U : (1U << slot);
+            open_patch |= is_solid_at(src, at) ? 0U : patch_bit(du, dv);
         }
     }
 
-    return corners_from_patch(src, n, u, v, open_bits);
+    return corners_from_patch(src, n, u, v, open_patch);
 }
 
 auto light_from_rows(
     mesh_source src, const layer_rows& rows, int32 u_at, int32 v_at, int x,
-    int y, int z, int face
+    int y, int z, face_direction face
 ) -> corner_light {
-    uint32 open_bits = 0;
+    uint32 open_patch = 0;
 
     for (int32 dv = -1; dv <= 1; ++dv) {
         const uint64 row = rows.front[v_at + dv];
         for (int32 du = -1; du <= 1; ++du) {
-            const auto slot = static_cast<uint32>(((dv + 1) * 3) + (du + 1));
-            open_bits |= ((row >> (u_at + du)) & 1U) == 0 ? (1U << slot) : 0U;
+            open_patch |= ((row >> (u_at + du)) & 1U) == 0 ? patch_bit(du, dv) : 0U;
         }
     }
-    open_bits |= 1U << 4;
+    open_patch |= front_cell_bit;
 
     return corners_from_patch(
-        src, vec3i{x, y, z} + ao_normal[face], ao_tangent_u[face], ao_tangent_v[face],
-        open_bits
+        src, vec3i{x, y, z} + offset_of(face), ao_tangent_u[face], ao_tangent_v[face],
+        open_patch
     );
 }
 
 auto is_face_visible(
-    mesh_source src, int x, int y, int z, int face_direction
+    mesh_source src, int x, int y, int z, face_direction face
 ) -> bool {
-    static constexpr int dx[6] = {1, -1, 0, 0, 0, 0};
-    static constexpr int dy[6] = {0, 0, 1, -1, 0, 0};
-    static constexpr int dz[6] = {0, 0, 0, 0, 1, -1};
+    const vec3i step = offset_of(face);
 
-    int nx = x + dx[face_direction];
-    int ny = y + dy[face_direction];
-    int nz = z + dz[face_direction];
+    int nx = x + step.x;
+    int ny = y + step.y;
+    int nz = z + step.z;
 
     if (nx < 0 || nx >= src.voxels.width() || ny < 0 || ny >= src.voxels.height() || nz < 0 ||
         nz >= src.voxels.depth()) {
-        if (src.has_boundary_slice(face_direction)) {
-            return !src.is_boundary_solid(face_direction, x, y, z);
+        if (src.has_boundary_slice(face)) {
+            return !src.is_boundary_solid(face, x, y, z);
         }
         return true;
     }
@@ -547,7 +547,7 @@ auto build_face_mask(
     mesh_generation_storage& storage,
     mesh_source src,
     const face_axis_mapping& axes,
-    int face_direction,
+    face_direction face,
     int layer,
     [[maybe_unused]] mesh_options opts
 ) -> void {
@@ -581,12 +581,12 @@ auto build_face_mask(
                 for (int u = u_block; u < u_end; u++) {
                     for (int v = v_block; v < v_end; v++) {
                         auto [mx, my, mz] = axes.to_model_coords(u, v, layer);
-                        if (is_face_visible(src, mx, my, mz, face_direction)) {
+                        if (is_face_visible(src, mx, my, mz, face)) {
                             storage.mask[idx(u, v)] = {
                                 fid,
-                                compute_corner_darkness(src, mx, my, mz, face_direction),
-                                compute_corner_light(src, mx, my, mz, face_direction),
-                                compute_corner_convexity(src, mx, my, mz, face_direction)
+                                compute_corner_darkness(src, mx, my, mz, face),
+                                compute_corner_light(src, mx, my, mz, face),
+                                compute_corner_convexity(src, mx, my, mz, face)
                             };
                         } else {
                             storage.mask[idx(u, v)] = empty_cell;
@@ -604,12 +604,12 @@ auto build_face_mask(
                     const int ly      = my % ps;
                     const int lz      = mz % ps;
                     auto& vx          = (*page)[lx + ly * ps + lz * ps * ps];
-                    if (!vx.is_empty() && is_face_visible(src, mx, my, mz, face_direction)) {
+                    if (!vx.is_empty() && is_face_visible(src, mx, my, mz, face)) {
                         storage.mask[idx(u, v)] = {
                             vx,
-                            compute_corner_darkness(src, mx, my, mz, face_direction),
-                            compute_corner_light(src, mx, my, mz, face_direction),
-                            compute_corner_convexity(src, mx, my, mz, face_direction)
+                            compute_corner_darkness(src, mx, my, mz, face),
+                            compute_corner_light(src, mx, my, mz, face),
+                            compute_corner_convexity(src, mx, my, mz, face)
                         };
                     } else {
                         storage.mask[idx(u, v)] = empty_cell;
@@ -622,7 +622,7 @@ auto build_face_mask(
 
 auto add_quad(
     std::vector<quad>& quads,
-    int face_direction,
+    face_direction face,
     vec3i min_pos,
     vec3i max_pos,
     voxel_slot slot,
@@ -630,18 +630,18 @@ auto add_quad(
     uint8 corner_convex,
     corner_light light
 ) -> void {
-    static constexpr uint8 winding_to_corner[6][4] = {
-        {0, 1, 3, 2},
-        {0, 2, 3, 1},
-        {0, 1, 3, 2},
-        {0, 2, 3, 1},
-        {0, 2, 3, 1},
-        {1, 3, 2, 0},
+    using corner_order = std::array<uint8, 4>;
+
+    static constexpr per_face<corner_order> winding_to_corner = {
+        corner_order{0, 1, 3, 2},
+        corner_order{0, 2, 3, 1},
+        corner_order{0, 1, 3, 2},
+        corner_order{0, 2, 3, 1},
+        corner_order{0, 2, 3, 1},
+        corner_order{1, 3, 2, 0},
     };
 
     static constexpr uint8 corner_to_ao[4] = {0, 1, 3, 2};
-
-    const auto normal_id = static_cast<uint8>(face_direction);
 
     const uint8 c_ao[4] = {
         static_cast<uint8>(corner_ao & 0x3u),
@@ -655,7 +655,7 @@ auto add_quad(
     uint16 sky_winding   = 0;
     uint16 block_winding = 0;
     for (int i = 0; i < 4; i++) {
-        const uint8 corner_i = winding_to_corner[face_direction][i];
+        const uint8 corner_i = winding_to_corner[face][i];
         const uint8 ao_i     = corner_to_ao[corner_i];
         ao_winding |= static_cast<uint8>(c_ao[ao_i] << (i * 2));
 
@@ -671,44 +671,44 @@ auto add_quad(
     }
 
     quads.push_back(quad::pack(
-        min_pos, max_pos, normal_id, slot, ao_winding, convex_winding, sky_winding,
+        min_pos, max_pos, face, slot, ao_winding, convex_winding, sky_winding,
         block_winding
     ));
 }
 
 
 auto boundary_row(
-    mesh_source src, int face_direction, int v
+    mesh_source src, face_direction face, int v
 ) -> uint64 {
-    if (!src.has_boundary_slice(face_direction)) {
+    if (!src.has_boundary_slice(face)) {
         return 0;
     }
 
-    const auto& face = src.boundary_face(face_direction);
+    const auto& plane = src.boundary_face(face);
 
-    if (face_direction / 2 == 0) {
+    if (axis_of(face) == 0) {
         uint64 bits = 0;
         for (int z = 0; z < 64; ++z) {
-            if (face.test(v, z)) {
+            if (plane.test(v, z)) {
                 bits |= uint64{1} << z;
             }
         }
         return bits;
     }
 
-    return face.rows[v];
+    return plane.rows[v];
 }
 
 auto build_layer_rows(
     mesh_source src,
     const vw::asset::chunk_occupancy& occupancy,
     const face_axis_mapping& axes,
-    int face_direction,
+    face_direction face,
     int layer,
     layer_rows& out
 ) -> bool {
-    const int d    = (face_direction % 2 == 0) ? layer : axes.depth - 1 - layer;
-    const int step = (face_direction % 2 == 0) ? 1 : -1;
+    const int d    = is_positive(face) ? layer : axes.depth - 1 - layer;
+    const int step = is_positive(face) ? 1 : -1;
     const int nd   = d + step;
     const bool inside = nd >= 0 && nd < 64;
 
@@ -720,18 +720,18 @@ auto build_layer_rows(
         uint64 own  = 0;
         uint64 front = 0;
 
-        switch (face_direction / 2) {
+        switch (axis_of(face)) {
             case 0:
                 own   = occupancy.zrow(v, d);
-                front = inside ? occupancy.zrow(v, nd) : boundary_row(src, face_direction, v);
+                front = inside ? occupancy.zrow(v, nd) : boundary_row(src, face, v);
                 break;
             case 1:
                 own   = occupancy.row(d, v);
-                front = inside ? occupancy.row(nd, v) : boundary_row(src, face_direction, v);
+                front = inside ? occupancy.row(nd, v) : boundary_row(src, face, v);
                 break;
             default:
                 own   = occupancy.row(v, d);
-                front = inside ? occupancy.row(v, nd) : boundary_row(src, face_direction, v);
+                front = inside ? occupancy.row(v, nd) : boundary_row(src, face, v);
                 break;
         }
 
@@ -793,7 +793,7 @@ auto pack_corners_convex(const corner_samples& s, int u) -> uint8 {
 auto emit_rect(
     mesh_generation_storage& storage,
     const face_axis_mapping& axes,
-    int face_direction,
+    face_direction face,
     int layer,
     int u_start,
     int v_start,
@@ -806,7 +806,7 @@ auto emit_rect(
 
     add_quad(
         storage.quads,
-        face_direction,
+        face,
         min_pos,
         max_pos,
         voxel_slot{slots[cell.index.value]},
@@ -825,7 +825,7 @@ auto simple_mesh_generator::generate_mesh_data(
     std::vector<quad> quads;
     std::array<uint32, 6> face_counts{};
 
-    for (int face = 0; face < 6; face++) {
+    for (const face_direction face : all_face_directions) {
         const auto before = quads.size();
 
         for (int x = 0; x < src.voxels.width(); x++) {
@@ -843,7 +843,7 @@ auto simple_mesh_generator::generate_mesh_data(
             }
         }
 
-        face_counts[static_cast<std::size_t>(face)] = static_cast<uint32>(quads.size() - before);
+        face_counts[std::to_underlying(face)] = static_cast<uint32>(quads.size() - before);
     }
 
     return mesh{.quads = std::move(quads), .face_counts = face_counts};
@@ -855,33 +855,31 @@ auto simple_mesh_generator::add_cube_face(
     int x,
     int y,
     int z,
-    int face_direction,
+    face_direction face,
     voxel voxel_id,
     const voxel_registry& registry,
     [[maybe_unused]] mesh_options opts
 ) -> void {
     detail::add_quad(
         quads,
-        face_direction,
+        face,
         {x, y, z},
         {x + 1, y + 1, z + 1},
         registry.slot_of(voxel_id),
-        detail::compute_corner_darkness(src, x, y, z, face_direction),
-        detail::compute_corner_convexity(src, x, y, z, face_direction),
-        detail::compute_corner_light(src, x, y, z, face_direction)
+        detail::compute_corner_darkness(src, x, y, z, face),
+        detail::compute_corner_convexity(src, x, y, z, face),
+        detail::compute_corner_light(src, x, y, z, face)
     );
 }
 
 auto simple_mesh_generator::is_face_visible(
-    mesh_source src, int x, int y, int z, int face_direction
+    mesh_source src, int x, int y, int z, face_direction face
 ) -> bool {
-    static constexpr int dx[6] = {1, -1, 0, 0, 0, 0};
-    static constexpr int dy[6] = {0, 0, 1, -1, 0, 0};
-    static constexpr int dz[6] = {0, 0, 0, 0, 1, -1};
+    const vec3i step = offset_of(face);
 
-    int nx = x + dx[face_direction];
-    int ny = y + dy[face_direction];
-    int nz = z + dz[face_direction];
+    int nx = x + step.x;
+    int ny = y + step.y;
+    int nz = z + step.z;
 
     if (nx < 0 || nx >= src.voxels.width() || ny < 0 || ny >= src.voxels.height() || nz < 0 ||
         nz >= src.voxels.depth()) {
@@ -909,11 +907,10 @@ auto strip_mesh_generator::generate_mesh_data(
 
     std::array<uint32, 6> face_counts{};
 
-    for (int face_direction = 0; face_direction < 6; face_direction++) {
+    for (const face_direction face : all_face_directions) {
         const auto before = storage.quads.size();
-        generate_face_quads(storage, src, face_direction, registry, opts);
-        face_counts[static_cast<std::size_t>(face_direction)] =
-            static_cast<uint32>(storage.quads.size() - before);
+        generate_face_quads(storage, src, face, registry, opts);
+        face_counts[std::to_underlying(face)] = static_cast<uint32>(storage.quads.size() - before);
     }
 
     return mesh{std::move(storage.quads), face_counts, {}};
@@ -923,7 +920,7 @@ auto strip_mesh_generator::merge_and_emit_strips(
     mesh_generation_storage& storage,
     mesh_source src,
     const detail::face_axis_mapping& axes,
-    int face_direction,
+    face_direction face,
     int layer,
     const voxel_registry& registry,
     [[maybe_unused]] mesh_options opts
@@ -951,7 +948,7 @@ auto strip_mesh_generator::merge_and_emit_strips(
             int w = u - strip_start;
 
             detail::emit_rect(
-                storage, axes, face_direction, layer, strip_start, v, w, 1, cell, slots
+                storage, axes, face, layer, strip_start, v, w, 1, cell, slots
             );
         }
     }
@@ -960,11 +957,11 @@ auto strip_mesh_generator::merge_and_emit_strips(
 auto strip_mesh_generator::generate_face_quads(
     mesh_generation_storage& storage,
     mesh_source src,
-    int face_direction,
+    face_direction face,
     const voxel_registry& registry,
     mesh_options opts
 ) -> void {
-    detail::face_axis_mapping axes(src, face_direction);
+    detail::face_axis_mapping axes(src, face);
     constexpr int ps = vw::asset::model::page_size;
 
     auto mask_size = static_cast<std::size_t>(axes.width) * static_cast<std::size_t>(axes.height);
@@ -993,7 +990,7 @@ auto strip_mesh_generator::generate_face_quads(
             continue;
         }
 
-        detail::build_face_mask(storage, src, axes, face_direction, layer, opts);
+        detail::build_face_mask(storage, src, axes, face, layer, opts);
 
         bool has_faces = false;
         for (std::size_t i = 0; i < mask_size && !has_faces; i++) {
@@ -1002,7 +999,7 @@ auto strip_mesh_generator::generate_face_quads(
         if (!has_faces)
             continue;
 
-        merge_and_emit_strips(storage, src, axes, face_direction, layer, registry, opts);
+        merge_and_emit_strips(storage, src, axes, face, layer, registry, opts);
     }
 }
 
@@ -1028,11 +1025,10 @@ auto greedy_mesh_generator::generate_mesh_data(
 
     std::array<uint32, 6> face_counts{};
 
-    for (int face_direction = 0; face_direction < 6; face_direction++) {
+    for (const face_direction face : all_face_directions) {
         const auto before = storage.quads.size();
-        generate_face_quads(storage, src, face_direction, registry, opts);
-        face_counts[static_cast<std::size_t>(face_direction)] =
-            static_cast<uint32>(storage.quads.size() - before);
+        generate_face_quads(storage, src, face, registry, opts);
+        face_counts[std::to_underlying(face)] = static_cast<uint32>(storage.quads.size() - before);
     }
 
     vw::asset::chunk_links links;
@@ -1050,7 +1046,7 @@ auto greedy_mesh_generator::generate_mesh_data(
 auto greedy_mesh_generator::merge_and_emit_rects_bits(
     mesh_generation_storage& storage,
     const detail::face_axis_mapping& axes,
-    int face_direction,
+    face_direction face,
     int layer,
     detail::layer_rows& rows,
     const std::array<uint16, 256>& slots
@@ -1093,7 +1089,7 @@ auto greedy_mesh_generator::merge_and_emit_rects_bits(
             }
 
             row &= ~span;
-            detail::emit_rect(storage, axes, face_direction, layer, u, v, w, h, key, slots);
+            detail::emit_rect(storage, axes, face, layer, u, v, w, h, key, slots);
         }
 
         rows.visible[v] = 0;
@@ -1104,7 +1100,7 @@ auto greedy_mesh_generator::merge_and_emit_rects(
     mesh_generation_storage& storage,
     mesh_source src,
     const detail::face_axis_mapping& axes,
-    int face_direction,
+    face_direction face,
     int layer,
     const voxel_registry& registry,
     [[maybe_unused]] mesh_options opts
@@ -1148,7 +1144,7 @@ auto greedy_mesh_generator::merge_and_emit_rects(
                 }
             }
 
-            detail::emit_rect(storage, axes, face_direction, layer, u, v, w, h, cell, slots);
+            detail::emit_rect(storage, axes, face, layer, u, v, w, h, cell, slots);
         }
     }
 }
@@ -1156,13 +1152,13 @@ auto greedy_mesh_generator::merge_and_emit_rects(
 auto greedy_mesh_generator::generate_face_quads(
     mesh_generation_storage& storage,
     mesh_source src,
-    int face_direction,
+    face_direction face,
     const voxel_registry& registry,
     mesh_options opts
 ) -> void {
     const auto& slots = registry.slot_row(src.voxels.category());
 
-    detail::face_axis_mapping axes(src, face_direction);
+    detail::face_axis_mapping axes(src, face);
     constexpr int ps = vw::asset::model::page_size;
 
     auto mask_size = static_cast<std::size_t>(axes.width) * static_cast<std::size_t>(axes.height);
@@ -1200,7 +1196,7 @@ auto greedy_mesh_generator::generate_face_quads(
 
         if (storage.occupancy_valid) {
             if (!detail::build_layer_rows(
-                    src, *storage.occupancy, axes, face_direction, layer, rows
+                    src, *storage.occupancy, axes, face, layer, rows
                 )) {
                 continue;
             }
@@ -1220,7 +1216,7 @@ auto greedy_mesh_generator::generate_face_quads(
                     interior_v ? rows.front[v + 1] : 0
                 );
 
-                const bool wants_convex = face_direction == detail::convex_face;
+                const bool wants_convex = face == detail::convex_face;
 
                 const auto own_samples = detail::samples_from_rows(
                     interior_v && wants_convex ? rows.own[v - 1] : 0,
@@ -1238,18 +1234,18 @@ auto greedy_mesh_generator::generate_face_quads(
 
                     const uint8 dark   = interior ? detail::pack_corners(samples, u)
                                                   : detail::compute_corner_darkness(
-                                                        src, mx, my, mz, face_direction
+                                                        src, mx, my, mz, face
                                                     );
                     uint8 convex = 0;
                     if (wants_convex) {
                         convex = interior
                             ? detail::pack_corners_convex(own_samples, u)
-                            : detail::compute_corner_convexity(src, mx, my, mz, face_direction);
+                            : detail::compute_corner_convexity(src, mx, my, mz, face);
                     }
                     const corner_light light =
                         interior
-                            ? detail::light_from_rows(src, rows, u, v, mx, my, mz, face_direction)
-                            : detail::compute_corner_light(src, mx, my, mz, face_direction);
+                            ? detail::light_from_rows(src, rows, u, v, mx, my, mz, face)
+                            : detail::compute_corner_light(src, mx, my, mz, face);
 
                     storage.mask[idx(u, v)] = {
                         src.voxels.get_index(mx, my, mz), dark, light, convex
@@ -1257,11 +1253,11 @@ auto greedy_mesh_generator::generate_face_quads(
                 }
             }
 
-            merge_and_emit_rects_bits(storage, axes, face_direction, layer, rows, slots);
+            merge_and_emit_rects_bits(storage, axes, face, layer, rows, slots);
             continue;
         }
 
-        detail::build_face_mask(storage, src, axes, face_direction, layer, opts);
+        detail::build_face_mask(storage, src, axes, face, layer, opts);
 
         bool has_faces = false;
         for (std::size_t i = 0; i < mask_size && !has_faces; i++) {
@@ -1270,7 +1266,7 @@ auto greedy_mesh_generator::generate_face_quads(
         if (!has_faces)
             continue;
 
-        merge_and_emit_rects(storage, src, axes, face_direction, layer, registry, opts);
+        merge_and_emit_rects(storage, src, axes, face, layer, registry, opts);
     }
 }
 

@@ -18,7 +18,7 @@ voxel_edits_scene::voxel_edits_scene(
     : scene{stand}, per_frame_{args.integer("--voxels-per-frame", 1)} {}
 
 auto voxel_edits_scene::start_() -> void {
-    const auto surface = stand().grid().get_surface_y(0, 0);
+    const auto surface = stand().grid().get_surface_voxel_y(0, 0);
     if (!surface) {
         return;
     }
@@ -46,7 +46,7 @@ auto voxel_edits_scene::tick(float32) -> void {
         }
     }
 
-    const int32 scale = stand().voxel_scale();
+    const int32 scale = stand().world_units_per_voxel();
 
     for (int32 done = 0; done < per_frame_ && cursor_ < cells; ++cursor_) {
         const int32 x = (cursor_ % side) - (side / 2);

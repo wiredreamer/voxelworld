@@ -14,6 +14,13 @@ namespace {
 
 constexpr float32 palette_gamma = 1.5f;
 
+struct palette_entry {
+    alignas(16) vec3f color;
+    alignas(4) float32 glow;
+};
+
+static_assert(sizeof(palette_entry) == 16);
+
 [[nodiscard]] auto decode(uint8 channel) -> float32 {
     return std::pow(static_cast<float32>(channel) / 255.0f, palette_gamma);
 }
@@ -31,18 +38,18 @@ palette_buffer::palette_buffer(
     , descriptor_set_layout_(descriptor_set_layout) {
     const std::span<const voxel_type> types = registry.all();
 
-    std::vector<vec4f> palette_data;
+    std::vector<palette_entry> palette_data;
     palette_data.reserve(types.size());
     for (const voxel_type& type : types) {
         const color clr = type.material.clr;
 
-        palette_data.push_back(vec4f{
-            decode(clr.r()), decode(clr.g()), decode(clr.b()),
-            static_cast<float32>(type.material.glow) / 255.0f
+        palette_data.push_back(palette_entry{
+            .color = vec3f{decode(clr.r()), decode(clr.g()), decode(clr.b())},
+            .glow  = static_cast<float32>(type.material.glow) / 255.0f,
         });
     }
 
-    const std::size_t palette_bytes = palette_data.size() * sizeof(vec4f);
+    const std::size_t palette_bytes = palette_data.size() * sizeof(palette_entry);
 
     buffer_ = std::make_unique<storage_buffer>(*context_, palette_bytes);
     buffer_->copy_from(palette_data.data(), palette_bytes);

@@ -1,3 +1,7 @@
+module;
+
+#include <cstddef>
+
 export module vw.gfx:resource.light_buffer;
 
 import std;
@@ -88,13 +92,43 @@ private:
     uint32 lights_count_ = 0;
 };
 
+enum class cull_list : uint32 {
+    sources = 0,
+    blobs   = 1,
+};
+
+inline constexpr uint32 cull_list_count = 2;
+
 struct light_cull_ubo {
     alignas(16) float32 view[16]{};
-    alignas(16) vec4f cluster_params{};
-    alignas(16) vec4f cluster_extent{};
-    alignas(16) vec4f screen_dims{};
-    alignas(16) vec4<uint32> cull_dims{};
+
+    alignas(4) float32 z_scale   = 0.0F;
+    alignas(4) float32 z_bias    = 0.0F;
+    alignas(4) float32 tile_size = 0.0F;
+    alignas(4) float32 slices    = 0.0F;
+
+    alignas(4) float32 near_depth = 0.0F;
+    alignas(4) float32 far_depth  = 0.0F;
+    alignas(4) float32 proj_x     = 0.0F;
+    alignas(4) float32 proj_y     = 0.0F;
+
+    alignas(4) float32 screen_width  = 0.0F;
+    alignas(4) float32 screen_height = 0.0F;
+    alignas(4) float32 tiles_x       = 0.0F;
+    alignas(4) float32 tiles_y       = 0.0F;
+
+    alignas(4) uint32 cap           = 0;
+    alignas(4) uint32 shape_count   = 0;
+    alignas(4) uint32 cluster_count = 0;
+    alignas(4) cull_list list       = cull_list::sources;
 };
+
+static_assert(offsetof(light_cull_ubo, z_scale) == 64);
+static_assert(offsetof(light_cull_ubo, near_depth) == 80);
+static_assert(offsetof(light_cull_ubo, screen_width) == 96);
+static_assert(offsetof(light_cull_ubo, cap) == 112);
+static_assert(offsetof(light_cull_ubo, list) == 124);
+static_assert(sizeof(light_cull_ubo) == 128);
 
 class blob_buffer {
 public:

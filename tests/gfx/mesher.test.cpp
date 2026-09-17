@@ -22,6 +22,9 @@ struct face_cell {
     auto operator<=>(const face_cell&) const = default;
 };
 
+constexpr std::array<int32, 6> voxel_vert_tangent_u_axis{2, 2, 0, 0, 0, 0};
+constexpr std::array<int32, 6> voxel_vert_tangent_v_axis{1, 1, 2, 2, 1, 1};
+
 auto unpack_min(const gfx::quad& q) -> vec3i {
     return {
         static_cast<int32>(q.data0 & 0x7FU),
@@ -30,24 +33,21 @@ auto unpack_min(const gfx::quad& q) -> vec3i {
     };
 }
 
-// data1 carries the two tangent extents rather than the far corner; the third
-// component is always one cell along the face axis. Same two tables the shaders
-// and gfx::quad::pack use.
-auto unpack_max(const gfx::quad& q) -> vec3i {
-    constexpr int32 u_axis[6] = {2, 2, 0, 0, 0, 0};
-    constexpr int32 v_axis[6] = {1, 1, 2, 2, 1, 1};
-
-    const auto normal = static_cast<std::size_t>((q.data0 >> 21) & 0x7U);
-
-    vec3i mx = unpack_min(q);
-    mx[normal >> 1U] += 1;
-    mx[u_axis[normal]] += static_cast<int32>(q.data1 & 0x7FU) + 1;
-    mx[v_axis[normal]] += static_cast<int32>((q.data1 >> 7) & 0x7FU) + 1;
-    return mx;
-}
-
 auto unpack_normal(const gfx::quad& q) -> uint8 {
     return static_cast<uint8>((q.data0 >> 21) & 0x7U);
+}
+
+auto unpack_max(const gfx::quad& q) -> vec3i {
+    const uint8 normal    = unpack_normal(q);
+    const int32 face_axis = normal / 2;
+    const int32 u_extent  = static_cast<int32>(q.data1 & 0x7FU) + 1;
+    const int32 v_extent  = static_cast<int32>((q.data1 >> 7) & 0x7FU) + 1;
+
+    vec3i far_corner = unpack_min(q);
+    far_corner[face_axis] += 1;
+    far_corner[voxel_vert_tangent_u_axis[normal]] += u_extent;
+    far_corner[voxel_vert_tangent_v_axis[normal]] += v_extent;
+    return far_corner;
 }
 
 auto unpack_slot(const gfx::quad& q) -> uint16 {
@@ -507,9 +507,9 @@ TEST_CASE("boundary faces close the seam between chunks", "[mesh]") {
     REQUIRE(count_faces(left_chunk, 0) == size * size);
     const auto before_minus_x = count_faces(left_chunk, 1);
 
-    left_chunk.set_boundary_slice(0, *right);
+    left_chunk.set_boundary_slice(face_direction::pos_x, *right);
 
-    REQUIRE(left_chunk.has_boundary_slice(0));
+    REQUIRE(left_chunk.has_boundary_slice(face_direction::pos_x));
     REQUIRE(count_faces(left_chunk, 0) == 0);
     REQUIRE(count_faces(left_chunk, 1) == before_minus_x);
 }
@@ -939,7 +939,7 @@ TEST_CASE("ambient occlusion reads across the chunk seam", "[mesh]") {
     REQUIRE(before.has_value());
     REQUIRE(*before == open);
 
-    left.chunk().set_boundary_slice(0, *right.get());
+    left.chunk().set_boundary_slice(face_direction::pos_x, *right.get());
 
     const auto after = seam_corners(left.simple());
     REQUIRE(after.has_value());

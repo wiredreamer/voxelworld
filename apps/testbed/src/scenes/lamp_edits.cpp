@@ -49,7 +49,7 @@ auto lamp_edits_scene::tick(float32) -> void {
         start_();
     }
 
-    const int32 scale = stand().voxel_scale();
+    const int32 scale = stand().world_units_per_voxel();
 
     for (int32 done = 0; done < per_frame_ && cursor_ < cells; ++cursor_) {
         const int32 ix = cursor_ % side;
@@ -58,7 +58,7 @@ auto lamp_edits_scene::tick(float32) -> void {
         const int32 vx = (ix - (side / 2)) * spacing;
         const int32 vz = (iz - (side / 2)) * spacing;
 
-        const auto surface = stand().grid().get_surface_y(vx, vz);
+        const auto surface = stand().grid().get_surface_voxel_y(vx, vz);
         if (!surface) {
             continue;
         }

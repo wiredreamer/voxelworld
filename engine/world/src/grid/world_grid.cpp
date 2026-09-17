@@ -37,14 +37,9 @@ auto world_grid::set_voxel(
     mark_light_dirty_(cc, lc);
     refresh_chunk(cc);
 
-    constexpr int32 last = chunk::size - 1;
-    const bool on_face[6]{
-        lc.x == last, lc.x == 0, lc.y == last, lc.y == 0, lc.z == last, lc.z == 0,
-    };
-
-    for (int32 fd = 0; fd < 6; ++fd) {
-        if (on_face[fd]) {
-            refresh_chunk(cc + boundary_face_offsets[fd]);
+    for (const face_direction face : all_face_directions) {
+        if (lc[axis_of(face)] == boundary_layer(face, chunk::size)) {
+            refresh_chunk(cc + offset_of(face));
         }
     }
 }
@@ -107,13 +102,13 @@ auto world_grid::refresh_chunk(
     auto& vol  = *c.get_volume();
     uint8 mask = 0;
 
-    for (int32 fd = 0; fd < 6; ++fd) {
-        const auto neighbor = chunks_.find(chunk_coord + boundary_face_offsets[fd]);
+    for (const face_direction face : all_face_directions) {
+        const auto neighbor = chunks_.find(chunk_coord + offset_of(face));
         if (neighbor == chunks_.end()) {
             continue;
         }
-        vol.set_boundary_slice(fd, neighbor->second->get_volume()->voxels());
-        mask |= static_cast<uint8>(1U << fd);
+        vol.set_boundary_slice(face, neighbor->second->get_volume()->voxels());
+        mask |= face_bit(face);
     }
 
     c.set_known_neighbors(mask);
@@ -140,14 +135,14 @@ auto world_grid::get_chunk(
     return it != chunks_.end() ? it->second.get() : nullptr;
 }
 
-auto world_grid::get_surface_y(
-    int32 vx, int32 vz
+auto world_grid::get_surface_voxel_y(
+    int32 voxel_x, int32 voxel_z
 ) const -> std::optional<int32> {
     constexpr int32 s = chunk::size;
 
     auto floor_div = [](int32 a, int32 b) -> int32 { return a >= 0 ? a / b : (a - b + 1) / b; };
-    int32 cx       = floor_div(vx, s);
-    int32 cz       = floor_div(vz, s);
+    int32 cx       = floor_div(voxel_x, s);
+    int32 cz       = floor_div(voxel_z, s);
     vec2i col_coord{cx, cz};
 
     auto col_it = column_chunks_.find(col_coord);
@@ -157,8 +152,8 @@ auto world_grid::get_surface_y(
 
     const auto& y_levels = col_it->second;
 
-    int32 local_x = ((vx % s) + s) % s;
-    int32 local_z = ((vz % s) + s) % s;
+    int32 local_x = ((voxel_x % s) + s) % s;
+    int32 local_z = ((voxel_z % s) + s) % s;
 
     for (auto it = y_levels.rbegin(); it != y_levels.rend(); ++it) {
         int32 cy = *it;

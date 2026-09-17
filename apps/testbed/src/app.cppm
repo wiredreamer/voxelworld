@@ -39,12 +39,9 @@ constexpr std::array<voxel_choice, 8> voxel_menu{{
     {"white", voxels::world::snow[2]},
 }};
 
-// Воксель под прицелом и пустой перед ним, в воксельных координатах, а не в
-// мировых. В какой из двух пишет инструмент — вся разница между «поставить» и
-// «убрать».
 struct voxel_pick {
-    vec3i solid;
-    vec3i empty;
+    vec3i solid_voxel_pos;
+    vec3i empty_voxel_pos;
 };
 
 class testbed_app final : public gfx::app {
@@ -85,10 +82,7 @@ public:
         return *generator_;
     }
 
-    // Сколько мировых единиц в вокселе. Спрашивают этого столько же, сколько
-    // сам генератор: правка мира говорит в мировых, а рельеф отвечает в
-    // вокселях, и путать их — промах ровно в этот множитель, притом молчаливый.
-    [[nodiscard]] auto voxel_scale() const -> int32 {
+    [[nodiscard]] auto world_units_per_voxel() const -> int32 {
         return generator_params_.voxel_scale;
     }
 

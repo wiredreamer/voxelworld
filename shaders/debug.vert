@@ -3,9 +3,6 @@
 layout(binding = 0) uniform UniformBufferObject {
     mat4 view;
     mat4 proj;
-    vec3 viewPos;
-    vec3 lightPos;
-    vec3 lightColor;
 } ubo;
 
 layout(location = 0) in vec3 inPosition;

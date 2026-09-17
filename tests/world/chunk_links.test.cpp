@@ -14,14 +14,7 @@ namespace {
 
 constexpr int32 side = asset::chunk_occupancy::side;
 
-enum face : int32 {
-    neg_x = 0,
-    pos_x = 1,
-    neg_y = 2,
-    pos_y = 3,
-    neg_z = 4,
-    pos_z = 5,
-};
+using enum face_direction;
 
 auto solid_chunk() -> asset::chunk_occupancy {
     asset::chunk_occupancy occupancy;
@@ -64,16 +57,16 @@ auto corner_cell(const asset::chunk_links& links) -> const asset::cell_links& {
 auto open_faces(const asset::cell_links& links) -> uint8 {
     uint8 faces = 0;
     for (const auto& pocket : links.pockets) {
-        for (int32 face = 0; face < asset::chunk_pocket::face_count; ++face) {
+        for (const face_direction face : all_face_directions) {
             if (pocket.touches(face)) {
-                faces |= static_cast<uint8>(1U << face);
+                faces |= face_bit(face);
             }
         }
     }
     return faces;
 }
 
-auto connects(const asset::cell_links& links, int32 a, int32 b) -> bool {
+auto connects(const asset::cell_links& links, face_direction a, face_direction b) -> bool {
     return std::ranges::any_of(links.pockets, [a, b](const asset::chunk_pocket& pocket) -> bool {
         return pocket.touches(a) && pocket.touches(b);
     });
@@ -93,8 +86,8 @@ TEST_CASE("empty space is one pocket open on every face", "[world][links]") {
 
     for (const auto& cell : links.cells) {
         REQUIRE(cell.pockets.size() == 1);
-        REQUIRE(open_faces(cell) == 0b111111);
-        for (int32 face = 0; face < asset::chunk_pocket::face_count; ++face) {
+        REQUIRE(open_faces(cell) == all_faces_mask);
+        for (const face_direction face : all_face_directions) {
             REQUIRE(cell.pockets[0].faces[face] == ~uint64{0});
         }
     }
@@ -103,8 +96,8 @@ TEST_CASE("empty space is one pocket open on every face", "[world][links]") {
 TEST_CASE("a bore joins the two faces it runs between", "[world][links]") {
     struct probe {
         int32 axis;
-        int32 low;
-        int32 high;
+        face_direction low;
+        face_direction high;
     };
 
     for (const auto [axis, low, high] : {
@@ -192,7 +185,7 @@ TEST_CASE("a pocket that only opens on one face crosses nothing", "[world][links
 
     const auto& cell = corner_cell(links);
     REQUIRE(cell.pockets.size() == 1);
-    REQUIRE(open_faces(cell) == (1U << neg_x));
+    REQUIRE(open_faces(cell) == face_bit(neg_x));
 
     for (int32 i = 1; i < asset::chunk_links::cell_count; ++i) {
         REQUIRE(links.cells[i].is_sealed());

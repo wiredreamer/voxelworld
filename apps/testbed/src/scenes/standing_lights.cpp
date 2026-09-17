@@ -81,7 +81,7 @@ auto standing_lights_scene::place_emitters_() -> void {
         seeded_ = true;
     }
 
-    const int32 scale = stand().voxel_scale();
+    const int32 scale = stand().world_units_per_voxel();
 
     int32 done       = 0;
     std::size_t keep = 0;
@@ -91,7 +91,7 @@ auto standing_lights_scene::place_emitters_() -> void {
 
         if (done < per_frame_) {
             const vec2i at = site(at_site);
-            if (const auto surface = stand().grid().get_surface_y(at.x, at.y)) {
+            if (const auto surface = stand().grid().get_surface_voxel_y(at.x, at.y)) {
                 stand().grid().set_voxel(
                     {at.x * scale, (*surface + 1) * scale, at.y * scale}, voxels::world::glowstone
                 );
@@ -138,7 +138,7 @@ auto standing_lights_scene::drive_lights_(float32 delta_time) -> void {
     auto& light_sys     = world.system<ecs::light_system>();
 
     const auto& lamp = stand().renderer().get_block_light_settings();
-    const auto scale = static_cast<float32>(stand().voxel_scale());
+    const auto scale = static_cast<float32>(stand().world_units_per_voxel());
     const auto phase = static_cast<float32>(phase_);
 
     phase_ += stand().benching()
@@ -161,7 +161,7 @@ auto standing_lights_scene::drive_lights_(float32 delta_time) -> void {
         const auto vx = static_cast<int32>(std::lround(at_x));
         const auto vz = static_cast<int32>(std::lround(at_z));
 
-        const auto surface = stand().grid().get_surface_y(vx, vz);
+        const auto surface = stand().grid().get_surface_voxel_y(vx, vz);
         const float32 y =
             surface ? (static_cast<float32>(*surface + 3) * scale) : stand().altitude();
 

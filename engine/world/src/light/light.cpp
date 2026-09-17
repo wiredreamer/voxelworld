@@ -459,7 +459,7 @@ auto gather_boundary(
         return column.level_at(x, y, z, channel);
     };
 
-    for (int32 face = 0; face < light_field::boundary_light::face_count; ++face) {
+    for (const face_direction face : all_face_directions) {
         std::vector<uint8> packed(static_cast<std::size_t>(side) * side / 2);
 
         uint8 first  = 0;
@@ -475,10 +475,9 @@ auto gather_boundary(
                 static_cast<uint8>((slot % 2) == 0 ? level : (level << 4));
         };
 
-        switch (face) {
-            case 0:
-            case 1: {
-                const int32 x = face == 0 ? side : -1;
+        switch (axis_of(face)) {
+            case 0: {
+                const int32 x = is_positive(face) ? side : -1;
                 for (int32 y = 0; y < side; ++y) {
                     for (int32 z = 0; z < side; ++z) {
                         put((y * side) + z, at(x, y_base + y, z));
@@ -486,9 +485,8 @@ auto gather_boundary(
                 }
                 break;
             }
-            case 2:
-            case 3: {
-                const int32 y = face == 2 ? y_base + side : y_base - 1;
+            case 1: {
+                const int32 y = is_positive(face) ? y_base + side : y_base - 1;
                 for (int32 z = 0; z < side; ++z) {
                     for (int32 x = 0; x < side; ++x) {
                         put((x * side) + z, at(x, y, z));
@@ -497,7 +495,7 @@ auto gather_boundary(
                 break;
             }
             default: {
-                const int32 z = face == 4 ? side : -1;
+                const int32 z = is_positive(face) ? side : -1;
                 for (int32 y = 0; y < side; ++y) {
                     for (int32 x = 0; x < side; ++x) {
                         put((x * side) + y, at(x, y_base + y, z));
@@ -507,9 +505,9 @@ auto gather_boundary(
             }
         }
 
-        out.uniform[static_cast<std::size_t>(face)] = first;
+        out.uniform[face] = first;
         if (!uniform) {
-            out.packed[static_cast<std::size_t>(face)] = std::move(packed);
+            out.packed[face] = std::move(packed);
         }
     }
 

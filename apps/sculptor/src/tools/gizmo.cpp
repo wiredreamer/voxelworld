@@ -25,13 +25,9 @@ constexpr float32 ring_radius  = 0.75F;
 constexpr float32 tube_radius  = 0.022F;
 constexpr float32 handle_half  = 0.05F;
 
-// Манипулятор занимает примерно эту долю высоты экрана вне зависимости от того,
-// как далеко камера.
-constexpr float32 screen_size = 0.18F;
+constexpr float32 screen_height_fraction = 0.18F;
 
-// Допуск попадания — тоже доля от размера манипулятора, а не мировая величина:
-// так ручка одинаково ловится на любом отдалении камеры.
-constexpr float32 pick_tolerance = 0.09F;
+constexpr float32 pick_tolerance_of_gizmo_size = 0.09F;
 
 constexpr float32 snap_translate = 0.5F;
 
@@ -190,7 +186,7 @@ auto gizmo::build_frame_(
     }
 
     const auto& camera = engine_->get_camera();
-    fr.scale = math::length(pivot - camera.get_position()) * screen_size;
+    fr.scale = math::length(pivot - camera.get_position()) * screen_height_fraction;
 
     return fr;
 }
@@ -202,7 +198,7 @@ auto gizmo::pick_(
     const auto& camera = engine_->get_camera();
     const auto r = camera.screen_to_world_ray(window.get_cursor_pos(), window.get_size());
 
-    const auto tolerance = pick_tolerance * fr.scale;
+    const auto tolerance = pick_tolerance_of_gizmo_size * fr.scale;
 
     auto best      = gizmo_axis::none;
     auto best_dist = std::numeric_limits<float32>::max();
@@ -233,7 +229,8 @@ auto gizmo::pick_(
 
         if (mode_() == gizmo_mode::scale) {
             const auto center = fr.pivot + (axis * fr.scale);
-            const auto reach  = std::max(handle_half * 1.8F, pick_tolerance) * fr.scale;
+            const auto reach =
+                std::max(handle_half * 1.8F, pick_tolerance_of_gizmo_size) * fr.scale;
             if (distance_to_ray(center, r) > reach) {
                 continue;
             }

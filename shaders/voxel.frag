@@ -2,7 +2,8 @@
 
 layout(location = 0) in vec3 fragPos;
 layout(location = 1) in vec3 fragNormal;
-layout(location = 2) in vec4 fragColor;
+layout(location = 2) in vec3 fragColor;
+layout(location = 2, component = 3) in float fragGlow;
 layout(location = 3) in float viewDepth;
 layout(location = 4) in vec2 fragUV;
 layout(location = 5) flat in uint fragCornersMask;
@@ -47,6 +48,25 @@ struct FogData {
     uint enabled;
 };
 
+struct CornerShadingData {
+    float ao_strength;
+    float ao_curve;
+    float convex_strength;
+    float convex_curve;
+};
+
+struct ClusterData {
+    float z_scale;
+    float z_bias;
+    float tile_size;
+    float slices;
+
+    uint tiles_x;
+    uint tiles_y;
+    uint cap;
+    uint enabled;
+};
+
 layout(set = 0, binding = 0) uniform UniformBufferObject {
     mat4 view;
     mat4 proj;
@@ -55,7 +75,7 @@ layout(set = 0, binding = 0) uniform UniformBufferObject {
     vec4 ambient_sky;
     vec4 ambient_ground;
 
-    vec4 ao_params;
+    CornerShadingData corner_shading;
 
     vec4 cave_ambient;
 
@@ -75,13 +95,7 @@ layout(set = 0, binding = 0) uniform UniformBufferObject {
 
     float blob_strength;
 
-    vec4 cluster_params;
-
-    // x: tiles across, y: tiles down, z: the cap on one cluster's list, w: 1
-    // when this shader reads that list and 0 when it walks every source in the
-    // frame. Both paths stay, because "the picture did not change" has to be a
-    // thing that can be checked.
-    uvec4 cluster_dims;
+    ClusterData clusters;
 
     uvec4 blob_dims;
 } ubo;
@@ -236,14 +250,14 @@ vec3 calculateDirectionalLight(vec3 normal, float shadow) {
 }
 
 uint clusterOf(vec2 pixel, float depth) {
-    float raw   = (log(max(depth, 1e-6)) * ubo.cluster_params.x) + ubo.cluster_params.y;
-    uint slices = uint(ubo.cluster_params.w);
+    float raw   = (log(max(depth, 1e-6)) * ubo.clusters.z_scale) + ubo.clusters.z_bias;
+    uint slices = uint(ubo.clusters.slices);
     uint slice  = uint(clamp(int(floor(raw)), 0, int(slices) - 1));
 
-    uint tile_x = min(uint(pixel.x / ubo.cluster_params.z), ubo.cluster_dims.x - 1u);
-    uint tile_y = min(uint(pixel.y / ubo.cluster_params.z), ubo.cluster_dims.y - 1u);
+    uint tile_x = min(uint(pixel.x / ubo.clusters.tile_size), ubo.clusters.tiles_x - 1u);
+    uint tile_y = min(uint(pixel.y / ubo.clusters.tile_size), ubo.clusters.tiles_y - 1u);
 
-    return (((slice * ubo.cluster_dims.y) + tile_y) * ubo.cluster_dims.x) + tile_x;
+    return (((slice * ubo.clusters.tiles_y) + tile_y) * ubo.clusters.tiles_x) + tile_x;
 }
 
 vec3 clusterHeat(uint count, uint cap) {
@@ -291,7 +305,7 @@ float blobShadow(vec3 fragPos, vec3 normal) {
         return 1.0;
     }
 
-    bool clustered = ubo.cluster_dims.w == 1u;
+    bool clustered = ubo.clusters.enabled == 1u;
     uint cap       = max(ubo.blob_dims.x, 1u);
     uint cluster   = 0u;
     uint count     = ubo.blob_dims.y;
@@ -363,7 +377,7 @@ void main() {
     float a01 = float((m >> 6)  & 3u) * (1.0 / 3.0);
 
     float occlusion = mix(mix(a00, a10, fragUV.x), mix(a01, a11, fragUV.x), fragUV.y);
-    occlusion = pow(occlusion, ubo.ao_params.y);
+    occlusion = pow(occlusion, ubo.corner_shading.ao_curve);
 
     uint cm = fragConvexMask;
     float x00 = float( cm        & 3u) * (1.0 / 3.0);
@@ -372,15 +386,15 @@ void main() {
     float x01 = float((cm >> 6)  & 3u) * (1.0 / 3.0);
 
     float exposure = mix(mix(x00, x10, fragUV.x), mix(x01, x11, fragUV.x), fragUV.y);
-    exposure = pow(exposure, ubo.ao_params.w);
+    exposure = pow(exposure, ubo.corner_shading.convex_curve);
 
     if (ubo.debug_view == 4u) {
         outColor = vec4(vec3(exposure), 1.0);
         return;
     }
 
-    float aoFactor     = 1.0 - (occlusion * ubo.ao_params.x);
-    float convexFactor = 1.0 + (exposure * ubo.ao_params.z);
+    float aoFactor     = 1.0 - (occlusion * ubo.corner_shading.ao_strength);
+    float convexFactor = 1.0 + (exposure * ubo.corner_shading.convex_strength);
 
     if (ubo.debug_view == 1u) {
         outColor = vec4(vec3(aoFactor), 1.0);
@@ -428,7 +442,7 @@ void main() {
 
     if (ubo.debug_view == 7u) {
         uint cluster = clusterOf(gl_FragCoord.xy, viewDepth);
-        outColor = vec4(clusterHeat(clusterCounts.counts[cluster], ubo.cluster_dims.z), 1.0);
+        outColor = vec4(clusterHeat(clusterCounts.counts[cluster], ubo.clusters.cap), 1.0);
         return;
     }
 
@@ -449,13 +463,13 @@ void main() {
 
     vec3 pointLighting = vec3(0.0);
 
-    if (ubo.cluster_dims.w == 0u) {
+    if (ubo.clusters.enabled == 0u) {
         for (uint i = 0; i < ubo.point_lights_count; i++) {
             pointLighting += calculatePointLight(i, fragPos);
         }
     } else {
         uint cluster = clusterOf(gl_FragCoord.xy, viewDepth);
-        uint cap     = ubo.cluster_dims.z;
+        uint cap     = ubo.clusters.cap;
         uint count   = min(clusterCounts.counts[cluster], cap);
 
         for (uint i = 0; i < count; i++) {
@@ -464,9 +478,9 @@ void main() {
     }
 
     vec3 lighting = (ambient + directional + lamp + pointLighting) * convexFactor * blob;
-    vec3 result = lighting * fragColor.rgb;
+    vec3 result = lighting * fragColor;
 
-    result += fragColor.rgb * fragColor.a * ubo.glow_params.x;
+    result += fragColor * fragGlow * ubo.glow_params.x;
 
     result *= ubo.tonemap_params.x;
     vec3 white = vec3(ubo.tonemap_params.y);

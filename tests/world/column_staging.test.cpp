@@ -171,22 +171,18 @@ TEST_CASE("a placed chunk knows every neighbour it has", "[world][grid]") {
     world w;
     const settled_grid settled{w};
 
-    static constexpr vec3i offsets[6] = {
-        {1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1},
-    };
-
     auto& grid = *w.system<world_grid_system>().grid();
 
     std::size_t checked = 0;
     std::size_t missing = 0;
 
     grid.for_each_chunk([&](vec3i coord, const chunk& c) {
-        for (int32 fd = 0; fd < 6; ++fd) {
-            if (!grid.has_chunk(coord + offsets[fd])) {
+        for (const face_direction face : all_face_directions) {
+            if (!grid.has_chunk(coord + offset_of(face))) {
                 continue;
             }
             ++checked;
-            if ((c.known_neighbors() & (1U << fd)) == 0) {
+            if ((c.known_neighbors() & face_bit(face)) == 0) {
                 ++missing;
             }
         }
@@ -202,28 +198,15 @@ TEST_CASE("buried rock costs no entity", "[world][grid]") {
 
     auto& grid = *w.system<world_grid_system>().grid();
 
-    // Face order as the grid exchanges boundaries: +X, -X, +Y, -Y, +Z, -Z. The
-    // plane of the neighbour that faces this chunk is the far side of that
-    // offset, which is why the layers below run the axis backwards.
-    static constexpr vec3i offsets[6] = {
-        {1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1},
-    };
-
     constexpr int32 s = chunk::size;
 
-    const auto seam_is_solid = [&](const chunk& neighbor, int32 fd) -> bool {
+    const auto seam_is_solid = [&](const chunk& neighbor, face_direction toward) -> bool {
+        const face_direction facing_back = opposite(toward);
+        const int32 seam                 = boundary_layer(facing_back, s);
+
         for (int32 a = 0; a < s; ++a) {
             for (int32 b = 0; b < s; ++b) {
-                const vec3i local = [&] -> vec3i {
-                    switch (fd) {
-                        case 0: return {0, a, b};
-                        case 1: return {s - 1, a, b};
-                        case 2: return {a, 0, b};
-                        case 3: return {a, s - 1, b};
-                        case 4: return {a, b, 0};
-                        default: return {a, b, s - 1};
-                    }
-                }();
+                const vec3i local = lift_off_face_plane(facing_back, vec2i{a, b}, seam);
 
                 if (neighbor.get_voxel(local).is_empty()) {
                     return false;
@@ -257,16 +240,16 @@ TEST_CASE("buried rock costs no entity", "[world][grid]") {
             return;
         }
 
-        for (int32 fd = 0; fd < 6; ++fd) {
-            INFO("face " << fd);
+        for (const face_direction face : all_face_directions) {
+            INFO("face " << static_cast<int32>(face));
 
-            auto* neighbor = grid.get_chunk(coord + offsets[fd]);
+            auto* neighbor = grid.get_chunk(coord + offset_of(face));
             if (neighbor == nullptr) {
-                REQUIRE((c.known_neighbors() & (1U << fd)) != 0);
+                REQUIRE((c.known_neighbors() & face_bit(face)) != 0);
                 continue;
             }
 
-            REQUIRE(seam_is_solid(*neighbor, fd));
+            REQUIRE(seam_is_solid(*neighbor, face));
             ++verified;
         }
     });
@@ -334,10 +317,12 @@ TEST_CASE("digging a seam tells both sides", "[world][grid]") {
     REQUIRE(digger->is_drawn());
     REQUIRE(digger->known_neighbors() != 0);
     REQUIRE(east->is_drawn());
-    REQUIRE(east->get_volume()->has_boundary_slice(1));
-    REQUIRE_FALSE(east->get_volume()->is_boundary_solid(1, 0, local.y, local.z));
+    REQUIRE(east->get_volume()->has_boundary_slice(face_direction::neg_x));
+    REQUIRE_FALSE(
+        east->get_volume()->is_boundary_solid(face_direction::neg_x, 0, local.y, local.z)
+    );
 
-    REQUIRE(east->get_volume()->is_boundary_solid(1, 0, local.y + 1, local.z));
+    REQUIRE(east->get_volume()->is_boundary_solid(face_direction::neg_x, 0, local.y + 1, local.z));
 }
 
 TEST_CASE("a placed chunk arrives with its sky light", "[world][grid]") {

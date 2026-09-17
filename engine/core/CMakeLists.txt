@@ -18,6 +18,7 @@ target_sources(vw_core
             src/spatial/spatial.cppm
             src/voxels/voxels.cppm
             src/voxels/catalog.cppm
+            src/voxels/face_direction.cppm
             src/log/log.cppm
     PRIVATE
         src/math/math.cpp

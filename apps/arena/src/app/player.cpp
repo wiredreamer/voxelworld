@@ -149,7 +149,7 @@ auto player::try_place(
     }
 
     const auto grid    = engine_.get_world().system<ecs::world_grid_system>().grid();
-    const auto surface = grid->get_surface_y(0, 0);
+    const auto surface = grid->get_surface_voxel_y(0, 0);
     if (!surface) {
         return;
     }

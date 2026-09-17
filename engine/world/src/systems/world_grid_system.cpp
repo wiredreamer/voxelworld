@@ -417,9 +417,9 @@ auto world_grid_system::integrate_completed_columns_() -> void {
 
         boundary_from_total += measure_ms([&] -> auto {
             for (auto& [y, cd] : it->second->get_all_chunk_data()) {
-                for (int32 fd = 0; fd < 6; ++fd) {
-                    if (auto* neighbor = model_at_(cd.coord + boundary_face_offsets[fd])) {
-                        cd.volume->set_boundary_slice(fd, *neighbor);
+                for (const face_direction face : all_face_directions) {
+                    if (auto* neighbor = model_at_(cd.coord + offset_of(face))) {
+                        cd.volume->set_boundary_slice(face, *neighbor);
                     }
                 }
             }

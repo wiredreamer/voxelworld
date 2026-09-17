@@ -64,7 +64,7 @@ namespace vw::testbed {
         };
 
         if (!world_grid_->get_voxel(world).is_empty()) {
-            return voxel_pick{.solid = at, .empty = empty};
+            return voxel_pick{.solid_voxel_pos = at, .empty_voxel_pos = empty};
         }
 
         empty = at;
@@ -111,10 +111,10 @@ auto testbed_app::draw_hover_() -> void {
         renderer.draw_box(at, vec3f{scale + 0.1f, scale + 0.1f, scale + 0.1f}, clr);
     };
 
-    outline(hovered_->solid, colors::white);
+    outline(hovered_->solid_voxel_pos, colors::white);
 
-    if (tool_ == edit_tool::place && hovered_->empty != hovered_->solid) {
-        outline(hovered_->empty, colors::green_4);
+    if (tool_ == edit_tool::place && hovered_->empty_voxel_pos != hovered_->solid_voxel_pos) {
+        outline(hovered_->empty_voxel_pos, colors::green_4);
     }
 }
 
@@ -130,7 +130,7 @@ auto testbed_app::apply_tool_() -> void {
 
     const int32 scale  = generator_params_.voxel_scale;
     const bool placing = tool_ == edit_tool::place;
-    const vec3i cell   = placing ? hovered_->empty : hovered_->solid;
+    const vec3i cell   = placing ? hovered_->empty_voxel_pos : hovered_->solid_voxel_pos;
 
     world_grid_->set_voxel(
         {cell.x * scale, cell.y * scale, cell.z * scale},
@@ -151,7 +151,7 @@ auto testbed_app::drop_emitter(voxel id, int32 radius) -> void {
     const int32 vx = floor_div(static_cast<int32>(std::floor(pos.x)), scale);
     const int32 vz = floor_div(static_cast<int32>(std::floor(pos.z)), scale);
 
-    const auto surface = world_grid_->get_surface_y(vx, vz);
+    const auto surface = world_grid_->get_surface_voxel_y(vx, vz);
     if (!surface) {
         drop_status_ = std::format("no ground under voxel {},{}", vx, vz);
         return;

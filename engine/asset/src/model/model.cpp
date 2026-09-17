@@ -443,10 +443,10 @@ auto build_cell_links(
         };
 
         if ((run & 1U) != 0) {
-            pocket.faces[0] |= block_bit(y, z);
+            pocket.faces[face_direction::neg_x] |= block_bit(y, z);
         }
         if (((run >> (size - 1)) & 1U) != 0) {
-            pocket.faces[1] |= block_bit(y, z);
+            pocket.faces[face_direction::pos_x] |= block_bit(y, z);
         }
 
         const bool on_y = (y == 0) || (y == size - 1);
@@ -462,16 +462,20 @@ auto build_cell_links(
                 continue;
             }
             if (y == 0) {
-                pocket.faces[2] |= uint64{1} << (((z / face_block) * face_span) + i);
+                pocket.faces[face_direction::neg_y] |=
+                    uint64{1} << (((z / face_block) * face_span) + i);
             }
             if (y == size - 1) {
-                pocket.faces[3] |= uint64{1} << (((z / face_block) * face_span) + i);
+                pocket.faces[face_direction::pos_y] |=
+                    uint64{1} << (((z / face_block) * face_span) + i);
             }
             if (z == 0) {
-                pocket.faces[4] |= uint64{1} << (((y / face_block) * face_span) + i);
+                pocket.faces[face_direction::neg_z] |=
+                    uint64{1} << (((y / face_block) * face_span) + i);
             }
             if (z == size - 1) {
-                pocket.faces[5] |= uint64{1} << (((y / face_block) * face_span) + i);
+                pocket.faces[face_direction::pos_z] |=
+                    uint64{1} << (((y / face_block) * face_span) + i);
             }
         }
     };
@@ -536,7 +540,7 @@ auto build_cell_links(
         chunk_pocket merged;
         for (const auto& pocket : links.pockets) {
             merged.volume |= pocket.volume;
-            for (int32 face = 0; face < chunk_pocket::face_count; ++face) {
+            for (const face_direction face : all_face_directions) {
                 merged.faces[face] |= pocket.faces[face];
             }
         }
@@ -644,7 +648,7 @@ auto model::scan_fill() const -> model_fill {
     return fill_;
 }
 
-auto model::extract_face(int32 face_direction, face_occupancy& out) const -> bool {
+auto model::extract_face(face_direction face, face_occupancy& out) const -> bool {
     constexpr int32 side  = face_occupancy::side;
     constexpr int32 ps    = page_size;
     constexpr int32 pages = side / ps;
@@ -655,35 +659,13 @@ auto model::extract_face(int32 face_direction, face_occupancy& out) const -> boo
 
     out.clear();
 
-    // Порядок граней: +X, -X, +Y, -Y, +Z, -Z. Чётное направление — дальняя сторона
-    // своей оси. Плоскость адресуется парой (a, b), пропуская саму ось: (y, z) для
-    // ±X, (x, z) для ±Y, (x, y) для ±Z — в том же порядке её читает обратно
-    // is_boundary_solid.
-    const int32 axis  = face_direction / 2;
-    const int32 layer = (face_direction % 2 == 0) ? side - 1 : 0;
+    const int32 layer = boundary_layer(face, side);
     const int32 pl    = layer / ps;
-
-    const auto page_at = [axis, pl](int32 pa, int32 pb) -> vec3i {
-        switch (axis) {
-            case 0: return {pl, pa, pb};
-            case 1: return {pa, pl, pb};
-            default: return {pa, pb, pl};
-        }
-    };
-
-    const int32 ll = layer % ps;
-
-    const auto cell_index = [axis, ll](int32 a, int32 b) -> int32 {
-        switch (axis) {
-            case 0: return local_index(ll, a, b);
-            case 1: return local_index(a, ll, b);
-            default: return local_index(a, b, ll);
-        }
-    };
+    const int32 ll    = layer % ps;
 
     for (int32 pb = 0; pb < pages; ++pb) {
         for (int32 pa = 0; pa < pages; ++pa) {
-            const auto page = page_at(pa, pb);
+            const auto page = lift_off_face_plane(face, vec2i{pa, pb}, pl);
             const auto mode = get_page_mode(page.x, page.y, page.z);
 
             if (mode == page_mode::empty) {
@@ -703,7 +685,8 @@ auto model::extract_face(int32 face_direction, face_occupancy& out) const -> boo
             for (int32 b = 0; b < ps; ++b) {
                 uint64 bits = 0;
                 for (int32 a = 0; a < ps; ++a) {
-                    if (!(*data)[cell_index(a, b)].is_empty()) {
+                    const auto cell = lift_off_face_plane(face, vec2i{a, b}, ll);
+                    if (!(*data)[local_index(cell.x, cell.y, cell.z)].is_empty()) {
                         bits |= uint64{1} << a;
                     }
                 }

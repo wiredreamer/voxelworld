@@ -12,17 +12,28 @@ struct PointLightData {
 layout(set = 0, binding = 0) uniform CullParams {
     mat4 view;
 
-    vec4 cluster_params;
+    float z_scale;
+    float z_bias;
+    float tile_size;
+    float slices;
 
-    // x: near depth, y: far depth, z: proj[0][0], w: proj[1][1].
-    vec4 cluster_extent;
+    float near_depth;
+    float far_depth;
+    float proj_x;
+    float proj_y;
 
-    vec4 screen_dims;
+    float screen_width;
+    float screen_height;
+    float tiles_x;
+    float tiles_y;
 
-    // x: the cap on one cluster's list, y: how many shapes the buffer holds,
-    // z: how many clusters, w: which list -- 0 sources, 1 bodies.
-    uvec4 cull_dims;
+    uint cap;
+    uint shape_count;
+    uint cluster_count;
+    uint list;
 } params;
+
+const uint cull_list_sources = 0u;
 
 struct BlobData {
     vec4 position_radius;
@@ -72,8 +83,8 @@ vec2 projected_span(float x_min, float x_max, float depth_min, float depth_max) 
 }
 
 ivec4 rect_of_span(vec2 span_x, vec2 span_y) {
-    vec2 ndc_x = span_x * params.cluster_extent.z;
-    vec2 ndc_y = span_y * params.cluster_extent.w;
+    vec2 ndc_x = span_x * params.proj_x;
+    vec2 ndc_y = span_y * params.proj_y;
 
     if (ndc_x.x > ndc_x.y) {
         ndc_x = ndc_x.yx;
@@ -82,8 +93,8 @@ ivec4 rect_of_span(vec2 span_x, vec2 span_y) {
         ndc_y = ndc_y.yx;
     }
 
-    float width  = params.screen_dims.x;
-    float height = params.screen_dims.y;
+    float width  = params.screen_width;
+    float height = params.screen_height;
 
     vec2 pixel_x = ((ndc_x * 0.5) + 0.5) * width;
     vec2 pixel_y = ((ndc_y * 0.5) + 0.5) * height;
@@ -92,9 +103,9 @@ ivec4 rect_of_span(vec2 span_x, vec2 span_y) {
         return no_tiles;
     }
 
-    float tile_size = params.cluster_params.z;
-    int last_x      = int(params.screen_dims.z) - 1;
-    int last_y      = int(params.screen_dims.w) - 1;
+    float tile_size = params.tile_size;
+    int last_x      = int(params.tiles_x) - 1;
+    int last_y      = int(params.tiles_y) - 1;
 
     return ivec4(
         clamp(int(floor(pixel_x.x / tile_size)), 0, last_x),
@@ -146,7 +157,7 @@ ivec4 scatter_capsule(vec3 end_a, vec3 end_b, float radius, float slab_near, flo
     );
 }
 
-vec3 forwards(vec4 in_view) {
+vec3 to_view_depth(vec4 in_view) {
     return vec3(in_view.x, in_view.y, -in_view.z);
 }
 
@@ -154,36 +165,34 @@ void main() {
     uint shape_index = gl_WorkGroupID.x;
     uint slice       = gl_WorkGroupID.y;
 
-    uint slices = uint(params.cluster_params.w);
+    uint slices = uint(params.slices);
 
-    if (shape_index >= params.cull_dims.y || slice >= slices) {
+    if (shape_index >= params.shape_count || slice >= slices) {
         return;
     }
 
-    float near_depth = params.cluster_extent.x;
-    float far_depth  = params.cluster_extent.y;
+    float near_depth = params.near_depth;
+    float far_depth  = params.far_depth;
     float ratio      = far_depth / near_depth;
 
     float slab_near = near_depth * pow(ratio, float(slice) / float(slices));
     float slab_far  = near_depth * pow(ratio, float(slice + 1u) / float(slices));
 
-    uint kind = params.cull_dims.w;
-
     vec3 end_a;
     vec3 end_b;
     float radius;
 
-    if (kind == 0u) {
+    if (params.list == cull_list_sources) {
         PointLightData light = pointLights.lights[shape_index];
 
-        end_a  = forwards(params.view * vec4(light.position.xyz, 1.0));
+        end_a  = to_view_depth(params.view * vec4(light.position.xyz, 1.0));
         end_b  = end_a;
         radius = light.range;
     } else {
         BlobData body = blobs.items[shape_index];
 
-        end_a  = forwards(params.view * vec4(body.cull_a.xyz, 1.0));
-        end_b  = forwards(params.view * vec4(body.cull_b.xyz, 1.0));
+        end_a  = to_view_depth(params.view * vec4(body.cull_a.xyz, 1.0));
+        end_b  = to_view_depth(params.view * vec4(body.cull_b.xyz, 1.0));
         radius = body.cull_a.w;
     }
 
@@ -193,9 +202,10 @@ void main() {
         return;
     }
 
-    uint tiles_x = uint(params.screen_dims.z);
-    uint tiles_y = uint(params.screen_dims.w);
-    uint cap     = params.cull_dims.x;
+    uint tiles_x       = uint(params.tiles_x);
+    uint tiles_y       = uint(params.tiles_y);
+    uint cap           = params.cap;
+    uint overflow_slot = params.cluster_count;
 
     uint tiles_wide = uint(rect.z - rect.x) + 1u;
     uint tiles_high = uint(rect.w - rect.y) + 1u;
@@ -207,13 +217,13 @@ void main() {
 
         uint cluster = ((slice * tiles_y) + tile_y) * tiles_x + tile_x;
 
-        if (kind == 0u) {
+        if (params.list == cull_list_sources) {
             uint slot = atomicAdd(clusterCounts.counts[cluster], 1u);
 
             if (slot < cap) {
                 clusterIndices.indices[(cluster * cap) + slot] = shape_index;
             } else {
-                atomicAdd(clusterCounts.counts[params.cull_dims.z], 1u);
+                atomicAdd(clusterCounts.counts[overflow_slot], 1u);
             }
         } else {
             uint slot = atomicAdd(blobCounts.counts[cluster], 1u);
@@ -221,7 +231,7 @@ void main() {
             if (slot < cap) {
                 blobIndices.indices[(cluster * cap) + slot] = shape_index;
             } else {
-                atomicAdd(blobCounts.counts[params.cull_dims.z], 1u);
+                atomicAdd(blobCounts.counts[overflow_slot], 1u);
             }
         }
     }

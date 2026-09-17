@@ -113,8 +113,6 @@ struct cave_stats {
     std::size_t underground_total = 0;
     std::size_t underground_air   = 0;
 
-    // Air a character fits in. The arena body is 12x28x12 units at voxel_scale
-    // 8, so it needs a 2x4x2 box of clear voxels.
     std::size_t walkable = 0;
 
     std::size_t roomy = 0;
@@ -128,10 +126,23 @@ struct cave_stats {
     std::size_t faces = 0;
 };
 
-auto fits_body(const sampled_region& r, int32 x, int32 y, int32 z) -> bool {
-    for (int32 dx = 0; dx < 2; ++dx) {
-        for (int32 dy = 0; dy < 4; ++dy) {
-            for (int32 dz = 0; dz < 2; ++dz) {
+constexpr vec3i arena_body_units{12, 28, 12};
+constexpr int32 world_units_per_voxel = perlin_terrain_generator::params{}.voxel_scale;
+
+[[nodiscard]] constexpr auto voxels_covering(int32 world_units) -> int32 {
+    return (world_units + world_units_per_voxel - 1) / world_units_per_voxel;
+}
+
+constexpr vec3i arena_body_voxels{
+    voxels_covering(arena_body_units.x),
+    voxels_covering(arena_body_units.y),
+    voxels_covering(arena_body_units.z),
+};
+
+auto fits_arena_body(const sampled_region& r, int32 x, int32 y, int32 z) -> bool {
+    for (int32 dx = 0; dx < arena_body_voxels.x; ++dx) {
+        for (int32 dy = 0; dy < arena_body_voxels.y; ++dy) {
+            for (int32 dz = 0; dz < arena_body_voxels.z; ++dz) {
                 if (r.is_solid(x + dx, y + dy, z + dz)) {
                     return false;
                 }
@@ -189,7 +200,7 @@ auto measure(const sampled_region& r) -> cave_stats {
                 if (clear_cube(r, x, y, z, 2)) {
                     ++stats.roomy;
                 }
-                if (fits_body(r, x, y, z)) {
+                if (fits_arena_body(r, x, y, z)) {
                     ++stats.walkable;
                     walkable[r.at(x, y, z)] = 1;
                 }

@@ -347,10 +347,7 @@ struct move_entity_params {
     std::string name;
     std::string parent_name;
 
-    // Место среди детей нового родителя, отсчитанное по списку без самого узла:
-    // так одно и то же число значит одно и то же, переносят ли узел к чужому
-    // родителю или переставляют среди своих.
-    std::size_t index = 0;
+    std::size_t index_among_other_children = 0;
 };
 
 class move_entity_operation final : public base_operation {

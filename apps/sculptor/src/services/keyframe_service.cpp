@@ -12,9 +12,7 @@ import vw.gfx;
 namespace vw::sculptor {
 namespace {
 
-// Ближе этого два ключа считаются одним и тем же мгновением: клип меряется
-// долями секунды, а курсор ходит по пикселям и в круглое время не попадает.
-constexpr float32 key_epsilon = 1e-3f;
+constexpr float32 same_instant_tolerance_seconds = 1e-3f;
 
 constexpr std::array pose_properties{
     asset::animation_property::position,
@@ -83,7 +81,7 @@ auto keyframe_service::key_at_(
     return std::visit(
         [time](const auto& channel) -> std::optional<keyframe_value> {
             for (const auto& kf : channel.get_keyframes()) {
-                if (std::abs(kf.time - time) < key_epsilon) {
+                if (std::abs(kf.time - time) < same_instant_tolerance_seconds) {
                     return keyframe_value(kf);
                 }
             }
@@ -238,8 +236,8 @@ auto keyframe_service::step_to_key(
         std::visit(
             [&best, from, forward](const auto& channel) {
                 for (const auto& kf : channel.get_keyframes()) {
-                    const bool ahead = forward ? kf.time > from + key_epsilon
-                                               : kf.time < from - key_epsilon;
+                    const bool ahead = forward ? kf.time > from + same_instant_tolerance_seconds
+                                               : kf.time < from - same_instant_tolerance_seconds;
                     if (!ahead) {
                         continue;
                     }
@@ -289,7 +287,7 @@ auto keyframe_service::move_keyframe(
         *channel_var
     );
 
-    if (!found || std::abs(time_of(*found) - time) < key_epsilon) {
+    if (!found || std::abs(time_of(*found) - time) < same_instant_tolerance_seconds) {
         return;
     }
 

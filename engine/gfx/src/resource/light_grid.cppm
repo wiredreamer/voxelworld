@@ -22,13 +22,6 @@ enum class cluster_readback_level : uint8 {
     full,
 };
 
-enum class cull_list : uint32 {
-    sources = 0,
-    blobs   = 1,
-};
-
-inline constexpr uint32 cull_list_count = 2;
-
 struct cluster_readback {
     cull_list kind = cull_list::sources;
     spatial::cluster_grid grid{};
@@ -36,8 +29,8 @@ struct cluster_readback {
 
     std::vector<spatial::view_capsule> columns;
 
-    // Длиной cluster_count + 1, последняя запись — счёт переполнений.
-    std::vector<uint32> counts;
+    std::vector<uint32> cluster_counts;
+    uint32 overflow_count = 0;
 
     std::vector<uint32> indices;
 };

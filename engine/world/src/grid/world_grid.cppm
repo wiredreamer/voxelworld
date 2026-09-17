@@ -27,10 +27,8 @@ public:
     [[nodiscard]] auto has_chunk(vec3i chunk_coord) const -> bool;
     [[nodiscard]] auto get_chunk(vec3i chunk_coord) -> chunk*;
 
-    // Самый верхний сплошной воксель над точкой, в вокселях, а не в мировых
-    // единицах — и аргумент, и ответ. Всё остальное в этом классе принимает
-    // мировые единицы, так что умножай на voxel_scale(), чтобы вернуться к ним.
-    [[nodiscard]] auto get_surface_y(int32 vx, int32 vz) const -> std::optional<int32>;
+    [[nodiscard]] auto get_surface_voxel_y(int32 voxel_x, int32 voxel_z) const
+        -> std::optional<int32>;
     [[nodiscard]] auto has_column(vec2i coord) const -> bool;
 
     [[nodiscard]] auto column_levels(vec2i coord) const -> std::span<const int32>;

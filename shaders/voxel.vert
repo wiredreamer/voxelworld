@@ -2,27 +2,9 @@
 
 layout(location = 2) in uint inInstanceIndex;
 
-const int SHADOW_CASCADES = 5;
-
-struct DirectionalLightData {
-    mat4 light_space_matrices[SHADOW_CASCADES];
-    vec4 cascades[SHADOW_CASCADES];
-    vec4 shadow_filter;
-    vec3 direction;
-    vec3 color;
-    float intensity;
-    float wrap;
-};
-
 layout(set = 0, binding = 0) uniform UniformBufferObject {
     mat4 view;
     mat4 proj;
-    vec3 viewPos;
-    DirectionalLightData directional_light;
-    vec4 ambient_sky;
-    vec4 ambient_ground;
-    vec4 ao_params;
-    uint point_lights_count;
 } ubo;
 
 layout(set = 1, binding = 0, std430) readonly buffer ModelMatrices {
@@ -43,16 +25,19 @@ layout(set = 1, binding = 2, std430) readonly buffer Quads {
     Quad quads[];
 };
 
+struct PaletteEntry {
+    vec3 color;
+    float glow;
+};
+
 layout(set = 4, binding = 0, std430) readonly buffer PaletteBuffer {
-    vec4 palette[];
+    PaletteEntry palette[];
 };
 
 layout(location = 0) out vec3 fragPos;
 layout(location = 1) out vec3 fragNormal;
-// Alpha is how brightly the block draws itself; see gfx::palette_buffer.
-// A vec4 and not a vec3 plus a float: a location is vec4-sized either way,
-// so the fourth component rides along for nothing.
-layout(location = 2) out vec4 fragColor;
+layout(location = 2) out vec3 fragColor;
+layout(location = 2, component = 3) out float fragGlow;
 layout(location = 3) out float viewDepth;
 layout(location = 4) out vec2 fragUV;
 layout(location = 5) flat out uint fragCornersMask;
@@ -111,7 +96,8 @@ void main() {
 
     fragNormal = normalize(mat3(normalMatrices.normals[inInstanceIndex]) * NORMALS[normal_id]);
 
-    fragColor = palette[palette_idx];
+    fragColor = palette[palette_idx].color;
+    fragGlow  = palette[palette_idx].glow;
 
     vec2 corner_uvs[4] = vec2[4](
         vec2(0.0, 0.0),

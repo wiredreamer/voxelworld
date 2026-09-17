@@ -81,9 +81,8 @@ auto testbed_app::render_ui() -> void {
         } else if (!camera_controller_->is_mouse_captured()) {
             ImGui::TextUnformatted("F1 to capture the cursor");
         } else if (hovered_) {
-            ImGui::Text(
-                "voxel %d,%d,%d", hovered_->solid.x, hovered_->solid.y, hovered_->solid.z
-            );
+            const vec3i& solid = hovered_->solid_voxel_pos;
+            ImGui::Text("voxel %d,%d,%d", solid.x, solid.y, solid.z);
         } else {
             ImGui::TextUnformatted("nothing in reach");
         }

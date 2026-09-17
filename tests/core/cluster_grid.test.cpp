@@ -8,6 +8,7 @@ using namespace vw;
 using Catch::Approx;
 using spatial::cluster_grid;
 using spatial::cluster_lights;
+using spatial::view_depth_point;
 using spatial::view_sphere;
 
 namespace {
@@ -27,15 +28,15 @@ auto bench_grid() -> cluster_grid {
     };
 }
 
-auto cluster_of(const cluster_grid& grid, const vec3f& point) -> std::optional<uint32> {
-    if (point.z < grid.near_depth || point.z > grid.far_depth) {
+auto cluster_of(const cluster_grid& grid, const view_depth_point& point) -> std::optional<uint32> {
+    if (point.depth < grid.near_depth || point.depth > grid.far_depth) {
         return std::nullopt;
     }
 
-    const float32 pixel_x =
-        (((grid.proj_x * point.x / point.z) * 0.5F) + 0.5F) * static_cast<float32>(grid.screen_width);
-    const float32 pixel_y =
-        (((grid.proj_y * point.y / point.z) * 0.5F) + 0.5F) * static_cast<float32>(grid.screen_height);
+    const float32 pixel_x = (((grid.proj_x * point.x / point.depth) * 0.5F) + 0.5F) *
+                            static_cast<float32>(grid.screen_width);
+    const float32 pixel_y = (((grid.proj_y * point.y / point.depth) * 0.5F) + 0.5F) *
+                            static_cast<float32>(grid.screen_height);
 
     if (pixel_x < 0.0F || pixel_x >= static_cast<float32>(grid.screen_width) ||
         pixel_y < 0.0F || pixel_y >= static_cast<float32>(grid.screen_height)) {
@@ -45,14 +46,14 @@ auto cluster_of(const cluster_grid& grid, const vec3f& point) -> std::optional<u
     return grid.cluster_index(
         static_cast<uint32>(pixel_x) / grid.tile_size,
         static_cast<uint32>(pixel_y) / grid.tile_size,
-        grid.slice_of(point.z)
+        grid.slice_of(point.depth)
     );
 }
 
-auto reaches(const view_sphere& light, const vec3f& point) -> bool {
+auto reaches(const view_sphere& light, const view_depth_point& point) -> bool {
     const float32 across = point.x - light.center.x;
     const float32 down   = point.y - light.center.y;
-    const float32 depth  = point.z - light.center.z;
+    const float32 depth  = point.depth - light.center.depth;
 
     return ((across * across) + (down * down) + (depth * depth)) <
            (light.radius * light.radius);
@@ -66,10 +67,10 @@ auto random_light(const cluster_grid& grid, std::mt19937& rng) -> view_sphere {
     const float32 depth = std::exp(log_depth(rng));
 
     return view_sphere{
-        .center = vec3f{
-            across(rng) * depth / grid.proj_x,
-            across(rng) * depth / std::abs(grid.proj_y),
-            depth,
+        .center = view_depth_point{
+            .x     = across(rng) * depth / grid.proj_x,
+            .y     = across(rng) * depth / std::abs(grid.proj_y),
+            .depth = depth,
         },
         .radius = depth * reach(rng),
     };
@@ -164,10 +165,10 @@ TEST_CASE("a source is listed in every cluster it can light", "[cluster]") {
         clusters.add(0, light);
 
         for (int32 sample = 0; sample < 768; ++sample) {
-            const vec3f point{
-                light.center.x + (offset(rng) * light.radius),
-                light.center.y + (offset(rng) * light.radius),
-                light.center.z + (offset(rng) * light.radius),
+            const view_depth_point point{
+                .x     = light.center.x + (offset(rng) * light.radius),
+                .y     = light.center.y + (offset(rng) * light.radius),
+                .depth = light.center.depth + (offset(rng) * light.radius),
             };
 
             if (!reaches(light, point)) {
@@ -196,11 +197,11 @@ TEST_CASE("a source behind the camera reaches nothing", "[cluster]") {
     const cluster_grid grid = bench_grid();
 
     cluster_lights clusters{grid, 8};
-    clusters.add(0, view_sphere{.center = vec3f{0.0F, 0.0F, -50.0F}, .radius = 1.0F});
+    clusters.add(0, view_sphere{.center = {0.0F, 0.0F, -50.0F}, .radius = 1.0F});
 
     REQUIRE(clusters.get_assignment_count() == 0);
 
-    clusters.add(1, view_sphere{.center = vec3f{0.0F, 0.0F, 0.01F}, .radius = 0.02F});
+    clusters.add(1, view_sphere{.center = {0.0F, 0.0F, 0.01F}, .radius = 0.02F});
 
     REQUIRE(clusters.get_assignment_count() == 0);
 }
@@ -209,12 +210,12 @@ TEST_CASE("a source across the near plane keeps to the frame", "[cluster]") {
     const cluster_grid grid = bench_grid();
 
     cluster_lights clusters{grid, 8};
-    clusters.add(0, view_sphere{.center = vec3f{0.0F, 0.0F, 0.05F}, .radius = 10.0F});
+    clusters.add(0, view_sphere{.center = {0.0F, 0.0F, 0.05F}, .radius = 10.0F});
 
     REQUIRE(clusters.get_assignment_count() > 0);
     REQUIRE(clusters.get_assignment_count() <= grid.cluster_count());
 
-    const auto cluster = cluster_of(grid, vec3f{0.0F, 0.0F, 1.0F});
+    const auto cluster = cluster_of(grid, view_depth_point{0.0F, 0.0F, 1.0F});
     REQUIRE(cluster.has_value());
 
     const auto listed = clusters.lights_of(*cluster);
@@ -225,7 +226,7 @@ TEST_CASE("a source with no reach is listed nowhere", "[cluster]") {
     const cluster_grid grid = bench_grid();
 
     cluster_lights clusters{grid, 8};
-    clusters.add(0, view_sphere{.center = vec3f{0.0F, 0.0F, 12.0F}, .radius = 0.0F});
+    clusters.add(0, view_sphere{.center = {0.0F, 0.0F, 12.0F}, .radius = 0.0F});
 
     REQUIRE(clusters.get_assignment_count() == 0);
 }
@@ -234,7 +235,7 @@ TEST_CASE("a source larger than the scene is listed everywhere", "[cluster]") {
     const cluster_grid grid = bench_grid();
 
     cluster_lights clusters{grid, 8};
-    clusters.add(0, view_sphere{.center = vec3f{0.0F, 0.0F, 10.0F}, .radius = 1.0e6F});
+    clusters.add(0, view_sphere{.center = {0.0F, 0.0F, 10.0F}, .radius = 1.0e6F});
 
     REQUIRE(clusters.get_assignment_count() == grid.cluster_count());
 
@@ -257,8 +258,8 @@ TEST_CASE("a cluster past its cap counts the rest and stays out of its neighbour
 
     REQUIRE(grid.cluster_count() == 2);
 
-    const view_sphere left{.center = vec3f{-5.0F, 0.0F, 10.0F}, .radius = 0.5F};
-    const view_sphere right{.center = vec3f{5.0F, 0.0F, 10.0F}, .radius = 0.5F};
+    const view_sphere left{.center = {-5.0F, 0.0F, 10.0F}, .radius = 0.5F};
+    const view_sphere right{.center = {5.0F, 0.0F, 10.0F}, .radius = 0.5F};
 
     cluster_lights probe{grid, 4};
     probe.add(0, left);
@@ -291,9 +292,9 @@ TEST_CASE("clear puts the grid back where it started", "[cluster]") {
     const cluster_grid grid = bench_grid();
 
     cluster_lights clusters{grid, 2};
-    clusters.add(0, view_sphere{.center = vec3f{0.0F, 0.0F, 10.0F}, .radius = 1.0e6F});
-    clusters.add(1, view_sphere{.center = vec3f{0.0F, 0.0F, 10.0F}, .radius = 1.0e6F});
-    clusters.add(2, view_sphere{.center = vec3f{0.0F, 0.0F, 10.0F}, .radius = 1.0e6F});
+    clusters.add(0, view_sphere{.center = {0.0F, 0.0F, 10.0F}, .radius = 1.0e6F});
+    clusters.add(1, view_sphere{.center = {0.0F, 0.0F, 10.0F}, .radius = 1.0e6F});
+    clusters.add(2, view_sphere{.center = {0.0F, 0.0F, 10.0F}, .radius = 1.0e6F});
 
     REQUIRE(clusters.get_overflow_count() == grid.cluster_count());
 
@@ -311,7 +312,8 @@ TEST_CASE("clear puts the grid back where it started", "[cluster]") {
 namespace {
 
 struct gpu_buffers {
-    std::vector<uint32> counts;
+    std::vector<uint32> cluster_counts;
+    uint32 overflow_count = 0;
     std::vector<uint32> indices;
 };
 
@@ -320,12 +322,13 @@ auto as_gpu_wrote(const cluster_lights& reference) -> gpu_buffers {
     const uint32 cap      = reference.get_cap();
 
     gpu_buffers out{
-        .counts  = std::vector<uint32>(static_cast<std::size_t>(clusters) + 1, 0),
-        .indices = std::vector<uint32>(static_cast<std::size_t>(clusters) * cap, 0),
+        .cluster_counts = std::vector<uint32>(static_cast<std::size_t>(clusters), 0),
+        .overflow_count = static_cast<uint32>(reference.get_overflow_count()),
+        .indices        = std::vector<uint32>(static_cast<std::size_t>(clusters) * cap, 0),
     };
 
     for (uint32 cluster = 0; cluster < clusters; ++cluster) {
-        out.counts[cluster] = reference.count_of(cluster);
+        out.cluster_counts[cluster] = reference.count_of(cluster);
 
         const auto list = reference.lights_of(cluster);
         std::ranges::copy(
@@ -333,25 +336,27 @@ auto as_gpu_wrote(const cluster_lights& reference) -> gpu_buffers {
         );
     }
 
-    out.counts[clusters] = static_cast<uint32>(reference.get_overflow_count());
-
     return out;
 }
 
 auto lit_reference(const cluster_grid& grid, uint32 cap) -> cluster_lights {
     cluster_lights clusters{grid, cap};
 
-    clusters.add(0, view_sphere{.center = vec3f{0.0F, 0.0F, 12.0F}, .radius = 6.0F});
-    clusters.add(1, view_sphere{.center = vec3f{3.0F, 1.0F, 14.0F}, .radius = 8.0F});
-    clusters.add(2, view_sphere{.center = vec3f{-4.0F, -2.0F, 9.0F}, .radius = 5.0F});
-    clusters.add(3, view_sphere{.center = vec3f{0.5F, 0.0F, 40.0F}, .radius = 25.0F});
+    clusters.add(0, view_sphere{.center = {0.0F, 0.0F, 12.0F}, .radius = 6.0F});
+    clusters.add(1, view_sphere{.center = {3.0F, 1.0F, 14.0F}, .radius = 8.0F});
+    clusters.add(2, view_sphere{.center = {-4.0F, -2.0F, 9.0F}, .radius = 5.0F});
+    clusters.add(3, view_sphere{.center = {0.5F, 0.0F, 40.0F}, .radius = 25.0F});
 
     return clusters;
 }
 
+auto check_gpu(const cluster_lights& reference, const gpu_buffers& gpu) -> spatial::cluster_check {
+    return spatial::check_clusters(reference, gpu.cluster_counts, gpu.overflow_count, gpu.indices);
+}
+
 auto first_cluster_with_two(const gpu_buffers& gpu, uint32 clusters) -> uint32 {
     for (uint32 cluster = 0; cluster < clusters; ++cluster) {
-        if (gpu.counts[cluster] >= 2) {
+        if (gpu.cluster_counts[cluster] >= 2) {
             return cluster;
         }
     }
@@ -365,7 +370,7 @@ TEST_CASE("the comparator agrees with a cull that did the same thing", "[cluster
     const cluster_lights reference = lit_reference(grid, 8);
     const gpu_buffers gpu          = as_gpu_wrote(reference);
 
-    const auto check = spatial::check_clusters(reference, gpu.counts, gpu.indices);
+    const auto check = check_gpu(reference, gpu);
 
     REQUIRE(check.ok());
     REQUIRE(check.clusters_compared == grid.cluster_count());
@@ -381,12 +386,12 @@ TEST_CASE("the order inside a cluster is not something to agree on", "[cluster]"
 
     const uint32 cap     = reference.get_cap();
     const uint32 cluster = first_cluster_with_two(gpu, grid.cluster_count());
-    REQUIRE(gpu.counts[cluster] >= 2);
+    REQUIRE(gpu.cluster_counts[cluster] >= 2);
 
     const auto at = static_cast<std::size_t>(cluster) * cap;
     std::swap(gpu.indices[at], gpu.indices[at + 1]);
 
-    REQUIRE(spatial::check_clusters(reference, gpu.counts, gpu.indices).ok());
+    REQUIRE(check_gpu(reference, gpu).ok());
 }
 
 TEST_CASE("a count off by one is caught and located", "[cluster]") {
@@ -394,11 +399,11 @@ TEST_CASE("a count off by one is caught and located", "[cluster]") {
     const cluster_lights reference = lit_reference(grid, 8);
     gpu_buffers gpu                = as_gpu_wrote(reference);
 
-    const uint32 cluster = first_cluster_with_two(gpu, grid.cluster_count());
-    const uint32 was     = gpu.counts[cluster];
-    gpu.counts[cluster]  = was - 1;
+    const uint32 cluster        = first_cluster_with_two(gpu, grid.cluster_count());
+    const uint32 was            = gpu.cluster_counts[cluster];
+    gpu.cluster_counts[cluster] = was - 1;
 
-    const auto check = spatial::check_clusters(reference, gpu.counts, gpu.indices);
+    const auto check = check_gpu(reference, gpu);
 
     REQUIRE_FALSE(check.ok());
     REQUIRE(check.count_mismatches == 1);
@@ -417,7 +422,7 @@ TEST_CASE("a different source with the same count is caught", "[cluster]") {
 
     gpu.indices[static_cast<std::size_t>(cluster) * cap] = 99;
 
-    const auto check = spatial::check_clusters(reference, gpu.counts, gpu.indices);
+    const auto check = check_gpu(reference, gpu);
 
     REQUIRE_FALSE(check.ok());
     REQUIRE(check.count_mismatches == 0);
@@ -430,14 +435,14 @@ TEST_CASE("past the cap only the count is compared", "[cluster]") {
 
     cluster_lights reference{grid, 1};
     for (uint32 light = 0; light < 3; ++light) {
-        reference.add(light, view_sphere{.center = vec3f{0.0F, 0.0F, 10.0F}, .radius = 1.0e6F});
+        reference.add(light, view_sphere{.center = {0.0F, 0.0F, 10.0F}, .radius = 1.0e6F});
     }
 
     gpu_buffers gpu = as_gpu_wrote(reference);
 
     std::ranges::fill(gpu.indices, 2U);
 
-    const auto check = spatial::check_clusters(reference, gpu.counts, gpu.indices);
+    const auto check = check_gpu(reference, gpu);
 
     REQUIRE(reference.count_of(0) == 3);
     REQUIRE(check.ok());
@@ -447,16 +452,16 @@ TEST_CASE("a wrong overflow tally is caught on its own", "[cluster]") {
     const cluster_grid grid = bench_grid();
 
     cluster_lights reference{grid, 1};
-    reference.add(0, view_sphere{.center = vec3f{0.0F, 0.0F, 10.0F}, .radius = 1.0e6F});
-    reference.add(1, view_sphere{.center = vec3f{0.0F, 0.0F, 10.0F}, .radius = 1.0e6F});
+    reference.add(0, view_sphere{.center = {0.0F, 0.0F, 10.0F}, .radius = 1.0e6F});
+    reference.add(1, view_sphere{.center = {0.0F, 0.0F, 10.0F}, .radius = 1.0e6F});
 
     gpu_buffers gpu = as_gpu_wrote(reference);
 
-    REQUIRE(spatial::check_clusters(reference, gpu.counts, gpu.indices).ok());
+    REQUIRE(check_gpu(reference, gpu).ok());
 
-    gpu.counts[grid.cluster_count()] = 0;
+    gpu.overflow_count = 0;
 
-    const auto check = spatial::check_clusters(reference, gpu.counts, gpu.indices);
+    const auto check = check_gpu(reference, gpu);
 
     REQUIRE_FALSE(check.ok());
     REQUIRE(check.count_mismatches == 0);
@@ -469,25 +474,28 @@ TEST_CASE("buffers too short to hold the grid are not silently agreed with", "[c
     const cluster_lights reference = lit_reference(grid, 8);
     const gpu_buffers gpu          = as_gpu_wrote(reference);
 
-    const auto short_counts = std::span<const uint32>{gpu.counts}.first(gpu.counts.size() - 1);
+    const auto short_counts =
+        std::span<const uint32>{gpu.cluster_counts}.first(gpu.cluster_counts.size() - 1);
 
-    REQUIRE_FALSE(spatial::check_clusters(reference, short_counts, gpu.indices).ok());
+    REQUIRE_FALSE(
+        spatial::check_clusters(reference, short_counts, gpu.overflow_count, gpu.indices).ok()
+    );
 }
 
 namespace {
 
 using spatial::view_capsule;
 
-auto distance_to_segment(const view_capsule& shape, const vec3f& point) -> float32 {
+auto distance_to_segment(const view_capsule& shape, const view_depth_point& point) -> float32 {
     const vec3f along{
         shape.end_b.x - shape.end_a.x,
         shape.end_b.y - shape.end_a.y,
-        shape.end_b.z - shape.end_a.z,
+        shape.end_b.depth - shape.end_a.depth,
     };
     const vec3f from{
         point.x - shape.end_a.x,
         point.y - shape.end_a.y,
-        point.z - shape.end_a.z,
+        point.depth - shape.end_a.depth,
     };
 
     const float32 length_sq = math::dot(along, along);
@@ -514,7 +522,7 @@ auto listed_clusters(const cluster_lights& clusters) -> uint32 {
 TEST_CASE("a capsule with both ends together is the ball it came from", "[cluster]") {
     const cluster_grid grid = bench_grid();
 
-    const view_sphere ball{.center = vec3f{2.0F, -1.0F, 18.0F}, .radius = 7.0F};
+    const view_sphere ball{.center = {2.0F, -1.0F, 18.0F}, .radius = 7.0F};
 
     for (uint32 slice = 0; slice < grid.slices; ++slice) {
         const auto from_ball    = spatial::scatter_slice(grid, ball, slice);
@@ -534,19 +542,19 @@ TEST_CASE("a column is listed in every cluster it can reach", "[cluster]") {
 
     const std::array<view_capsule, 4> columns{
         view_capsule{
-            .end_a = vec3f{0.0F, 20.0F, 30.0F}, .end_b = vec3f{0.0F, -140.0F, 30.0F},
+            .end_a = {0.0F, 20.0F, 30.0F}, .end_b = {0.0F, -140.0F, 30.0F},
             .radius = 8.0F
         },
         view_capsule{
-            .end_a = vec3f{25.0F, 10.0F, 60.0F}, .end_b = vec3f{25.0F, -150.0F, 62.0F},
+            .end_a = {25.0F, 10.0F, 60.0F}, .end_b = {25.0F, -150.0F, 62.0F},
             .radius = 12.0F
         },
         view_capsule{
-            .end_a = vec3f{-18.0F, 40.0F, 12.0F}, .end_b = vec3f{-18.0F, -60.0F, 14.0F},
+            .end_a = {-18.0F, 40.0F, 12.0F}, .end_b = {-18.0F, -60.0F, 14.0F},
             .radius = 6.0F
         },
         view_capsule{
-            .end_a = vec3f{5.0F, 30.0F, 20.0F}, .end_b = vec3f{-40.0F, -90.0F, 220.0F},
+            .end_a = {5.0F, 30.0F, 20.0F}, .end_b = {-40.0F, -90.0F, 220.0F},
             .radius = 10.0F
         },
     };
@@ -567,13 +575,13 @@ TEST_CASE("a column is listed in every cluster it can reach", "[cluster]") {
         for (uint32 sample = 0; sample < 12000; ++sample) {
             const float32 t = along(rng);
 
-            const vec3f point{
-                shape.end_a.x + (t * (shape.end_b.x - shape.end_a.x)) +
-                    (offset(rng) * shape.radius),
-                shape.end_a.y + (t * (shape.end_b.y - shape.end_a.y)) +
-                    (offset(rng) * shape.radius),
-                shape.end_a.z + (t * (shape.end_b.z - shape.end_a.z)) +
-                    (offset(rng) * shape.radius),
+            const view_depth_point point{
+                .x     = shape.end_a.x + (t * (shape.end_b.x - shape.end_a.x)) +
+                         (offset(rng) * shape.radius),
+                .y     = shape.end_a.y + (t * (shape.end_b.y - shape.end_a.y)) +
+                         (offset(rng) * shape.radius),
+                .depth = shape.end_a.depth + (t * (shape.end_b.depth - shape.end_a.depth)) +
+                         (offset(rng) * shape.radius),
             };
 
             if (distance_to_segment(shape, point) > shape.radius) {
@@ -599,15 +607,15 @@ TEST_CASE("a column costs far fewer clusters than the ball around it", "[cluster
     const cluster_grid grid = bench_grid();
 
     const view_capsule column{
-        .end_a  = vec3f{0.0F, 24.0F, 260.0F},
-        .end_b  = vec3f{0.0F, -144.0F, 260.0F},
+        .end_a  = {0.0F, 24.0F, 260.0F},
+        .end_b  = {0.0F, -144.0F, 260.0F},
         .radius = 8.0F,
     };
 
     const float32 half = (column.end_a.y - column.end_b.y) * 0.5F;
 
     const view_sphere around{
-        .center = vec3f{0.0F, (column.end_a.y + column.end_b.y) * 0.5F, 260.0F},
+        .center = {0.0F, (column.end_a.y + column.end_b.y) * 0.5F, 260.0F},
         .radius = std::sqrt((column.radius * column.radius) + (half * half)),
     };
 
@@ -631,7 +639,7 @@ TEST_CASE("a column behind the camera reaches nothing", "[cluster]") {
     clusters.add(
         0,
         view_capsule{
-            .end_a = vec3f{0.0F, 20.0F, -40.0F}, .end_b = vec3f{0.0F, -20.0F, -10.0F},
+            .end_a = {0.0F, 20.0F, -40.0F}, .end_b = {0.0F, -20.0F, -10.0F},
             .radius = 5.0F
         }
     );

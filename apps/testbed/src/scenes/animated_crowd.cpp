@@ -72,13 +72,13 @@ auto animated_crowd_scene::drift_() const -> float32 {
 auto animated_crowd_scene::ground_at_(
     float32 x, float32 z
 ) const -> float32 {
-    const auto scale = static_cast<float32>(stand().voxel_scale());
+    const auto scale = static_cast<float32>(stand().world_units_per_voxel());
     const auto& grid = stand().grid();
 
     std::optional<int32> top;
     for (const float32 dz : {-collider_half_width, collider_half_width}) {
         for (const float32 dx : {-collider_half_width, collider_half_width}) {
-            const auto column = grid.get_surface_y(
+            const auto column = grid.get_surface_voxel_y(
                 static_cast<int32>(std::floor((x + dx) / scale)),
                 static_cast<int32>(std::floor((z + dz) / scale))
             );
