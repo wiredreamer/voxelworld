@@ -86,35 +86,6 @@ private:
 
 export namespace vw::sculptor {
 
-class dummy_tool final : public base_tool {
-public:
-    auto render(
-        [[maybe_unused]] float delta_time
-    ) -> void override{}
-
-    auto on_key_press(
-        [[maybe_unused]] const plat::key_press_event& ev
-    ) -> void override{}
-
-    auto on_mouse_move(
-        [[maybe_unused]] const plat::mouse_move_event& ev
-    ) -> void override{}
-
-    auto on_mouse_press(
-        [[maybe_unused]] const plat::mouse_press_event& ev
-    ) -> void override{}
-
-    auto on_mouse_release(
-        [[maybe_unused]] const plat::mouse_release_event& ev
-    ) -> void override{}
-
-    auto on_activate() -> void override{}
-};
-
-}  // namespace vw::sculptor
-
-export namespace vw::sculptor {
-
 class paint_tool final : public base_tool {
 public:
     using engine_type = gfx::engine;

@@ -91,6 +91,130 @@ auto keyframe_service::key_at_(
     );
 }
 
+auto keyframe_service::place_keyframe_(
+    const std::string& track_name, asset::animation_property property,
+    const keyframe_value& keyframe, const std::optional<keyframe_value>& replaced,
+    bool track_exists
+) const -> std::vector<std::unique_ptr<base_operation>> {
+    const auto& clip_name = state_->anim.selected_clip_name;
+
+    std::vector<std::unique_ptr<base_operation>> parts;
+
+    if (!track_exists) {
+        parts.push_back(
+            std::make_unique<add_track_operation>(
+                *engine_,
+                *state_,
+                add_track_params{
+                    .clip_name  = clip_name,
+                    .track_name = track_name,
+                    .property   = property,
+                    .keyframe   = keyframe,
+                }
+            )
+        );
+        return parts;
+    }
+
+    const auto occupant = key_at_(track_name, property, time_of(keyframe));
+    const bool occupied_by_other =
+        occupant.has_value() && (!replaced || id_of(*occupant) != id_of(*replaced));
+
+    std::optional<keyframe_value> rewritten = replaced;
+    if (!rewritten && occupied_by_other) {
+        rewritten = occupant;
+    }
+
+    if (occupied_by_other && replaced) {
+        parts.push_back(
+            std::make_unique<remove_keyframe_operation>(
+                *engine_,
+                *state_,
+                remove_keyframe_params{
+                    .clip_name  = clip_name,
+                    .track_name = track_name,
+                    .property   = property,
+                    .keyframe   = *occupant,
+                }
+            )
+        );
+    }
+
+    if (rewritten) {
+        parts.push_back(
+            std::make_unique<modify_keyframe_operation>(
+                *engine_,
+                *state_,
+                modify_keyframe_params{
+                    .clip_name    = clip_name,
+                    .track_name   = track_name,
+                    .property     = property,
+                    .old_keyframe = *rewritten,
+                    .new_keyframe = keyframe,
+                }
+            )
+        );
+        return parts;
+    }
+
+    parts.push_back(
+        std::make_unique<add_keyframe_operation>(
+            *engine_,
+            *state_,
+            add_keyframe_params{
+                .clip_name  = clip_name,
+                .track_name = track_name,
+                .property   = property,
+                .keyframe   = keyframe,
+            }
+        )
+    );
+    return parts;
+}
+
+auto keyframe_service::execute_parts_(
+    std::vector<std::unique_ptr<base_operation>> parts
+) -> void {
+    if (parts.empty()) {
+        return;
+    }
+
+    if (parts.size() == 1) {
+        op_manager_->execute(std::move(parts.front()));
+        return;
+    }
+
+    op_manager_->execute(std::make_unique<composite_operation>(std::move(parts)));
+}
+
+auto keyframe_service::set_keyframe(
+    const std::string& track_name, asset::animation_property property,
+    const keyframe_value& keyframe
+) -> void {
+    const auto& registry = engine_->get_world().resource<asset::animation_clip_registry>();
+    const auto clip      = registry.get(state_->anim.selected_clip_name);
+    if (!clip) {
+        return;
+    }
+
+    execute_parts_(
+        place_keyframe_(track_name, property, keyframe, std::nullopt, clip->has_track(track_name))
+    );
+}
+
+auto keyframe_service::modify_keyframe(
+    const std::string& track_name, asset::animation_property property,
+    const keyframe_value& old_keyframe, const keyframe_value& new_keyframe
+) -> void {
+    const auto& registry = engine_->get_world().resource<asset::animation_clip_registry>();
+    const auto clip      = registry.get(state_->anim.selected_clip_name);
+    if (!clip || !clip->has_track(track_name)) {
+        return;
+    }
+
+    execute_parts_(place_keyframe_(track_name, property, new_keyframe, old_keyframe, true));
+}
+
 auto keyframe_service::has_key_at_cursor() const -> bool {
     if (state_->scene.selected_name.empty()) {
         return false;
@@ -133,59 +257,16 @@ auto keyframe_service::record_pose(
         properties.push_back(property_of(state_->tool.gizmo));
     }
 
-    bool track_pending = !clip->has_track(name);
+    bool track_exists = clip->has_track(name);
 
     std::vector<std::unique_ptr<base_operation>> parts;
 
     for (const auto property : properties) {
-        auto value = pose_value_(it->second, property, time);
-
-        if (track_pending) {
-            track_pending = false;
-            parts.push_back(
-                std::make_unique<add_track_operation>(
-                    *engine_,
-                    *state_,
-                    add_track_params{
-                        .clip_name  = state_->anim.selected_clip_name,
-                        .track_name = name,
-                        .property   = property,
-                        .keyframe   = value,
-                    }
-                )
-            );
-            continue;
-        }
-
-        if (const auto existing = key_at_(name, property, time)) {
-            parts.push_back(
-                std::make_unique<modify_keyframe_operation>(
-                    *engine_,
-                    *state_,
-                    modify_keyframe_params{
-                        .clip_name    = state_->anim.selected_clip_name,
-                        .track_name   = name,
-                        .property     = property,
-                        .old_keyframe = *existing,
-                        .new_keyframe = value,
-                    }
-                )
-            );
-            continue;
-        }
-
-        parts.push_back(
-            std::make_unique<add_keyframe_operation>(
-                *engine_,
-                *state_,
-                add_keyframe_params{
-                    .clip_name  = state_->anim.selected_clip_name,
-                    .track_name = name,
-                    .property   = property,
-                    .keyframe   = value,
-                }
-            )
+        auto placed = place_keyframe_(
+            name, property, pose_value_(it->second, property, time), std::nullopt, track_exists
         );
+        track_exists = true;
+        std::ranges::move(placed, std::back_inserter(parts));
     }
 
     if (parts.empty()) {
@@ -194,12 +275,7 @@ auto keyframe_service::record_pose(
 
     state_->anim.selected_track_name = name;
 
-    if (parts.size() == 1) {
-        op_manager_->execute(std::move(parts.front()));
-        return;
-    }
-
-    op_manager_->execute(std::make_unique<composite_operation>(std::move(parts)));
+    execute_parts_(std::move(parts));
 }
 
 auto keyframe_service::step_to_key(
@@ -291,47 +367,10 @@ auto keyframe_service::move_keyframe(
         return;
     }
 
-    std::vector<std::unique_ptr<base_operation>> parts;
-
-    if (const auto occupied = key_at_(track_name, property, time);
-        occupied && id_of(*occupied) != keyframe_id) {
-        parts.push_back(
-            std::make_unique<remove_keyframe_operation>(
-                *engine_,
-                *state_,
-                remove_keyframe_params{
-                    .clip_name  = state_->anim.selected_clip_name,
-                    .track_name = track_name,
-                    .property   = property,
-                    .keyframe   = *occupied,
-                }
-            )
-        );
-    }
-
     auto moved = *found;
     std::visit([time](auto& kf) { kf.time = time; }, moved);
 
-    parts.push_back(
-        std::make_unique<modify_keyframe_operation>(
-            *engine_,
-            *state_,
-            modify_keyframe_params{
-                .clip_name    = state_->anim.selected_clip_name,
-                .track_name   = track_name,
-                .property     = property,
-                .old_keyframe = *found,
-                .new_keyframe = moved,
-            }
-        )
-    );
-
-    if (parts.size() == 1) {
-        op_manager_->execute(std::move(parts.front()));
-        return;
-    }
-
-    op_manager_->execute(std::make_unique<composite_operation>(std::move(parts)));
+    execute_parts_(place_keyframe_(track_name, property, moved, *found, true));
 }
 
 auto keyframe_service::delete_keyframe() -> void {

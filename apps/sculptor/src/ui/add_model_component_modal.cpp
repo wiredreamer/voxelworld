@@ -23,7 +23,7 @@ auto add_model_component_modal::open(const std::string& entity_name) -> void {
     need_open_   = true;
     entity_name_ = entity_name;
     size_        = {8, 8, 8};
-    category_    = selected_model_category(*engine_, *state_);
+    category_    = edited_model_category(*engine_, *state_);
     error_.clear();
 }
 

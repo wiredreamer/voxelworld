@@ -37,7 +37,6 @@ private:
     auto update_animation_context_() -> void;
     auto sync_visibility_() -> void;
     auto handle_animation_actions_() -> void;
-    auto collect_dirty_models_() -> void;
     auto prune_contexts_() -> void;
     auto refresh_volume_bounds_() -> void;
     auto render_volume_overlay_() -> void;

@@ -45,6 +45,7 @@ sculptor`; тестов у приложения нет.
      рядом с остальными из группы `"Tools"`: окно подсказок рисует заголовок
      при каждой смене `group`;
    - ветки в `tool_of` и `command_for_tool` (`shortcuts/shortcuts.cpp`);
+     инструмент без клавиши возвращает из `command_for_tool` `std::nullopt`;
    - `case command::<…>:` в хвост `switch` в `app::run_command_`: `switch` там
      без `default`.
 
@@ -88,17 +89,18 @@ sculptor`; тестов у приложения нет.
 
 **Записывается только помеченный объём.** `file_service` пишет .voxm лишь для
 сущностей из `state.file.dirty_models`. Туда их кладёт
-`app::collect_dirty_models_` по `world.changed<ecs::model_component>()`, а этот
-флаг ставят только `model_system::modify(ent).set_model`, `set_voxel` и `fill`.
+`file_service::collect_dirty_models` по `world.changed<ecs::model_component>()` и
+ещё не promoted `registry().requested<ecs::model_component>()`, а эти флаги ставят
+только `model_system::modify(ent).set_model`, `set_voxel` и `fill`.
 `set_pivot` заявляет изменение трансформа, а `set_source` не заявляет ничего,
 поэтому такую правку клади в `state_->file.dirty_models.insert(ent)` сам — иначе
 сохранение молча оставит старый .voxm.
 
-**Флаг доходит не сразу.** `changed` выставляет обновление мира, поэтому правка
-попадает в `dirty_models` лишь в начале ближайшего после него `app::render`.
-Сохранение, которое пришло раньше (`Ctrl+S` из опроса событий, вызов сразу за
-операцией), правку не увидит. Код, который сохраняет сразу после операции,
-сначала сам кладёт сущность в `dirty_models`.
+**Флаг доходит не сразу, и сохранение это учитывает.** `changed` выставляет
+обновление мира, поэтому правка из ImGui лежит в `requested` до ближайшего
+обновления. `file_service::write_` зовёт `collect_dirty_models` сам и читает оба
+набора, поэтому `Ctrl+S` из опроса событий и сохранение сразу за операцией видят
+правку. Новый путь сохранения зовёт `write_`, а не пишет объёмы в обход него.
 
 **Новый объект модели под старой ссылкой нужно отдать библиотеке через `adopt`.**
 Расширение и обрезка ставят узлу новый `asset::model`, а `source` не меняют;
@@ -141,9 +143,11 @@ undo и redo, а выделение не трогает. Вход и выход 
 кладёт в модель воксель не из этой кисти или вне контекста объёма, сверяет
 `voxel.category()` с `model->category()` сам.
 
-Сама панель берёт набор через `selected_model_category` по `scene.selected_name`.
-После undo, вернувшего объём другого набора при прежнем выделении, кисть
-подстроится не под ту модель. Правя панель, бери набор модели `edited_node()`.
+Сама панель берёт набор через `edited_model_category` — по `edited_node()`, а не
+по выделению: после undo, вернувшего объём другого набора, выделение остаётся
+прежним, и по нему кисть подстроилась бы не под ту модель. Вдобавок
+`add_voxel_tool` и `paint_tool` не пишут вовсе, когда набор кисти разошёлся с
+набором объёма.
 
 ## Анимация
 
@@ -156,10 +160,11 @@ undo и redo, а выделение не трогает. Вход и выход 
 - `move_keyframe` убирает ключ, занявший место, через
   `remove_keyframe_operation` в одной `composite_operation` с переносом.
 
-Новый путь, который добавляет ключ или меняет его время, идёт через
-`keyframe_service` и делает так же. Сейчас правило нарушают
-`create_keyframe_modal::create_keyframe` и поле Time в
-`keyframe_properties_panel`.
+Правило живёт в одном месте — `keyframe_service::place_keyframe_`, — и все пути
+идут через него: `record_pose`, `move_keyframe`, диалог «Add Keyframe…» и поле
+Time в `keyframe_properties_panel`. Новый путь зовёт `set_keyframe` (добавить или
+заменить) либо `modify_keyframe` (перенести или поправить), а не собирает
+операции с ключами сам.
 
 ## UI и ImGui
 

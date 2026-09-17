@@ -179,10 +179,10 @@ auto imgui_drag_vec3f(std::string_view label, vec3f& vec, float label_offset) ->
     return changed;
 }
 
-auto selected_model_category(
+auto edited_model_category(
     gfx::engine& eng, const app_state& state
 ) -> voxel_category {
-    const auto it = state.scene.name_to_entity.find(state.scene.selected_name);
+    const auto it = state.scene.name_to_entity.find(state.edited_node());
     if (it == state.scene.name_to_entity.end()) {
         return state.tool.selected_voxel.category();
     }

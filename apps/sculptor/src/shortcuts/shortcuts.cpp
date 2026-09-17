@@ -89,17 +89,18 @@ auto tool_of(
 
 auto command_for_tool(
     tools tool
-) -> command {
+) -> std::optional<command> {
     switch (tool) {
+        case tools::select_entity: return command::tool_select;
         case tools::add_voxel: return command::tool_add_voxel;
         case tools::remove_voxel: return command::tool_remove_voxel;
         case tools::paint_voxel: return command::tool_paint;
         case tools::color_picker: return command::tool_color_picker;
         case tools::move_pivot: return command::tool_move_pivot;
-        case tools::select_entity:
+        case tools::pose:
         case tools::invalid: break;
     }
-    return command::tool_select;
+    return std::nullopt;
 }
 
 }  // namespace vw::sculptor

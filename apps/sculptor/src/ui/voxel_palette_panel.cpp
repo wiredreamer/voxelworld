@@ -62,7 +62,7 @@ auto voxel_palette_panel::render(
     [[maybe_unused]] float delta_time
 ) -> void {
     const voxel_registry& registry = engine_->get_voxel_registry();
-    const voxel_category shown     = selected_model_category(*engine_, *state_);
+    const voxel_category shown     = edited_model_category(*engine_, *state_);
 
     state_->tool.brush_of_set[state_->tool.selected_voxel.category().value] =
         state_->tool.selected_voxel;

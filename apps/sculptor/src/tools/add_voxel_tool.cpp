@@ -3,6 +3,7 @@ module vw.sculptor;
 import std;
 
 import vw.core;
+import vw.asset;
 import vw.ecs;
 import vw.world;
 import vw.platform;
@@ -125,6 +126,11 @@ auto add_voxel_tool::on_mouse_press(
             op_manager_->execute(std::move(expand_op));
 
             update_hovered_voxel_();
+            return;
+        }
+
+        const auto model = model_comp.get_model();
+        if (!model || model->category() != state_->tool.selected_voxel.category()) {
             return;
         }
 

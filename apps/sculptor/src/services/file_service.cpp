@@ -47,6 +47,17 @@ auto file_service::save_as(
     return true;
 }
 
+auto file_service::collect_dirty_models() -> void {
+    auto& world = engine_->get_world();
+
+    for (const auto ent : world.changed<ecs::model_component>()) {
+        state_->file.dirty_models.insert(ent);
+    }
+    for (const auto ent : world.registry().requested<ecs::model_component>()) {
+        state_->file.dirty_models.insert(ent);
+    }
+}
+
 auto file_service::write_(
     const asset::asset_ref& prefab_ref
 ) -> bool {
@@ -55,6 +66,7 @@ auto file_service::write_(
         return false;
     }
 
+    collect_dirty_models();
     assign_missing_refs_(prefab_ref);
     write_dirty_models_();
 

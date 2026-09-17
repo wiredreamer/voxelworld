@@ -16,9 +16,9 @@ import vw.gfx;
 namespace vw::sculptor {
 
 create_keyframe_modal::create_keyframe_modal(
-    engine_type& eng, app_state& st, operation_manager& op_manager
+    engine_type& eng, app_state& st, keyframe_service& kf_svc
 )
-    : engine_(&eng), state_(&st), op_manager_(&op_manager) {}
+    : engine_(&eng), state_(&st), keyframe_service_(&kf_svc) {}
 
 auto create_keyframe_modal::open(
     const std::string& track_name
@@ -212,25 +212,7 @@ auto create_keyframe_modal::create_keyframe() -> bool {
         kf_val         = kf;
     }
 
-    if (!clip->has_track(track_name_)) {
-        add_track_params params = {
-            .clip_name  = state_->anim.selected_clip_name,
-            .track_name = track_name_,
-            .property   = prop,
-            .keyframe   = kf_val,
-        };
-        auto op = std::make_unique<add_track_operation>(*engine_, *state_, params);
-        op_manager_->execute(std::move(op));
-    } else {
-        add_keyframe_params params = {
-            .clip_name  = state_->anim.selected_clip_name,
-            .track_name = track_name_,
-            .property   = prop,
-            .keyframe   = kf_val,
-        };
-        auto op = std::make_unique<add_keyframe_operation>(*engine_, *state_, params);
-        op_manager_->execute(std::move(op));
-    }
+    keyframe_service_->set_keyframe(track_name_, prop, kf_val);
 
     state_->anim.selected_track_name = track_name_;
     state_->anim.selected_property   = prop;

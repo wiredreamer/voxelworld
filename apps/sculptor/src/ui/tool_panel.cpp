@@ -57,7 +57,8 @@ auto tool_panel::render_tool_button(
     }
     ImGui::PopStyleColor(2);
 
-    const auto keys = keys_of(command_for_tool(tool));
+    const auto cmd  = command_for_tool(tool);
+    const auto keys = cmd ? keys_of(*cmd) : std::string_view{};
     ImGui::SameLine();
     ImGui::TextDisabled("%.*s", static_cast<int>(keys.size()), keys.data());
     ImGui::Spacing();

@@ -16,9 +16,9 @@ import vw.gfx;
 namespace vw::sculptor {
 
 keyframe_properties_panel::keyframe_properties_panel(
-    engine_type& eng, app_state& st, operation_manager& op_manager
+    engine_type& eng, app_state& st, operation_manager& op_manager, keyframe_service& kf_svc
 )
-    : engine_(&eng), state_(&st), op_manager_(&op_manager) {}
+    : engine_(&eng), state_(&st), op_manager_(&op_manager), keyframe_service_(&kf_svc) {}
 
 auto keyframe_properties_panel::render(
     float
@@ -144,15 +144,12 @@ auto keyframe_properties_panel::render(
                     new_kf.tangent_in  = new_tangent_in;
                     new_kf.tangent_out = new_tangent_out;
 
-                    modify_keyframe_params mod_params;
-                    mod_params.clip_name    = state_->anim.selected_clip_name;
-                    mod_params.track_name   = state_->anim.selected_track_name;
-                    mod_params.property     = state_->anim.selected_property;
-                    mod_params.old_keyframe = keyframe_value(old_kf);
-                    mod_params.new_keyframe = keyframe_value(new_kf);
-                    auto op =
-                        std::make_unique<modify_keyframe_operation>(*engine_, *state_, mod_params);
-                    op_manager_->execute(std::move(op));
+                    keyframe_service_->modify_keyframe(
+                        state_->anim.selected_track_name,
+                        state_->anim.selected_property,
+                        keyframe_value(old_kf),
+                        keyframe_value(new_kf)
+                    );
                 }
 
                 ImGui::Spacing();

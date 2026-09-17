@@ -3,6 +3,7 @@ module vw.sculptor;
 import std;
 
 import vw.core;
+import vw.asset;
 import vw.ecs;
 import vw.world;
 import vw.platform;
@@ -88,10 +89,12 @@ auto paint_tool::on_mouse_press(
         }
 
         const auto& model_comp = world.get<ecs::model_component>(ent);
-        const bool has_model   = model_comp.has_model();
-        const bool is_same_voxel =
-            has_model && model_comp.get_voxel(hovered_voxel_) == state_->tool.selected_voxel;
-        if (is_same_voxel) {
+        const auto model       = model_comp.get_model();
+        if (!model || model->category() != state_->tool.selected_voxel.category()) {
+            return;
+        }
+
+        if (model_comp.get_voxel(hovered_voxel_) == state_->tool.selected_voxel) {
             return;
         }
 

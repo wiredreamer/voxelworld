@@ -41,7 +41,7 @@ auto create_entity_modal::open() -> void {
     name_             = std::format("new entity {}", scene.name_to_entity.size());
     parent_name_ =
         scene.name_to_entity.contains(scene.selected_name) ? scene.selected_name : scene.root_name;
-    category_ = selected_model_category(*engine_, *state_);
+    category_ = edited_model_category(*engine_, *state_);
 
     model_files_ = collect_asset_refs(app_state::model_dir(), ".voxm");
     if (!std::ranges::contains(model_files_, model_file_)) {

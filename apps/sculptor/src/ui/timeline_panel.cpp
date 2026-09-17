@@ -27,7 +27,7 @@ timeline_panel::timeline_panel(
     , op_manager_(&op_manager)
     , clip_service_(&clip_svc)
     , keyframe_service_(&kf_svc)
-    , create_kf_modal_(eng, st, op_manager)
+    , create_kf_modal_(eng, st, kf_svc)
     , delete_track_modal_(eng, st, op_manager)
     , save_clip_as_modal_(eng, st, clip_svc)
     , layer_blend_modal_(st) {}

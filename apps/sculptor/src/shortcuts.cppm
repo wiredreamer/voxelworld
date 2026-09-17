@@ -133,6 +133,6 @@ inline constexpr std::array shortcuts{
 [[nodiscard]] auto keys_of(command cmd) -> std::string_view;
 
 [[nodiscard]] auto tool_of(command cmd) -> tools;
-[[nodiscard]] auto command_for_tool(tools tool) -> command;
+[[nodiscard]] auto command_for_tool(tools tool) -> std::optional<command>;
 
 }  // namespace vw::sculptor

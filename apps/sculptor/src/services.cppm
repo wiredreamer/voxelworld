@@ -63,6 +63,8 @@ public:
     auto save() -> bool;
     auto save_as(std::string_view filename) -> bool;
 
+    auto collect_dirty_models() -> void;
+
 private:
     auto write_(const asset::asset_ref& prefab_ref) -> bool;
 
@@ -97,7 +99,25 @@ public:
         float32 time
     ) -> void;
 
+    auto set_keyframe(
+        const std::string& track_name, asset::animation_property property,
+        const keyframe_value& keyframe
+    ) -> void;
+
+    auto modify_keyframe(
+        const std::string& track_name, asset::animation_property property,
+        const keyframe_value& old_keyframe, const keyframe_value& new_keyframe
+    ) -> void;
+
 private:
+    [[nodiscard]] auto place_keyframe_(
+        const std::string& track_name, asset::animation_property property,
+        const keyframe_value& keyframe, const std::optional<keyframe_value>& replaced,
+        bool track_exists
+    ) const -> std::vector<std::unique_ptr<base_operation>>;
+
+    auto execute_parts_(std::vector<std::unique_ptr<base_operation>> parts) -> void;
+
     [[nodiscard]] auto key_at_(
         const std::string& track_name, asset::animation_property property, float32 time
     ) const -> std::optional<keyframe_value>;

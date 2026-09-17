@@ -206,7 +206,7 @@ auto imgui_clamp_window_pos_to_viewport() -> void;
 
 auto imgui_drag_vec3f(std::string_view label, vec3f& vec, float label_offset = 60.f) -> bool;
 
-[[nodiscard]] auto selected_model_category(gfx::engine& eng, const app_state& state)
+[[nodiscard]] auto edited_model_category(gfx::engine& eng, const app_state& state)
     -> voxel_category;
 
 auto imgui_voxel_set_combo(std::string_view label, const voxel_registry& registry,
@@ -301,7 +301,7 @@ class create_keyframe_modal final {
 public:
     using engine_type = gfx::engine;
 
-    create_keyframe_modal(engine_type& eng, app_state& st, operation_manager& op_manager);
+    create_keyframe_modal(engine_type& eng, app_state& st, keyframe_service& kf_svc);
 
     auto open(const std::string& track_name) -> void;
     auto render(float delta_time) -> void;
@@ -311,7 +311,7 @@ private:
 
     engine_type* engine_;
     app_state* state_;
-    operation_manager* op_manager_;
+    keyframe_service* keyframe_service_;
 
     bool need_open_ = false;
     std::string track_name_;
@@ -537,7 +537,9 @@ class keyframe_properties_panel final {
 public:
     using engine_type = gfx::engine;
 
-    keyframe_properties_panel(engine_type& eng, app_state& st, operation_manager& op_manager);
+    keyframe_properties_panel(
+        engine_type& eng, app_state& st, operation_manager& op_manager, keyframe_service& kf_svc
+    );
 
     auto render(float delta_time) -> void;
 
@@ -545,6 +547,7 @@ private:
     engine_type* engine_;
     app_state* state_;
     operation_manager* op_manager_;
+    keyframe_service* keyframe_service_;
 };
 
 }  // namespace vw::sculptor

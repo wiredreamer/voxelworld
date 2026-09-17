@@ -39,7 +39,7 @@ app::app(
     , voxel_palette_panel_(eng, state_)
     , entity_properties_panel_(eng, state_, op_manager_, model_library_)
     , socket_panel_(eng, state_, op_manager_, model_library_)
-    , keyframe_properties_panel_(eng, state_, op_manager_)
+    , keyframe_properties_panel_(eng, state_, op_manager_, keyframe_service_)
     , entity_tree_panel_(eng, state_, op_manager_, model_library_)
     , timeline_panel_(eng, state_, op_manager_, clip_service_, keyframe_service_)
     , fsm_panel_(state_, op_manager_, fsm_service_)
@@ -108,7 +108,7 @@ app::~app() {
 auto app::render(
     float delta_time
 ) -> void {
-    collect_dirty_models_();
+    file_service_.collect_dirty_models();
     prune_contexts_();
     refresh_volume_bounds_();
     sync_visibility_();
@@ -588,12 +588,6 @@ auto app::render_volume_overlay_() -> void {
     renderer.draw_line(node * vec3f{-arm, 0.f, 0.f}, node * vec3f{arm, 0.f, 0.f}, colors::purple_4);
     renderer.draw_line(node * vec3f{0.f, -arm, 0.f}, node * vec3f{0.f, arm, 0.f}, colors::purple_4);
     renderer.draw_line(node * vec3f{0.f, 0.f, -arm}, node * vec3f{0.f, 0.f, arm}, colors::purple_4);
-}
-
-auto app::collect_dirty_models_() -> void {
-    for (const auto ent : get_engine().get_world().changed<ecs::model_component>()) {
-        state_.file.dirty_models.insert(ent);
-    }
 }
 
 auto app::init_asset_dirs_() -> void {
