@@ -85,10 +85,9 @@ const std::vector<std::unique_ptr<combined_buffer>>& combined_buffer_pool::get_b
 auto combined_buffer_pool::process_destroyed_(world_type& world) -> void {
     for (auto ent : world.destroyed()) {
         hidden_entities_.erase(ent);
-        if (entity_buffer_infos_.contains(ent)) {
-            auto& info = entity_buffer_infos_[ent];
-            touched_bounds_.push_back(info.bounds);
-            auto swapped = buffers_[info.buffer_index]->free(ent);
+        if (auto* info = entity_buffer_infos_.get(ent)) {
+            touched_bounds_.push_back(info->bounds);
+            auto swapped = buffers_[info->buffer_index]->free(ent);
             if (swapped && world.has<transform_component>(*swapped)) {
                 auto& tc = world.get<transform_component>(*swapped);
                 vw::spatial::aabb bounds{};
@@ -96,10 +95,10 @@ auto combined_buffer_pool::process_destroyed_(world_type& world) -> void {
                     bounds = world.get<spatial_component>(*swapped)
                                  .get_bounds();
                 }
-                buffers_[info.buffer_index]->write_transform(
+                buffers_[info->buffer_index]->write_transform(
                     *swapped, model_matrix(tc, world.get<model_component>(*swapped)), bounds);
             }
-            entity_buffer_infos_.erase(ent);
+            entity_buffer_infos_.remove(ent);
         }
         chunk_links_.erase(ent);
         sorted_erase(mesh_pending_entities_, ent);
@@ -227,9 +226,8 @@ auto combined_buffer_pool::update_meshes_(
         if (!has_model || !has_transform) {
             hidden_entities_.erase(ent);
 
-            if (entity_buffer_infos_.contains(ent)) {
-                auto& buffer_info = entity_buffer_infos_[ent];
-                auto swapped = buffers_[buffer_info.buffer_index]->free(ent);
+            if (auto* buffer_info = entity_buffer_infos_.get(ent)) {
+                auto swapped = buffers_[buffer_info->buffer_index]->free(ent);
                 if (swapped && world.has<transform_component>(*swapped)) {
                     auto& tc = world.get<transform_component>(*swapped);
                     vw::spatial::aabb swap_bounds{};
@@ -237,11 +235,11 @@ auto combined_buffer_pool::update_meshes_(
                         swap_bounds = world.get<spatial_component>(*swapped)
                                           .get_bounds();
                     }
-                    buffers_[buffer_info.buffer_index]->write_transform(
+                    buffers_[buffer_info->buffer_index]->write_transform(
                         *swapped, model_matrix(tc, world.get<model_component>(*swapped)),
                         swap_bounds);
                 }
-                entity_buffer_infos_.erase(ent);
+                entity_buffer_infos_.remove(ent);
             }
             continue;
         }
@@ -281,8 +279,8 @@ auto combined_buffer_pool::update_meshes_(
             ent_bounds = world.get<spatial_component>(ent).get_bounds();
         }
 
-        if (entity_buffer_infos_.contains(ent)) {
-            auto& buffer_info = entity_buffer_infos_[ent];
+        if (auto* existing = entity_buffer_infos_.get(ent)) {
+            auto& buffer_info = *existing;
             auto& buffer      = buffers_[buffer_info.buffer_index];
 
             if (buffer_info.chunk_size == required_chunk_size) {
@@ -331,8 +329,9 @@ auto combined_buffer_pool::update_meshes_(
         buffer->allocate(ent, model_id, *mesh_ptr, transform_matrix, ent_bounds);
         uploaded_models_.push_back(model_id);
 
-        entity_buffer_infos_[ent] =
-            entity_buffer_info{required_chunk_size, buffer_index, ent_bounds};
+        entity_buffer_infos_.emplace(
+            ent, entity_buffer_info{required_chunk_size, buffer_index, ent_bounds}
+        );
         touched_bounds_.push_back(ent_bounds);
         ++mesh_writes;
     }
@@ -371,12 +370,12 @@ auto combined_buffer_pool::evict_uploaded_(
 
 auto combined_buffer_pool::hide_marked_() -> void {
     for (const auto ent : hidden_entities_) {
-        const auto it = entity_buffer_infos_.find(ent);
-        if (it == entity_buffer_infos_.end()) {
+        const auto* info = entity_buffer_infos_.get(ent);
+        if (info == nullptr) {
             continue;
         }
 
-        const auto buffer = it->second.buffer_index;
+        const auto buffer = info->buffer_index;
         const auto slot   = buffers_[buffer]->get_entity_allocation(ent).instance_index;
         visibility_flags_[buffer][slot] = 0U;
     }
@@ -406,12 +405,13 @@ auto combined_buffer_pool::update_chunk_visibility_(
         if (!ent.is_valid()) {
             return std::nullopt;
         }
-        const auto it = entity_buffer_infos_.find(ent);
-        if (it == entity_buffer_infos_.end()) {
+        const auto* info = entity_buffer_infos_.get(ent);
+        if (info == nullptr) {
             return std::nullopt;
         }
-        const auto index = buffers_[it->second.buffer_index]->get_entity_allocation(ent).instance_index;
-        return std::pair{it->second.buffer_index, index};
+        const auto index =
+            buffers_[info->buffer_index]->get_entity_allocation(ent).instance_index;
+        return std::pair{info->buffer_index, index};
     };
 
     vec3i lo{std::numeric_limits<int32>::max(), std::numeric_limits<int32>::max(),
@@ -589,7 +589,8 @@ auto combined_buffer_pool::update_transforms_(
             hidden_entities_.erase(ent);
         }
 
-        if (!entity_buffer_infos_.contains(ent)) {
+        auto* stored_info = entity_buffer_infos_.get(ent);
+        if (stored_info == nullptr) {
             continue;
         }
 
@@ -607,7 +608,7 @@ auto combined_buffer_pool::update_transforms_(
             break;
         }
 
-        auto& info = entity_buffer_infos_[ent];
+        auto& info = *stored_info;
         const auto& transform_comp = world.get<transform_component>(ent);
         vw::spatial::aabb tr_bounds{};
         if (world.has<spatial_component>(ent)) {

@@ -36,6 +36,8 @@ struct cell_lookup {
 struct chunk_walk_scratch {
     std::vector<uint64> queued;
     std::vector<std::pair<vec3i, int32>> pending;
+    std::vector<cell_lookup> cells;
+    std::vector<uint8> cell_known;
 };
 
 template <typename LinksAt, typename IsSky, typename StartsIn, typename Visit>
@@ -59,7 +61,10 @@ auto walk_visible_chunks(
     auto& queued  = scratch.queued;
     auto& pending = scratch.pending;
 
-    queued.assign(width * height * depth, 0);
+    const auto cell_count = width * height * depth;
+    queued.assign(cell_count, 0);
+    scratch.cells.assign(cell_count, cell_lookup{});
+    scratch.cell_known.assign(cell_count, 0);
     pending.clear();
 
     const auto slot_of = [&](vec3i cell) -> std::size_t {
@@ -67,6 +72,15 @@ auto walk_visible_chunks(
                 static_cast<std::size_t>(cell.z - span_lo.z)) *
                    width +
                static_cast<std::size_t>(cell.x - span_lo.x);
+    };
+
+    const auto lookup_at = [&](vec3i cell) -> const cell_lookup& {
+        const auto slot = slot_of(cell);
+        if (scratch.cell_known[slot] == 0) {
+            scratch.cells[slot]      = links_at(cell);
+            scratch.cell_known[slot] = 1;
+        }
+        return scratch.cells[slot];
     };
 
     const auto pockets_of = [&](const cell_lookup& cell) -> std::span<const asset::chunk_pocket> {
@@ -77,9 +91,9 @@ auto walk_visible_chunks(
     };
 
     {
-        const cell_lookup origin_cell = links_at(origin);
-        const auto pockets            = pockets_of(origin_cell);
-        uint64 mask                   = seen_bit;
+        const cell_lookup& origin_cell = lookup_at(origin);
+        const auto pockets             = pockets_of(origin_cell);
+        uint64 mask                    = seen_bit;
 
         bool found = false;
         for (std::size_t i = 0; i < pockets.size(); ++i) {
@@ -106,7 +120,7 @@ auto walk_visible_chunks(
         const auto [coord, pocket_index] = pending.back();
         pending.pop_back();
 
-        const auto pockets = pockets_of(links_at(coord));
+        const auto pockets = pockets_of(lookup_at(coord));
         if (static_cast<std::size_t>(pocket_index) >= pockets.size()) {
             continue;
         }
@@ -123,7 +137,7 @@ auto walk_visible_chunks(
                 continue;
             }
 
-            const cell_lookup next_cell = links_at(next);
+            const cell_lookup& next_cell = lookup_at(next);
             if (next_cell.links == nullptr && !next_cell.placed && !is_sky(next)) {
                 continue;
             }

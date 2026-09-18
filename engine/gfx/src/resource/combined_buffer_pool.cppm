@@ -131,7 +131,7 @@ private:
     std::unique_ptr<device_index_buffer> index_buffer_;
     std::unique_ptr<index_buffer> index_upload_;
     uint32 index_quads_ = 0;
-    std::unordered_map<entity, entity_buffer_info> entity_buffer_infos_;
+    ecs::component_pool<entity_buffer_info> entity_buffer_infos_;
     std::map<buffer_chunk_size, std::size_t> chunk_size_to_buffer_index_;
 
     vk::DescriptorPool descriptor_pool_                     = nullptr;
