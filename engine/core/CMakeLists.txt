@@ -11,6 +11,7 @@ target_sources(vw_core
             src/types/types.cppm
             src/types/color.cppm
             src/utils/timing.cppm
+            src/utils/latency.cppm
             src/math/vector.cppm
             src/math/matrix.cppm
             src/math/transform.cppm
@@ -21,6 +22,7 @@ target_sources(vw_core
             src/voxels/face_direction.cppm
             src/log/log.cppm
     PRIVATE
+        src/utils/latency.cpp
         src/math/math.cpp
         src/math/transform.cpp
         src/spatial/spatial.cpp

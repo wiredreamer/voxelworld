@@ -32,20 +32,6 @@ struct mesh_generation_task {
         , opts(opts) {}
 };
 
-struct mesh_gen_worker_stats {
-    uint64 chunks = 0;
-    uint64 nanos  = 0;
-    uint64 quads  = 0;
-    std::vector<uint32> micros;
-
-    auto record(uint64 elapsed_ns, std::size_t quad_count) -> void {
-        ++chunks;
-        nanos += elapsed_ns;
-        quads += quad_count;
-        micros.push_back(static_cast<uint32>(elapsed_ns / 1000));
-    }
-};
-
 struct mesh_gen_stats {
     uint64 chunks       = 0;
     uint64 quads        = 0;
@@ -87,7 +73,7 @@ public:
 private:
     auto gen_thread_function() -> void;
     auto sweep_orphaned_() -> void;
-    auto merge_worker_stats_(mesh_gen_worker_stats& worker) -> void;
+    auto record_chunk_(uint64 elapsed_ns, uint64 quads) -> void;
 
     vulkan_context* context_;
     const voxel_registry* registry_;
@@ -107,7 +93,9 @@ private:
     static constexpr std::size_t sweep_buckets_per_frame_ = 512;
     static constexpr std::size_t sweep_orphans_per_frame_ = 32;
 
-    mesh_gen_worker_stats gen_totals_;
+    mutable std::mutex stats_mutex_;
+    vw::latency_histogram gen_latency_;
+    uint64 gen_quads_      = 0;
     uint32 gen_queue_peak_ = 0;
 };
 

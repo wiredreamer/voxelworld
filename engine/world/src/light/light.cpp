@@ -691,62 +691,43 @@ auto light_baker::pending_count() const -> uint32 {
     return static_cast<uint32>(pending_.size());
 }
 
-auto light_baker::merge_worker_stats_(
-    light_worker_stats& worker
+auto light_baker::record_column_(
+    uint64 rows_nanos, uint64 flood_nanos, uint64 bake_nanos
 ) -> void {
-    if (worker.columns == 0) {
-        return;
-    }
-
-    totals_.columns += worker.columns;
-    totals_.rows_nanos += worker.rows_nanos;
-    totals_.flood_nanos += worker.flood_nanos;
-    totals_.bake_nanos += worker.bake_nanos;
-    totals_.micros.insert(totals_.micros.end(), worker.micros.begin(), worker.micros.end());
-
-    worker = light_worker_stats{};
+    std::scoped_lock lock(stats_mutex_);
+    latency_.record(rows_nanos + flood_nanos + bake_nanos);
+    rows_nanos_ += rows_nanos;
+    flood_nanos_ += flood_nanos;
+    bake_nanos_ += bake_nanos;
 }
 
 auto light_baker::get_stats() const -> light_stats {
-    std::scoped_lock lock(mutex_);
-
     light_stats out{};
-    out.columns     = totals_.columns;
-    out.rows_ms     = static_cast<float32>(static_cast<float64>(totals_.rows_nanos) / 1.0e6);
-    out.flood_ms    = static_cast<float32>(static_cast<float64>(totals_.flood_nanos) / 1.0e6);
-    out.bake_ms     = static_cast<float32>(static_cast<float64>(totals_.bake_nanos) / 1.0e6);
-    out.queue_depth = static_cast<uint32>(queue_.size());
-    out.queue_peak  = queue_peak_;
 
-    if (totals_.micros.empty()) {
-        return out;
+    {
+        std::scoped_lock lock(stats_mutex_);
+        const auto summary = latency_.summarize();
+
+        out.columns  = summary.count;
+        out.rows_ms  = static_cast<float32>(static_cast<float64>(rows_nanos_) / 1.0e6);
+        out.flood_ms = static_cast<float32>(static_cast<float64>(flood_nanos_) / 1.0e6);
+        out.bake_ms  = static_cast<float32>(static_cast<float64>(bake_nanos_) / 1.0e6);
+        out.mean_us  = summary.mean_us;
+        out.p50_us   = summary.p50_us;
+        out.p99_us   = summary.p99_us;
+        out.max_us   = summary.max_us;
     }
 
-    auto samples = totals_.micros;
-    std::ranges::sort(samples);
-
-    const auto at = [&samples](float32 quantile) -> float32 {
-        const auto count = static_cast<float32>(samples.size());
-        const auto rank  = static_cast<uint64>(std::ceil(quantile * count));
-        const auto index = std::clamp<uint64>(rank, 1, samples.size()) - 1;
-        return static_cast<float32>(samples[index]);
-    };
-
-    const auto total = totals_.rows_nanos + totals_.flood_nanos + totals_.bake_nanos;
-
-    out.mean_us = static_cast<float32>(
-        static_cast<float64>(total) / 1000.0 / static_cast<float64>(totals_.columns)
-    );
-    out.p50_us = at(0.50F);
-    out.p99_us = at(0.99F);
-    out.max_us = at(1.00F);
+    {
+        std::scoped_lock lock(mutex_);
+        out.queue_depth = static_cast<uint32>(queue_.size());
+        out.queue_peak  = queue_peak_;
+    }
 
     return out;
 }
 
 auto light_baker::worker_() -> void {
-    light_worker_stats local;
-
     std::vector<std::vector<asset::chunk_occupancy>> held(9);
     std::vector<std::vector<const asset::chunk_occupancy*>> pointers(9);
 
@@ -759,7 +740,6 @@ auto light_baker::worker_() -> void {
 
         {
             std::unique_lock lock(mutex_);
-            merge_worker_stats_(local);
             cv_.wait(lock, [this] -> bool { return !queue_.empty() || !running_; });
 
             if (!running_ && queue_.empty()) {
@@ -840,11 +820,7 @@ auto light_baker::worker_() -> void {
             );
         };
 
-        ++local.columns;
-        local.rows_nanos += span(started, rowed);
-        local.flood_nanos += span(rowed, flooded);
-        local.bake_nanos += span(flooded, baked);
-        local.micros.push_back(static_cast<uint32>(span(started, baked) / 1000));
+        record_column_(span(started, rowed), span(rowed, flooded), span(flooded, baked));
 
         {
             std::scoped_lock lock(completed_mutex_);

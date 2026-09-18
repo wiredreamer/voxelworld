@@ -76,69 +76,43 @@ auto chunk_loader::pending_count() const -> uint32 {
     return static_cast<uint32>(pending_columns_.size());
 }
 
-auto chunk_loader::merge_worker_stats_(
-    column_gen_worker_stats& worker
-) -> void {
-    if (worker.columns == 0) {
-        return;
-    }
-
-    gen_totals_.columns += worker.columns;
-    gen_totals_.chunks += worker.chunks;
-    gen_totals_.nanos += worker.nanos;
-    gen_totals_.micros.insert(
-        gen_totals_.micros.end(), worker.micros.begin(), worker.micros.end()
-    );
-
-    worker.columns = 0;
-    worker.chunks  = 0;
-    worker.nanos   = 0;
-    worker.micros.clear();
+auto chunk_loader::record_column_(uint64 elapsed_ns, uint64 chunks) -> void {
+    std::scoped_lock lock(stats_mutex_);
+    gen_latency_.record(elapsed_ns);
+    gen_chunks_ += chunks;
 }
 
 auto chunk_loader::get_gen_stats() const -> column_gen_stats {
-    std::scoped_lock lock(gen_mutex_);
-
     column_gen_stats out{};
-    out.columns     = gen_totals_.columns;
-    out.chunks      = gen_totals_.chunks;
-    out.total_ms    = static_cast<float32>(static_cast<float64>(gen_totals_.nanos) / 1.0e6);
-    out.queue_depth = static_cast<uint32>(gen_queue_.size());
-    out.queue_peak  = gen_queue_peak_;
 
-    if (gen_totals_.micros.empty()) {
-        return out;
+    {
+        std::scoped_lock lock(stats_mutex_);
+        const auto summary = gen_latency_.summarize();
+
+        out.columns  = summary.count;
+        out.chunks   = gen_chunks_;
+        out.total_ms = summary.total_ms;
+        out.mean_us  = summary.mean_us;
+        out.p50_us   = summary.p50_us;
+        out.p99_us   = summary.p99_us;
+        out.max_us   = summary.max_us;
     }
 
-    auto samples = gen_totals_.micros;
-    std::ranges::sort(samples);
-
-    const auto at = [&samples](float32 quantile) -> float32 {
-        const auto count = static_cast<float32>(samples.size());
-        const auto rank  = static_cast<uint64>(std::ceil(quantile * count));
-        const auto index = std::clamp<uint64>(rank, 1, samples.size()) - 1;
-        return static_cast<float32>(samples[index]);
-    };
-
-    out.mean_us = static_cast<float32>(
-        static_cast<float64>(gen_totals_.nanos) / 1000.0 / static_cast<float64>(gen_totals_.columns)
-    );
-    out.p50_us = at(0.50F);
-    out.p99_us = at(0.99F);
-    out.max_us = at(1.00F);
+    {
+        std::scoped_lock lock(gen_mutex_);
+        out.queue_depth = static_cast<uint32>(gen_queue_.size());
+        out.queue_peak  = gen_queue_peak_;
+    }
 
     return out;
 }
 
 auto chunk_loader::gen_thread_function_() -> void {
-    column_gen_worker_stats local;
-
     while (true) {
         gen_task task{};
 
         {
             std::unique_lock lock(gen_mutex_);
-            merge_worker_stats_(local);
             gen_cv_.wait(lock, [this] -> bool { return !gen_queue_.empty() || !gen_running_; });
 
             if (!gen_running_ && gen_queue_.empty()) {
@@ -175,10 +149,9 @@ auto chunk_loader::gen_thread_function_() -> void {
         const auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
             std::chrono::steady_clock::now() - started
         );
-        ++local.columns;
-        local.chunks += col->get_all_chunk_data().size();
-        local.nanos += static_cast<uint64>(elapsed.count());
-        local.micros.push_back(static_cast<uint32>(elapsed.count() / 1000));
+        record_column_(
+            static_cast<uint64>(elapsed.count()), col->get_all_chunk_data().size()
+        );
 
         {
             std::scoped_lock lock(completed_mutex_);

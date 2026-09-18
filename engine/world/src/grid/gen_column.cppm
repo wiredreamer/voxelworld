@@ -56,13 +56,6 @@ private:
     chunk_map chunks_;
 };
 
-struct column_gen_worker_stats {
-    uint64 columns = 0;
-    uint64 chunks  = 0;
-    uint64 nanos   = 0;
-    std::vector<uint32> micros;
-};
-
 struct column_gen_stats {
     uint64 columns     = 0;
     uint64 chunks      = 0;

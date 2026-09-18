@@ -27,7 +27,7 @@ public:
 
 private:
     auto gen_thread_function_() -> void;
-    auto merge_worker_stats_(column_gen_worker_stats& worker) -> void;
+    auto record_column_(uint64 elapsed_ns, uint64 chunks) -> void;
 
     struct gen_task {
         vec2i coord;
@@ -43,7 +43,9 @@ private:
     bool gen_running_ = true;
     std::unordered_set<vec2i> pending_columns_;
 
-    column_gen_worker_stats gen_totals_;
+    mutable std::mutex stats_mutex_;
+    latency_histogram gen_latency_;
+    uint64 gen_chunks_     = 0;
     uint32 gen_queue_peak_ = 0;
 };
 

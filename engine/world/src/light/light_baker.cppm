@@ -22,14 +22,6 @@ struct light_result {
     std::vector<asset::light_field> block;
 };
 
-struct light_worker_stats {
-    uint64 columns      = 0;
-    uint64 rows_nanos   = 0;
-    uint64 flood_nanos  = 0;
-    uint64 bake_nanos   = 0;
-    std::vector<uint32> micros;
-};
-
 struct light_stats {
     uint64 columns     = 0;
     float32 rows_ms    = 0.0F;
@@ -62,7 +54,7 @@ public:
 
 private:
     auto worker_() -> void;
-    auto merge_worker_stats_(light_worker_stats& worker) -> void;
+    auto record_column_(uint64 rows_nanos, uint64 flood_nanos, uint64 bake_nanos) -> void;
 
     std::vector<std::thread> threads_;
     std::queue<light_request> queue_;
@@ -73,8 +65,12 @@ private:
     bool running_ = true;
     std::unordered_set<vec2i> pending_;
 
-    light_worker_stats totals_;
-    uint32 queue_peak_ = 0;
+    mutable std::mutex stats_mutex_;
+    latency_histogram latency_;
+    uint64 rows_nanos_  = 0;
+    uint64 flood_nanos_ = 0;
+    uint64 bake_nanos_  = 0;
+    uint32 queue_peak_  = 0;
 
     asset::emission_table emission_;
 };

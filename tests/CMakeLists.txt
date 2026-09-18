@@ -29,6 +29,7 @@ add_executable(core_tests
     core/transform.test.cpp
     core/cluster_grid.test.cpp
     core/log.test.cpp
+    core/latency.test.cpp
 )
 
 target_link_libraries(core_tests PRIVATE
