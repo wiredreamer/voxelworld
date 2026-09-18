@@ -17,11 +17,11 @@ import :vk;
 namespace vw::gfx {
 
 renderer::renderer(
-    vulkan_context& context, window& window, const voxel_registry& registry, uint32 mesh_workers
+    vulkan_context& context, window& window, const voxel_registry& registry, vw::job_system& jobs
 )
     : context_(&context)
     , window_(&window)
-    , mesh_pool_(context, registry, mesh_workers)
+    , mesh_pool_(context, registry, jobs)
     , voxel_registry_(&registry) {
     vertex_shader_ =
         std::make_unique<shader>(*context_, "shaders/voxel.vert.spv", shader_type::VERTEX);

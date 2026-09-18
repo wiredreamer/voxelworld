@@ -626,30 +626,29 @@ static_assert(skirt_pages * light_page >= ecs::light_column::apron);
 }  // namespace
 
 light_baker::light_baker(
-    const voxel_registry& voxel_types, uint32 workers
+    const voxel_registry& voxel_types, job_system& jobs, uint32 concurrency
 )
-    : emission_{asset::build_emission_table(voxel_types)} {
-    auto count = workers != 0 ? workers : std::min(std::thread::hardware_concurrency(), 4U);
-    if (count == 0) {
-        count = 1;
+    : jobs_{&jobs}, emission_{asset::build_emission_table(voxel_types)} {
+    jobs_->set_lane_limit(job_lane::light, concurrency);
+}
+
+auto light_baker::acquire_scratch_() -> std::unique_ptr<worker_scratch> {
+    const std::scoped_lock lock(scratch_mutex_);
+    if (free_scratch_.empty()) {
+        return std::make_unique<worker_scratch>();
     }
-    for (uint32 i = 0; i < count; ++i) {
-        threads_.emplace_back(&light_baker::worker_, this);
-    }
+    auto taken = std::move(free_scratch_.back());
+    free_scratch_.pop_back();
+    return taken;
+}
+
+auto light_baker::release_scratch_(std::unique_ptr<worker_scratch> scratch) -> void {
+    const std::scoped_lock lock(scratch_mutex_);
+    free_scratch_.push_back(std::move(scratch));
 }
 
 light_baker::~light_baker() {
-    {
-        std::scoped_lock lock(mutex_);
-        running_ = false;
-    }
-    cv_.notify_all();
-
-    for (auto& t : threads_) {
-        if (t.joinable()) {
-            t.join();
-        }
-    }
+    jobs_->drain(job_lane::light);
 }
 
 auto light_baker::request(
@@ -660,12 +659,11 @@ auto light_baker::request(
     }
     pending_.insert(job.coord);
 
-    {
-        std::scoped_lock lock(mutex_);
-        queue_.push(std::move(job));
-        queue_peak_ = std::max(queue_peak_, static_cast<uint32>(queue_.size()));
-    }
-    cv_.notify_one();
+    jobs_->submit(job_lane::light, [this, job = std::move(job)](uint32) mutable {
+        auto scratch = acquire_scratch_();
+        bake_(std::move(job), *scratch);
+        release_scratch_(std::move(scratch));
+    });
     return true;
 }
 
@@ -720,114 +718,86 @@ auto light_baker::get_stats() const -> light_stats {
         out.max_us   = summary.max_us;
     }
 
-    {
-        std::scoped_lock lock(mutex_);
-        out.queue_depth = static_cast<uint32>(queue_.size());
-        out.queue_peak  = queue_peak_;
-    }
+    const auto lane = jobs_->get_lane_stats(job_lane::light);
+    out.queue_depth = lane.queued;
+    out.queue_peak  = lane.peak;
 
     return out;
 }
 
-auto light_baker::worker_() -> void {
-    std::vector<std::vector<asset::chunk_occupancy>> held(9);
-    std::vector<std::vector<const asset::chunk_occupancy*>> pointers(9);
+auto light_baker::bake_(light_request job, worker_scratch& scratch) -> void {
+    const auto started = std::chrono::steady_clock::now();
 
-    std::vector<std::vector<const asset::model*>> emitters(9);
+    ecs::light_column::neighbourhood around{};
 
-    ecs::light_scratch scratch;
+    for (int32 dz = -1; dz <= 1; ++dz) {
+        for (int32 dx = -1; dx <= 1; ++dx) {
+            const auto slot  = static_cast<std::size_t>(((dz + 1) * 3) + (dx + 1));
+            const auto& from = job.around[slot];
 
-    while (true) {
-        light_request job;
+            scratch.pointers[slot].clear();
+            scratch.emitters[slot].clear();
 
-        {
-            std::unique_lock lock(mutex_);
-            cv_.wait(lock, [this] -> bool { return !queue_.empty() || !running_; });
+            // см. docs/lighting.md#небесный-свет
+            const int32 px0 = dx < 0 ? pages_per_side - skirt_pages : 0;
+            const int32 px1 = dx > 0 ? skirt_pages : pages_per_side;
+            const int32 pz0 = dz < 0 ? pages_per_side - skirt_pages : 0;
+            const int32 pz1 = dz > 0 ? skirt_pages : pages_per_side;
 
-            if (!running_ && queue_.empty()) {
-                break;
-            }
-            if (queue_.empty()) {
-                continue;
-            }
+            scratch.held[slot].resize(from.size());
 
-            job = std::move(queue_.front());
-            queue_.pop();
-        }
+            for (std::size_t i = 0; i < from.size(); ++i) {
+                scratch.emitters[slot].push_back(from[i].get());
 
-        const auto started = std::chrono::steady_clock::now();
-
-        ecs::light_column::neighbourhood around{};
-
-        for (int32 dz = -1; dz <= 1; ++dz) {
-            for (int32 dx = -1; dx <= 1; ++dx) {
-                const auto slot  = static_cast<std::size_t>(((dz + 1) * 3) + (dx + 1));
-                const auto& from = job.around[slot];
-
-                pointers[slot].clear();
-                emitters[slot].clear();
-
-                // см. docs/lighting.md#небесный-свет
-                const int32 px0 = dx < 0 ? pages_per_side - skirt_pages : 0;
-                const int32 px1 = dx > 0 ? skirt_pages : pages_per_side;
-                const int32 pz0 = dz < 0 ? pages_per_side - skirt_pages : 0;
-                const int32 pz1 = dz > 0 ? skirt_pages : pages_per_side;
-
-                held[slot].resize(from.size());
-
-                for (std::size_t i = 0; i < from.size(); ++i) {
-                    emitters[slot].push_back(from[i].get());
-
-                    if (from[i] == nullptr) {
-                        pointers[slot].push_back(nullptr);
-                        continue;
-                    }
-
-                    static_cast<void>(from[i]->build_x_rows(held[slot][i], px0, px1, pz0, pz1));
-                    pointers[slot].push_back(&held[slot][i]);
+                if (from[i] == nullptr) {
+                    scratch.pointers[slot].push_back(nullptr);
+                    continue;
                 }
 
-                around[slot] = ecs::light_column::column_slice{
-                    .occupancy = pointers[slot],
-                    .models    = emitters[slot],
-                };
+                static_cast<void>(from[i]->build_x_rows(scratch.held[slot][i], px0, px1, pz0, pz1));
+                scratch.pointers[slot].push_back(&scratch.held[slot][i]);
             }
+
+            around[slot] = ecs::light_column::column_slice{
+                .occupancy = scratch.pointers[slot],
+                .models    = scratch.emitters[slot],
+            };
         }
+    }
 
-        const auto rowed = std::chrono::steady_clock::now();
+    const auto rowed = std::chrono::steady_clock::now();
 
-        ecs::light_column light{around, emission_, std::move(scratch)};
+    ecs::light_column light{around, emission_, std::move(scratch.flood)};
 
-        const auto flooded = std::chrono::steady_clock::now();
+    const auto flooded = std::chrono::steady_clock::now();
 
-        light_result result;
-        result.coord    = job.coord;
-        result.bottom_y = job.bottom_y;
-        result.sky.reserve(job.around[4].size());
-        result.block.reserve(job.around[4].size());
+    light_result result;
+    result.coord    = job.coord;
+    result.bottom_y = job.bottom_y;
+    result.sky.reserve(job.around[4].size());
+    result.block.reserve(job.around[4].size());
 
-        for (std::size_t i = 0; i < job.around[4].size(); ++i) {
-            const auto y_base = static_cast<int32>(i) * asset::light_field::side;
-            result.sky.push_back(light.bake(y_base, asset::light_channel::sky));
-            result.block.push_back(light.bake(y_base, asset::light_channel::block));
-        }
+    for (std::size_t i = 0; i < job.around[4].size(); ++i) {
+        const auto y_base = static_cast<int32>(i) * asset::light_field::side;
+        result.sky.push_back(light.bake(y_base, asset::light_channel::sky));
+        result.block.push_back(light.bake(y_base, asset::light_channel::block));
+    }
 
-        const auto baked = std::chrono::steady_clock::now();
+    const auto baked = std::chrono::steady_clock::now();
 
-        scratch = std::move(light).release();
+    scratch.flood = std::move(light).release();
 
-        const auto span = [](auto from, auto to) -> uint64 {
-            return static_cast<uint64>(
-                std::chrono::duration_cast<std::chrono::nanoseconds>(to - from).count()
-            );
-        };
+    const auto span = [](auto from, auto to) -> uint64 {
+        return static_cast<uint64>(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(to - from).count()
+        );
+    };
 
-        record_column_(span(started, rowed), span(rowed, flooded), span(flooded, baked));
+    record_column_(span(started, rowed), span(rowed, flooded), span(flooded, baked));
 
-        {
-            std::scoped_lock lock(completed_mutex_);
-            completed_.push(std::move(result));
-        }
+    {
+        std::scoped_lock lock(completed_mutex_);
+        completed_.push(std::move(result));
     }
 }
 

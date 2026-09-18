@@ -25,11 +25,13 @@ auto world_grid_system::set_grid(
 }
 
 auto world_grid_system::set_loader(
-    std::unique_ptr<chunk_loader> loader
+    std::unique_ptr<chunk_loader> loader, job_system& jobs
 ) -> void {
     clear_loader_transient_state_();
     loader_ = std::move(loader);
-    baker_  = loader_ != nullptr ? std::make_unique<light_baker>(world_->voxel_types()) : nullptr;
+    baker_  = loader_ != nullptr
+                  ? std::make_unique<light_baker>(world_->voxel_types(), jobs)
+                  : nullptr;
 }
 
 auto world_grid_system::grid() -> world_grid* {

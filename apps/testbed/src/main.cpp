@@ -11,6 +11,8 @@ namespace {
 auto bench_from(const testbed::arg_reader& args) -> gfx::bench_config {
     gfx::bench_config bench;
 
+    bench.workers = args.count("--workers", 0);
+
     if (!args.flag("--bench")) {
         return bench;
     }
@@ -18,8 +20,6 @@ auto bench_from(const testbed::arg_reader& args) -> gfx::bench_config {
     bench.measure_frames      = args.count("--bench-frames", 2000);
     bench.warmup_frames       = args.count("--bench-warmup", 200);
     bench.fixed_delta_seconds = 1.0f / 60.0f;
-    bench.mesh_workers        = args.count("--mesh-workers", 0);
-    bench.terrain_workers     = args.count("--terrain-workers", 0);
 
     if (const auto path = args.text("--bench-out")) {
         bench.report_path = std::string{*path};

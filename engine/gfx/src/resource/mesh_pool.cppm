@@ -56,7 +56,7 @@ struct mesh_gen_stats {
 class mesh_pool final {
 public:
     explicit mesh_pool(vulkan_context& context, const voxel_registry& registry,
-                       uint32 workers = 0);
+                       vw::job_system& jobs);
     ~mesh_pool();
 
     mesh_pool(const mesh_pool&)                    = delete;
@@ -80,7 +80,7 @@ public:
     [[nodiscard]] auto get_gen_stats() const -> mesh_gen_stats;
 
 private:
-    auto gen_thread_function() -> void;
+    auto generate_(mesh_generation_task& task, mesh_generation_storage& storage) -> void;
     auto sweep_orphaned_() -> void;
     auto record_chunk_(uint64 elapsed_ns, uint64 quads) -> void;
 
@@ -93,19 +93,15 @@ private:
     std::unordered_map<vw::asset::model_identity, std::future<mesh>> pending_meshes_;
     std::unordered_set<uint32> pending_indices_;
 
-    std::vector<std::thread> gen_threads_;
-    std::queue<std::unique_ptr<mesh_generation_task>> gen_queue_;
-    mutable std::mutex gen_mutex_;
-    std::condition_variable gen_cv_;
-    bool gen_running_ = true;
+    vw::job_system* jobs_;
+    std::vector<mesh_generation_storage> storage_;
     std::size_t sweep_bucket_ = 0;
     static constexpr std::size_t sweep_buckets_per_frame_ = 512;
     static constexpr std::size_t sweep_orphans_per_frame_ = 32;
 
     mutable std::mutex stats_mutex_;
     vw::latency_histogram gen_latency_;
-    uint64 gen_quads_      = 0;
-    uint32 gen_queue_peak_ = 0;
+    uint64 gen_quads_ = 0;
 };
 
 }  // namespace vw::gfx

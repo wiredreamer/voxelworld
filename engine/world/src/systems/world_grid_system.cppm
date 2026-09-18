@@ -54,7 +54,7 @@ public:
     auto operator=(world_grid_system&&) noexcept -> world_grid_system&;
 
     auto set_grid(std::unique_ptr<world_grid> grid) -> void;
-    auto set_loader(std::unique_ptr<chunk_loader> loader) -> void;
+    auto set_loader(std::unique_ptr<chunk_loader> loader, job_system& jobs) -> void;
 
     [[nodiscard]] auto grid() -> world_grid*;
     [[nodiscard]] auto grid() const -> const world_grid*;

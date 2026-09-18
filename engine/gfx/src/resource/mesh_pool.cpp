@@ -11,37 +11,16 @@ namespace vw::gfx {
 
 
 mesh_pool::mesh_pool(
-    vulkan_context& context, const voxel_registry& registry, uint32 workers
+    vulkan_context& context, const voxel_registry& registry, vw::job_system& jobs
 )
-    : context_{&context}, registry_{&registry} {
-    auto count = workers != 0 ? workers : std::min(std::thread::hardware_concurrency(), 4u);
-    if (count == 0) {
-        count = 1;
-    }
-    for (uint32 i = 0; i < count; ++i) {
-        gen_threads_.emplace_back(&mesh_pool::gen_thread_function, this);
-    }
-}
+    : context_{&context}, registry_{&registry}, jobs_{&jobs}, storage_(jobs.worker_count()) {}
 
 mesh_pool::~mesh_pool() {
     stop_gen_threads();
 }
 
 auto mesh_pool::stop_gen_threads() -> void {
-    {
-        std::scoped_lock lock(gen_mutex_);
-        if (!gen_running_) {
-            return;
-        }
-        gen_running_ = false;
-    }
-    gen_cv_.notify_all();
-
-    for (auto& t : gen_threads_) {
-        if (t.joinable()) {
-            t.join();
-        }
-    }
+    jobs_->close(vw::job_lane::mesh);
 }
 
 [[nodiscard]] auto mesh_pool::has(
@@ -87,14 +66,13 @@ auto mesh_pool::request_mesh(
             chunk_ptr ? chunk_ptr->share_sky_light() : nullptr,
             chunk_ptr ? chunk_ptr->share_block_light() : nullptr, opts
         );
-        auto future = task->promise.get_future();
+        pending_meshes_[identity] = task->promise.get_future();
 
-        std::scoped_lock lock(gen_mutex_);
-        pending_meshes_[identity] = std::move(future);
-        gen_queue_.push(std::move(task));
-        gen_queue_peak_ = std::max(gen_queue_peak_, static_cast<uint32>(gen_queue_.size()));
+        jobs_->submit(
+            vw::job_lane::mesh,
+            [this, task = std::move(task)](uint32 worker) { generate_(*task, storage_[worker]); }
+        );
     }
-    gen_cv_.notify_one();
 }
 
 [[nodiscard]] auto mesh_pool::get(
@@ -216,65 +194,42 @@ auto mesh_pool::get_gen_stats() const -> mesh_gen_stats {
         out.max_us   = summary.max_us;
     }
 
-    {
-        std::scoped_lock lock(gen_mutex_);
-        out.queue_depth = static_cast<uint32>(gen_queue_.size());
-        out.queue_peak  = gen_queue_peak_;
-    }
+    const auto lane = jobs_->get_lane_stats(vw::job_lane::mesh);
+    out.queue_depth = lane.queued;
+    out.queue_peak  = lane.peak;
 
     return out;
 }
 
-auto mesh_pool::gen_thread_function() -> void {
-    mesh_generation_storage storage;
+auto mesh_pool::generate_(
+    mesh_generation_task& task, mesh_generation_storage& storage
+) -> void {
+    auto model_ptr = task.model_ref.lock();
+    if (!model_ptr || model_ptr->get_identity() != task.identity) {
+        task.promise.set_value(mesh{});
+        return;
+    }
 
-    while (true) {
-        std::unique_ptr<mesh_generation_task> task;
+    const mesh_source source{
+        .voxels   = *model_ptr,
+        .boundary = task.boundary.get(),
+        .sky      = task.sky.get(),
+        .block    = task.block.get()
+    };
 
-        {
-            std::unique_lock lock(gen_mutex_);
+    try {
+        const auto started = std::chrono::steady_clock::now();
+        mesh data = greedy_mesh_generator::generate_mesh_data(
+            storage, source, *registry_, task.opts
+        );
+        const auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now() - started
+        );
+        record_chunk_(static_cast<uint64>(elapsed.count()), data.quads.size());
 
-            gen_cv_.wait(lock, [this] -> bool { return !gen_queue_.empty() || !gen_running_; });
-
-            if (!gen_running_ && gen_queue_.empty()) {
-                break;
-            }
-
-            if (!gen_queue_.empty()) {
-                task = std::move(gen_queue_.front());
-                gen_queue_.pop();
-            }
-        }
-
-        if (task) {
-            auto model_ptr = task->model_ref.lock();
-            if (!model_ptr || model_ptr->get_identity() != task->identity) {
-                task->promise.set_value(mesh{});
-                continue;
-            }
-
-            const mesh_source source{
-                .voxels   = *model_ptr,
-                .boundary = task->boundary.get(),
-                .sky      = task->sky.get(),
-                .block    = task->block.get()
-            };
-
-            try {
-                const auto started = std::chrono::steady_clock::now();
-                mesh data = greedy_mesh_generator::generate_mesh_data(
-                    storage, source, *registry_, task->opts
-                );
-                const auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
-                    std::chrono::steady_clock::now() - started
-                );
-                record_chunk_(static_cast<uint64>(elapsed.count()), data.quads.size());
-
-                task->promise.set_value(std::move(data));
-            } catch (const std::exception&) {
-                task->promise.set_exception(std::current_exception());
-            }
-        }
+        task.promise.set_value(std::move(data));
+    } catch (const std::exception&) {
+        task.promise.set_exception(std::current_exception());
     }
 }
 

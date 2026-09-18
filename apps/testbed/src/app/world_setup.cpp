@@ -25,10 +25,10 @@ auto testbed_app::setup_world_grid() -> void {
     );
     world_grid_  = grid.get();
     auto loader  = std::make_unique<ecs::chunk_loader>(
-        std::move(generator), get_engine().get_terrain_workers());
+        std::move(generator), get_engine().get_jobs());
     auto& gs     = world.system<ecs::world_grid_system>();
     gs.set_grid(std::move(grid));
-    gs.set_loader(std::move(loader));
+    gs.set_loader(std::move(loader), get_engine().get_jobs());
 
     viewer_ = world.create()
         .with<ecs::transform_component>()

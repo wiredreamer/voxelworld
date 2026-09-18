@@ -23,9 +23,12 @@ auto setup_world_grid(gfx::engine& engine) -> world_setup_result {
         registry.get_identity_pool(), registry.get_page_pool(), params
     );
 
-    auto& gs = world.system<ecs::world_grid_system>();
+    auto& jobs = engine.get_jobs();
+    auto& gs   = world.system<ecs::world_grid_system>();
     gs.set_grid(std::make_unique<ecs::world_grid>(world, params.world_units_per_voxel));
-    gs.set_loader(std::make_unique<ecs::chunk_loader>(std::move(generator)));
+    gs.set_loader(
+        std::make_unique<ecs::chunk_loader>(std::move(generator), jobs), jobs
+    );
 
     return {.generator_params = params};
 }

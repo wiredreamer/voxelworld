@@ -22,14 +22,20 @@ auto shallow_params() -> perlin_terrain_generator::params {
 
 class settled_grid {
 public:
-    explicit settled_grid(world& w) : world_{&w} {
+    settled_grid(world& w, job_system& jobs) : world_{&w} {
         auto& models = w.resource<asset::model_registry>();
         auto& gs     = w.system<world_grid_system>();
 
         gs.set_grid(std::make_unique<world_grid>(w, 8));
-        gs.set_loader(std::make_unique<chunk_loader>(std::make_unique<perlin_terrain_generator>(
-            models.get_identity_pool(), models.get_page_pool(), shallow_params()
-        )));
+        gs.set_loader(
+            std::make_unique<chunk_loader>(
+                std::make_unique<perlin_terrain_generator>(
+                    models.get_identity_pool(), models.get_page_pool(), shallow_params()
+                ),
+                jobs
+            ),
+            jobs
+        );
 
         viewer_ = w.create().with<transform_component>().with<world_view_component>().get_entity();
         gs.modify_view(viewer_).set_view_distance(view_distance);
@@ -159,8 +165,9 @@ auto solid_shaft_site(world_grid& grid, vec2i column, int32 depth) -> std::optio
 }  // namespace
 
 TEST_CASE("a placed chunk is never reissued", "[world][grid]") {
+    job_system jobs;
     world w;
-    const settled_grid settled{w};
+    const settled_grid settled{w, jobs};
 
     REQUIRE(settled.seen_count() > 0);
 
@@ -168,8 +175,9 @@ TEST_CASE("a placed chunk is never reissued", "[world][grid]") {
 }
 
 TEST_CASE("a placed chunk knows every neighbour it has", "[world][grid]") {
+    job_system jobs;
     world w;
-    const settled_grid settled{w};
+    const settled_grid settled{w, jobs};
 
     auto& grid = *w.system<world_grid_system>().grid();
 
@@ -193,8 +201,9 @@ TEST_CASE("a placed chunk knows every neighbour it has", "[world][grid]") {
 }
 
 TEST_CASE("buried rock costs no entity", "[world][grid]") {
+    job_system jobs;
     world w;
-    const settled_grid settled{w};
+    const settled_grid settled{w, jobs};
 
     auto& grid = *w.system<world_grid_system>().grid();
 
@@ -260,8 +269,9 @@ TEST_CASE("buried rock costs no entity", "[world][grid]") {
 }
 
 TEST_CASE("a chunk with no entity still holds its voxels", "[world][grid]") {
+    job_system jobs;
     world w;
-    const settled_grid settled{w};
+    const settled_grid settled{w, jobs};
 
     auto& grid = *w.system<world_grid_system>().grid();
 
@@ -282,8 +292,9 @@ TEST_CASE("a chunk with no entity still holds its voxels", "[world][grid]") {
 }
 
 TEST_CASE("digging a seam tells both sides", "[world][grid]") {
+    job_system jobs;
     world w;
-    const settled_grid settled{w};
+    const settled_grid settled{w, jobs};
 
     auto& grid = *w.system<world_grid_system>().grid();
 
@@ -326,8 +337,9 @@ TEST_CASE("digging a seam tells both sides", "[world][grid]") {
 }
 
 TEST_CASE("a placed chunk arrives with its sky light", "[world][grid]") {
+    job_system jobs;
     world w;
-    const settled_grid settled{w};
+    const settled_grid settled{w, jobs};
 
     std::size_t chunks     = 0;
     std::size_t with_light = 0;
@@ -376,8 +388,9 @@ TEST_CASE("a placed chunk arrives with its sky light", "[world][grid]") {
 }
 
 TEST_CASE("digging to the sky relights the shaft", "[world][grid]") {
+    job_system jobs;
     world w;
-    settled_grid settled{w};
+    settled_grid settled{w, jobs};
 
     auto& gs         = w.system<world_grid_system>();
     auto& grid       = *gs.grid();
@@ -418,8 +431,9 @@ TEST_CASE("digging to the sky relights the shaft", "[world][grid]") {
 }
 
 TEST_CASE("digging in the dark relights nothing", "[world][grid]") {
+    job_system jobs;
     world w;
-    settled_grid settled{w};
+    settled_grid settled{w, jobs};
 
     auto& gs   = w.system<world_grid_system>();
     auto& grid = *gs.grid();
@@ -460,8 +474,9 @@ TEST_CASE("digging in the dark relights nothing", "[world][grid]") {
 }
 
 TEST_CASE("the apron is generated but not placed", "[world][grid]") {
+    job_system jobs;
     world w;
-    const settled_grid settled{w};
+    const settled_grid settled{w, jobs};
 
     const auto& grid = settled.grid();
 

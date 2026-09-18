@@ -41,10 +41,11 @@ engine::engine(
         recorder_ = std::make_unique<frame_recorder>(bench_.measure_frames);
     }
 
+    jobs_           = std::make_unique<vw::job_system>(bench_.workers);
     window_         = std::make_unique<window>(width, height, title);
     vulkan_context_ = std::make_unique<vulkan_context>(*window_);
     renderer_       = std::make_unique<renderer_type>(
-        *vulkan_context_, *window_, voxel_registry_, bench_.mesh_workers);
+        *vulkan_context_, *window_, voxel_registry_, *jobs_);
     camera_ =
         std::make_unique<camera>(45.0f, static_cast<float>(width) / static_cast<float>(height));
     world_      = std::make_unique<world_type>(voxel_registry_);

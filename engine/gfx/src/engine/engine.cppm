@@ -52,8 +52,8 @@ public:
     [[nodiscard]] auto get_voxel_registry() const -> const voxel_registry&;
     [[nodiscard]] auto get_debug_tool() const -> debug_window_type&;
 
-    [[nodiscard]] auto get_terrain_workers() const -> uint32 {
-        return bench_.terrain_workers;
+    [[nodiscard]] auto get_jobs() const -> vw::job_system& {
+        return *jobs_;
     }
 
     [[nodiscard]] auto get_stats() const -> const engine_stats&;
@@ -71,6 +71,7 @@ private:
     [[nodiscard]] static auto calculate_commit_usage() -> uint64;
     [[nodiscard]] auto calculate_vram_usage() const -> uint64;
 
+    std::unique_ptr<vw::job_system> jobs_;
     std::unique_ptr<window> window_;
     std::unique_ptr<vulkan_context> vulkan_context_;
     std::unique_ptr<renderer_type> renderer_;

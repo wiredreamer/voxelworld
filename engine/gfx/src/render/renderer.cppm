@@ -32,7 +32,7 @@ public:
     using light_buffer_type         = light_buffer;
 
     renderer(vulkan_context& context, window& window, const voxel_registry& registry,
-             uint32 mesh_workers = 0);
+             vw::job_system& jobs);
     ~renderer();
 
     renderer(const renderer&)            = delete;

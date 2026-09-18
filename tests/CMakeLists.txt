@@ -30,6 +30,7 @@ add_executable(core_tests
     core/cluster_grid.test.cpp
     core/log.test.cpp
     core/latency.test.cpp
+    core/jobs.test.cpp
 )
 
 target_link_libraries(core_tests PRIVATE

@@ -3,6 +3,7 @@ export module vw.core;
 export import :types;
 export import :timing;
 export import :latency;
+export import :jobs;
 export import :log;
 export import :vector;
 export import :matrix;

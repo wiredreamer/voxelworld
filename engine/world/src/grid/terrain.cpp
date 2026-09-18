@@ -9,30 +9,12 @@ import vw.asset;
 namespace vw::ecs {
 
 chunk_loader::chunk_loader(
-    std::unique_ptr<terrain_generator> generator, uint32 workers
+    std::unique_ptr<terrain_generator> generator, job_system& jobs
 )
-    : generator_(std::move(generator)) {
-    auto count = workers != 0 ? workers : std::min(std::thread::hardware_concurrency(), 4u);
-    if (count == 0) {
-        count = 1;
-    }
-    for (uint32 i = 0; i < count; ++i) {
-        gen_threads_.emplace_back(&chunk_loader::gen_thread_function_, this);
-    }
-}
+    : generator_(std::move(generator)), jobs_(&jobs) {}
 
 chunk_loader::~chunk_loader() {
-    {
-        std::scoped_lock lock(gen_mutex_);
-        gen_running_ = false;
-    }
-    gen_cv_.notify_all();
-
-    for (auto& t : gen_threads_) {
-        if (t.joinable()) {
-            t.join();
-        }
-    }
+    jobs_->drain(job_lane::terrain);
 }
 
 auto chunk_loader::request(
@@ -43,12 +25,7 @@ auto chunk_loader::request(
     }
     pending_columns_.insert(coord);
 
-    {
-        std::scoped_lock lock(gen_mutex_);
-        gen_queue_.push({coord});
-        gen_queue_peak_ = std::max(gen_queue_peak_, static_cast<uint32>(gen_queue_.size()));
-    }
-    gen_cv_.notify_one();
+    jobs_->submit(job_lane::terrain, [this, coord](uint32) { generate_(coord); });
     return true;
 }
 
@@ -98,65 +75,41 @@ auto chunk_loader::get_gen_stats() const -> column_gen_stats {
         out.max_us   = summary.max_us;
     }
 
-    {
-        std::scoped_lock lock(gen_mutex_);
-        out.queue_depth = static_cast<uint32>(gen_queue_.size());
-        out.queue_peak  = gen_queue_peak_;
-    }
+    const auto lane = jobs_->get_lane_stats(job_lane::terrain);
+    out.queue_depth = lane.queued;
+    out.queue_peak  = lane.peak;
 
     return out;
 }
 
-auto chunk_loader::gen_thread_function_() -> void {
-    while (true) {
-        gen_task task{};
+auto chunk_loader::generate_(vec2i coord) -> void {
+    const auto started = std::chrono::steady_clock::now();
 
-        {
-            std::unique_lock lock(gen_mutex_);
-            gen_cv_.wait(lock, [this] -> bool { return !gen_queue_.empty() || !gen_running_; });
+    auto col = std::make_unique<gen_column>(coord.x, coord.y);
 
-            if (!gen_running_ && gen_queue_.empty()) {
-                break;
-            }
-
-            if (!gen_queue_.empty()) {
-                task = gen_queue_.front();
-                gen_queue_.pop();
-            } else {
-                continue;
-            }
+    terrain_context ctx{
+        .cx           = coord.x,
+        .cz           = coord.y,
+        .create_chunk = [&col](int32 y) -> chunk_data& {
+            return col->create_chunk(y, chunk_data{});
         }
+    };
 
-        const auto started = std::chrono::steady_clock::now();
+    generator_->generate(ctx);
+    col->set_phase(column_phase::terrain);
 
-        auto col = std::make_unique<gen_column>(task.coord.x, task.coord.y);
+    for (auto& [y, cd] : col->get_all_chunk_data()) {
+        static_cast<void>(cd.volume->voxels().scan_fill());
+    }
 
-        terrain_context ctx{
-            .cx           = task.coord.x,
-            .cz           = task.coord.y,
-            .create_chunk = [&col](int32 y) -> chunk_data& {
-                return col->create_chunk(y, chunk_data{});
-            }
-        };
+    const auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::steady_clock::now() - started
+    );
+    record_column_(static_cast<uint64>(elapsed.count()), col->get_all_chunk_data().size());
 
-        generator_->generate(ctx);
-        col->set_phase(column_phase::terrain);
-
-        for (auto& [y, cd] : col->get_all_chunk_data()) {
-            static_cast<void>(cd.volume->voxels().scan_fill());
-        }
-
-        const auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::steady_clock::now() - started
-        );
-        record_column_(
-            static_cast<uint64>(elapsed.count()), col->get_all_chunk_data().size()
-        );
-
-        {
-            std::scoped_lock lock(completed_mutex_);
-            completed_queue_.push(std::move(col));
-        }
+    {
+        std::scoped_lock lock(completed_mutex_);
+        completed_queue_.push(std::move(col));
     }
 }
 
