@@ -128,7 +128,7 @@ renderer::~renderer() {
     cleanup_descriptor_pool();
 }
 
-auto renderer::begin_frame() -> void {
+auto renderer::begin_frame() -> bool {
     const vk::Device device = context_->get_device();
     vk_must(
         device.waitForFences(in_flight_fences_[current_frame_], vk::True, std::numeric_limits<uint64>::max()),
@@ -156,7 +156,7 @@ auto renderer::begin_frame() -> void {
 
     if (result == vk::Result::eErrorOutOfDateKHR) {
         recreate_swapchain();
-        return;
+        return false;
     }
     if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR) {
         throw std::runtime_error("Failed to acquire swap chain image!");
@@ -167,6 +167,8 @@ auto renderer::begin_frame() -> void {
     ImGui_ImplVulkan_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
+
+    return true;
 }
 
 auto renderer::end_frame() -> void {

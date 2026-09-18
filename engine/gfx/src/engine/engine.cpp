@@ -403,7 +403,11 @@ auto engine::render(
     stats_.world_update_ms = measure_ms([&] { world_->update(delta_time); });
 
     stats_.world_render_ms = measure_ms([&] {
-        stats_.begin_frame_ms = measure_ms([&] { renderer_->begin_frame(); });
+        bool opened = false;
+        stats_.begin_frame_ms = measure_ms([&] { opened = renderer_->begin_frame(); });
+        if (!opened) {
+            return;
+        }
         stats_.app_render_ms  = measure_ms([&] {
             app_->render(delta_time);
             debug_tool_->render(delta_time);

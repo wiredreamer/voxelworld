@@ -41,7 +41,7 @@ public:
     renderer(renderer&&)            = delete;
     renderer& operator=(renderer&&) = delete;
 
-    auto begin_frame() -> void;
+    [[nodiscard]] auto begin_frame() -> bool;
     auto render(world_type& world, camera& camera) -> void;
     auto end_frame() -> void;
 
