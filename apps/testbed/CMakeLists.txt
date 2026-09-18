@@ -49,3 +49,8 @@ endif()
 
 include(shaders)
 vw_setup_shaders(${PROJECT_NAME})
+
+option(VW_ALLOC_PROBE "Count and time every heap allocation in testbed" OFF)
+if(VW_ALLOC_PROBE)
+    target_sources(${PROJECT_NAME} PRIVATE src/alloc_probe.cpp)
+endif()
