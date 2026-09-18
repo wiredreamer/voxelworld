@@ -51,6 +51,8 @@ private:
     float32 pitch_ = 20.0f;
     float32 yaw_   = 0.0f;
     float32 actual_arm_length_ = 0.0f;
+
+    std::vector<entity> collision_candidates_;
 };
 
 }  // namespace vw::gfx

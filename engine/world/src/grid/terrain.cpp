@@ -385,7 +385,8 @@ auto perlin_terrain_generator::carve_caves_(
     const int32 points = cells + 1;
     const auto plane   = static_cast<std::size_t>(points) * points;
 
-    std::vector<float32> open(plane * points, -1.0F);
+    thread_local std::vector<float32> open;
+    open.assign(plane * points, -1.0F);
 
     bool any_open = false;
 

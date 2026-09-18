@@ -48,9 +48,8 @@ auto third_person_camera_controller::update(
 
     auto& spatial_sys = world_->system<spatial_system>();
     vw::spatial::ray collision_ray{focus, desired_pos};
-    std::vector<entity> candidates;
     constexpr spatial_layer_mask camera_mask = spatial_layer::terrain | spatial_layer::prop;
-    auto hit = spatial_sys.voxel_ray_cast(collision_ray, candidates, camera_mask);
+    auto hit = spatial_sys.voxel_ray_cast(collision_ray, collision_candidates_, camera_mask);
 
     if (hit) {
         const auto& hit_tc  = registry.get<transform_component>(hit->ent);

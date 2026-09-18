@@ -459,8 +459,10 @@ auto gather_boundary(
         return column.level_at(x, y, z, channel);
     };
 
+    thread_local std::vector<uint8> packed;
+
     for (const face_direction face : all_face_directions) {
-        std::vector<uint8> packed(static_cast<std::size_t>(side) * side / 2);
+        packed.assign(static_cast<std::size_t>(side) * side / 2, 0);
 
         uint8 first  = 0;
         bool uniform = true;
@@ -507,7 +509,7 @@ auto gather_boundary(
 
         out.uniform[face] = first;
         if (!uniform) {
-            out.packed[face] = std::move(packed);
+            out.packed[face].assign(packed.begin(), packed.end());
         }
     }
 
