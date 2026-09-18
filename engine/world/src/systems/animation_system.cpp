@@ -334,12 +334,19 @@ auto animation_system::compute_layer_transform(
         return std::nullopt;
     }
 
-    auto transform_result = track->get_transform(layer.time);
+    return compute_track_transform(layer, *track, target_name, rest);
+}
+
+auto animation_system::compute_track_transform(
+    const asset::animation_layer& layer, const asset::animation_track& track,
+    const std::string& target_name, const transform& rest
+) const -> std::optional<transform> {
+    auto transform_result = track.get_transform(layer.time);
     if (!transform_result) {
         return std::nullopt;
     }
 
-    transform t = merge_with_rest(*transform_result, *track, rest);
+    transform t = merge_with_rest(*transform_result, track, rest);
 
     bool is_blending = layer.blend_transition.duration > 0.0f &&
         (layer.blend_prev_clip || !layer.blend_snapshot.empty());
@@ -391,27 +398,43 @@ auto animation_system::apply_animation(
 
     auto& reg = world_->registry();
 
-    auto get_rest = [&](const std::string& name) -> transform {
-        auto it = target_map->find(name);
-        if (it != target_map->end() &&
-            reg.has<animation_target_component>(it->second)) {
-            return reg.get<animation_target_component>(it->second)
-                .get_rest_transform();
+    const auto target_of = [&](const std::string& name) -> entity {
+        const auto it = target_map->find(name);
+        return it != target_map->end() ? it->second : invalid_entity;
+    };
+
+    const auto rest_of = [&](entity target) -> transform {
+        if (target.is_valid() && reg.has<animation_target_component>(target)) {
+            return reg.get<animation_target_component>(target).get_rest_transform();
         }
         return {};
     };
 
-    std::unordered_map<std::string, transform> final_transforms;
+    auto& final_transforms = final_transforms_;
+    final_transforms.clear();
+
+    const auto slot_of = [&](entity target) -> transform* {
+        for (auto& [ent, value] : final_transforms) {
+            if (ent == target) {
+                return &value;
+            }
+        }
+        return nullptr;
+    };
 
     if (!anim_comp.layers_.empty()) {
         const auto& base = anim_comp.layers_[0];
         if (base.clip) {
             for (const auto& track : base.clip->get_tracks()) {
-                const auto& name = track.get_target_name();
-                auto rest        = get_rest(name);
-                auto t           = compute_layer_transform(base, name, rest);
+                const auto& name  = track.get_target_name();
+                const auto target = target_of(name);
+                if (!target.is_valid()) {
+                    continue;
+                }
+                auto rest = rest_of(target);
+                auto t    = compute_track_transform(base, track, name, rest);
                 if (t) {
-                    final_transforms[name] = *t;
+                    final_transforms.emplace_back(target, *t);
                 }
             }
 
@@ -426,24 +449,27 @@ auto animation_system::apply_animation(
                 );
 
                 for (const auto& prev_track : base.blend_prev_clip->get_tracks()) {
-                    const auto& name = prev_track.get_target_name();
-                    if (final_transforms.contains(name)) {
+                    const auto& name  = prev_track.get_target_name();
+                    const auto target = target_of(name);
+                    if (!target.is_valid() || slot_of(target) != nullptr) {
                         continue;
                     }
 
-                    auto rest = get_rest(name);
+                    auto rest = rest_of(target);
 
                     auto snapshot_it = base.blend_snapshot.find(name);
                     if (snapshot_it != base.blend_snapshot.end()) {
-                        final_transforms[name] =
-                            math::lerp(snapshot_it->second, rest, blend_factor);
+                        final_transforms.emplace_back(
+                            target, math::lerp(snapshot_it->second, rest, blend_factor)
+                        );
                     } else {
                         auto prev_result = prev_track.get_transform(base.blend_prev_time);
                         if (prev_result) {
                             transform prev_merged =
                                 merge_with_rest(*prev_result, prev_track, rest);
-                            final_transforms[name] =
-                                math::lerp(prev_merged, rest, blend_factor);
+                            final_transforms.emplace_back(
+                                target, math::lerp(prev_merged, rest, blend_factor)
+                            );
                         }
                     }
                 }
@@ -458,28 +484,28 @@ auto animation_system::apply_animation(
         }
 
         for (const auto& target_name : layer.mask) {
-            auto rest = get_rest(target_name);
+            const auto target = target_of(target_name);
+            if (!target.is_valid()) {
+                continue;
+            }
+
+            auto rest = rest_of(target);
             auto t    = compute_layer_transform(layer, target_name, rest);
             if (!t) {
                 continue;
             }
 
-            auto base_it = final_transforms.find(target_name);
-            if (base_it != final_transforms.end()) {
-                base_it->second = math::lerp(base_it->second, *t, layer.fade_influence);
+            if (auto* existing = slot_of(target)) {
+                *existing = math::lerp(*existing, *t, layer.fade_influence);
             } else {
-                final_transforms[target_name] = math::lerp(rest, *t, layer.fade_influence);
+                final_transforms.emplace_back(
+                    target, math::lerp(rest, *t, layer.fade_influence)
+                );
             }
         }
     }
 
-    for (const auto& [name, t] : final_transforms) {
-        auto it = target_map->find(name);
-        if (it == target_map->end()) {
-            continue;
-        }
-
-        entity target_ent = it->second;
+    for (const auto& [target_ent, t] : final_transforms) {
         if (!reg.has<transform_component>(target_ent)) {
             continue;
         }

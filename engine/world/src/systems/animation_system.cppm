@@ -148,6 +148,12 @@ private:
                                                const transform& rest) const
         -> std::optional<transform>;
 
+    [[nodiscard]] auto compute_track_transform(const asset::animation_layer& layer,
+                                               const asset::animation_track& track,
+                                               const std::string& target_name,
+                                               const transform& rest) const
+        -> std::optional<transform>;
+
     static auto merge_with_rest(const transform& anim, const asset::animation_track& track,
                                 const transform& rest) -> transform;
 
@@ -155,6 +161,7 @@ private:
     std::unordered_map<entity, std::unordered_map<std::string, entity>> target_maps_;
     std::unordered_map<entity, std::unordered_set<std::string>> warned_targets_;
     std::vector<entity> to_remove_;
+    std::vector<std::pair<entity, transform>> final_transforms_;
     float32 accumulated_delta_time_ = 0.0F;
     float32 target_frame_time_      = 1.0F / 120.0F;
 
