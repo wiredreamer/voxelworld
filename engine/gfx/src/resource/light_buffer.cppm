@@ -7,6 +7,7 @@ export module vw.gfx:resource.light_buffer;
 import std;
 
 import vw.core;
+import :frames_in_flight;
 import vw.ecs;
 import vw.world;
 import :gpu_buffers;
@@ -55,7 +56,6 @@ class light_buffer {
 public:
     using world_type = world;
 
-    static constexpr uint32 max_frames_in_flight = 2;
 
     explicit light_buffer(
         vulkan_context& context,
@@ -94,9 +94,9 @@ private:
     vulkan_context* context_;
     deletion_queue* deletion_;
     std::vector<point_light_data> lights_;
-    std::array<uint32, max_frames_in_flight> capacities_{};
-    std::array<std::unique_ptr<storage_buffer>, max_frames_in_flight> lights_buffers_;
-    std::array<vk::DescriptorSet, max_frames_in_flight> descriptor_sets_{};
+    std::array<uint32, frames_in_flight> capacities_{};
+    std::array<std::unique_ptr<storage_buffer>, frames_in_flight> lights_buffers_;
+    std::array<vk::DescriptorSet, frames_in_flight> descriptor_sets_{};
 
     vk::DescriptorPool descriptor_pool_            = nullptr;
     vk::DescriptorSetLayout descriptor_set_layout_ = nullptr;
@@ -146,7 +146,6 @@ class blob_buffer {
 public:
     using world_type = world;
 
-    static constexpr uint32 max_frames_in_flight = 2;
 
     blob_buffer(
         vulkan_context& context,
@@ -173,8 +172,8 @@ private:
     vulkan_context* context_;
     deletion_queue* deletion_;
     std::vector<blob_data> blobs_;
-    std::array<uint32, max_frames_in_flight> capacities_{};
-    std::array<std::unique_ptr<storage_buffer>, max_frames_in_flight> buffers_;
-    std::array<vk::DescriptorSet, max_frames_in_flight> sets_{};
+    std::array<uint32, frames_in_flight> capacities_{};
+    std::array<std::unique_ptr<storage_buffer>, frames_in_flight> buffers_;
+    std::array<vk::DescriptorSet, frames_in_flight> sets_{};
 };
 }  // namespace vw::gfx

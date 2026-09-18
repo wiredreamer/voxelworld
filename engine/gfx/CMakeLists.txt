@@ -11,6 +11,7 @@ target_sources(vw_gfx
         FILE_SET CXX_MODULES BASE_DIRS src FILES
             src/gfx.cppm
             src/vk.cppm
+            src/frames_in_flight.cppm
             src/camera/camera.cppm
             src/camera/controllers.cppm
             src/camera/fps_camera_controller.cppm

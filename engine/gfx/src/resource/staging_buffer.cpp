@@ -15,13 +15,12 @@ import :vk;
 namespace vw::gfx {
 
 staging_buffer::staging_buffer(
-    vulkan_context& context, vk::DeviceSize frame_capacity, uint32 max_frames_in_flight
+    vulkan_context& context, vk::DeviceSize frame_capacity
 )
     : context_(&context)
     , frame_capacity_(frame_capacity)
-    , max_frames_in_flight_(max_frames_in_flight)
-    , current_frame_index_(max_frames_in_flight - 1) {
-    const vk::DeviceSize total_capacity = frame_capacity_ * max_frames_in_flight_;
+    , current_frame_index_(frames_in_flight - 1) {
+    const vk::DeviceSize total_capacity = frame_capacity_ * frames_in_flight;
 
     const vk::Device device = context_->get_device();
 
@@ -79,7 +78,7 @@ staging_buffer::~staging_buffer() {
 }
 
 auto staging_buffer::begin_frame() -> void {
-    current_frame_index_ = (current_frame_index_ + 1) % max_frames_in_flight_;
+    current_frame_index_ = (current_frame_index_ + 1) % frames_in_flight;
     write_offset_        = current_frame_index_ * frame_capacity_;
     frame_end_offset_    = write_offset_ + frame_capacity_;
 }

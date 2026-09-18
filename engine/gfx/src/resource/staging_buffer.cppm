@@ -3,6 +3,7 @@ export module vw.gfx:resource.staging_buffer;
 import std;
 
 import vw.core;
+import :frames_in_flight;
 import :resource.buffer;
 import vulkan;
 
@@ -14,8 +15,7 @@ class staging_buffer {
 public:
     explicit staging_buffer(
         vulkan_context& context,
-        vk::DeviceSize frame_capacity  = 1 * 1024 * 1024,
-        uint32 max_frames_in_flight = 2
+        vk::DeviceSize frame_capacity  = 1 * 1024 * 1024
     );
     ~staging_buffer();
 
@@ -70,7 +70,6 @@ private:
     void* mapped_             = nullptr;
 
     vk::DeviceSize frame_capacity_    = 0;
-    uint32 max_frames_in_flight_    = 2;
     uint32 current_frame_index_     = 0;
     vk::DeviceSize write_offset_      = 0;
     vk::DeviceSize frame_end_offset_  = 0;

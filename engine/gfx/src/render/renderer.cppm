@@ -7,6 +7,7 @@ export import :renderer.stats;
 import std;
 
 import vw.core;
+import :frames_in_flight;
 import vw.ecs;
 import vw.world;
 import vw.platform;
@@ -59,7 +60,7 @@ public:
 
     [[nodiscard]] auto get_present_mode_name() const -> std::string_view;
     [[nodiscard]] static constexpr auto get_frames_in_flight() -> uint32 {
-        return static_cast<uint32>(max_frames_in_flight_);
+        return static_cast<uint32>(frames_in_flight);
     }
 
     [[nodiscard]] auto get_descriptor_pool() const -> vk::DescriptorPool {
@@ -281,7 +282,6 @@ private:
     uint32 current_image_index_ = 0;
     bool framebuffer_resized_     = false;
     vec4f clear_color_            = {0.1f, 0.1f, 0.1f, 1.0f};
-    std::vector<vk::Fence> images_in_flight_;
     render_mode current_render_mode_ = render_mode::lit;
 
     vk::DescriptorPool imgui_descriptor_pool_ = nullptr;
@@ -329,6 +329,5 @@ private:
     mutable renderer_stats stats_;
     uint32 draw_call_count_ = 0;
 
-    static constexpr uint32 max_frames_in_flight_ = 2;
 };
 }  // namespace vw::gfx

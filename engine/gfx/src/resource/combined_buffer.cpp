@@ -35,15 +35,18 @@ auto is_axis_aligned(
 }  // namespace
 
 combined_buffer::~combined_buffer() {
-    if (compute_descriptor_set_ && descriptor_pool_) {
-        static_cast<void>(
-            context_->get_device().freeDescriptorSets(descriptor_pool_, compute_descriptor_set_)
-        );
+    if (descriptor_pool_ == nullptr) {
+        return;
     }
-    if (descriptor_set_ && descriptor_pool_) {
-        static_cast<void>(
-            context_->get_device().freeDescriptorSets(descriptor_pool_, descriptor_set_)
-        );
+    for (vk::DescriptorSet set : compute_descriptor_sets_) {
+        if (set) {
+            static_cast<void>(context_->get_device().freeDescriptorSets(descriptor_pool_, set));
+        }
+    }
+    for (vk::DescriptorSet set : descriptor_sets_) {
+        if (set) {
+            static_cast<void>(context_->get_device().freeDescriptorSets(descriptor_pool_, set));
+        }
     }
 }
 
@@ -103,29 +106,34 @@ combined_buffer::combined_buffer(
         *context_, instance_capacity_ * sizeof(uint32)
     );
 
-    descriptor_set_ = vk_must(
+    std::array<vk::DescriptorSetLayout, frames_in_flight> layouts{};
+    layouts.fill(descriptor_set_layout_);
+
+    const auto sets = vk_must(
         context_->get_device().allocateDescriptorSets({
             .descriptorPool     = descriptor_pool_,
-            .descriptorSetCount = 1,
-            .pSetLayouts        = &descriptor_set_layout_,
+            .descriptorSetCount = frames_in_flight,
+            .pSetLayouts        = layouts.data(),
         }),
-        "allocate combined buffer descriptor set"
-    ).front();
-
-    update_descriptor_set_();
+        "allocate combined buffer descriptor sets"
+    );
+    std::ranges::copy(sets, descriptor_sets_.begin());
 
     if (compute_descriptor_set_layout_) {
-        compute_descriptor_set_ = vk_must(
+        layouts.fill(compute_descriptor_set_layout_);
+
+        const auto compute_sets = vk_must(
             context_->get_device().allocateDescriptorSets({
                 .descriptorPool     = descriptor_pool_,
-                .descriptorSetCount = 1,
-                .pSetLayouts        = &compute_descriptor_set_layout_,
+                .descriptorSetCount = frames_in_flight,
+                .pSetLayouts        = layouts.data(),
             }),
-            "allocate compute descriptor set"
-        ).front();
-
-        update_compute_descriptor_set_();
+            "allocate compute descriptor sets"
+        );
+        std::ranges::copy(compute_sets, compute_descriptor_sets_.begin());
     }
+
+    invalidate_descriptor_sets_();
 }
 
 auto combined_buffer::allocate(
@@ -396,7 +404,7 @@ auto combined_buffer::expand_mesh_buffers_() -> void {
 
     deletion_->retire(std::exchange(quad_buffer_, std::move(new_quad_buffer)));
 
-    update_descriptor_set_();
+    invalidate_descriptor_sets_();
 }
 
 auto combined_buffer::expand_instance_buffers_() -> void {
@@ -496,13 +504,10 @@ auto combined_buffer::expand_instance_buffers_() -> void {
         )
     ));
 
-    update_descriptor_set_();
-    if (compute_descriptor_set_ != nullptr) {
-        update_compute_descriptor_set_();
-    }
+    invalidate_descriptor_sets_();
 }
 
-auto combined_buffer::update_descriptor_set_() -> void {
+auto combined_buffer::update_descriptor_set_(uint32 frame) -> void {
     const vk::DescriptorBufferInfo model_buffer_info{
         .buffer = model_matrix_buffer_->get_buffer(),
         .offset = 0,
@@ -523,7 +528,7 @@ auto combined_buffer::update_descriptor_set_() -> void {
 
     const std::array descriptor_writes{
         vk::WriteDescriptorSet{
-            .dstSet          = descriptor_set_,
+            .dstSet          = descriptor_sets_[frame],
             .dstBinding      = 0,
             .dstArrayElement = 0,
             .descriptorCount = 1,
@@ -531,7 +536,7 @@ auto combined_buffer::update_descriptor_set_() -> void {
             .pBufferInfo     = &model_buffer_info,
         },
         vk::WriteDescriptorSet{
-            .dstSet          = descriptor_set_,
+            .dstSet          = descriptor_sets_[frame],
             .dstBinding      = 1,
             .dstArrayElement = 0,
             .descriptorCount = 1,
@@ -539,7 +544,7 @@ auto combined_buffer::update_descriptor_set_() -> void {
             .pBufferInfo     = &normal_buffer_info,
         },
         vk::WriteDescriptorSet{
-            .dstSet          = descriptor_set_,
+            .dstSet          = descriptor_sets_[frame],
             .dstBinding      = 2,
             .dstArrayElement = 0,
             .descriptorCount = 1,
@@ -551,7 +556,7 @@ auto combined_buffer::update_descriptor_set_() -> void {
     context_->get_device().updateDescriptorSets(descriptor_writes, nullptr);
 }
 
-auto combined_buffer::update_compute_descriptor_set_() -> void {
+auto combined_buffer::update_compute_descriptor_set_(uint32 frame) -> void {
     const vk::DescriptorBufferInfo indirect_info{
         .buffer = indirect_draw_buffer_->get_buffer(),
         .offset = 0,
@@ -584,7 +589,7 @@ auto combined_buffer::update_compute_descriptor_set_() -> void {
 
     const std::array writes{
         vk::WriteDescriptorSet{
-            .dstSet          = compute_descriptor_set_,
+            .dstSet          = compute_descriptor_sets_[frame],
             .dstBinding      = 0,
             .dstArrayElement = 0,
             .descriptorCount = 1,
@@ -592,7 +597,7 @@ auto combined_buffer::update_compute_descriptor_set_() -> void {
             .pBufferInfo     = &indirect_info,
         },
         vk::WriteDescriptorSet{
-            .dstSet          = compute_descriptor_set_,
+            .dstSet          = compute_descriptor_sets_[frame],
             .dstBinding      = 1,
             .dstArrayElement = 0,
             .descriptorCount = 1,
@@ -600,7 +605,7 @@ auto combined_buffer::update_compute_descriptor_set_() -> void {
             .pBufferInfo     = &aabb_info,
         },
         vk::WriteDescriptorSet{
-            .dstSet          = compute_descriptor_set_,
+            .dstSet          = compute_descriptor_sets_[frame],
             .dstBinding      = 2,
             .dstArrayElement = 0,
             .descriptorCount = 1,
@@ -608,7 +613,7 @@ auto combined_buffer::update_compute_descriptor_set_() -> void {
             .pBufferInfo     = &culled_info,
         },
         vk::WriteDescriptorSet{
-            .dstSet          = compute_descriptor_set_,
+            .dstSet          = compute_descriptor_sets_[frame],
             .dstBinding      = 3,
             .dstArrayElement = 0,
             .descriptorCount = 1,
@@ -616,7 +621,7 @@ auto combined_buffer::update_compute_descriptor_set_() -> void {
             .pBufferInfo     = &count_info,
         },
         vk::WriteDescriptorSet{
-            .dstSet          = compute_descriptor_set_,
+            .dstSet          = compute_descriptor_sets_[frame],
             .dstBinding      = 4,
             .dstArrayElement = 0,
             .descriptorCount = 1,
@@ -626,6 +631,33 @@ auto combined_buffer::update_compute_descriptor_set_() -> void {
     };
 
     context_->get_device().updateDescriptorSets(writes, nullptr);
+}
+
+auto combined_buffer::invalidate_descriptor_sets_() -> void {
+    constexpr uint32 all_frames = (uint32{1} << frames_in_flight) - 1;
+
+    stale_frames_ = all_frames;
+    if (compute_descriptor_sets_.front()) {
+        stale_compute_frames_ = all_frames;
+    }
+}
+
+auto combined_buffer::get_descriptor_set(uint32 frame) -> vk::DescriptorSet {
+    const uint32 bit = uint32{1} << frame;
+    if ((stale_frames_ & bit) != 0) {
+        update_descriptor_set_(frame);
+        stale_frames_ &= ~bit;
+    }
+    return descriptor_sets_[frame];
+}
+
+auto combined_buffer::get_compute_descriptor_set(uint32 frame) -> vk::DescriptorSet {
+    const uint32 bit = uint32{1} << frame;
+    if ((stale_compute_frames_ & bit) != 0) {
+        update_compute_descriptor_set_(frame);
+        stale_compute_frames_ &= ~bit;
+    }
+    return compute_descriptor_sets_[frame];
 }
 
 auto combined_buffer::get_instance_count() const -> uint32 {

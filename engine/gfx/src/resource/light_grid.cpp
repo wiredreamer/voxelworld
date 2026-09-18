@@ -38,7 +38,7 @@ light_grid::light_grid(
     , deletion_(&deletion)
     , descriptor_pool_(descriptor_pool)
     , light_set_layout_(light_set_layout) {
-    std::ranges::copy_n(light_sets.begin(), max_frames_in_flight, light_sets_.begin());
+    std::ranges::copy_n(light_sets.begin(), frames_in_flight, light_sets_.begin());
 
     compute_shader_ = std::make_unique<shader>(
         *context_, "shaders/light_cull.comp.spv", shader_type::COMPUTE

@@ -104,26 +104,26 @@ auto cull_pipeline::create_pipeline_() -> void {
 }
 
 auto cull_pipeline::create_frustum_ubos_() -> void {
-    for (uint32 i = 0; i < max_frames_in_flight; i++) {
+    for (uint32 i = 0; i < frames_in_flight; i++) {
         frustum_ubos_[i] = std::make_unique<uniform_buffer>(
             *context_, static_cast<vk::DeviceSize>(sizeof(cull_frustum_ubo))
         );
     }
 
-    std::array<vk::DescriptorSetLayout, max_frames_in_flight> layouts{};
+    std::array<vk::DescriptorSetLayout, frames_in_flight> layouts{};
     layouts.fill(frustum_descriptor_set_layout_);
 
     const auto sets = vk_must(
         context_->get_device().allocateDescriptorSets({
             .descriptorPool     = descriptor_pool_,
-            .descriptorSetCount = max_frames_in_flight,
+            .descriptorSetCount = frames_in_flight,
             .pSetLayouts        = layouts.data(),
         }),
         "allocate frustum descriptor sets"
     );
     std::ranges::copy(sets, frustum_descriptor_sets_.begin());
 
-    for (uint32 i = 0; i < max_frames_in_flight; i++) {
+    for (uint32 i = 0; i < frames_in_flight; i++) {
         const vk::DescriptorBufferInfo buffer_info{
             .buffer = frustum_ubos_[i]->get_buffer(),
             .offset = 0,
@@ -225,7 +225,7 @@ auto cull_pipeline::dispatch(
 
         cmd.bindDescriptorSets(
             vk::PipelineBindPoint::eCompute, compute_pipeline_layout_, 1,
-            buffer->get_compute_descriptor_set(), nullptr
+            buffer->get_compute_descriptor_set(frame_index), nullptr
         );
 
         cmd.pushConstants<uint32>(

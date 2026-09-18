@@ -23,19 +23,19 @@ light_buffer::light_buffer(
     , descriptor_pool_(descriptor_pool)
     , descriptor_set_layout_(descriptor_set_layout) {
     const std::vector<vk::DescriptorSetLayout> layouts(
-        max_frames_in_flight, descriptor_set_layout_
+        frames_in_flight, descriptor_set_layout_
     );
 
     const auto sets = vk_must(
         context_->get_device().allocateDescriptorSets({
             .descriptorPool     = descriptor_pool_,
-            .descriptorSetCount = max_frames_in_flight,
+            .descriptorSetCount = frames_in_flight,
             .pSetLayouts        = layouts.data(),
         }),
         "allocate light descriptor sets"
     );
 
-    for (uint32 frame = 0; frame < max_frames_in_flight; ++frame) {
+    for (uint32 frame = 0; frame < frames_in_flight; ++frame) {
         capacities_[frame]     = default_capacity_;
         lights_buffers_[frame] = std::make_unique<storage_buffer>(
             *context_, capacities_[frame] * sizeof(point_light_data)

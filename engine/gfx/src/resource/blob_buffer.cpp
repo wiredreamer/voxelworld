@@ -17,9 +17,9 @@ blob_buffer::blob_buffer(
 )
     : context_(&context)
     , deletion_(&deletion) {
-    std::ranges::copy_n(sets.begin(), max_frames_in_flight, sets_.begin());
+    std::ranges::copy_n(sets.begin(), frames_in_flight, sets_.begin());
 
-    for (uint32 frame = 0; frame < max_frames_in_flight; ++frame) {
+    for (uint32 frame = 0; frame < frames_in_flight; ++frame) {
         capacities_[frame] = default_capacity_;
         buffers_[frame]    = std::make_unique<storage_buffer>(
             *context_, capacities_[frame] * sizeof(blob_data)

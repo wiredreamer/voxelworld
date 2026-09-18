@@ -7,6 +7,7 @@ export module vw.gfx:render.cull_pipeline;
 import std;
 
 import vw.core;
+import :frames_in_flight;
 import vw.ecs;
 import vw.world;
 import :camera;
@@ -43,7 +44,6 @@ static_assert(sizeof(cull_frustum_ubo) == 608);
 
 class cull_pipeline {
 public:
-    static constexpr uint32 max_frames_in_flight = 2;
 
     explicit cull_pipeline(
         vulkan_context& context,
@@ -87,8 +87,8 @@ private:
     vk::DescriptorSetLayout frustum_descriptor_set_layout_ = nullptr;
     vk::DescriptorSetLayout buffer_descriptor_set_layout_  = nullptr;
 
-    std::array<std::unique_ptr<uniform_buffer>, max_frames_in_flight> frustum_ubos_;
-    std::array<vk::DescriptorSet, max_frames_in_flight> frustum_descriptor_sets_{};
+    std::array<std::unique_ptr<uniform_buffer>, frames_in_flight> frustum_ubos_;
+    std::array<vk::DescriptorSet, frames_in_flight> frustum_descriptor_sets_{};
 };
 
 }  // namespace vw::gfx

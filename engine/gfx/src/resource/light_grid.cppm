@@ -3,6 +3,7 @@ export module vw.gfx:resource.light_grid;
 import std;
 
 import vw.core;
+import :frames_in_flight;
 import vw.ecs;
 import vw.world;
 import :camera;
@@ -37,7 +38,6 @@ struct cluster_readback {
 
 class light_grid {
 public:
-    static constexpr uint32 max_frames_in_flight = 2;
 
     light_grid(
         vulkan_context& context,
@@ -118,18 +118,18 @@ private:
     vk::DescriptorSetLayout params_descriptor_set_layout_ = nullptr;
     vk::DescriptorSetLayout light_set_layout_             = nullptr;
 
-    static constexpr uint32 params_slots_ = max_frames_in_flight * cull_list_count;
+    static constexpr uint32 params_slots_ = frames_in_flight * cull_list_count;
 
     std::array<std::unique_ptr<uniform_buffer>, params_slots_> params_ubos_;
     std::array<vk::DescriptorSet, params_slots_> params_descriptor_sets_{};
 
-    std::array<vk::DescriptorSet, max_frames_in_flight> light_sets_{};
-    std::array<std::array<list_frame, max_frames_in_flight>, cull_list_count> lists_{};
+    std::array<vk::DescriptorSet, frames_in_flight> light_sets_{};
+    std::array<std::array<list_frame, frames_in_flight>, cull_list_count> lists_{};
 
     cluster_readback_level readback_ = cluster_readback_level::off;
     std::array<std::optional<cluster_readback>, cull_list_count> ready_{};
 
-    std::array<uint64, max_frames_in_flight> built_{};
+    std::array<uint64, frames_in_flight> built_{};
     uint64 generation_ = 1;
 
     spatial::cluster_grid grid_{};

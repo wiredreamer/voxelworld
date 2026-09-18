@@ -84,8 +84,8 @@ renderer::renderer(
         *context_, deletion_queue_, descriptor_pool_, point_lights_descriptor_set_layout_
     );
 
-    std::array<vk::DescriptorSet, max_frames_in_flight_> light_sets{};
-    for (uint32 frame = 0; frame < max_frames_in_flight_; ++frame) {
+    std::array<vk::DescriptorSet, frames_in_flight> light_sets{};
+    for (uint32 frame = 0; frame < frames_in_flight; ++frame) {
         light_sets[frame] = light_buffer_->get_descriptor_set(frame);
     }
 
@@ -137,8 +137,8 @@ auto renderer::begin_frame() -> void {
 
     vk_must(device.resetFences(in_flight_fences_[current_frame_]), "reset frame fence");
 
-    if (frame_counter_ >= max_frames_in_flight_) {
-        deletion_queue_.collect(frame_counter_ - max_frames_in_flight_);
+    if (frame_counter_ >= frames_in_flight) {
+        deletion_queue_.collect(frame_counter_ - frames_in_flight);
     }
     deletion_queue_.set_frame(frame_counter_);
 
@@ -164,15 +164,6 @@ auto renderer::begin_frame() -> void {
 
     current_image_index_ = image_index;
 
-    if (images_in_flight_[image_index] != nullptr) {
-        vk_must(
-            device.waitForFences(images_in_flight_[image_index], vk::True, std::numeric_limits<uint64>::max()),
-            "wait for image fence"
-        );
-    }
-
-    images_in_flight_[image_index] = in_flight_fences_[current_frame_];
-
     ImGui_ImplVulkan_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
@@ -187,7 +178,7 @@ auto renderer::end_frame() -> void {
     submit_info.pWaitSemaphores        = wait_semaphores;
     submit_info.pWaitDstStageMask      = wait_stages;
     submit_info.commandBufferCount     = 1;
-    submit_info.pCommandBuffers        = &command_buffers_[current_image_index_];
+    submit_info.pCommandBuffers        = &command_buffers_[current_frame_];
 
     vk::Semaphore signal_semaphores[]  = {render_finished_semaphores_[current_image_index_]};
     submit_info.signalSemaphoreCount = 1;
@@ -221,7 +212,7 @@ auto renderer::end_frame() -> void {
     stats_.draw_call_count = draw_call_count_;
     draw_call_count_       = 0;
 
-    current_frame_ = (current_frame_ + 1) % max_frames_in_flight_;
+    current_frame_ = (current_frame_ + 1) % frames_in_flight;
     ++frame_counter_;
 }
 
@@ -414,9 +405,9 @@ auto renderer::render(
     vk::CommandBufferBeginInfo begin_info{};
     begin_info.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
 
-    vk_must(command_buffers_[current_image_index_].begin(begin_info), "begin recording command buffer");
+    vk_must(command_buffers_[current_frame_].begin(begin_info), "begin recording command buffer");
 
-    auto cmd = command_buffers_[current_image_index_];
+    auto cmd = command_buffers_[current_frame_];
     gpu_timer_->reset(cmd, current_frame_);
     gpu_timer_->begin(cmd, gpu_stage::frame);
 
@@ -425,7 +416,7 @@ auto renderer::render(
     stats_.timing.buffer_pool_update_ms = measure_ms([&] {
         gpu_timer_->begin(cmd, gpu_stage::buffer_upload);
         combined_buffer_pool_->update(
-            world, camera, command_buffers_[current_image_index_], mesh_pool_);
+            world, camera, command_buffers_[current_frame_], mesh_pool_);
         gpu_timer_->end(cmd, gpu_stage::buffer_upload);
     });
 
@@ -479,7 +470,7 @@ auto renderer::render(
                 vk::PipelineStageFlagBits::eDrawIndirect |  //
                 vk::PipelineStageFlagBits::eVertexShader |  //
                 vk::PipelineStageFlagBits::eComputeShader;
-            command_buffers_[current_image_index_].pipelineBarrier(
+            command_buffers_[current_frame_].pipelineBarrier(
                 vk::PipelineStageFlagBits::eTransfer,
                 stage_mask,
                 {},
@@ -498,7 +489,7 @@ auto renderer::render(
             current_frame_, view_frustum, cull_cascades, camera.get_position());
 
         cull_pipeline_->dispatch(
-            command_buffers_[current_image_index_],
+            command_buffers_[current_frame_],
             combined_buffer_pool_->get_buffers(),
             current_frame_
         );
@@ -507,7 +498,7 @@ auto renderer::render(
             vk::MemoryBarrier compute_barrier{};
             compute_barrier.srcAccessMask = vk::AccessFlagBits::eShaderWrite;
             compute_barrier.dstAccessMask = vk::AccessFlagBits::eIndirectCommandRead;
-            command_buffers_[current_image_index_].pipelineBarrier(
+            command_buffers_[current_frame_].pipelineBarrier(
                 vk::PipelineStageFlagBits::eComputeShader,
                 vk::PipelineStageFlagBits::eDrawIndirect,
                 {},
@@ -537,7 +528,7 @@ auto renderer::render(
 
     gpu_timer_->end(cmd, gpu_stage::frame);
 
-    vk_must(command_buffers_[current_image_index_].end(), "record command buffer");
+    vk_must(command_buffers_[current_frame_].end(), "record command buffer");
 }
 
 auto renderer::draw_line(
@@ -1145,7 +1136,7 @@ auto renderer::create_framebuffers() -> void {
 }
 
 auto renderer::create_command_buffers() -> void {
-    command_buffers_.resize(framebuffers_.size());
+    command_buffers_.resize(frames_in_flight);
 
     vk::CommandBufferAllocateInfo alloc_info{};
     alloc_info.commandPool        = context_->get_command_pool();
@@ -1157,17 +1148,16 @@ auto renderer::create_command_buffers() -> void {
 }
 
 auto renderer::create_sync_objects() -> void {
-    image_available_semaphores_.resize(max_frames_in_flight_);
+    image_available_semaphores_.resize(frames_in_flight);
     render_finished_semaphores_.resize(swapchain_images_.size());
-    in_flight_fences_.resize(max_frames_in_flight_);
-    images_in_flight_.assign(swapchain_images_.size(), nullptr);
+    in_flight_fences_.resize(frames_in_flight);
 
     vk::SemaphoreCreateInfo semaphore_info{};
 
     vk::FenceCreateInfo fence_info{};
     fence_info.flags = vk::FenceCreateFlagBits::eSignaled;
 
-    for (std::size_t i = 0; i < max_frames_in_flight_; i++) {
+    for (std::size_t i = 0; i < frames_in_flight; i++) {
         image_available_semaphores_[i] = vk_must(context_->get_device().createSemaphore(semaphore_info), "failed to create synchronization objects for a frame");
     }
 
@@ -1175,16 +1165,16 @@ auto renderer::create_sync_objects() -> void {
         render_finished_semaphores_[i] = vk_must(context_->get_device().createSemaphore(semaphore_info), "failed to create synchronization objects for a frame");
     }
 
-    for (std::size_t i = 0; i < max_frames_in_flight_; i++) {
+    for (std::size_t i = 0; i < frames_in_flight; i++) {
         in_flight_fences_[i] = vk_must(context_->get_device().createFence(fence_info), "failed to create synchronization objects for a frame");
     }
 }
 
 auto renderer::create_uniform_buffers() -> void {
     vk::DeviceSize buffer_size = sizeof(uniform_buffer_object);
-    uniform_buffers_.resize(max_frames_in_flight_);
+    uniform_buffers_.resize(frames_in_flight);
 
-    for (std::size_t i = 0; i < max_frames_in_flight_; i++) {
+    for (std::size_t i = 0; i < frames_in_flight; i++) {
         uniform_buffers_[i] = std::make_unique<uniform_buffer>(*context_, buffer_size);
     }
 }
@@ -1196,12 +1186,12 @@ auto renderer::create_descriptor_pool() -> void {
     std::array pool_sizes = {
         vk::DescriptorPoolSize{
             vk::DescriptorType::eUniformBuffer,
-            static_cast<uint32>(max_frames_in_flight_ * 8)
+            static_cast<uint32>(frames_in_flight * 8)
         },
         vk::DescriptorPoolSize{vk::DescriptorType::eStorageBuffer, STORAGE_BUFFER_COUNT},
         vk::DescriptorPoolSize{
             vk::DescriptorType::eCombinedImageSampler,
-            static_cast<uint32>(max_frames_in_flight_)
+            static_cast<uint32>(frames_in_flight)
         }
     };
 
@@ -1215,16 +1205,16 @@ auto renderer::create_descriptor_pool() -> void {
 }
 
 auto renderer::create_descriptor_sets() -> void {
-    std::vector layouts(max_frames_in_flight_, uniform_descriptor_set_layout_);
+    std::vector layouts(frames_in_flight, uniform_descriptor_set_layout_);
     vk::DescriptorSetAllocateInfo alloc_info{};
     alloc_info.descriptorPool     = descriptor_pool_;
-    alloc_info.descriptorSetCount = static_cast<uint32>(max_frames_in_flight_);
+    alloc_info.descriptorSetCount = static_cast<uint32>(frames_in_flight);
     alloc_info.pSetLayouts        = layouts.data();
 
     descriptor_sets_ =
         vk_must(context_->get_device().allocateDescriptorSets(alloc_info), "allocate descriptor sets");
 
-    for (std::size_t i = 0; i < max_frames_in_flight_; i++) {
+    for (std::size_t i = 0; i < frames_in_flight; i++) {
         vk::DescriptorBufferInfo ubo_buffer_info{};
         ubo_buffer_info.buffer = uniform_buffers_[i]->get_buffer();
         ubo_buffer_info.offset = 0;
@@ -1466,7 +1456,7 @@ auto renderer::render_world_pass(
     render_pass_info.clearValueCount = 2;
     render_pass_info.pClearValues    = clear_values;
 
-    command_buffers_[current_image_index_].beginRenderPass(render_pass_info, vk::SubpassContents::eInline);
+    command_buffers_[current_frame_].beginRenderPass(render_pass_info, vk::SubpassContents::eInline);
 
     vk::Viewport viewport{};
     viewport.x        = 0.0f;
@@ -1476,15 +1466,15 @@ auto renderer::render_world_pass(
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
 
-    command_buffers_[current_image_index_].setViewport(0, viewport);
+    command_buffers_[current_frame_].setViewport(0, viewport);
 
     vk::Rect2D scissor{};
     scissor.offset = {0, 0};
     scissor.extent = swapchain_extent_;
 
-    command_buffers_[current_image_index_].setScissor(0, scissor);
+    command_buffers_[current_frame_].setScissor(0, scissor);
 
-    auto cmd = command_buffers_[current_image_index_];
+    auto cmd = command_buffers_[current_frame_];
 
     stats_.timing.world_pass_geometry_ms = measure_ms([&] {
         gpu_timer_->begin(cmd, gpu_stage::world_geometry);
@@ -1492,7 +1482,7 @@ auto renderer::render_world_pass(
         gpu_timer_->end(cmd, gpu_stage::world_geometry);
     });
 
-    command_buffers_[current_image_index_].nextSubpass(vk::SubpassContents::eInline);
+    command_buffers_[current_frame_].nextSubpass(vk::SubpassContents::eInline);
 
     stats_.timing.world_pass_debug_ms = measure_ms([&] {
         gpu_timer_->begin(cmd, gpu_stage::world_debug);
@@ -1501,7 +1491,7 @@ auto renderer::render_world_pass(
         gpu_timer_->end(cmd, gpu_stage::world_debug);
     });
 
-    command_buffers_[current_image_index_].nextSubpass(vk::SubpassContents::eInline);
+    command_buffers_[current_frame_].nextSubpass(vk::SubpassContents::eInline);
 
     stats_.timing.world_pass_imgui_ms = measure_ms([&] {
         gpu_timer_->begin(cmd, gpu_stage::world_imgui);
@@ -1509,7 +1499,7 @@ auto renderer::render_world_pass(
         gpu_timer_->end(cmd, gpu_stage::world_imgui);
     });
 
-    command_buffers_[current_image_index_].endRenderPass();
+    command_buffers_[current_frame_].endRenderPass();
 }
 
 auto renderer::render_world(
@@ -1517,9 +1507,9 @@ auto renderer::render_world(
 ) -> void {
     vk::Pipeline current_pipeline =
         (current_render_mode_ == render_mode::lit) ? graphics_pipeline_ : wireframe_pipeline_;
-    command_buffers_[current_image_index_].bindPipeline(vk::PipelineBindPoint::eGraphics, current_pipeline);
+    command_buffers_[current_frame_].bindPipeline(vk::PipelineBindPoint::eGraphics, current_pipeline);
 
-    command_buffers_[current_image_index_].bindDescriptorSets(
+    command_buffers_[current_frame_].bindDescriptorSets(
         vk::PipelineBindPoint::eGraphics,
         pipeline_layout_,
         0,
@@ -1527,7 +1517,7 @@ auto renderer::render_world(
         nullptr
     );
 
-    command_buffers_[current_image_index_].bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+    command_buffers_[current_frame_].bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
         pipeline_layout_,
         2,
         1,
@@ -1537,7 +1527,7 @@ auto renderer::render_world(
 
     vk::DescriptorSet point_lights_descriptor_set =
         light_buffer_->get_descriptor_set(current_frame_);
-    command_buffers_[current_image_index_].bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+    command_buffers_[current_frame_].bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
         pipeline_layout_,
         3,
         1,
@@ -1546,7 +1536,7 @@ auto renderer::render_world(
         nullptr);
 
     vk::DescriptorSet palette_ds = palette_buffer_->get_descriptor_set();
-    command_buffers_[current_image_index_].bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+    command_buffers_[current_frame_].bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
         pipeline_layout_,
         4,
         1,
@@ -1562,8 +1552,8 @@ auto renderer::render_world(
 
         vk::Buffer instance_index_buffer = buffer->get_instance_index_buffer();
 
-        vk::DescriptorSet buffer_descriptor_set = buffer->get_descriptor_set();
-        command_buffers_[current_image_index_].bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+        vk::DescriptorSet buffer_descriptor_set = buffer->get_descriptor_set(current_frame_);
+        command_buffers_[current_frame_].bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
             pipeline_layout_,
             1,
             1,
@@ -1572,14 +1562,14 @@ auto renderer::render_world(
             nullptr);
 
         constexpr vk::DeviceSize instance_offset = 0;
-        command_buffers_[current_image_index_].bindVertexBuffers(
+        command_buffers_[current_frame_].bindVertexBuffers(
             0, instance_index_buffer, instance_offset);
-        command_buffers_[current_image_index_].bindIndexBuffer(
+        command_buffers_[current_frame_].bindIndexBuffer(
             combined_buffer_pool_->get_index_buffer(), 0, vk::IndexType::eUint32);
 
         const uint32 max_draws = buffer->get_draw_command_count();
         if (max_draws > 0) {
-            command_buffers_[current_image_index_].drawIndexedIndirectCount(buffer->get_culled_indirect_buffer(),
+            command_buffers_[current_frame_].drawIndexedIndirectCount(buffer->get_culled_indirect_buffer(),
                 0,
                 buffer->get_count_buffer(),
                 0,
@@ -1699,9 +1689,9 @@ auto renderer::render_debug_primitives() -> void {
 
     update_debug_vertex_buffer();
 
-    command_buffers_[current_image_index_].bindPipeline(vk::PipelineBindPoint::eGraphics, debug_pipeline_);
+    command_buffers_[current_frame_].bindPipeline(vk::PipelineBindPoint::eGraphics, debug_pipeline_);
 
-    command_buffers_[current_image_index_].bindDescriptorSets(
+    command_buffers_[current_frame_].bindDescriptorSets(
         vk::PipelineBindPoint::eGraphics,
         debug_pipeline_layout_,
         0,
@@ -1711,9 +1701,9 @@ auto renderer::render_debug_primitives() -> void {
 
     vk::Buffer vertex_buffer        = debug_vertex_buffer_->get_buffer();
     constexpr vk::DeviceSize offset = 0;
-    command_buffers_[current_image_index_].bindVertexBuffers(0, vertex_buffer, offset);
+    command_buffers_[current_frame_].bindVertexBuffers(0, vertex_buffer, offset);
 
-    command_buffers_[current_image_index_].draw(static_cast<uint32>(debug_primitives_.get_vertices().size()),
+    command_buffers_[current_frame_].draw(static_cast<uint32>(debug_primitives_.get_vertices().size()),
         1,
         0,
         0);
@@ -1737,7 +1727,7 @@ auto renderer::render_debug_solids() -> void {
 
     update_debug_solid_vertex_buffer();
 
-    auto cmd = command_buffers_[current_image_index_];
+    auto cmd = command_buffers_[current_frame_];
 
     cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, debug_solid_pipeline_);
     cmd.bindDescriptorSets(
@@ -1765,7 +1755,7 @@ auto renderer::update_debug_solid_vertex_buffer() -> void {
 
 auto renderer::render_imgui() const -> void {
     ImGui::Render();
-    ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), command_buffers_[current_image_index_]);
+    ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), command_buffers_[current_frame_]);
 }
 
 auto renderer::get_shadow_map_texture_id(
@@ -2020,24 +2010,24 @@ namespace vw::gfx {
 
 auto renderer::create_shadow_uniform_buffers() -> void {
     vk::DeviceSize buffer_size = sizeof(shadow_uniform_buffer_object);
-    shadow_uniform_buffers_.resize(max_frames_in_flight_);
+    shadow_uniform_buffers_.resize(frames_in_flight);
 
-    for (std::size_t i = 0; i < max_frames_in_flight_; i++) {
+    for (std::size_t i = 0; i < frames_in_flight; i++) {
         shadow_uniform_buffers_[i] = std::make_unique<uniform_buffer>(*context_, buffer_size);
     }
 }
 
 auto renderer::create_shadow_descriptor_sets() -> void {
-    std::vector layouts(max_frames_in_flight_, uniform_descriptor_set_layout_);
+    std::vector layouts(frames_in_flight, uniform_descriptor_set_layout_);
     vk::DescriptorSetAllocateInfo alloc_info{};
     alloc_info.descriptorPool     = descriptor_pool_;
-    alloc_info.descriptorSetCount = static_cast<uint32>(max_frames_in_flight_);
+    alloc_info.descriptorSetCount = static_cast<uint32>(frames_in_flight);
     alloc_info.pSetLayouts        = layouts.data();
 
     shadow_descriptor_sets_ =
         vk_must(context_->get_device().allocateDescriptorSets(alloc_info), "allocate shadow descriptor sets");
 
-    for (std::size_t i = 0; i < max_frames_in_flight_; i++) {
+    for (std::size_t i = 0; i < frames_in_flight; i++) {
         vk::DescriptorBufferInfo ubo_buffer_info{};
         ubo_buffer_info.buffer = shadow_uniform_buffers_[i]->get_buffer();
         ubo_buffer_info.offset = 0;
@@ -2056,16 +2046,16 @@ auto renderer::create_shadow_descriptor_sets() -> void {
 }
 
 auto renderer::create_shadow_map_descriptor_sets() -> void {
-    std::vector layouts(max_frames_in_flight_, shadow_descriptor_set_layout_);
+    std::vector layouts(frames_in_flight, shadow_descriptor_set_layout_);
     vk::DescriptorSetAllocateInfo alloc_info{};
     alloc_info.descriptorPool     = descriptor_pool_;
-    alloc_info.descriptorSetCount = static_cast<uint32>(max_frames_in_flight_);
+    alloc_info.descriptorSetCount = static_cast<uint32>(frames_in_flight);
     alloc_info.pSetLayouts        = layouts.data();
 
     shadow_map_descriptor_sets_ =
         vk_must(context_->get_device().allocateDescriptorSets(alloc_info), "allocate shadow map descriptor sets");
 
-    for (std::size_t i = 0; i < max_frames_in_flight_; i++) {
+    for (std::size_t i = 0; i < frames_in_flight; i++) {
         vk::DescriptorImageInfo image_info{};
         image_info.imageLayout = vk::ImageLayout::eDepthStencilReadOnlyOptimal;
         image_info.imageView   = shadow_map_->get_array_image_view();
@@ -2209,7 +2199,7 @@ auto renderer::render_shadow_pass(
 
         const auto cascade_stage =
             static_cast<gpu_stage>(static_cast<uint32>(gpu_stage::shadow_cascade_0) + cascade_index);
-        gpu_timer_->begin(command_buffers_[current_image_index_], cascade_stage);
+        gpu_timer_->begin(command_buffers_[current_frame_], cascade_stage);
 
         vk::RenderPassBeginInfo render_pass_info{};
         render_pass_info.renderPass        = shadow_map_->get_render_pass();
@@ -2225,7 +2215,7 @@ auto renderer::render_shadow_pass(
         render_pass_info.clearValueCount = 1;
         render_pass_info.pClearValues    = &clear_value;
 
-        command_buffers_[current_image_index_].beginRenderPass(render_pass_info, vk::SubpassContents::eInline);
+        command_buffers_[current_frame_].beginRenderPass(render_pass_info, vk::SubpassContents::eInline);
 
         vk::Viewport viewport{};
         viewport.x        = 0.0f;
@@ -2234,17 +2224,17 @@ auto renderer::render_shadow_pass(
         viewport.height   = static_cast<float>(shadow_map_->get_size());
         viewport.minDepth = 0.0f;
         viewport.maxDepth = 1.0f;
-        command_buffers_[current_image_index_].setViewport(0, viewport);
+        command_buffers_[current_frame_].setViewport(0, viewport);
 
         vk::Rect2D scissor{};
         scissor.offset = {0, 0};
         scissor.extent = {shadow_map_->get_size(), shadow_map_->get_size()};
-        command_buffers_[current_image_index_].setScissor(0, scissor);
+        command_buffers_[current_frame_].setScissor(0, scissor);
 
-        command_buffers_[current_image_index_].bindPipeline(vk::PipelineBindPoint::eGraphics,
+        command_buffers_[current_frame_].bindPipeline(vk::PipelineBindPoint::eGraphics,
             shadow_pipeline_);
 
-        command_buffers_[current_image_index_].bindDescriptorSets(
+        command_buffers_[current_frame_].bindDescriptorSets(
         vk::PipelineBindPoint::eGraphics,
         shadow_pipeline_layout_,
         0,
@@ -2255,7 +2245,7 @@ auto renderer::render_shadow_pass(
         shadow_push_constant_data push_constants{
             .cascade_index = cascade_index,
         };
-        command_buffers_[current_image_index_].pushConstants<shadow_push_constant_data>(shadow_pipeline_layout_, vk::ShaderStageFlagBits::eVertex, 0, push_constants);
+        command_buffers_[current_frame_].pushConstants<shadow_push_constant_data>(shadow_pipeline_layout_, vk::ShaderStageFlagBits::eVertex, 0, push_constants);
 
         const auto& buffers = combined_buffer_pool_->get_buffers();
         for (const auto& buffer : buffers) {
@@ -2265,8 +2255,8 @@ auto renderer::render_shadow_pass(
 
             vk::Buffer instance_index_buffer = buffer->get_instance_index_buffer();
 
-            vk::DescriptorSet buffer_descriptor_set = buffer->get_descriptor_set();
-            command_buffers_[current_image_index_].bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+            vk::DescriptorSet buffer_descriptor_set = buffer->get_descriptor_set(current_frame_);
+            command_buffers_[current_frame_].bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
                 shadow_pipeline_layout_,
                 1,
                 1,
@@ -2275,15 +2265,15 @@ auto renderer::render_shadow_pass(
                 nullptr);
 
             constexpr vk::DeviceSize instance_offset = 0;
-            command_buffers_[current_image_index_].bindVertexBuffers(
+            command_buffers_[current_frame_].bindVertexBuffers(
                 0, instance_index_buffer, instance_offset);
-            command_buffers_[current_image_index_].bindIndexBuffer(
+            command_buffers_[current_frame_].bindIndexBuffer(
                 combined_buffer_pool_->get_index_buffer(), 0, vk::IndexType::eUint32);
 
             const uint32 max_draws  = buffer->get_draw_command_count();
             const uint32 pass_index = cascade_index + 1;
             if (max_draws > 0) {
-                command_buffers_[current_image_index_].drawIndexedIndirectCount(buffer->get_culled_indirect_buffer(),
+                command_buffers_[current_frame_].drawIndexedIndirectCount(buffer->get_culled_indirect_buffer(),
                     static_cast<vk::DeviceSize>(pass_index) * max_draws * sizeof(draw_command),
                     buffer->get_count_buffer(),
                     pass_index * sizeof(uint32),
@@ -2292,8 +2282,8 @@ auto renderer::render_shadow_pass(
             }
         }
 
-        command_buffers_[current_image_index_].endRenderPass();
-        gpu_timer_->end(command_buffers_[current_image_index_], cascade_stage);
+        command_buffers_[current_frame_].endRenderPass();
+        gpu_timer_->end(command_buffers_[current_frame_], cascade_stage);
     }
 
     shadow_map_->clear_pending();

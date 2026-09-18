@@ -7,6 +7,7 @@ export module vw.gfx:resource.combined_buffer;
 import std;
 
 import vw.core;
+import :frames_in_flight;
 import vw.asset;
 import vw.ecs;
 import vw.world;
@@ -134,12 +135,8 @@ public:
     [[nodiscard]] auto get_count_buffer() const -> vk::Buffer;
     [[nodiscard]] auto is_empty() const -> bool;
     [[nodiscard]] auto get_stats() const -> const combined_buffer_stats&;
-    [[nodiscard]] auto get_descriptor_set() const -> vk::DescriptorSet {
-        return descriptor_set_;
-    }
-    [[nodiscard]] auto get_compute_descriptor_set() const -> vk::DescriptorSet {
-        return compute_descriptor_set_;
-    }
+    [[nodiscard]] auto get_descriptor_set(uint32 frame) -> vk::DescriptorSet;
+    [[nodiscard]] auto get_compute_descriptor_set(uint32 frame) -> vk::DescriptorSet;
 
 private:
     auto write_draw_command_(uint32 instance_index, const mesh_allocation& mesh_alloc) -> void;
@@ -148,8 +145,9 @@ private:
     ) -> void;
     auto expand_mesh_buffers_() -> void;
     auto expand_instance_buffers_() -> void;
-    auto update_descriptor_set_() -> void;
-    auto update_compute_descriptor_set_() -> void;
+    auto update_descriptor_set_(uint32 frame) -> void;
+    auto update_compute_descriptor_set_(uint32 frame) -> void;
+    auto invalidate_descriptor_sets_() -> void;
 
     static constexpr uint32 default_mesh_capacity_     = 32;
     static constexpr uint32 default_instance_capacity_ = 64;
@@ -178,10 +176,12 @@ private:
     std::vector<free_slot> free_slots_;
     uint32 quad_used_{0};
 
-    vk::DescriptorSet descriptor_set_                       = nullptr;
+    std::array<vk::DescriptorSet, frames_in_flight> descriptor_sets_{};
+    std::array<vk::DescriptorSet, frames_in_flight> compute_descriptor_sets_{};
+    uint32 stale_frames_                                    = 0;
+    uint32 stale_compute_frames_                            = 0;
     vk::DescriptorPool descriptor_pool_                     = nullptr;
     vk::DescriptorSetLayout descriptor_set_layout_          = nullptr;
-    vk::DescriptorSet compute_descriptor_set_               = nullptr;
     vk::DescriptorSetLayout compute_descriptor_set_layout_  = nullptr;
 
     mutable combined_buffer_stats stats_;
