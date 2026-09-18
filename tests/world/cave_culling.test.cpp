@@ -197,8 +197,9 @@ auto measure_culling(const occupancy_world& world, int32 cell_size) -> culling_r
     culling_result result;
     result.chunks = world.count();
 
+    ecs::chunk_walk_scratch scratch;
     ecs::walk_visible_chunks(
-        origin, lo, hi,
+        scratch, origin, lo, hi,
         [&cells](vec3i cell) -> const asset::cell_links* {
             const auto it = cells.find(cell);
             return it == cells.end() ? nullptr : &it->second;

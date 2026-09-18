@@ -93,8 +93,9 @@ auto walk_underground(const fake_grid& grid, vec3i origin, int32 radius)
     -> std::set<std::tuple<int32, int32, int32>> {
     const vec3i extent{radius, radius, radius};
     std::set<std::tuple<int32, int32, int32>> seen;
+    chunk_walk_scratch scratch;
     walk_visible_chunks(
-        origin, origin - extent, origin + extent,
+        scratch, origin, origin - extent, origin + extent,
         [&grid](vec3i c) { return grid.lookup_at(c); }, [](vec3i) { return false; },
         [](const asset::chunk_pocket&) { return true; },
         [&seen](vec3i c) { seen.insert({c.x, c.y, c.z}); }

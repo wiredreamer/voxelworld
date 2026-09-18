@@ -156,6 +156,7 @@ private:
     std::unordered_map<entity, vw::asset::chunk_links> chunk_links_;
 
     std::unordered_map<vec2i, int32> column_top_;
+    ecs::chunk_walk_scratch chunk_walk_scratch_;
 
     mutable combined_buffer_pool_stats stats_;
 };

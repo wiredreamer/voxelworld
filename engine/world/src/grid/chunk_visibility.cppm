@@ -32,16 +32,42 @@ struct cell_lookup {
     }
 };
 
+// см. docs/world.md#обход
+struct chunk_walk_scratch {
+    std::vector<uint64> queued;
+    std::vector<std::pair<vec3i, int32>> pending;
+};
+
 template <typename LinksAt, typename IsSky, typename StartsIn, typename Visit>
 auto walk_visible_chunks(
-    vec3i origin, vec3i lo, vec3i hi, LinksAt&& links_at, IsSky&& is_sky, StartsIn&& starts_in,
-    Visit&& visit
+    chunk_walk_scratch& scratch, vec3i origin, vec3i lo, vec3i hi, LinksAt&& links_at,
+    IsSky&& is_sky, StartsIn&& starts_in, Visit&& visit
 ) -> void {
     static const asset::chunk_pocket open_pocket = asset::chunk_pocket::wide_open();
 
     constexpr uint64 seen_bit = uint64{1} << 63;
-    std::unordered_map<vec3i, uint64> queued;
-    std::vector<std::pair<vec3i, int32>> pending;
+
+    const vec3i span_lo{std::min(lo.x, origin.x), std::min(lo.y, origin.y),
+                        std::min(lo.z, origin.z)};
+    const vec3i span_hi{std::max(hi.x, origin.x), std::max(hi.y, origin.y),
+                        std::max(hi.z, origin.z)};
+
+    const auto width  = static_cast<std::size_t>(span_hi.x - span_lo.x + 1);
+    const auto height = static_cast<std::size_t>(span_hi.y - span_lo.y + 1);
+    const auto depth  = static_cast<std::size_t>(span_hi.z - span_lo.z + 1);
+
+    auto& queued  = scratch.queued;
+    auto& pending = scratch.pending;
+
+    queued.assign(width * height * depth, 0);
+    pending.clear();
+
+    const auto slot_of = [&](vec3i cell) -> std::size_t {
+        return ((static_cast<std::size_t>(cell.y - span_lo.y) * depth) +
+                static_cast<std::size_t>(cell.z - span_lo.z)) *
+                   width +
+               static_cast<std::size_t>(cell.x - span_lo.x);
+    };
 
     const auto pockets_of = [&](const cell_lookup& cell) -> std::span<const asset::chunk_pocket> {
         if (cell.links == nullptr) {
@@ -72,7 +98,7 @@ auto walk_visible_chunks(
             }
         }
 
-        queued[origin] = mask;
+        queued[slot_of(origin)] = mask;
         visit(origin);
     }
 
@@ -104,7 +130,7 @@ auto walk_visible_chunks(
 
             const auto next_pockets = pockets_of(next_cell);
 
-            auto& mask = queued[next];
+            auto& mask = queued[slot_of(next)];
             if ((mask & seen_bit) == 0) {
                 mask |= seen_bit;
                 visit(next);
@@ -127,8 +153,9 @@ auto walk_visible_chunks(
 template <typename LinksAt, typename Visit>
 auto walk_visible_chunks(vec3i origin, int32 radius, LinksAt&& links_at, Visit&& visit) -> void {
     const vec3i extent{radius, radius, radius};
+    chunk_walk_scratch scratch;
     walk_visible_chunks(
-        origin, origin - extent, origin + extent, std::forward<LinksAt>(links_at),
+        scratch, origin, origin - extent, origin + extent, std::forward<LinksAt>(links_at),
         [](vec3i) { return true; }, [](const asset::chunk_pocket&) { return true; },
         std::forward<Visit>(visit)
     );

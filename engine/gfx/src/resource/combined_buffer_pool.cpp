@@ -507,7 +507,7 @@ auto combined_buffer_pool::update_chunk_visibility_(
     }
 
     ecs::walk_visible_chunks(
-        origin, cell_lo, cell_hi,
+        chunk_walk_scratch_, origin, cell_lo, cell_hi,
         [&](vec3i cell) -> vw::ecs::cell_lookup {
             static const vw::asset::cell_links sealed{};
 
