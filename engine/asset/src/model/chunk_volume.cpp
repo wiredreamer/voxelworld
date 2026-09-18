@@ -13,7 +13,7 @@ auto chunk_volume::set_boundary_slice(face_direction face, const model& neighbor
     }
 
     if (boundary_ == nullptr) {
-        boundary_ = std::make_unique<model_boundary>();
+        boundary_ = std::make_shared<model_boundary>();
     }
 
     auto& plane = boundary_->faces[face];
@@ -58,12 +58,12 @@ auto chunk_volume::boundaries_are_solid() const -> bool {
 }
 
 auto chunk_volume::set_sky_light(light_field light) -> void {
-    sky_ = std::make_unique<light_field>(std::move(light));
+    sky_ = std::make_shared<light_field>(std::move(light));
     voxels_->invalidate();
 }
 
 auto chunk_volume::set_block_light(light_field light) -> void {
-    block_ = std::make_unique<light_field>(std::move(light));
+    block_ = std::make_shared<light_field>(std::move(light));
     voxels_->invalidate();
 }
 

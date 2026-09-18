@@ -44,6 +44,18 @@ public:
         boundary_.reset();
     }
 
+    [[nodiscard]] auto share_boundary() const -> std::shared_ptr<const model_boundary> {
+        return boundary_;
+    }
+
+    [[nodiscard]] auto share_sky_light() const -> std::shared_ptr<const light_field> {
+        return sky_;
+    }
+
+    [[nodiscard]] auto share_block_light() const -> std::shared_ptr<const light_field> {
+        return block_;
+    }
+
     auto set_sky_light(light_field light) -> void;
 
     [[nodiscard]] auto get_sky_light() const -> const light_field* {
@@ -66,9 +78,9 @@ public:
 
 private:
     std::shared_ptr<model> voxels_;
-    std::unique_ptr<model_boundary> boundary_;
-    std::unique_ptr<light_field> sky_;
-    std::unique_ptr<light_field> block_;
+    std::shared_ptr<model_boundary> boundary_;
+    std::shared_ptr<light_field> sky_;
+    std::shared_ptr<light_field> block_;
 };
 
 }  // namespace vw::asset

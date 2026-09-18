@@ -333,7 +333,12 @@ public:
     }
 
     [[nodiscard]] auto source() const -> gfx::mesh_source {
-        return gfx::mesh_source{.voxels = *model_, .chunk = chunk_.get()};
+        return gfx::mesh_source{
+            .voxels   = *model_,
+            .boundary = chunk_->share_boundary().get(),
+            .sky      = chunk_->get_sky_light(),
+            .block    = chunk_->get_block_light()
+        };
     }
 
     [[nodiscard]] auto size() const -> int32 {
@@ -493,7 +498,14 @@ TEST_CASE("boundary faces close the seam between chunks", "[mesh]") {
     const auto count_faces = [&registry](const asset::chunk_volume& c, uint8 normal) {
         gfx::mesh_generation_storage storage;
         const auto mesh = gfx::greedy_mesh_generator::generate_mesh_data(
-            storage, gfx::mesh_source{.voxels = c.voxels(), .chunk = &c}, registry);
+            storage,
+            gfx::mesh_source{
+                .voxels   = c.voxels(),
+                .boundary = c.share_boundary().get(),
+                .sky      = c.get_sky_light(),
+                .block    = c.get_block_light()
+            },
+            registry);
 
         std::size_t count = 0;
         for (const auto& cell : to_face_cells(mesh)) {

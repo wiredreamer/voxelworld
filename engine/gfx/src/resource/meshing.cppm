@@ -54,28 +54,31 @@ struct mesh_options {
 
 struct mesh_source {
     const vw::asset::model& voxels;
-    const vw::asset::chunk_volume* chunk = nullptr;
+    const vw::asset::model_boundary* boundary = nullptr;
+    const vw::asset::light_field* sky         = nullptr;
+    const vw::asset::light_field* block       = nullptr;
 
     [[nodiscard]] auto has_boundary_slice(face_direction face) const -> bool {
-        return chunk != nullptr && chunk->has_boundary_slice(face);
+        return boundary != nullptr && (boundary->valid & face_bit(face)) != 0;
     }
 
     [[nodiscard]] auto is_boundary_solid(face_direction face, int32 x, int32 y, int32 z) const
         -> bool {
-        return chunk->is_boundary_solid(face, x, y, z);
+        const vec2i on_plane = project_onto_face_plane(face, vec3i{x, y, z});
+        return boundary->faces[face].test(on_plane.x, on_plane.y);
     }
 
     [[nodiscard]] auto boundary_face(face_direction face) const
         -> const vw::asset::face_occupancy& {
-        return chunk->get_boundary_face(face);
+        return boundary->faces[face];
     }
 
     [[nodiscard]] auto sky_light() const -> const vw::asset::light_field* {
-        return chunk != nullptr ? chunk->get_sky_light() : nullptr;
+        return sky;
     }
 
     [[nodiscard]] auto block_light() const -> const vw::asset::light_field* {
-        return chunk != nullptr ? chunk->get_block_light() : nullptr;
+        return block;
     }
 };
 

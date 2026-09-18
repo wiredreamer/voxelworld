@@ -81,8 +81,12 @@ auto mesh_pool::request_mesh(
     chunk_refs_[identity] = chunk_ptr;
 
     {
-        auto task =
-            std::make_unique<mesh_generation_task>(identity, model_ptr, chunk_ptr, opts);
+        auto task = std::make_unique<mesh_generation_task>(
+            identity, model_ptr, chunk_ptr,
+            chunk_ptr ? chunk_ptr->share_boundary() : nullptr,
+            chunk_ptr ? chunk_ptr->share_sky_light() : nullptr,
+            chunk_ptr ? chunk_ptr->share_block_light() : nullptr, opts
+        );
         auto future = task->promise.get_future();
 
         std::scoped_lock lock(gen_mutex_);
@@ -229,6 +233,7 @@ auto mesh_pool::gen_thread_function() -> void {
 
         {
             std::unique_lock lock(gen_mutex_);
+
             gen_cv_.wait(lock, [this] -> bool { return !gen_queue_.empty() || !gen_running_; });
 
             if (!gen_running_ && gen_queue_.empty()) {
@@ -248,8 +253,12 @@ auto mesh_pool::gen_thread_function() -> void {
                 continue;
             }
 
-            const auto chunk_ptr = task->chunk_ref.lock();
-            const mesh_source source{.voxels = *model_ptr, .chunk = chunk_ptr.get()};
+            const mesh_source source{
+                .voxels   = *model_ptr,
+                .boundary = task->boundary.get(),
+                .sky      = task->sky.get(),
+                .block    = task->block.get()
+            };
 
             try {
                 const auto started = std::chrono::steady_clock::now();
