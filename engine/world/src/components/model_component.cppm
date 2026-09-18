@@ -27,7 +27,7 @@ struct model_component final {
         return model_ != nullptr;
     }
 
-    [[nodiscard]] auto get_model() const -> std::shared_ptr<asset::model> {
+    [[nodiscard]] auto get_model() const -> const std::shared_ptr<asset::model>& {
         return model_;
     }
 

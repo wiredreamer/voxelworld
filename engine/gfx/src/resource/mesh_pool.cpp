@@ -99,9 +99,9 @@ auto mesh_pool::request_mesh(
 
 [[nodiscard]] auto mesh_pool::get(
     const vw::asset::model_identity& identity
-) const -> std::shared_ptr<mesh> {
+) const -> const mesh* {
     auto iter = meshes_.find(identity);
-    return iter != meshes_.end() ? iter->second : nullptr;
+    return iter != meshes_.end() ? &iter->second : nullptr;
 }
 
 auto mesh_pool::remove(
@@ -174,7 +174,7 @@ auto mesh_pool::process_completed() -> void {
             auto identity = iter->first;
             auto data     = iter->second.get();
 
-            meshes_[identity] = std::make_shared<mesh>(std::move(data));
+            meshes_.insert_or_assign(identity, std::move(data));
 
             if (const auto ref = chunk_refs_.find(identity); ref != chunk_refs_.end()) {
                 if (const auto chunk = ref->second.lock()) {

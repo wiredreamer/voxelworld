@@ -72,7 +72,7 @@ public:
         const std::shared_ptr<vw::asset::chunk_volume>& chunk_ptr,
         mesh_options opts = {}
     ) -> void;
-    [[nodiscard]] auto get(const vw::asset::model_identity& identity) const -> std::shared_ptr<mesh>;
+    [[nodiscard]] auto get(const vw::asset::model_identity& identity) const -> const mesh*;
     auto remove(const vw::asset::model_identity& identity) -> void;
     auto evict(const vw::asset::model_identity& identity) -> void;
     auto process_completed() -> void;
@@ -86,7 +86,7 @@ private:
 
     vulkan_context* context_;
     const voxel_registry* registry_;
-    std::unordered_map<vw::asset::model_identity, std::shared_ptr<mesh>> meshes_;
+    std::unordered_map<vw::asset::model_identity, mesh> meshes_;
     std::unordered_map<vw::asset::model_identity, std::weak_ptr<vw::asset::model>> model_refs_;
     std::unordered_map<vw::asset::model_identity, std::weak_ptr<vw::asset::chunk_volume>>
         chunk_refs_;

@@ -135,11 +135,11 @@ auto chunk::is_empty(
     return volume_->voxels().is_empty(x, y, z);
 }
 
-auto chunk::get_model() const -> std::shared_ptr<asset::model> {
+auto chunk::get_model() const -> const std::shared_ptr<asset::model>& {
     return volume_->shared_voxels();
 }
 
-auto chunk::get_volume() const -> std::shared_ptr<asset::chunk_volume> {
+auto chunk::get_volume() const -> const std::shared_ptr<asset::chunk_volume>& {
     return volume_;
 }
 

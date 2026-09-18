@@ -30,8 +30,8 @@ public:
     auto set_voxel(vec3i local, voxel v) -> void;
     [[nodiscard]] auto is_empty(int32 x, int32 y, int32 z) const -> bool;
 
-    [[nodiscard]] auto get_model() const -> std::shared_ptr<asset::model>;
-    [[nodiscard]] auto get_volume() const -> std::shared_ptr<asset::chunk_volume>;
+    [[nodiscard]] auto get_model() const -> const std::shared_ptr<asset::model>&;
+    [[nodiscard]] auto get_volume() const -> const std::shared_ptr<asset::chunk_volume>&;
 
     [[nodiscard]] auto get_entity() const -> entity;
     [[nodiscard]] auto is_drawn() const -> bool;
