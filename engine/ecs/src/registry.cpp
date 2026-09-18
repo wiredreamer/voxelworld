@@ -115,14 +115,14 @@ auto registry::request_change(uint32 component_id, entity e) -> void {
     request_sets_[component_id].insert(e);
 }
 
-auto registry::changed_set(uint32 component_id) -> std::unordered_set<entity>& {
+auto registry::changed_set(uint32 component_id) -> const std::vector<entity>& {
     ensure_id_slot_(component_id);
-    return changed_sets_[component_id];
+    return changed_sets_[component_id].view();
 }
 
-auto registry::requested_set(uint32 component_id) -> std::unordered_set<entity>& {
+auto registry::requested_set(uint32 component_id) -> const std::vector<entity>& {
     ensure_id_slot_(component_id);
-    return request_sets_[component_id];
+    return request_sets_[component_id].view();
 }
 
 auto registry::clear_requested(uint32 component_id) -> void {

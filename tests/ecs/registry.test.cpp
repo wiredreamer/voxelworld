@@ -191,8 +191,8 @@ TEST_CASE("registry change sets and dependencies", "[registry]") {
 
     reg.notify_changed<position_component>(e);
 
-    REQUIRE(reg.changed<position_component>().contains(e));
-    REQUIRE(reg.requested<velocity_component>().contains(e));
+    REQUIRE(std::ranges::contains(reg.changed<position_component>(), e));
+    REQUIRE(std::ranges::contains(reg.requested<velocity_component>(), e));
 
     reg.clear_changed();
     REQUIRE(reg.changed<position_component>().empty());

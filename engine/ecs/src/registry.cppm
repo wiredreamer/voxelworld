@@ -8,7 +8,34 @@ import :pool;
 
 namespace vw::ecs::detail {
 auto next_component_id() -> uint32;
-}
+
+// см. docs/ENGINE.md#наборы-изменений
+class change_set final {
+public:
+    auto insert(entity e) -> void {
+        entities_.push_back(e);
+        deduplicated_ = false;
+    }
+
+    auto clear() -> void {
+        entities_.clear();
+        deduplicated_ = true;
+    }
+
+    [[nodiscard]] auto view() -> const std::vector<entity>& {
+        if (!deduplicated_) {
+            std::sort(entities_.begin(), entities_.end());
+            entities_.erase(std::unique(entities_.begin(), entities_.end()), entities_.end());
+            deduplicated_ = true;
+        }
+        return entities_;
+    }
+
+private:
+    std::vector<entity> entities_;
+    bool deduplicated_ = true;
+};
+}  // namespace vw::ecs::detail
 
 export namespace vw::ecs {
 
@@ -45,8 +72,8 @@ public:
     auto add_change_dep(uint32 component_id, uint32 dependent_id) -> void;
     auto notify_changed(uint32 component_id, entity e) -> void;
     auto request_change(uint32 component_id, entity e) -> void;
-    [[nodiscard]] auto changed_set(uint32 component_id) -> std::unordered_set<entity>&;
-    [[nodiscard]] auto requested_set(uint32 component_id) -> std::unordered_set<entity>&;
+    [[nodiscard]] auto changed_set(uint32 component_id) -> const std::vector<entity>&;
+    [[nodiscard]] auto requested_set(uint32 component_id) -> const std::vector<entity>&;
     auto clear_requested(uint32 component_id) -> void;
     auto clear_changed() -> void;
 
@@ -136,7 +163,7 @@ public:
     }
 
     template <typename T>
-    [[nodiscard]] auto requested() -> std::unordered_set<entity>& {
+    [[nodiscard]] auto requested() -> const std::vector<entity>& {
         return requested_set(component_id_of<T>());
     }
 
@@ -151,7 +178,7 @@ public:
     }
 
     template <typename T>
-    [[nodiscard]] auto changed() -> std::unordered_set<entity>& {
+    [[nodiscard]] auto changed() -> const std::vector<entity>& {
         return changed_set(component_id_of<T>());
     }
 
@@ -162,8 +189,8 @@ private:
     entity_pool entity_pool_;
     std::vector<std::unique_ptr<pool_base>> pools_;
     std::vector<std::vector<uint32>> change_deps_;
-    std::vector<std::unordered_set<entity>> request_sets_;
-    std::vector<std::unordered_set<entity>> changed_sets_;
+    std::vector<detail::change_set> request_sets_;
+    std::vector<detail::change_set> changed_sets_;
     std::vector<entity> destroyed_set_;
 };
 

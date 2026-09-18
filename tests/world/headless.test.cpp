@@ -63,7 +63,7 @@ TEST_CASE("a moved viewer is reported to the world grid", "[world]") {
     w.system<transform_system>().modify(ent).set_position(vec3f{0.0F, 0.0F, 64.0F});
     w.update(0.016F);
 
-    REQUIRE(w.registry().requested<world_view_component>().contains(ent));
+    REQUIRE(std::ranges::contains(w.registry().requested<world_view_component>(), ent));
 }
 
 TEST_CASE("voxels survive a round trip through the model registry", "[world]") {
@@ -231,7 +231,7 @@ TEST_CASE("removing a model is reported as a model change", "[world]") {
     w.modify(ent).without<model_component>();
     w.update(0.016F);
 
-    REQUIRE(w.changed<model_component>().contains(ent));
+    REQUIRE(std::ranges::contains(w.changed<model_component>(), ent));
 }
 
 TEST_CASE("a hidden model lets the picking ray through", "[world]") {

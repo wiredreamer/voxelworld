@@ -187,7 +187,7 @@ public:
     [[nodiscard]] auto registry() -> ecs::registry&;
 
     template <typename T>
-    [[nodiscard]] auto changed() -> std::unordered_set<entity>& {
+    [[nodiscard]] auto changed() -> const std::vector<entity>& {
         return registry_.changed<T>();
     }
 

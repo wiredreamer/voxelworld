@@ -304,6 +304,6 @@ TEST_CASE("moving the pivot reports a transform change", "[scene]") {
     w.system<model_system>().modify(ent).set_pivot(vec3f{2.0F, 0.0F, 0.0F});
     w.update(0.016F);
 
-    REQUIRE(w.changed<transform_component>().contains(ent));
+    REQUIRE(std::ranges::contains(w.changed<transform_component>(), ent));
     REQUIRE(w.get<model_component>(ent).get_pivot() == vec3f{2.0F, 0.0F, 0.0F});
 }
