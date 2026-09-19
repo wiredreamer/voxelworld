@@ -96,6 +96,13 @@ public:
         return static_cast<const component_pool<T>*>(try_pool(component_id_of<T>()));
     }
 
+    template <typename T>
+    auto reserve(uint32 count) -> void {
+        pool_of<T>().reserve(count);
+    }
+
+    [[nodiscard]] auto memory_bytes() const -> std::size_t;
+
     template <typename T, typename... Args>
     auto emplace(entity e, Args&&... args) -> T& {
         return pool_of<T>().emplace(e, std::forward<Args>(args)...);
@@ -121,6 +128,24 @@ public:
         }
         const auto* pool = try_pool_of<T>();
         return pool != nullptr && pool->has(e);
+    }
+
+    template <typename T>
+    [[nodiscard]] auto try_get(entity e) -> T* {
+        if (!alive(e)) {
+            return nullptr;
+        }
+        auto* pool = try_pool_of<T>();
+        return pool != nullptr ? pool->get(e) : nullptr;
+    }
+
+    template <typename T>
+    [[nodiscard]] auto try_get(entity e) const -> const T* {
+        if (!alive(e)) {
+            return nullptr;
+        }
+        const auto* pool = try_pool_of<T>();
+        return pool != nullptr ? pool->get(e) : nullptr;
     }
 
     template <typename T>

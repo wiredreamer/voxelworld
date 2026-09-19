@@ -16,8 +16,14 @@ public:
     pool_base(pool_base&&)                         = delete;
     auto operator=(pool_base&&) -> pool_base&      = delete;
 
-    virtual auto remove(entity e) -> void = 0;
-    virtual auto clear() -> void          = 0;
+    virtual auto remove(entity e) -> void        = 0;
+    virtual auto clear() -> void                 = 0;
+    virtual auto reserve(uint32 count) -> void   = 0;
+
+    [[nodiscard]] virtual auto memory_bytes() const -> std::size_t {
+        return (dense_entities_.capacity() * sizeof(entity)) +
+            (sparse_indices_.capacity() * sizeof(uint32));
+    }
 
     auto batch_remove(const std::vector<entity>& entities) -> void {
         for (auto e : entities) {
@@ -64,6 +70,10 @@ protected:
 
     auto clear_slots_() -> void;
 
+    auto reserve_dense_(uint32 count) -> void {
+        dense_entities_.reserve(count);
+    }
+
 private:
     std::vector<entity> dense_entities_;
     std::vector<uint32> sparse_indices_;
@@ -103,6 +113,15 @@ public:
     auto clear() -> void override {
         clear_slots_();
         dense_.clear();
+    }
+
+    auto reserve(uint32 count) -> void override {
+        reserve_dense_(count);
+        dense_.reserve(count);
+    }
+
+    [[nodiscard]] auto memory_bytes() const -> std::size_t override {
+        return pool_base::memory_bytes() + (dense_.capacity() * sizeof(T));
     }
 
     [[nodiscard]] auto get(entity e) -> T* {
@@ -166,6 +185,15 @@ public:
     auto clear() -> void override {
         clear_slots_();
         data_.clear();
+    }
+
+    auto reserve(uint32 count) -> void override {
+        reserve_dense_(count);
+        data_.reserve(static_cast<std::size_t>(count) * layout_.size);
+    }
+
+    [[nodiscard]] auto memory_bytes() const -> std::size_t override {
+        return pool_base::memory_bytes() + data_.capacity();
     }
 
     [[nodiscard]] auto get(entity e) -> void* {

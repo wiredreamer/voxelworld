@@ -139,6 +139,20 @@ public:
     }
 
     template <typename T>
+    [[nodiscard]] auto try_get(
+        entity ent
+    ) -> T* {
+        return registry_.try_get<T>(ent);
+    }
+
+    template <typename T>
+    [[nodiscard]] auto try_get(
+        entity ent
+    ) const -> const T* {
+        return registry_.try_get<T>(ent);
+    }
+
+    template <typename T>
     [[nodiscard]] auto get(
         entity ent
     ) -> T& {

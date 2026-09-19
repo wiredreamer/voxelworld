@@ -130,6 +130,16 @@ auto registry::clear_requested(uint32 component_id) -> void {
     request_sets_[component_id].clear();
 }
 
+auto registry::memory_bytes() const -> std::size_t {
+    std::size_t total = 0;
+    for (const auto& pool : pools_) {
+        if (pool != nullptr) {
+            total += pool->memory_bytes();
+        }
+    }
+    return total;
+}
+
 auto registry::clear_changed() -> void {
     for (auto& set : changed_sets_) {
         set.clear();
