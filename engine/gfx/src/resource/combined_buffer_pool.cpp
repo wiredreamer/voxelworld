@@ -175,6 +175,18 @@ auto combined_buffer_pool::get_or_create_buffer(
     return buffers_[buffer_index].get();
 }
 
+auto combined_buffer_pool::mesh_write_budget() const -> uint32 {
+    constexpr uint32 estimated_avg_mesh_cost = 32 * 1024;
+    constexpr uint32 min_writes              = 4;
+    constexpr uint32 max_writes              = 16;
+
+    return std::clamp(
+        static_cast<uint32>(staging_.frame_capacity() / estimated_avg_mesh_cost),
+        min_writes,
+        max_writes
+    );
+}
+
 auto combined_buffer_pool::update_meshes_(
     world_type& world, const vec3f& camera_pos, mesh_pool& pool
 ) -> void {
@@ -200,10 +212,8 @@ auto combined_buffer_pool::update_meshes_(
         entities_to_process_.push_back(ent);
     }
 
-    constexpr uint32 estimated_avg_mesh_cost = 32 * 1024;
-    const uint32 max_mesh_writes = std::clamp(
-        static_cast<uint32>(staging_.available() / estimated_avg_mesh_cost), 4u, 16u);
-    uint32 mesh_writes = 0;
+    const uint32 max_mesh_writes = mesh_write_budget();
+    uint32 mesh_writes           = 0;
 
     merge_buffer_.clear();
     merge_buffer_.reserve(entities_to_process_.size());

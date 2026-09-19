@@ -139,14 +139,15 @@ auto mesh_pool::sweep_orphaned_() -> void {
     }
 }
 
-auto mesh_pool::process_completed() -> void {
+auto mesh_pool::process_completed(
+    uint32 max_meshes
+) -> void {
     sweep_orphaned_();
 
-    constexpr uint32 max_meshes_per_frame = 4;
     uint32 completed = 0;
 
     for (auto iter = pending_meshes_.begin();
-         iter != pending_meshes_.end() && completed < max_meshes_per_frame;) {
+         iter != pending_meshes_.end() && completed < max_meshes;) {
         const auto status = iter->second.wait_for(std::chrono::seconds(0));
         if (status == std::future_status::ready) {
             auto identity = iter->first;

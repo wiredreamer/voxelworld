@@ -112,6 +112,8 @@ public:
         return touched_bounds_;
     }
 
+    [[nodiscard]] auto mesh_write_budget() const -> uint32;
+
 private:
     auto get_or_create_buffer(const buffer_chunk_size& chunk_size) -> combined_buffer*;
 

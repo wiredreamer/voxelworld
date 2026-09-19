@@ -77,7 +77,7 @@ public:
     [[nodiscard]] auto get(const vw::asset::model_identity& identity) const -> const mesh*;
     auto remove(const vw::asset::model_identity& identity) -> void;
     auto evict(const vw::asset::model_identity& identity) -> void;
-    auto process_completed() -> void;
+    auto process_completed(uint32 max_meshes) -> void;
     [[nodiscard]] auto get_pending_count() const -> uint32;
     [[nodiscard]] auto get_gen_stats() const -> mesh_gen_stats;
 

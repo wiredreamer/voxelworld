@@ -360,7 +360,7 @@ auto renderer::get_render_mode() const -> render_mode {
 }
 
 auto renderer::sync_meshes_(world_type& world) -> void {
-    mesh_pool_.process_completed();
+    mesh_pool_.process_completed(combined_buffer_pool_->mesh_write_budget());
 
     auto& registry = world.registry();
 

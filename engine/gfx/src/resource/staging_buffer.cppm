@@ -53,6 +53,10 @@ public:
         return frame_end_offset_ - write_offset_;
     }
 
+    [[nodiscard]] auto frame_capacity() const -> vk::DeviceSize {
+        return frame_capacity_;
+    }
+
     auto replace_buffer(vk::Buffer old_buf, vk::Buffer new_buf) -> void;
 
     auto flush(vk::CommandBuffer cmd) -> void;
