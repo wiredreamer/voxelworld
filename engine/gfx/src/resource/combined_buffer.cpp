@@ -255,6 +255,8 @@ auto combined_buffer::allocate_mesh(
         quad_used_ += chunk_size_.quad_count;
     }
 
+    mesh_peak_ = std::max(mesh_peak_, static_cast<uint32>(mesh_allocations_.size()) + 1);
+
     if (quad_used_ > mesh_capacity_ * chunk_size_.quad_count) {
         expand_mesh_buffers_();
     }
@@ -390,7 +392,12 @@ auto combined_buffer::get_quad_buffer() const -> vk::Buffer {
 auto combined_buffer::expand_mesh_buffers_() -> void {
     const auto old_bytes = (mesh_capacity_ * chunk_size_.quad_count) * sizeof(quad);
 
-    mesh_capacity_ += (mesh_capacity_ + 1) / 2;
+    const auto slot_bytes = std::max<std::size_t>(
+        static_cast<std::size_t>(chunk_size_.quad_count) * sizeof(quad), 1);
+    const auto capped_slots = static_cast<uint32>(
+        std::max<std::size_t>(growth_cap_bytes_ / slot_bytes, 1));
+
+    mesh_capacity_ += std::min((mesh_capacity_ + 1) / 2, capped_slots);
 
     auto new_quad_buffer = std::make_unique<device_storage_buffer>(
         *context_, mesh_capacity_ * chunk_size_.quad_count * sizeof(quad)
@@ -704,6 +711,8 @@ auto combined_buffer::get_stats() const -> const combined_buffer_stats& {
     stats_.chunk_size        = chunk_size_;
     stats_.mesh_capacity     = mesh_capacity_;
     stats_.mesh_count        = static_cast<uint32>(mesh_allocations_.size());
+    stats_.mesh_peak         = mesh_peak_;
+    stats_.mesh_high_water   = chunk_size_.quad_count > 0 ? quad_used_ / chunk_size_.quad_count : 0;
     stats_.instance_capacity = instance_capacity_;
     stats_.instance_count    = static_cast<uint32>(entity_allocations_.size());
     stats_.quad_load_min     = 0.f;

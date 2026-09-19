@@ -314,10 +314,12 @@ auto engine::write_bench_report_() const -> void {
 
         std::format_to(
             std::back_inserter(report_text),
-            "  {:>8}  {:>5} of {:<6}  load {:.2f}  {:.1f} MB\n",
+            "  {:>8}  {:>5} of {:<6}  peak {:<6}  water {:<6}  load {:.2f}  {:.1f} MB\n",
             b.chunk_size.quad_count,
             b.mesh_count,
             b.mesh_capacity,
+            b.mesh_peak,
+            b.mesh_high_water,
             b.quad_load_avg,
             held
         );

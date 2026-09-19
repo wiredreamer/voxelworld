@@ -84,6 +84,8 @@ struct combined_buffer_stats {
     float32 quad_load_avg    = 0.0f;
     uint32 mesh_capacity     = 0;
     uint32 mesh_count        = 0;
+    uint32 mesh_peak         = 0;
+    uint32 mesh_high_water   = 0;
     uint32 instance_capacity = 0;
     uint32 instance_count    = 0;
 };
@@ -150,6 +152,9 @@ private:
     auto invalidate_descriptor_sets_() -> void;
 
     static constexpr uint32 default_mesh_capacity_     = 32;
+
+    // см. docs/optimization-plan.md#42-vram-перелёт-роста-буферов
+    static constexpr std::size_t growth_cap_bytes_ = 16ULL * 1024 * 1024;
     static constexpr uint32 default_instance_capacity_ = 64;
 
     vulkan_context* context_;
@@ -175,6 +180,7 @@ private:
     std::unordered_map<uint32, entity> instance_indexes_;
     std::vector<free_slot> free_slots_;
     uint32 quad_used_{0};
+    uint32 mesh_peak_{0};
 
     std::array<vk::DescriptorSet, frames_in_flight> descriptor_sets_{};
     std::array<vk::DescriptorSet, frames_in_flight> compute_descriptor_sets_{};
