@@ -288,6 +288,14 @@ auto engine::write_bench_report_() const -> void {
         static_cast<float32>(stats_.vram_peak_bytes) * to_mb
     );
 
+    const auto& registry = world_->registry();
+    std::format_to(
+        std::back_inserter(report_text),
+        "ecs: {} pools, {:.1f} MB in pools\n",
+        registry.pool_count(),
+        static_cast<float32>(registry.memory_bytes()) * to_mb
+    );
+
     const auto& buffers = renderer_->get_stats().combined_buffers;
 
     float32 slot_mb = 0.0F;
