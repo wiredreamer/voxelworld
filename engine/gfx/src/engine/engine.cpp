@@ -193,7 +193,7 @@ auto engine::write_bench_report_() const -> void {
         std::back_inserter(report_text),
         "\nmeshing: {} chunks, {} quads, {:.1f} ms total\n"
         "  per chunk (us): mean {:.0f}  p50 {:.0f}  p99 {:.0f}  max {:.0f}\n"
-        "  queue: {} left, {} peak\n",
+        "  queue: {} left, {} peak; held {}, {} peak\n",
         meshing.chunks,
         meshing.quads,
         meshing.total_ms,
@@ -202,7 +202,9 @@ auto engine::write_bench_report_() const -> void {
         meshing.p99_us,
         meshing.max_us,
         meshing.queue_depth,
-        meshing.queue_peak
+        meshing.queue_peak,
+        meshing.held,
+        meshing.held_peak
     );
 
     const auto columns = world_->system<ecs::world_grid_system>().get_loader_stats();

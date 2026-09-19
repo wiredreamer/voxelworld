@@ -51,6 +51,8 @@ struct mesh_gen_stats {
     float32 max_us      = 0.0f;
     uint32 queue_depth  = 0;
     uint32 queue_peak   = 0;
+    uint32 held         = 0;
+    uint32 held_peak    = 0;
 };
 
 class mesh_pool final {
@@ -102,6 +104,7 @@ private:
     mutable std::mutex stats_mutex_;
     vw::latency_histogram gen_latency_;
     uint64 gen_quads_ = 0;
+    uint32 held_peak_ = 0;
 };
 
 }  // namespace vw::gfx

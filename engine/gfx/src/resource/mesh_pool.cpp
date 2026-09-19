@@ -153,6 +153,7 @@ auto mesh_pool::process_completed() -> void {
             auto data     = iter->second.get();
 
             meshes_.insert_or_assign(identity, std::move(data));
+            held_peak_ = std::max(held_peak_, static_cast<uint32>(meshes_.size()));
 
             if (const auto ref = chunk_refs_.find(identity); ref != chunk_refs_.end()) {
                 if (const auto chunk = ref->second.lock()) {
@@ -197,6 +198,8 @@ auto mesh_pool::get_gen_stats() const -> mesh_gen_stats {
     const auto lane = jobs_->get_lane_stats(vw::job_lane::mesh);
     out.queue_depth = lane.queued;
     out.queue_peak  = lane.peak;
+    out.held        = static_cast<uint32>(meshes_.size());
+    out.held_peak   = held_peak_;
 
     return out;
 }

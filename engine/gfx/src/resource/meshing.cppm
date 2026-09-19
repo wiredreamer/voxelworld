@@ -42,10 +42,6 @@ struct mesh {
     std::array<uint32, 6> face_counts{};
 
     vw::asset::chunk_links links;
-
-    auto release_data() -> void {
-        quads = {};
-    }
 };
 
 struct mesh_options {
