@@ -82,23 +82,38 @@ public:
     [[nodiscard]] auto get_gen_stats() const -> mesh_gen_stats;
 
 private:
+    // см. docs/scaling.md#12-хэндл-вместо-ключа
+    struct mesh_slot {
+        uint32 generation = 0;
+        bool has_mesh     = false;
+        mesh data;
+        std::weak_ptr<vw::asset::model> model_ref;
+        std::weak_ptr<vw::asset::chunk_volume> chunk_ref;
+        std::future<mesh> pending;
+    };
+
     auto generate_(mesh_generation_task& task, mesh_generation_storage& storage) -> void;
     auto sweep_orphaned_() -> void;
     auto record_chunk_(uint64 elapsed_ns, uint64 quads) -> void;
 
+    [[nodiscard]] auto live_slot_(const vw::asset::model_identity& identity) -> mesh_slot*;
+    [[nodiscard]] auto live_slot_(const vw::asset::model_identity& identity) const
+        -> const mesh_slot*;
+    auto open_slot_(const vw::asset::model_identity& identity) -> mesh_slot&;
+    auto drop_mesh_(mesh_slot& slot) -> void;
+    auto drop_pending_(uint32 index) -> void;
+
     vulkan_context* context_;
     const voxel_registry* registry_;
-    std::unordered_map<vw::asset::model_identity, mesh> meshes_;
-    std::unordered_map<vw::asset::model_identity, std::weak_ptr<vw::asset::model>> model_refs_;
-    std::unordered_map<vw::asset::model_identity, std::weak_ptr<vw::asset::chunk_volume>>
-        chunk_refs_;
-    std::unordered_map<vw::asset::model_identity, std::future<mesh>> pending_meshes_;
-    std::unordered_set<uint32> pending_indices_;
+
+    std::vector<mesh_slot> slots_;
+    std::vector<uint32> pending_slots_;
+    uint32 held_ = 0;
 
     vw::job_system* jobs_;
     std::vector<mesh_generation_storage> storage_;
-    std::size_t sweep_bucket_ = 0;
-    static constexpr std::size_t sweep_buckets_per_frame_ = 512;
+    std::size_t sweep_cursor_ = 0;
+    static constexpr std::size_t sweep_slots_per_frame_   = 512;
     static constexpr std::size_t sweep_orphans_per_frame_ = 32;
 
     mutable std::mutex stats_mutex_;
