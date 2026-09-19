@@ -40,6 +40,8 @@ public:
     auto update(float32 delta_time) -> void;
     [[nodiscard]] auto get_stats() const -> const physics_stats&;
 
+    auto request_detailed_stats() -> void;
+
     class rigid_body_modifier {
     public:
         auto set_velocity(const vec3f& vel) -> rigid_body_modifier&;
@@ -90,6 +92,8 @@ private:
     world* world_;
     float32 gravity_          = -300.0F;
     float32 accumulated_time_ = 0.0F;
+    bool detailed_requested_  = false;
+    bool detailed_active_     = false;
     physics_stats stats_;
     std::vector<entity> entity_query_cache_;
 };

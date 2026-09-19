@@ -13,7 +13,7 @@ import vw.platform;
 namespace vw::gfx {
 
 auto debug_window::render_systems_panel() -> void {
-    const auto& world  = engine_->get_world();
+    auto& world        = engine_->get_world();
     const auto& update = world.get_update_stats();
 
     metric_row("world update", update.total_ms);
@@ -24,7 +24,10 @@ auto debug_window::render_systems_panel() -> void {
         metric_row(name.data(), update.ms[i]);
 
         if (name == ecs::physics_system::system_name) {
-            const auto& physics = world.system<ecs::physics_system>().get_stats();
+            auto& physics_sys = world.system<ecs::physics_system>();
+            physics_sys.request_detailed_stats();
+
+            const auto& physics = physics_sys.get_stats();
             ImGui::Indent();
             metric_row("step", physics.step_ms);
             metric_row("voxel_col", physics.voxel_collision_ms);

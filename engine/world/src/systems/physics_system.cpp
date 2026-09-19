@@ -5,6 +5,23 @@ import vw.core;
 
 namespace vw::ecs {
 
+namespace {
+
+template <typename F>
+auto measure_into(bool enabled, float32& sink, F&& body) -> void {
+    if (!enabled) {
+        body();
+        return;
+    }
+
+    using clock = std::chrono::high_resolution_clock;
+    const auto started = clock::now();
+    body();
+    sink += std::chrono::duration<float32>(clock::now() - started).count() * 1000.0F;
+}
+
+}  // namespace
+
 physics_system::physics_system(world& w)
     : world_(&w) {}
 
@@ -23,7 +40,8 @@ auto physics_system::update(
         return;
     }
 
-    stats_ = {};
+    stats_           = {};
+    detailed_active_ = std::exchange(detailed_requested_, false);
 
     accumulated_time_ += delta_time;
     auto max_accumulated = fixed_dt * static_cast<float32>(max_steps_per_frame);
@@ -47,10 +65,13 @@ auto physics_system::get_stats() const -> const physics_stats& {
     return stats_;
 }
 
+auto physics_system::request_detailed_stats() -> void {
+    detailed_requested_ = true;
+}
+
 auto physics_system::step(
     float32 dt
 ) -> void {
-    using clock = std::chrono::high_resolution_clock;
     constexpr float32 impulse_epsilon = 0.01f;
 
     auto& reg = world_->registry();
@@ -60,8 +81,8 @@ auto physics_system::step(
 
         rb.velocity_.y += gravity_ * rb.gravity_scale_ * dt;
 
-        if (reg.has<movement_intent_component>(ent)) {
-            const auto& mi = reg.get<movement_intent_component>(ent);
+        if (const auto* mi_ptr = reg.try_get<movement_intent_component>(ent)) {
+            const auto& mi = *mi_ptr;
             auto axes = mi.wish_axes_;
 
             if (axes & axis_flag::x) { rb.velocity_.x = mi.wish_velocity_.x; }
@@ -82,8 +103,8 @@ auto physics_system::step(
 
         auto new_position = position + rb.velocity_ * dt;
 
-        if (reg.has<box_collider_component>(ent)) {
-            const auto& col = reg.get<box_collider_component>(ent);
+        if (const auto* col_ptr = reg.try_get<box_collider_component>(ent)) {
+            const auto& col = *col_ptr;
             auto half = col.extents_ * 0.5f;
             auto box_center = new_position + col.offset_;
 
@@ -96,16 +117,17 @@ auto physics_system::step(
 
             rb.frozen_ = false;
 
-            const auto voxel_start = clock::now();
-            auto result = resolve_box_voxel(box_center, half, rb.velocity_);
-            stats_.voxel_collision_ms += std::chrono::duration<float32>(clock::now() - voxel_start).count() * 1000.0f;
+            collision_result result{};
+            measure_into(detailed_active_, stats_.voxel_collision_ms, [&] {
+                result = resolve_box_voxel(box_center, half, rb.velocity_);
+            });
 
             new_position = result.resolved_position - col.offset_;
             rb.grounded_ = result.grounded;
 
-            const auto entity_start = clock::now();
-            resolve_entity_collisions(ent, new_position, rb.velocity_, half, col.offset_);
-            stats_.entity_collision_ms += std::chrono::duration<float32>(clock::now() - entity_start).count() * 1000.0f;
+            measure_into(detailed_active_, stats_.entity_collision_ms, [&] {
+                resolve_entity_collisions(ent, new_position, rb.velocity_, half, col.offset_);
+            });
         }
 
         world_->system<transform_system>().modify(ent).set_position(new_position);
@@ -257,70 +279,71 @@ auto physics_system::resolve_entity_collisions(
     entity ent, vec3f& position, vec3f& velocity,
     const vec3f& half_extents, const vec3f& offset
 ) -> void {
-    using clock = std::chrono::high_resolution_clock;
     auto center = position + offset;
     spatial::aabb entity_aabb{center - half_extents, center + half_extents};
 
-    const auto q_start = clock::now();
-    world_->system<spatial_system>().query_all(entity_aabb, entity_query_cache_, spatial_layer::character);
-    stats_.entity_query_ms += std::chrono::duration<float32>(clock::now() - q_start).count() * 1000.0f;
+    measure_into(detailed_active_, stats_.entity_query_ms, [&] {
+        world_->system<spatial_system>().query_all(
+            entity_aabb, entity_query_cache_, spatial_layer::character);
+    });
     stats_.entity_query_results += static_cast<int32>(entity_query_cache_.size());
 
     auto& reg = world_->registry();
-    const auto r_start = clock::now();
-    for (const auto other : entity_query_cache_) {
-        if (other == ent) {
-            continue;
+    measure_into(detailed_active_, stats_.entity_resolve_ms, [&] {
+        for (const auto other : entity_query_cache_) {
+            if (other == ent) {
+                continue;
+            }
+
+            const auto* other_col_ptr = reg.try_get<box_collider_component>(other);
+            const auto* other_tc_ptr  = reg.try_get<transform_component>(other);
+            if (other_col_ptr == nullptr || other_tc_ptr == nullptr) {
+                continue;
+            }
+
+            const auto& other_col = *other_col_ptr;
+            const auto& other_tc  = *other_tc_ptr;
+
+            auto other_half   = other_col.extents_ * 0.5f;
+            auto other_center = other_tc.get_position() + other_col.offset_;
+
+            auto overlap_x = std::min(center.x + half_extents.x, other_center.x + other_half.x)
+                           - std::max(center.x - half_extents.x, other_center.x - other_half.x);
+            auto overlap_y = std::min(center.y + half_extents.y, other_center.y + other_half.y)
+                           - std::max(center.y - half_extents.y, other_center.y - other_half.y);
+            auto overlap_z = std::min(center.z + half_extents.z, other_center.z + other_half.z)
+                           - std::max(center.z - half_extents.z, other_center.z - other_half.z);
+
+            if (overlap_x <= 0.0f || overlap_y <= 0.0f || overlap_z <= 0.0f) {
+                continue;
+            }
+
+            auto dir = center - other_center;
+
+            vec3f push{0.0f, 0.0f, 0.0f};
+            float32 penetration = 0.0f;
+
+            if (overlap_x <= overlap_y && overlap_x <= overlap_z) {
+                penetration = overlap_x;
+                push.x = dir.x >= 0.0f ? 1.0f : -1.0f;
+            } else if (overlap_y <= overlap_x && overlap_y <= overlap_z) {
+                penetration = overlap_y;
+                push.y = dir.y >= 0.0f ? 1.0f : -1.0f;
+            } else {
+                penetration = overlap_z;
+                push.z = dir.z >= 0.0f ? 1.0f : -1.0f;
+            }
+
+            center = center + push * penetration;
+            entity_aabb = {center - half_extents, center + half_extents};
+
+            auto vel_along = math::dot(velocity, push);
+            if (vel_along < 0.0f) {
+                velocity = velocity - push * vel_along;
+            }
         }
 
-        if (!reg.has<box_collider_component>(other) ||
-            !reg.has<transform_component>(other)) {
-            continue;
-        }
-
-        const auto& other_col = reg.get<box_collider_component>(other);
-        const auto& other_tc  = reg.get<transform_component>(other);
-
-        auto other_half   = other_col.extents_ * 0.5f;
-        auto other_center = other_tc.get_position() + other_col.offset_;
-
-        auto overlap_x = std::min(center.x + half_extents.x, other_center.x + other_half.x)
-                       - std::max(center.x - half_extents.x, other_center.x - other_half.x);
-        auto overlap_y = std::min(center.y + half_extents.y, other_center.y + other_half.y)
-                       - std::max(center.y - half_extents.y, other_center.y - other_half.y);
-        auto overlap_z = std::min(center.z + half_extents.z, other_center.z + other_half.z)
-                       - std::max(center.z - half_extents.z, other_center.z - other_half.z);
-
-        if (overlap_x <= 0.0f || overlap_y <= 0.0f || overlap_z <= 0.0f) {
-            continue;
-        }
-
-        auto dir = center - other_center;
-
-        vec3f push{0.0f, 0.0f, 0.0f};
-        float32 penetration = 0.0f;
-
-        if (overlap_x <= overlap_y && overlap_x <= overlap_z) {
-            penetration = overlap_x;
-            push.x = dir.x >= 0.0f ? 1.0f : -1.0f;
-        } else if (overlap_y <= overlap_x && overlap_y <= overlap_z) {
-            penetration = overlap_y;
-            push.y = dir.y >= 0.0f ? 1.0f : -1.0f;
-        } else {
-            penetration = overlap_z;
-            push.z = dir.z >= 0.0f ? 1.0f : -1.0f;
-        }
-
-        center = center + push * penetration;
-        entity_aabb = {center - half_extents, center + half_extents};
-
-        auto vel_along = math::dot(velocity, push);
-        if (vel_along < 0.0f) {
-            velocity = velocity - push * vel_along;
-        }
-    }
-
-    stats_.entity_resolve_ms += std::chrono::duration<float32>(clock::now() - r_start).count() * 1000.0f;
+    });
     position = center - offset;
 }
 
