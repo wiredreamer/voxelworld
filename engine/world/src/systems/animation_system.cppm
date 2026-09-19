@@ -162,6 +162,7 @@ private:
     std::unordered_map<entity, std::unordered_set<std::string>> warned_targets_;
     std::vector<entity> to_remove_;
     std::vector<std::pair<entity, transform>> final_transforms_;
+    std::vector<uint32> slot_by_entity_;
     float32 accumulated_delta_time_ = 0.0F;
     float32 target_frame_time_      = 1.0F / 120.0F;
 

@@ -404,22 +404,40 @@ auto animation_system::apply_animation(
     };
 
     const auto rest_of = [&](entity target) -> transform {
-        if (target.is_valid() && reg.has<animation_target_component>(target)) {
-            return reg.get<animation_target_component>(target).get_rest_transform();
+        if (!target.is_valid()) {
+            return {};
         }
-        return {};
+
+        const auto* comp = reg.try_get<animation_target_component>(target);
+        return comp != nullptr ? comp->get_rest_transform() : transform{};
     };
 
     auto& final_transforms = final_transforms_;
     final_transforms.clear();
 
+    constexpr uint32 no_slot = std::numeric_limits<uint32>::max();
+
     const auto slot_of = [&](entity target) -> transform* {
-        for (auto& [ent, value] : final_transforms) {
-            if (ent == target) {
-                return &value;
-            }
+        if (target.index >= slot_by_entity_.size()) {
+            return nullptr;
         }
-        return nullptr;
+
+        const auto slot = slot_by_entity_[target.index];
+        if (slot >= final_transforms.size()) {
+            return nullptr;
+        }
+
+        auto& [ent, value] = final_transforms[slot];
+        return ent == target ? &value : nullptr;
+    };
+
+    const auto add_slot = [&](entity target, const transform& value) {
+        if (target.index >= slot_by_entity_.size()) {
+            slot_by_entity_.resize(static_cast<std::size_t>(target.index) + 1, no_slot);
+        }
+
+        slot_by_entity_[target.index] = static_cast<uint32>(final_transforms.size());
+        final_transforms.emplace_back(target, value);
     };
 
     if (!anim_comp.layers_.empty()) {
@@ -434,7 +452,7 @@ auto animation_system::apply_animation(
                 auto rest = rest_of(target);
                 auto t    = compute_track_transform(base, track, name, rest);
                 if (t) {
-                    final_transforms.emplace_back(target, *t);
+                    add_slot(target, *t);
                 }
             }
 
@@ -459,17 +477,13 @@ auto animation_system::apply_animation(
 
                     auto snapshot_it = base.blend_snapshot.find(name);
                     if (snapshot_it != base.blend_snapshot.end()) {
-                        final_transforms.emplace_back(
-                            target, math::lerp(snapshot_it->second, rest, blend_factor)
-                        );
+                        add_slot(target, math::lerp(snapshot_it->second, rest, blend_factor));
                     } else {
                         auto prev_result = prev_track.get_transform(base.blend_prev_time);
                         if (prev_result) {
                             transform prev_merged =
                                 merge_with_rest(*prev_result, prev_track, rest);
-                            final_transforms.emplace_back(
-                                target, math::lerp(prev_merged, rest, blend_factor)
-                            );
+                            add_slot(target, math::lerp(prev_merged, rest, blend_factor));
                         }
                     }
                 }
@@ -498,19 +512,18 @@ auto animation_system::apply_animation(
             if (auto* existing = slot_of(target)) {
                 *existing = math::lerp(*existing, *t, layer.fade_influence);
             } else {
-                final_transforms.emplace_back(
-                    target, math::lerp(rest, *t, layer.fade_influence)
-                );
+                add_slot(target, math::lerp(rest, *t, layer.fade_influence));
             }
         }
     }
 
+    auto& transform_sys = world_->system<transform_system>();
     for (const auto& [target_ent, t] : final_transforms) {
-        if (!reg.has<transform_component>(target_ent)) {
+        if (reg.try_get<transform_component>(target_ent) == nullptr) {
             continue;
         }
 
-        auto modifier = world_->system<transform_system>().modify(target_ent);
+        auto modifier = transform_sys.modify(target_ent);
         modifier.set_transform_with_matrix(t, t.calc_matrix());
     }
 }
