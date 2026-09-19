@@ -913,7 +913,7 @@ auto strip_mesh_generator::generate_mesh_data(
         face_counts[std::to_underlying(face)] = static_cast<uint32>(storage.quads.size() - before);
     }
 
-    return mesh{std::move(storage.quads), face_counts, {}};
+    return mesh{std::vector<quad>{storage.quads}, face_counts, {}};
 }
 
 auto strip_mesh_generator::merge_and_emit_strips(
@@ -1040,7 +1040,7 @@ auto greedy_mesh_generator::generate_mesh_data(
         }
     }
 
-    return mesh{std::move(storage.quads), face_counts, std::move(links)};
+    return mesh{std::vector<quad>{storage.quads}, face_counts, std::move(links)};
 }
 
 auto greedy_mesh_generator::merge_and_emit_rects_bits(
