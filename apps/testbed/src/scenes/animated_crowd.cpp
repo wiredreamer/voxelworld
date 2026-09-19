@@ -16,7 +16,10 @@ namespace vw::testbed {
 animated_crowd_scene::animated_crowd_scene(
     testbed_app& stand, const arg_reader& args
 )
-    : scene{stand}, size_{args.count("--bodies", 50)} {}
+    : scene{stand}
+    , size_{args.count("--bodies", 50)}
+    , bones_{args.count("--bones", 0)}
+    , blend_{args.count("--blend", 0)} {}
 
 auto animated_crowd_scene::on_world_ready() -> void {
     if (spawned_ || size_ == 0) {
@@ -33,6 +36,23 @@ auto animated_crowd_scene::tick(float32) -> void {
     }
     if (settle_frames_ < settle_target) {
         ++settle_frames_;
+    }
+
+    if (blend_ == 0) {
+        return;
+    }
+
+    if (++blend_frames_ < blend_) {
+        return;
+    }
+
+    blend_frames_ = 0;
+    blend_slot_   = 1 - blend_slot_;
+
+    auto& anim_sys = stand().world().system<ecs::animation_system>();
+    const asset::transition fade{.duration = blend_seconds};
+    for (const body& b : bodies_) {
+        anim_sys.modify_player(b.ent).layer(0).blend_to(clips_[blend_slot_], fade);
     }
 }
 
@@ -92,10 +112,10 @@ auto animated_crowd_scene::ground_at_(
 }
 
 auto animated_crowd_scene::make_clip_(
-    ecs::world& world
-) -> std::shared_ptr<asset::animation_clip> {
+    ecs::world& world, std::string_view name, float32 swing
+) const -> std::shared_ptr<asset::animation_clip> {
     auto& clips = world.resource<asset::animation_clip_registry>();
-    auto clip   = clips.create("crowd_wave");
+    auto clip   = clips.create(name);
 
     for (const auto& part : parts) {
         asset::animation_track track{std::string{part.target}, 60.0f};
@@ -109,7 +129,54 @@ auto animated_crowd_scene::make_clip_(
         clip->add_track(std::move(track));
     }
 
+    for (uint32 bone = 0; bone < bones_; ++bone) {
+        asset::animation_track track{std::format("bone_{}", bone), 60.0f};
+
+        const auto phase = static_cast<float32>(bone) / static_cast<float32>(bones_ + 1);
+        const vec3f rest{0.0f, bone_spacing, 0.0f};
+
+        asset::animation_channel<vec3f> channel{asset::animation_property::position};
+        channel.add(asset::keyframe_vec3f{0.0f, rest});
+        channel.add(asset::keyframe_vec3f{
+            wave_seconds * (0.2f + (0.6f * phase)), rest + vec3f{0.0f, 0.0f, swing}});
+        channel.add(asset::keyframe_vec3f{wave_seconds, rest});
+        track.add<asset::animation_property::position>(std::move(channel));
+
+        clip->add_track(std::move(track));
+    }
+
     return clip;
+}
+
+auto animated_crowd_scene::spawn_bone_chain_(
+    ecs::entity root
+) -> void {
+    auto& world = stand().world();
+
+    auto& transform_sys = world.system<ecs::transform_system>();
+    auto& hierarchy_sys = world.system<ecs::hierarchy_system>();
+    auto& anim_sys      = world.system<ecs::animation_system>();
+
+    auto parent = root;
+    for (uint32 bone = 0; bone < bones_; ++bone) {
+        const auto ent = world.create()
+                             .with<ecs::hierarchy_component>()
+                             .with<ecs::transform_component>()
+                             .with<ecs::animation_target_component>()
+                             .get_entity();
+
+        hierarchy_sys.modify(ent).set_parent(parent);
+
+        transform rest;
+        rest.set_position({0.0f, bone_spacing, 0.0f});
+        transform_sys.modify(ent).set_transform(rest);
+
+        const auto target = anim_sys.modify_target(ent);
+        target.set_target_name(std::format("bone_{}", bone));
+        target.set_rest_transform(rest);
+
+        parent = ent;
+    }
 }
 
 auto animated_crowd_scene::spawn_() -> void {
@@ -129,7 +196,10 @@ auto animated_crowd_scene::spawn_() -> void {
         models[part]->fill(parts[part].fill);
     }
 
-    const auto clip = make_clip_(world);
+    clips_[0] = make_clip_(world, "crowd_wave", bone_swing);
+    clips_[1] = blend_ > 0 ? make_clip_(world, "crowd_wave_alt", -bone_swing) : clips_[0];
+
+    const auto clip = clips_[0];
 
     const auto side =
         static_cast<int32>(std::ceil(std::sqrt(static_cast<float32>(size_))));
@@ -189,6 +259,8 @@ auto animated_crowd_scene::spawn_() -> void {
             target.set_rest_transform(rest);
         }
 
+        spawn_bone_chain_(root);
+
         auto player = anim_sys.modify_player(root);
         player.add_layer(0);
         player.layer(0).blend_to(clip);
@@ -199,8 +271,9 @@ auto animated_crowd_scene::spawn_() -> void {
     }
 
     log::info(
-        "animated-crowd: {} bodies of {} parts each, dropped {} units onto their own columns",
-        bodies_.size(), parts.size(), drop_height
+        "animated-crowd: {} bodies of {} parts and {} chained bones each, dropped {} units onto "
+        "their own columns",
+        bodies_.size(), parts.size(), bones_, drop_height
     );
 }
 
@@ -209,7 +282,9 @@ auto animated_crowd_scene::collect_report(
 ) const -> void {
     out.section("crowd")
         .value("bodies", static_cast<uint64>(bodies_.size()))
-        .value("entities", static_cast<uint64>(bodies_.size() * (1 + parts.size())))
+        .value("bones", static_cast<uint64>(bones_))
+        .value("blend_period", static_cast<uint64>(blend_))
+        .value("entities", static_cast<uint64>(bodies_.size() * (1 + parts.size() + bones_)))
         .value("grounded", static_cast<uint64>(grounded_()))
         .value("settle_frames", static_cast<uint64>(settle_frames_))
         .value("drift", static_cast<float64>(drift_()), 2);

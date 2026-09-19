@@ -44,6 +44,11 @@ private:
     static constexpr float32 wave_seconds = 1.0f;
     static constexpr float32 spacing      = 40.0f;
 
+    static constexpr float32 bone_spacing = 2.0f;
+    static constexpr float32 bone_swing   = 3.0f;
+
+    static constexpr float32 blend_seconds = 0.35f;
+
     struct body_part {
         std::string_view target;
         std::string_view model;
@@ -70,8 +75,10 @@ private:
         vec2f home;
     };
 
-    [[nodiscard]] static auto make_clip_(ecs::world& world)
+    [[nodiscard]] auto make_clip_(ecs::world& world, std::string_view name, float32 swing) const
         -> std::shared_ptr<asset::animation_clip>;
+
+    auto spawn_bone_chain_(ecs::entity root) -> void;
 
     [[nodiscard]] auto ground_at_(float32 x, float32 z) const -> float32;
     [[nodiscard]] auto grounded_() const -> std::size_t;
@@ -79,7 +86,13 @@ private:
 
     auto spawn_() -> void;
 
-    uint32 size_ = 50;
+    uint32 size_  = 50;
+    uint32 bones_ = 0;
+    uint32 blend_ = 0;
+
+    std::array<std::shared_ptr<asset::animation_clip>, 2> clips_{};
+    uint32 blend_frames_ = 0;
+    uint32 blend_slot_   = 0;
 
     std::vector<body> bodies_;
     uint32 settle_frames_ = 0;
