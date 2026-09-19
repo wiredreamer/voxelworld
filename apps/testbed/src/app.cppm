@@ -146,6 +146,8 @@ private:
     int32 edit_clicks_  = 0;
     std::optional<voxel_pick> hovered_;
 
+    uint32 view_distance_ = 10;
+
     float32 bench_altitude_   = 0.0f;
     mutable bool bench_ready_ = false;
     bool world_ready_         = false;

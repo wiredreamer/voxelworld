@@ -15,6 +15,7 @@ testbed_app::testbed_app(
 )
     : app{eng}
     , sun_in_bench_{args.flag("--sun")}
+    , view_distance_{args.count("--view-distance", 10)}
     , benching_{args.flag("--bench")}
     , clusters_{args.flag("--cluster-stats"), args.count("--verify-lights", 0)} {
     auto& renderer = get_engine().get_renderer();
@@ -75,8 +76,6 @@ testbed_app::testbed_app(
 
     setup_world_grid();
     camera.set_rotation(0.0f, 0.0f);
-
-    viewer_ = get_engine().get_world().create().with<ecs::world_view_component>().get_entity();
 
     scene_ = make_scene(*this);
     rig_   = make_camera ? make_camera(*this) : scene_camera_();

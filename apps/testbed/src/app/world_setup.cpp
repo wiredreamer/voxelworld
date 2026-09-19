@@ -35,7 +35,7 @@ auto testbed_app::setup_world_grid() -> void {
         .with<ecs::world_view_component>()
         .get_entity();
 
-    gs.modify_view(viewer_).set_view_distance(10);
+    gs.modify_view(viewer_).set_view_distance(static_cast<int32>(view_distance_));
 }
 
 auto testbed_app::try_place_camera() -> void {
