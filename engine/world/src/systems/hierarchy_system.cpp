@@ -53,23 +53,20 @@ auto hierarchy_system::modify(entity ent) -> hierarchy_modifier {
 auto hierarchy_system::get_hierarchy_depth(
     entity ent
 ) const -> std::size_t {
-    constexpr int MAX_HIERARCHY_DEPTH = 64;
+    constexpr std::size_t max_hierarchy_depth = 64;
 
-    int depth      = 0;
-    entity current = ent;
+    std::size_t depth = 0;
+    entity current    = ent;
 
-    auto& reg = world_->registry();
-    while (reg.has<hierarchy_component>(current)) {
-        const auto& hierarchy_comp = reg.get<hierarchy_component>(current);
-        if (!hierarchy_comp.has_parent()) {
+    const auto& reg = world_->registry();
+    while (depth < max_hierarchy_depth) {
+        const auto* hierarchy_comp = reg.try_get<hierarchy_component>(current);
+        if (hierarchy_comp == nullptr || !hierarchy_comp->has_parent()) {
             break;
         }
-        current = hierarchy_comp.get_parent();
-        depth++;
 
-        if (depth >= MAX_HIERARCHY_DEPTH) {
-            throw std::runtime_error("hierarchy depth is too deep");
-        }
+        current = hierarchy_comp->get_parent();
+        ++depth;
     }
 
     return depth;

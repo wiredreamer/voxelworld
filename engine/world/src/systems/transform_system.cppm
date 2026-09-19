@@ -55,6 +55,7 @@ private:
     auto update_entity_world_matrix(entity ent, const transform_component& transform_comp) -> void;
 
     world* world_;
+    uint32 subtree_stamp_ = 1;
     std::vector<std::pair<std::size_t, entity>> sorted_entities_;
 };
 

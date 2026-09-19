@@ -64,6 +64,8 @@ private:
 
     mutable mat4f world_matrix_;
     mutable bool world_dirty_ = true;
+
+    uint32 subtree_stamp_ = 0;
 };
 
 struct hierarchy_component final {
