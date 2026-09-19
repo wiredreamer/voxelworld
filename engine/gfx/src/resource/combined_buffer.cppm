@@ -153,7 +153,7 @@ private:
 
     static constexpr uint32 default_mesh_capacity_     = 32;
 
-    // см. docs/optimization-plan.md#42-vram-перелёт-роста-буферов
+    // см. docs/optimization.md#e3-что-осталось-в-буферах-после-потолка-роста
     static constexpr std::size_t growth_cap_bytes_ = 16ULL * 1024 * 1024;
     static constexpr uint32 default_instance_capacity_ = 64;
 

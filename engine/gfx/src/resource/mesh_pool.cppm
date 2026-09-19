@@ -82,7 +82,7 @@ public:
     [[nodiscard]] auto get_gen_stats() const -> mesh_gen_stats;
 
 private:
-    // см. docs/scaling.md#12-хэндл-вместо-ключа
+    // см. docs/optimization.md#что-измерено-и-переоткрывать-не-надо
     struct mesh_slot {
         uint32 generation = 0;
         bool has_mesh     = false;

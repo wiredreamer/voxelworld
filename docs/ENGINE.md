@@ -404,5 +404,5 @@ ctest --test-dir build/release --output-on-failure
   сборки; проверяется первым пушем.
 
 Способ мерить кадровое время — навык `render-bench`; что в этом времени ещё
-стоит править — `docs/optimization-plan.md`. Продукт, ради которого всё это, —
+стоит править — `docs/optimization.md`. Продукт, ради которого всё это, —
 `docs/PRD.md`.

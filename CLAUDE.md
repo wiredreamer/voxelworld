@@ -3,8 +3,8 @@
 Воксельный движок на C++23/Vulkan. Движок + ECS + приложение Sculptor (редактор
 вокселей). Описание движка — `docs/ENGINE.md`, продукт — `docs/PRD.md`.
 Подсистемы подробно: `docs/lighting.md` (свет), `docs/rendering.md` (рендер),
-`docs/world.md` (мировая сетка). Что станет дорого при росте числа систем и
-сущностей — `docs/scaling.md`.
+`docs/world.md` (мировая сетка). Что уже оптимизировано, что нет и что станет
+дорого при росте — `docs/optimization.md`.
 
 ## Architecture
 
