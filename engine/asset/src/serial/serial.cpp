@@ -611,7 +611,7 @@ auto asset_storage::load_prefab(
 }
 
 auto asset_storage::get_prefab(std::string_view name) const -> const vox_prefab_data* {
-    const auto it = prefabs_.find(std::string(name));
+    const auto it = prefabs_.find(name);
     return it != prefabs_.end() ? &it->second : nullptr;
 }
 
@@ -668,7 +668,7 @@ auto asset_storage::make_fsm(const voxf_data& data) const -> animation_fsm {
 auto asset_storage::get_entity(
     std::string_view prefab, std::string_view entity_name
 ) const -> const vox_entity_data& {
-    auto pit = prefabs_.find(std::string(prefab));
+    auto pit = prefabs_.find(prefab);
     for (const auto& ent : pit->second.entities) {
         if (ent.name == entity_name) {
             return ent;
@@ -682,7 +682,7 @@ auto asset_storage::get_entity(
 auto asset_storage::get_model(
     std::string_view prefab, std::string_view entity_name
 ) const -> std::shared_ptr<model> {
-    const auto pit = prefabs_.find(std::string(prefab));
+    const auto pit = prefabs_.find(prefab);
     if (pit == prefabs_.end()) {
         return nullptr;
     }

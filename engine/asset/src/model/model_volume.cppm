@@ -269,7 +269,7 @@ public:
 private:
     model_identity_pool identity_pool_;
     page_pool page_pool_;
-    std::unordered_map<std::string, std::shared_ptr<model>> models_;
+    string_map<std::shared_ptr<model>> models_;
 };
 
 }  // namespace vw::asset

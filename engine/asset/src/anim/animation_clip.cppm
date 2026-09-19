@@ -46,18 +46,9 @@ private:
     std::vector<animation_track> tracks_;
 };
 
-struct string_hash {
-    using is_transparent = void;
-
-    [[nodiscard]] auto operator()(std::string_view sv) const noexcept -> std::size_t {
-        return std::hash<std::string_view>{}(sv);
-    }
-};
-
 class animation_clip_registry final {
 public:
-    using map_type = std::
-        unordered_map<std::string, std::shared_ptr<animation_clip>, string_hash, std::equal_to<>>;
+    using map_type = string_map<std::shared_ptr<animation_clip>>;
 
     [[nodiscard]] auto create(std::string_view name) -> std::shared_ptr<animation_clip>;
     auto add(std::string_view name, std::shared_ptr<animation_clip> clip) -> void;

@@ -42,7 +42,7 @@ public:
 private:
     vox_parser* parser_;
     model_library* library_;
-    std::unordered_map<std::string, vox_prefab_data> prefabs_;
+    string_map<vox_prefab_data> prefabs_;
     std::unordered_map<asset_ref, std::shared_ptr<animation_clip>> clips_;
     std::unordered_map<asset_ref, voxf_data> machines_;
 };

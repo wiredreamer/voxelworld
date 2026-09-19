@@ -809,11 +809,11 @@ auto model::increment_generation_() -> void {
 }
 
 auto model_registry::has(std::string_view name) const -> bool {
-    return models_.contains(std::string(name));
+    return models_.contains(name);
 }
 
 auto model_registry::get(std::string_view name) const -> std::shared_ptr<model> {
-    const auto iter = models_.find(std::string(name));
+    const auto iter = models_.find(name);
     return iter != models_.end() ? iter->second : nullptr;
 }
 
