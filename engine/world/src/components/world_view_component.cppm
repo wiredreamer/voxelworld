@@ -20,6 +20,8 @@ class spatial_system;
 class transform_system;
 class world_grid_system;
 
+inline constexpr uint32 default_view_distance = 16;
+
 struct world_view_component final {
     [[nodiscard]] auto get_chunk_coord() const -> vec3i {
         return chunk_coord_;
@@ -33,7 +35,7 @@ private:
     friend class world_grid_system;
 
     vec3i chunk_coord_{0, 0, 0};
-    uint32 view_distance_{10};
+    uint32 view_distance_{default_view_distance};
     bool dirty_ = true;
 };
 }  // namespace vw::ecs

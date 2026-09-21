@@ -15,7 +15,7 @@ testbed_app::testbed_app(
 )
     : app{eng}
     , sun_in_bench_{args.flag("--sun")}
-    , view_distance_{args.count("--view-distance", 10)}
+    , view_distance_{args.count("--view-distance", ecs::default_view_distance)}
     , benching_{args.flag("--bench")}
     , clusters_{args.flag("--cluster-stats"), args.count("--verify-lights", 0)} {
     auto& renderer = get_engine().get_renderer();
@@ -67,14 +67,19 @@ testbed_app::testbed_app(
     renderer.set_clear_color(0.4f, 0.6f, 0.9f, 1.0f);
     get_engine().get_debug_tool().set_visible(true);
 
+    setup_world_grid();
+
+    const float32 draw_reach = static_cast<float32>(view_distance_) *
+                               static_cast<float32>(ecs::chunk::size) *
+                               static_cast<float32>(generator_params_.world_units_per_voxel);
+
     auto& fog         = renderer.get_fog_settings();
     fog.color         = {0.4f, 0.6f, 0.9f};
-    fog.near_distance = 6 * 64 * 8;
-    fog.far_distance  = 9 * 64 * 8;
+    fog.near_distance = 0.6f * draw_reach;
+    fog.far_distance  = 0.9f * draw_reach;
 
     camera.set_far(fog.far_distance);
 
-    setup_world_grid();
     camera.set_rotation(0.0f, 0.0f);
 
     scene_ = make_scene(*this);

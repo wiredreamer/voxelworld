@@ -69,10 +69,14 @@ arena_app::arena_app(
         );
     }
 
+    const float32 draw_reach = static_cast<float32>(ecs::default_view_distance) *
+                               static_cast<float32>(ecs::chunk::size) *
+                               static_cast<float32>(generator_params_.world_units_per_voxel);
+
     auto& fog         = get_engine().get_renderer().get_fog_settings();
     fog.color         = {0.4f, 0.6f, 0.9f};
-    fog.near_distance = 6.f * 64.f * generator_params_.world_units_per_voxel;
-    fog.far_distance  = 9.f * 64.f * generator_params_.world_units_per_voxel;
+    fog.near_distance = 0.6f * draw_reach;
+    fog.far_distance  = 0.9f * draw_reach;
 }
 
 auto arena_app::render(
