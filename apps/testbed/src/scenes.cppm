@@ -5,6 +5,7 @@ export import :scenes.voxel_edits;
 export import :scenes.lamp_edits;
 export import :scenes.standing_lights;
 export import :scenes.blob_shadows;
+export import :scenes.lod_probe;
 export import :scenes.animated_crowd;
 
 import std;

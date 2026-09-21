@@ -20,6 +20,7 @@ target_sources(${PROJECT_NAME}
             src/scenes/lamp_edits.cppm
             src/scenes/standing_lights.cppm
             src/scenes/blob_shadows.cppm
+            src/scenes/lod_probe.cppm
             src/scenes/animated_crowd.cppm
     PRIVATE
         src/main.cpp
@@ -35,6 +36,7 @@ target_sources(${PROJECT_NAME}
         src/scenes/lamp_edits.cpp
         src/scenes/standing_lights.cpp
         src/scenes/blob_shadows.cpp
+        src/scenes/lod_probe.cpp
         src/scenes/animated_crowd.cpp
 )
 
