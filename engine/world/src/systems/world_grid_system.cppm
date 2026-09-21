@@ -55,6 +55,8 @@ public:
 
     auto set_grid(std::unique_ptr<world_grid> grid) -> void;
     auto set_loader(std::unique_ptr<chunk_loader> loader, job_system& jobs) -> void;
+    auto set_coarse_ring(std::unique_ptr<world_grid> grid, std::unique_ptr<chunk_loader> loader,
+                         job_system& jobs, int32 voxels_per_cell, int32 draw_distance) -> void;
 
     [[nodiscard]] auto grid() -> world_grid*;
     [[nodiscard]] auto grid() const -> const world_grid*;
@@ -90,6 +92,9 @@ private:
     struct column_layer {
         int32 voxels_per_cell = 1;
 
+        vec2i camera_column{};
+        int32 draw_distance = 0;
+
         std::unique_ptr<world_grid> grid;
         std::unique_ptr<chunk_loader> loader;
         std::unique_ptr<light_baker> baker;
@@ -118,7 +123,9 @@ private:
     [[nodiscard]] static auto already_lit_(gen_column& col) -> bool;
     [[nodiscard]] auto column_available_(column_layer& layer, vec2i coord) const -> bool;
     [[nodiscard]] auto column_ready_(column_layer& layer, vec2i coord) const -> bool;
-    [[nodiscard]] auto within_draw_(vec2i coord) const -> bool;
+    [[nodiscard]] static auto within_draw_(const column_layer& layer, vec2i coord) -> bool;
+    auto run_layer_(column_layer& layer) -> void;
+    [[nodiscard]] auto covered_by_near_(vec2i coarse_coord) const -> bool;
     [[nodiscard]] auto model_at_(column_layer& layer, vec3i chunk_coord) const -> asset::model*;
     auto queue_if_ready_(column_layer& layer, vec2i coord) -> void;
     auto demote_column_(column_layer& layer, vec2i coord) -> void;
@@ -132,9 +139,7 @@ private:
 
     world* world_;
     column_layer near_;
-
-    vec2i camera_column_{};
-    int32 draw_distance_ = 0;
+    column_layer far_;
 
     world_grid_system_stats stats_;
 };

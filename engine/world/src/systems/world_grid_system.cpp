@@ -34,6 +34,22 @@ auto world_grid_system::set_loader(
                   : nullptr;
 }
 
+auto world_grid_system::set_coarse_ring(
+    std::unique_ptr<world_grid> grid, std::unique_ptr<chunk_loader> loader, job_system& jobs,
+    int32 voxels_per_cell, int32 draw_distance
+) -> void {
+    clear_grid_transient_state_(far_);
+    clear_loader_transient_state_(far_);
+
+    far_.voxels_per_cell = std::max(voxels_per_cell, 1);
+    far_.draw_distance   = std::max(draw_distance, 0);
+    far_.grid            = std::move(grid);
+    far_.loader          = std::move(loader);
+    far_.baker           = far_.loader != nullptr
+                               ? std::make_unique<light_baker>(world_->voxel_types(), jobs)
+                               : nullptr;
+}
+
 auto world_grid_system::grid() -> world_grid* {
     return near_.grid.get();
 }
@@ -71,6 +87,10 @@ auto world_grid_system::get_stats() const -> const world_grid_system_stats& {
 }
 
 auto world_grid_system::shutdown() -> void {
+    far_.grid.reset();
+    far_.baker.reset();
+    far_.loader.reset();
+
     near_.grid.reset();
     near_.baker.reset();
     near_.loader.reset();
@@ -81,14 +101,17 @@ auto world_grid_system::update(float32) -> void {
         return;
     }
 
-    auto& reg       = world_->registry();
-    stats_.stage_ms = measure_ms([&] { stage_completed_columns_(near_); });
-    stats_.light_apply_ms = measure_ms([&] {
-        collect_lit_columns_(near_);
-        relight_dirty_columns_(near_);
-    });
-    stats_.integrate_ms       = measure_ms([&] { integrate_completed_columns_(near_); });
-    stats_.request_columns_ms = measure_ms([&] { dispatch_column_requests_(near_); });
+    stats_.stage_ms           = 0.0F;
+    stats_.light_apply_ms     = 0.0F;
+    stats_.integrate_ms       = 0.0F;
+    stats_.request_columns_ms = 0.0F;
+
+    auto& reg = world_->registry();
+
+    run_layer_(near_);
+    if (far_.grid != nullptr) {
+        run_layer_(far_);
+    }
     update_grid_stats_();
 
     if (reg.requested<world_view_component>().empty()) {
@@ -98,16 +121,48 @@ auto world_grid_system::update(float32) -> void {
     if (process_dirty_entities_()) {
         vec2i camera_column{};
         stats_.rebuild_active_ms = measure_ms([&] { camera_column = rebuild_active_set_(); });
-        stats_.unload_ms         = measure_ms([&] { unload_inactive_columns_(near_); });
+
+        stats_.unload_ms = measure_ms([&] {
+            unload_inactive_columns_(near_);
+            if (far_.grid != nullptr) {
+                unload_inactive_columns_(far_);
+            }
+        });
+
         std::swap(near_.active_columns, near_.pending_active_columns);
         rebuild_pending_requests_(near_, camera_column);
         stats_.active_count = static_cast<uint32>(near_.active_columns.size());
+
+        if (far_.grid != nullptr) {
+            std::swap(far_.active_columns, far_.pending_active_columns);
+            rebuild_pending_requests_(far_, far_.camera_column);
+        }
     }
 
     reg.clear_requested<world_view_component>();
 }
 
+auto world_grid_system::run_layer_(
+    column_layer& layer
+) -> void {
+    if (layer.grid == nullptr || layer.loader == nullptr) {
+        return;
+    }
+
+    stats_.stage_ms += measure_ms([&] { stage_completed_columns_(layer); });
+    stats_.light_apply_ms += measure_ms([&] {
+        collect_lit_columns_(layer);
+        relight_dirty_columns_(layer);
+    });
+    stats_.integrate_ms += measure_ms([&] { integrate_completed_columns_(layer); });
+    stats_.request_columns_ms += measure_ms([&] { dispatch_column_requests_(layer); });
+}
+
 namespace {
+auto floor_div_columns(int32 a, int32 b) -> int32 {
+    return a >= 0 ? a / b : (a - b + 1) / b;
+}
+
 constexpr vec2i column_neighbor_offsets[8] = {
     {1, 0},    //
     {-1, 0},   //
@@ -127,10 +182,25 @@ auto world_grid_system::column_available_(
 }
 
 auto world_grid_system::within_draw_(
-    vec2i coord
+    const column_layer& layer, vec2i coord
+) -> bool {
+    const auto d = coord - layer.camera_column;
+    return std::abs(d.x) <= layer.draw_distance && std::abs(d.y) <= layer.draw_distance;
+}
+
+auto world_grid_system::covered_by_near_(
+    vec2i coarse_coord
 ) const -> bool {
-    const auto d = coord - camera_column_;
-    return std::abs(d.x) <= draw_distance_ && std::abs(d.y) <= draw_distance_;
+    const int32 ratio = std::max(far_.voxels_per_cell / near_.voxels_per_cell, 1);
+
+    for (int32 dx = 0; dx < ratio; ++dx) {
+        for (int32 dz = 0; dz < ratio; ++dz) {
+            if (!within_draw_(near_, {(coarse_coord.x * ratio) + dx, (coarse_coord.y * ratio) + dz})) {
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 auto world_grid_system::column_ready_(
@@ -505,6 +575,7 @@ auto world_grid_system::process_dirty_entities_() -> bool {
 auto world_grid_system::rebuild_active_set_() -> vec2i {
     auto& reg = world_->registry();
     near_.pending_active_columns.clear();
+    far_.pending_active_columns.clear();
     vec2i camera_column{};
 
     for (auto ent : reg.requested<world_view_component>()) {
@@ -517,16 +588,38 @@ auto world_grid_system::rebuild_active_set_() -> vec2i {
         auto chunk_coord = wv.get_chunk_coord();
         camera_column    = {chunk_coord.x, chunk_coord.z};
 
-        camera_column_ = camera_column;
-        draw_distance_ = static_cast<int32>(wv.get_view_distance());
+        near_.camera_column = camera_column;
+        near_.draw_distance = static_cast<int32>(wv.get_view_distance());
 
-        const auto dist = draw_distance_ + apron_columns;
+        const auto dist = near_.draw_distance + apron_columns;
 
         for (int32 dx = -dist; dx <= dist; ++dx) {
             for (int32 dz = -dist; dz <= dist; ++dz) {
                 int32 cx = camera_column.x + dx;
                 int32 cz = camera_column.y + dz;
                 near_.pending_active_columns.insert({cx, cz});
+            }
+        }
+
+        if (far_.grid == nullptr) {
+            continue;
+        }
+
+        const int32 ratio = std::max(far_.voxels_per_cell / near_.voxels_per_cell, 1);
+
+        far_.camera_column = {
+            floor_div_columns(camera_column.x, ratio), floor_div_columns(camera_column.y, ratio)
+        };
+
+        const auto far_dist = far_.draw_distance + apron_columns;
+
+        for (int32 dx = -far_dist; dx <= far_dist; ++dx) {
+            for (int32 dz = -far_dist; dz <= far_dist; ++dz) {
+                const vec2i coord{far_.camera_column.x + dx, far_.camera_column.y + dz};
+                if (covered_by_near_(coord)) {
+                    continue;
+                }
+                far_.pending_active_columns.insert(coord);
             }
         }
     }
@@ -558,7 +651,7 @@ auto world_grid_system::unload_inactive_columns_(
     for (const auto& coord : layer.active_columns) {
         if (!layer.pending_active_columns.contains(coord)) {
             layer.grid->unload_column(coord);
-        } else if (!within_draw_(coord) && layer.grid->has_column(coord)) {
+        } else if (!within_draw_(layer, coord) && layer.grid->has_column(coord)) {
             demote_column_(layer, coord);
         }
     }

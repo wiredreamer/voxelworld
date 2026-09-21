@@ -9,9 +9,11 @@ import vw.asset;
 namespace vw::ecs {
 
 chunk_loader::chunk_loader(
-    std::unique_ptr<terrain_generator> generator, job_system& jobs
+    std::unique_ptr<terrain_generator> generator, job_system& jobs, int32 voxels_per_cell
 )
-    : generator_(std::move(generator)), jobs_(&jobs) {}
+    : generator_(std::move(generator))
+    , jobs_(&jobs)
+    , voxels_per_cell_(std::max(voxels_per_cell, 1)) {}
 
 chunk_loader::~chunk_loader() {
     jobs_->drain(job_lane::terrain);
@@ -88,9 +90,10 @@ auto chunk_loader::generate_(vec2i coord) -> void {
     auto col = std::make_unique<gen_column>(coord.x, coord.y);
 
     terrain_context ctx{
-        .cx           = coord.x,
-        .cz           = coord.y,
-        .create_chunk = [&col](int32 y) -> chunk_data& {
+        .cx              = coord.x,
+        .cz              = coord.y,
+        .voxels_per_cell = voxels_per_cell_,
+        .create_chunk    = [&col](int32 y) -> chunk_data& {
             return col->create_chunk(y, chunk_data{});
         }
     };

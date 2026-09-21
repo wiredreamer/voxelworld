@@ -10,7 +10,8 @@ export namespace vw::ecs {
 
 class chunk_loader {
 public:
-    explicit chunk_loader(std::unique_ptr<terrain_generator> generator, job_system& jobs);
+    chunk_loader(std::unique_ptr<terrain_generator> generator, job_system& jobs,
+                 int32 voxels_per_cell = 1);
     ~chunk_loader();
 
     chunk_loader(const chunk_loader&)                    = delete;
@@ -25,12 +26,17 @@ public:
     [[nodiscard]] auto pending_count() const -> uint32;
     [[nodiscard]] auto get_gen_stats() const -> column_gen_stats;
 
+    [[nodiscard]] auto voxels_per_cell() const -> int32 {
+        return voxels_per_cell_;
+    }
+
 private:
     auto generate_(vec2i coord) -> void;
     auto record_column_(uint64 elapsed_ns, uint64 chunks) -> void;
 
     std::unique_ptr<terrain_generator> generator_;
     job_system* jobs_;
+    int32 voxels_per_cell_ = 1;
     std::queue<std::unique_ptr<gen_column>> completed_queue_;
     mutable std::mutex completed_mutex_;
     std::unordered_set<vec2i> pending_columns_;
