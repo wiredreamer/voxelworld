@@ -39,7 +39,7 @@ layout(location = 1) out vec3 fragNormal;
 layout(location = 2) out vec3 fragColor;
 layout(location = 2, component = 3) out float fragGlow;
 layout(location = 3) out float viewDepth;
-layout(location = 4) out vec2 fragUV;
+layout(location = 4) centroid out vec2 fragUV;
 layout(location = 5) flat out uint fragCornersMask;
 layout(location = 6) flat out uint fragLightMask;
 layout(location = 7) flat out uint fragConvexMask;

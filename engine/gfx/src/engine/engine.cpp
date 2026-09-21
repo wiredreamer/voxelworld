@@ -34,7 +34,7 @@ constexpr std::string_view build_config =
 }  // namespace
 
 engine::engine(
-    int32 width, int32 height, std::string_view title, bench_config bench
+    int32 width, int32 height, std::string_view title, bench_config bench, uint32 msaa_samples
 )
     : bench_(std::move(bench)) {
     if (bench_.enabled()) {
@@ -45,7 +45,7 @@ engine::engine(
     window_         = std::make_unique<window>(width, height, title);
     vulkan_context_ = std::make_unique<vulkan_context>(*window_);
     renderer_       = std::make_unique<renderer_type>(
-        *vulkan_context_, *window_, voxel_registry_, *jobs_);
+        *vulkan_context_, *window_, voxel_registry_, *jobs_, msaa_samples);
     camera_ =
         std::make_unique<camera>(45.0f, static_cast<float>(width) / static_cast<float>(height));
     world_      = std::make_unique<world_type>(voxel_registry_);
@@ -179,10 +179,11 @@ auto engine::write_bench_report_() const -> void {
     const auto props = vulkan_context_->get_physical_device().getProperties();
 
     std::string report_text = std::format(
-        "gpu: {}\nbuild: {}\npresent mode: {}\nframes in flight: {}\nwarmup frames: {}\n{}",
+        "gpu: {}\nbuild: {}\npresent mode: {}\nmsaa: {}x\nframes in flight: {}\nwarmup frames: {}\n{}",
         static_cast<const char*>(props.deviceName),
         build_config,
         renderer_->get_present_mode_name(),
+        renderer_->get_msaa_samples(),
         renderer_type::get_frames_in_flight(),
         bench_.warmup_frames,
         recorder_->report()
@@ -379,6 +380,7 @@ auto engine::write_bench_report_() const -> void {
         .value("gpu", std::string_view{static_cast<const char*>(props.deviceName)})
         .value("build", std::string_view{build_config})
         .value("present_mode", std::string_view{renderer_->get_present_mode_name()})
+        .value("msaa_samples", static_cast<uint64>(renderer_->get_msaa_samples()))
         .value("frames_in_flight", static_cast<uint64>(renderer_type::get_frames_in_flight()))
         .value("warmup_frames", static_cast<uint64>(bench_.warmup_frames))
         .value("measured_frames", static_cast<uint64>(recorder_->sample_count()))

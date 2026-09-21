@@ -5,7 +5,7 @@ layout(location = 1) in vec3 fragNormal;
 layout(location = 2) in vec3 fragColor;
 layout(location = 2, component = 3) in float fragGlow;
 layout(location = 3) in float viewDepth;
-layout(location = 4) in vec2 fragUV;
+layout(location = 4) centroid in vec2 fragUV;
 layout(location = 5) flat in uint fragCornersMask;
 layout(location = 6) flat in uint fragLightMask;
 layout(location = 7) flat in uint fragConvexMask;

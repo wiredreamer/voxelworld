@@ -17,12 +17,14 @@ import :vk;
 namespace vw::gfx {
 
 renderer::renderer(
-    vulkan_context& context, window& window, const voxel_registry& registry, vw::job_system& jobs
+    vulkan_context& context, window& window, const voxel_registry& registry, vw::job_system& jobs,
+    uint32 wanted_msaa_samples
 )
     : context_(&context)
     , window_(&window)
     , mesh_pool_(context, registry, jobs)
-    , voxel_registry_(&registry) {
+    , voxel_registry_(&registry)
+    , wanted_msaa_samples_(wanted_msaa_samples) {
     vertex_shader_ =
         std::make_unique<shader>(*context_, "shaders/voxel.vert.spv", shader_type::VERTEX);
     fragment_shader_ =
@@ -48,6 +50,8 @@ renderer::renderer(
 
     create_swapchain();
     create_image_views();
+    choose_msaa_samples();
+    create_color_resources();
     create_depth_resources();
     create_render_pass();
     create_descriptor_set_layouts();
@@ -119,6 +123,7 @@ renderer::~renderer() {
     cleanup_imgui();
 
     cleanup_swapchain();
+    cleanup_color_resources();
     cleanup_depth_resources();
     cleanup_pipelines();
     cleanup_shadow_pipeline();
@@ -659,6 +664,47 @@ auto renderer::create_image_views() -> void {
     }
 }
 
+auto renderer::choose_msaa_samples() -> void {
+    const vk::PhysicalDeviceProperties properties = context_->get_physical_device().getProperties();
+
+    const vk::SampleCountFlags supported = properties.limits.framebufferColorSampleCounts &
+                                           properties.limits.framebufferDepthSampleCounts;
+
+    constexpr std::array<vk::SampleCountFlagBits, 4> ladder{
+        vk::SampleCountFlagBits::e8,
+        vk::SampleCountFlagBits::e4,
+        vk::SampleCountFlagBits::e2,
+        vk::SampleCountFlagBits::e1,
+    };
+
+    msaa_samples_ = vk::SampleCountFlagBits::e1;
+    for (vk::SampleCountFlagBits step : ladder) {
+        if (static_cast<uint32>(step) <= wanted_msaa_samples_ && (supported & step)) {
+            msaa_samples_ = step;
+            break;
+        }
+    }
+}
+
+auto renderer::create_color_resources() -> void {
+    if (msaa_samples_ == vk::SampleCountFlagBits::e1) {
+        return;
+    }
+
+    create_image(
+        color_image_,
+        color_image_memory_,
+        swapchain_extent_,
+        swapchain_image_format_,
+        vk::ImageTiling::eOptimal,
+        vk::ImageUsageFlagBits::eTransientAttachment | vk::ImageUsageFlagBits::eColorAttachment,
+        vk::MemoryPropertyFlagBits::eDeviceLocal,
+        msaa_samples_
+    );
+    color_image_view_ =
+        create_image_view(color_image_, swapchain_image_format_, vk::ImageAspectFlagBits::eColor);
+}
+
 auto renderer::create_depth_resources() -> void {
     vk::Format depth_format = find_depth_format();
 
@@ -670,29 +716,47 @@ auto renderer::create_depth_resources() -> void {
         vk::ImageTiling::eOptimal,
         vk::ImageUsageFlagBits::eDepthStencilAttachment,
         vk::MemoryPropertyFlagBits::eDeviceLocal,
-        vk::SampleCountFlagBits::e1
+        msaa_samples_
     );
     depth_image_view_ = create_image_view(depth_image_, depth_format, vk::ImageAspectFlagBits::eDepth);
 }
 
 auto renderer::create_render_pass() -> void {
+    const bool multisampled = msaa_samples_ != vk::SampleCountFlagBits::e1;
+
     vk::AttachmentDescription color_attachment{};
     color_attachment.format         = swapchain_image_format_;
-    color_attachment.samples        = vk::SampleCountFlagBits::e1;
+    color_attachment.samples        = msaa_samples_;
     color_attachment.loadOp         = vk::AttachmentLoadOp::eClear;
-    color_attachment.storeOp        = vk::AttachmentStoreOp::eStore;
+    color_attachment.storeOp =
+        multisampled ? vk::AttachmentStoreOp::eDontCare : vk::AttachmentStoreOp::eStore;
     color_attachment.stencilLoadOp  = vk::AttachmentLoadOp::eDontCare;
     color_attachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
     color_attachment.initialLayout  = vk::ImageLayout::eUndefined;
-    color_attachment.finalLayout    = vk::ImageLayout::ePresentSrcKHR;
+    color_attachment.finalLayout    = multisampled ? vk::ImageLayout::eColorAttachmentOptimal
+                                                   : vk::ImageLayout::ePresentSrcKHR;
 
     vk::AttachmentReference color_attachment_ref{};
     color_attachment_ref.attachment = 0;
     color_attachment_ref.layout     = vk::ImageLayout::eColorAttachmentOptimal;
 
+    vk::AttachmentDescription resolve_attachment{};
+    resolve_attachment.format         = swapchain_image_format_;
+    resolve_attachment.samples        = vk::SampleCountFlagBits::e1;
+    resolve_attachment.loadOp         = vk::AttachmentLoadOp::eDontCare;
+    resolve_attachment.storeOp        = vk::AttachmentStoreOp::eStore;
+    resolve_attachment.stencilLoadOp  = vk::AttachmentLoadOp::eDontCare;
+    resolve_attachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
+    resolve_attachment.initialLayout  = vk::ImageLayout::eUndefined;
+    resolve_attachment.finalLayout    = vk::ImageLayout::ePresentSrcKHR;
+
+    vk::AttachmentReference resolve_attachment_ref{};
+    resolve_attachment_ref.attachment = 2;
+    resolve_attachment_ref.layout     = vk::ImageLayout::eColorAttachmentOptimal;
+
     vk::AttachmentDescription depth_attachment{};
     depth_attachment.format         = find_depth_format();
-    depth_attachment.samples        = vk::SampleCountFlagBits::e1;
+    depth_attachment.samples        = msaa_samples_;
     depth_attachment.loadOp         = vk::AttachmentLoadOp::eClear;
     depth_attachment.storeOp        = vk::AttachmentStoreOp::eDontCare;
     depth_attachment.stencilLoadOp  = vk::AttachmentLoadOp::eDontCare;
@@ -723,7 +787,7 @@ auto renderer::create_render_pass() -> void {
     subpass_imgui.colorAttachmentCount    = 1;
     subpass_imgui.pColorAttachments       = &color_attachment_ref;
     subpass_imgui.pDepthStencilAttachment = nullptr;
-    subpass_imgui.pResolveAttachments     = nullptr;
+    subpass_imgui.pResolveAttachments = multisampled ? &resolve_attachment_ref : nullptr;
 
     vk::SubpassDescription subpasses[] = {subpass_3d, subpass_debug, subpass_imgui};
 
@@ -754,10 +818,12 @@ auto renderer::create_render_pass() -> void {
 
     vk::SubpassDependency dependencies[] = {dependency_3d, dependency_debug, dependency_imgui};
 
-    vk::AttachmentDescription attachments[] = {color_attachment, depth_attachment};
+    vk::AttachmentDescription attachments[] = {
+        color_attachment, depth_attachment, resolve_attachment
+    };
 
     vk::RenderPassCreateInfo render_pass_info{};
-    render_pass_info.attachmentCount = 2;
+    render_pass_info.attachmentCount = multisampled ? 3u : 2u;
     render_pass_info.pAttachments    = attachments;
     render_pass_info.subpassCount    = 3;
     render_pass_info.pSubpasses      = subpasses;
@@ -866,7 +932,7 @@ auto renderer::create_graphics_pipeline() -> void {
 
     vk::PipelineMultisampleStateCreateInfo multisampling{};
     multisampling.sampleShadingEnable  = vk::False;
-    multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
+    multisampling.rasterizationSamples = msaa_samples_;
 
     vk::PipelineColorBlendAttachmentState color_blend_attachment{};
     color_blend_attachment.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
@@ -967,7 +1033,7 @@ auto renderer::create_wireframe_pipeline() -> void {
 
     vk::PipelineMultisampleStateCreateInfo multisampling{};
     multisampling.sampleShadingEnable  = vk::False;
-    multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
+    multisampling.rasterizationSamples = msaa_samples_;
 
     vk::PipelineColorBlendAttachmentState color_blend_attachment{};
     color_blend_attachment.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
@@ -1052,7 +1118,7 @@ auto renderer::create_debug_pipeline() -> void {
 
     vk::PipelineMultisampleStateCreateInfo multisampling{};
     multisampling.sampleShadingEnable  = vk::False;
-    multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
+    multisampling.rasterizationSamples = msaa_samples_;
 
     vk::PipelineColorBlendAttachmentState color_blend_attachment{};
     color_blend_attachment.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
@@ -1121,15 +1187,18 @@ auto renderer::create_debug_pipeline() -> void {
 auto renderer::create_framebuffers() -> void {
     framebuffers_.resize(swapchain_image_views_.size());
 
+    const bool multisampled = msaa_samples_ != vk::SampleCountFlagBits::e1;
+
     for (std::size_t i = 0; i < swapchain_image_views_.size(); i++) {
         vk::ImageView attachments[] = {
-            swapchain_image_views_[i],
+            multisampled ? color_image_view_ : swapchain_image_views_[i],
             depth_image_view_,
+            swapchain_image_views_[i],
         };
 
         vk::FramebufferCreateInfo framebuffer_info{};
         framebuffer_info.renderPass      = render_pass_;
-        framebuffer_info.attachmentCount = 2;
+        framebuffer_info.attachmentCount = multisampled ? 3u : 2u;
         framebuffer_info.pAttachments    = attachments;
         framebuffer_info.width           = swapchain_extent_.width;
         framebuffer_info.height          = swapchain_extent_.height;
@@ -1264,7 +1333,7 @@ auto renderer::init_imgui() -> void {
 
     init_info.PipelineInfoMain.RenderPass  = render_pass_;
     init_info.PipelineInfoMain.Subpass     = 2;
-    init_info.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+    init_info.PipelineInfoMain.MSAASamples = static_cast<VkSampleCountFlagBits>(msaa_samples_);
 
     if (!ImGui_ImplVulkan_Init(&init_info)) {
         throw std::runtime_error("failed to initialize imgui");
@@ -1402,6 +1471,21 @@ auto renderer::cleanup_swapchain() -> void {
     }
 }
 
+auto renderer::cleanup_color_resources() -> void {
+    if (color_image_view_ != nullptr) {
+        context_->get_device().destroyImageView(color_image_view_);
+        color_image_view_ = nullptr;
+    }
+    if (color_image_ != nullptr) {
+        context_->get_device().destroyImage(color_image_);
+        color_image_ = nullptr;
+    }
+    if (color_image_memory_ != nullptr) {
+        context_->get_device().freeMemory(color_image_memory_);
+        color_image_memory_ = nullptr;
+    }
+}
+
 auto renderer::cleanup_depth_resources() -> void {
     if (depth_image_view_ != nullptr) {
         context_->get_device().destroyImageView(depth_image_view_);
@@ -1429,10 +1513,12 @@ auto renderer::recreate_swapchain() -> void {
     wait_idle();
 
     cleanup_swapchain();
+    cleanup_color_resources();
     cleanup_depth_resources();
 
     create_swapchain();
     create_image_views();
+    create_color_resources();
     create_depth_resources();
     create_framebuffers();
     create_sync_objects();

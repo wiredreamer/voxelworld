@@ -32,7 +32,7 @@ public:
     using light_buffer_type         = light_buffer;
 
     renderer(vulkan_context& context, window& window, const voxel_registry& registry,
-             vw::job_system& jobs);
+             vw::job_system& jobs, uint32 wanted_msaa_samples = msaa_sample_count);
     ~renderer();
 
     renderer(const renderer&)            = delete;
@@ -59,6 +59,9 @@ public:
     [[nodiscard]] auto get_stats() const -> const renderer_stats&;
 
     [[nodiscard]] auto get_present_mode_name() const -> std::string_view;
+    [[nodiscard]] auto get_msaa_samples() const -> uint32 {
+        return static_cast<uint32>(msaa_samples_);
+    }
     [[nodiscard]] static constexpr auto get_frames_in_flight() -> uint32 {
         return static_cast<uint32>(frames_in_flight);
     }
@@ -138,6 +141,8 @@ public:
 private:
     auto create_swapchain() -> void;
     auto create_image_views() -> void;
+    auto choose_msaa_samples() -> void;
+    auto create_color_resources() -> void;
     auto create_depth_resources() -> void;
     auto create_render_pass() -> void;
     auto create_descriptor_set_layouts() -> void;
@@ -167,6 +172,7 @@ private:
     auto cleanup_shadow_pipeline() -> void;
     auto cleanup_debug_pipeline() -> void;
     auto cleanup_swapchain() -> void;
+    auto cleanup_color_resources() -> void;
     auto cleanup_depth_resources() -> void;
     auto recreate_swapchain() -> void;
 
@@ -241,6 +247,13 @@ private:
     vk::Extent2D swapchain_extent_{};
     vk::PresentModeKHR present_mode_   = vk::PresentModeKHR::eFifo;
     std::vector<vk::ImageView> swapchain_image_views_;
+
+    uint32 wanted_msaa_samples_           = msaa_sample_count;
+    vk::SampleCountFlagBits msaa_samples_ = vk::SampleCountFlagBits::e1;
+
+    vk::Image color_image_               = nullptr;
+    vk::DeviceMemory color_image_memory_ = nullptr;
+    vk::ImageView color_image_view_      = nullptr;
 
     vk::Image depth_image_               = nullptr;
     vk::DeviceMemory depth_image_memory_ = nullptr;

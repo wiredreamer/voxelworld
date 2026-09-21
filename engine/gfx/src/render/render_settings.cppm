@@ -10,6 +10,8 @@ enum class render_mode : uint8 { lit, wireframe };
 
 inline constexpr std::array<std::string_view, 2> render_mode_names{"lit", "wireframe"};
 
+inline constexpr uint32 msaa_sample_count = 4;
+
 struct directional_light_settings {
     vec3f direction{0.0f, -1.0f, 0.0f};
     vec3f color{1.f, 1.f, 1.f};

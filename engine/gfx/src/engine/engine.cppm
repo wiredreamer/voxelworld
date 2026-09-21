@@ -30,7 +30,8 @@ public:
     using debug_window_type = debug_window;
     using app_type          = app;
 
-    engine(int32 width, int32 height, std::string_view title, bench_config bench = {});
+    engine(int32 width, int32 height, std::string_view title, bench_config bench = {},
+           uint32 msaa_samples = msaa_sample_count);
     ~engine();
 
     engine(const engine&)                    = delete;
