@@ -39,8 +39,10 @@ renderer::renderer(
         std::make_unique<shader>(*context_, "shaders/shadow.frag.spv", shader_type::FRAGMENT);
 
     constexpr vk::DeviceSize initial_size = 512 * 2 * sizeof(debug_vertex);
-    debug_vertex_buffer_                = std::make_unique<vertex_buffer>(*context_, initial_size);
-    debug_solid_vertex_buffer_ = std::make_unique<vertex_buffer>(*context_, initial_size);
+    for (uint32 frame = 0; frame < frames_in_flight; ++frame) {
+        debug_vertex_buffers_[frame]       = std::make_unique<vertex_buffer>(*context_, initial_size);
+        debug_solid_vertex_buffers_[frame] = std::make_unique<vertex_buffer>(*context_, initial_size);
+    }
 
     shadow_map_ = std::make_unique<shadow_map>(*context_);
 
@@ -1701,7 +1703,7 @@ auto renderer::render_debug_primitives() -> void {
         nullptr
     );
 
-    vk::Buffer vertex_buffer        = debug_vertex_buffer_->get_buffer();
+    vk::Buffer vertex_buffer        = debug_vertex_buffers_[current_frame_]->get_buffer();
     constexpr vk::DeviceSize offset = 0;
     command_buffers_[current_frame_].bindVertexBuffers(0, vertex_buffer, offset);
 
@@ -1714,12 +1716,14 @@ auto renderer::render_debug_primitives() -> void {
 auto renderer::update_debug_vertex_buffer() -> void {
     const auto& debug_vertices = debug_primitives_.get_vertices();
 
+    auto& target = debug_vertex_buffers_[current_frame_];
+
     const vk::DeviceSize required_size = sizeof(debug_vertex) * debug_vertices.size();
-    if (required_size > debug_vertex_buffer_->get_size()) {
-        debug_vertex_buffer_ = std::make_unique<vertex_buffer>(*context_, required_size);
+    if (required_size > target->get_size()) {
+        target = std::make_unique<vertex_buffer>(*context_, required_size);
     }
 
-    debug_vertex_buffer_->copy_from_vector(debug_vertices);
+    target->copy_from_vector(debug_vertices);
 }
 
 auto renderer::render_debug_solids() -> void {
@@ -1737,7 +1741,7 @@ auto renderer::render_debug_solids() -> void {
         nullptr
     );
 
-    vk::Buffer vertex_buffer        = debug_solid_vertex_buffer_->get_buffer();
+    vk::Buffer vertex_buffer        = debug_solid_vertex_buffers_[current_frame_]->get_buffer();
     constexpr vk::DeviceSize offset = 0;
     cmd.bindVertexBuffers(0, vertex_buffer, offset);
 
@@ -1747,12 +1751,14 @@ auto renderer::render_debug_solids() -> void {
 auto renderer::update_debug_solid_vertex_buffer() -> void {
     const auto& solid_vertices = debug_primitives_.get_solid_vertices();
 
+    auto& target = debug_solid_vertex_buffers_[current_frame_];
+
     const vk::DeviceSize required_size = sizeof(debug_vertex) * solid_vertices.size();
-    if (required_size > debug_solid_vertex_buffer_->get_size()) {
-        debug_solid_vertex_buffer_ = std::make_unique<vertex_buffer>(*context_, required_size);
+    if (required_size > target->get_size()) {
+        target = std::make_unique<vertex_buffer>(*context_, required_size);
     }
 
-    debug_solid_vertex_buffer_->copy_from_vector(solid_vertices);
+    target->copy_from_vector(solid_vertices);
 }
 
 auto renderer::render_imgui() const -> void {

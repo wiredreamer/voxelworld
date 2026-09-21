@@ -289,8 +289,8 @@ private:
     vk::PipelineLayout debug_pipeline_layout_ = nullptr;
     vk::Pipeline debug_pipeline_              = nullptr;
     vk::Pipeline debug_solid_pipeline_        = nullptr;
-    std::unique_ptr<vertex_buffer> debug_vertex_buffer_;
-    std::unique_ptr<vertex_buffer> debug_solid_vertex_buffer_;
+    std::array<std::unique_ptr<vertex_buffer>, frames_in_flight> debug_vertex_buffers_;
+    std::array<std::unique_ptr<vertex_buffer>, frames_in_flight> debug_solid_vertex_buffers_;
     debug_primitives debug_primitives_;
 
     std::unique_ptr<shader> debug_vertex_shader_;
