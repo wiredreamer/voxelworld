@@ -125,12 +125,20 @@ private:
         int32 min_stone   = 0;
         int32 max_surface = 0;
 
+        int32 voxels_per_cell = 1;
+
         [[nodiscard]] static auto stone_index(int32 x, int32 z) -> int32 {
             return ((x + apron) * stride) + (z + apron);
         }
+
+        [[nodiscard]] auto cell_of(int32 world_y) const -> int32 {
+            return world_y >= 0 ? world_y / voxels_per_cell
+                                : (world_y - voxels_per_cell + 1) / voxels_per_cell;
+        }
     };
 
-    [[nodiscard]] auto sample_column_(int32 cx, int32 cz) const -> column_profile;
+    [[nodiscard]] auto sample_column_(int32 cx, int32 cz, int32 voxels_per_cell) const
+        -> column_profile;
 
     auto carve_caves_(asset::model_writer& writer, terrain_context& ctx, int32 chunk_y,
                       const column_profile& profile) const -> void;

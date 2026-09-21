@@ -92,6 +92,7 @@ add_executable(world_tests
     world/hierarchy.test.cpp
     world/column_staging.test.cpp
     world/surface.test.cpp
+    world/terrain_step.test.cpp
     world/sky_light.test.cpp
     world/emission.test.cpp
     world/block_light.test.cpp

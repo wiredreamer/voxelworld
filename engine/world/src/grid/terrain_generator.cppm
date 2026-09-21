@@ -20,6 +20,7 @@ struct chunk_y_range {
 struct terrain_context {
     int32 cx;
     int32 cz;
+    int32 voxels_per_cell = 1;
     std::function<auto(int32 y) -> chunk_data&> create_chunk;
 };
 

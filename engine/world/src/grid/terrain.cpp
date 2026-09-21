@@ -322,14 +322,17 @@ auto perlin_terrain_generator::carve_caves_(
         return;
     }
 
+    const int32 voxels_per_cell = profile.voxels_per_cell;
+
     const int32 x0 = ctx.cx * s;
     const int32 y0 = chunk_y * s;
     const int32 z0 = ctx.cz * s;
 
-    if (y0 > profile.max_surface) {
+    if (y0 > profile.cell_of(profile.max_surface)) {
         return;
     }
-    if ((y0 + s - 1) < (params_.world_bottom_y + params_.bedrock_thickness + 4)) {
+    if ((((y0 + s - 1) * voxels_per_cell) + voxels_per_cell - 1) <
+        (params_.world_bottom_y + params_.bedrock_thickness + 4)) {
         return;
     }
 
@@ -345,20 +348,22 @@ auto perlin_terrain_generator::carve_caves_(
 
     for (int32 gy = 0; gy < points; ++gy) {
         const int32 ly = std::min(gy * stride, s - 1);
-        const int32 wy = y0 + ly;
+        const int32 wy = (y0 + ly) * voxels_per_cell;
 
         for (int32 gz = 0; gz < points; ++gz) {
             const int32 lz = std::min(gz * stride, s - 1);
+            const int32 wz = (z0 + lz) * voxels_per_cell;
 
             for (int32 gx = 0; gx < points; ++gx) {
                 const int32 lx = std::min(gx * stride, s - 1);
+                const int32 wx = (x0 + lx) * voxels_per_cell;
 
                 const int32 surface = profile.surface[(lx * s) + lz];
                 const int32 depth   = surface - wy;
 
                 const float32 leak =
                     depth < (params_.cave_surface_margin + params_.cave_surface_fade)
-                    ? cave_entrance_leak_at(x0 + lx, z0 + lz)
+                    ? cave_entrance_leak_at(wx, wz)
                     : 0.0F;
 
                 float32 shaft = 0.0F;
@@ -366,19 +371,18 @@ auto perlin_terrain_generator::carve_caves_(
                     const float32 taper = 1.0F -
                         (static_cast<float32>(depth) /
                          static_cast<float32>(std::max(1, params_.cave_entrance_depth)));
-                    shaft = cave_entrance_leak_at(x0 + lx, z0 + lz) * taper;
+                    shaft = cave_entrance_leak_at(wx, wz) * taper;
                 }
 
                 const float32 field = std::max(
-                    cave_field_at(x0 + lx, wy, z0 + lz, depth),
+                    cave_field_at(wx, wy, wz, depth),
                     std::max(leak, shaft) * params_.cave_entrance_field
                 );
                 if (field <= 0.0F) {
                     continue;
                 }
 
-                const float32 value =
-                    cave_openness_at(x0 + lx, wy, z0 + lz, field, surface, leak);
+                const float32 value = cave_openness_at(wx, wy, wz, field, surface, leak);
 
                 open[(static_cast<std::size_t>(gy) * plane) + (static_cast<std::size_t>(gz) * points) + gx] =
                     value;
@@ -423,7 +427,7 @@ auto perlin_terrain_generator::carve_caves_(
                 const int32 z_end = std::min((cz + 1) * stride, s);
 
                 for (int32 y = cy * stride; y < y_end; ++y) {
-                    if ((y0 + y) < params_.world_bottom_y) {
+                    if (((y0 + y) * voxels_per_cell) < params_.world_bottom_y) {
                         continue;
                     }
                     const float32 ty = static_cast<float32>(y - (cy * stride)) * inv;
@@ -620,12 +624,12 @@ auto perlin_terrain_generator::generate(
 ) -> void {
     constexpr int32 s = 64;
 
-    const auto profile = sample_column_(ctx.cx, ctx.cz);
+    const auto profile = sample_column_(ctx.cx, ctx.cz, std::max(ctx.voxels_per_cell, 1));
 
     auto floor_div = [](int32 a, int32 b) -> int32 { return a >= 0 ? a / b : (a - b + 1) / b; };
 
-    int32 min_cy = floor_div(params_.world_bottom_y, s);
-    int32 max_cy = floor_div(profile.max_surface, s);
+    int32 min_cy = floor_div(profile.cell_of(params_.world_bottom_y), s);
+    int32 max_cy = floor_div(profile.cell_of(profile.max_surface), s);
 
     for (int32 cy = max_cy; cy >= min_cy; --cy) {
         generate_chunk(ctx, cy, profile);
@@ -633,20 +637,22 @@ auto perlin_terrain_generator::generate(
 }
 
 auto perlin_terrain_generator::sample_column_(
-    int32 cx, int32 cz
+    int32 cx, int32 cz, int32 voxels_per_cell
 ) const -> column_profile {
     constexpr int32 s = column_profile::size;
     constexpr int32 a = column_profile::apron;
     constexpr int32 p = column_profile::page;
 
     column_profile profile{};
-    profile.min_stone   = std::numeric_limits<int32>::max();
-    profile.max_surface = std::numeric_limits<int32>::lowest();
+    profile.voxels_per_cell = voxels_per_cell;
+    profile.min_stone       = std::numeric_limits<int32>::max();
+    profile.max_surface     = std::numeric_limits<int32>::lowest();
 
     for (int32 i = 0; i < column_profile::stride; ++i) {
         for (int32 j = 0; j < column_profile::stride; ++j) {
-            profile.stone[(i * column_profile::stride) + j] =
-                stone_height_at((cx * s) + i - a, (cz * s) + j - a);
+            profile.stone[(i * column_profile::stride) + j] = stone_height_at(
+                ((cx * s) + i - a) * voxels_per_cell, ((cz * s) + j - a) * voxels_per_cell
+            );
         }
     }
 
@@ -662,10 +668,14 @@ auto perlin_terrain_generator::sample_column_(
             const auto dz = profile.stone[column_profile::stone_index(x, z + 1)] -
                 profile.stone[column_profile::stone_index(x, z - 1)];
 
-            const auto slope = 0.5F * static_cast<float32>(std::max(std::abs(dx), std::abs(dz)));
+            const auto slope = 0.5F * static_cast<float32>(std::max(std::abs(dx), std::abs(dz))) /
+                               static_cast<float32>(voxels_per_cell);
 
-            const int32 surface =
-                stone + soil_depth_at((cx * s) + x, (cz * s) + z, stone, slope);
+            const int32 surface = stone +
+                soil_depth_at(
+                    ((cx * s) + x) * voxels_per_cell, ((cz * s) + z) * voxels_per_cell, stone,
+                    slope
+                );
 
             profile.surface[(x * s) + z] = surface;
 
@@ -686,15 +696,18 @@ auto perlin_terrain_generator::generate_chunk(
 ) -> void {
     constexpr int32 s = 64;
 
+    const int32 voxels_per_cell = profile.voxels_per_cell;
+
     auto mdl = std::make_shared<vw::asset::model>(
         *identity_pool_, *page_pool_, vw::voxels::world::category, s, s, s,
-        params_.world_units_per_voxel
+        params_.world_units_per_voxel * voxels_per_cell
     );
 
     constexpr int32 p  = column_profile::page;
     constexpr int32 pn = column_profile::pages;
 
-    const int32 base_y = chunk_y * s;
+    const int32 base_y      = chunk_y * s;
+    const int32 bottom_cell = profile.cell_of(params_.world_bottom_y);
 
     vw::asset::model_writer writer{*mdl};
 
@@ -702,23 +715,26 @@ auto perlin_terrain_generator::generate_chunk(
         const int32 y0 = base_y + (py * p);
         const int32 y1 = y0 + p - 1;
 
-        if (y1 < params_.world_bottom_y) {
+        if (y1 < bottom_cell) {
             continue;
         }
 
-        const bool one_rock = y0 >= params_.world_bottom_y &&
-            rock_voxel_at(y0) == rock_voxel_at(y1);
+        const bool one_rock = y0 >= bottom_cell &&
+            rock_voxel_at(y0 * voxels_per_cell) ==
+                rock_voxel_at((y1 * voxels_per_cell) + voxels_per_cell - 1);
 
         for (int32 px = 0; px < pn; ++px) {
             for (int32 pz = 0; pz < pn; ++pz) {
                 const int32 page = (px * pn) + pz;
 
-                if (y0 > profile.page_max_surface[page]) {
+                if (y0 > profile.cell_of(profile.page_max_surface[page])) {
                     continue;
                 }
 
-                if (one_rock && y1 < (profile.page_min_stone[page] - params_.rock_skin)) {
-                    writer.fill_page(px, py, pz, rock_voxel_at(y0));
+                if (one_rock &&
+                    ((y1 * voxels_per_cell) + voxels_per_cell - 1) <
+                        (profile.page_min_stone[page] - params_.rock_skin)) {
+                    writer.fill_page(px, py, pz, rock_voxel_at(y0 * voxels_per_cell));
                     continue;
                 }
 
@@ -731,11 +747,17 @@ auto perlin_terrain_generator::generate_chunk(
                         const int32 stone   = profile.stone[column_profile::stone_index(x, z)];
                         const int32 surface = profile.surface[(x * s) + z];
 
-                        const int32 top    = std::min(surface, y1);
-                        const int32 bottom = std::max(y0, params_.world_bottom_y);
+                        const int32 surface_cell = profile.cell_of(surface);
 
-                        for (int32 wy = bottom; wy <= top; ++wy) {
-                            writer.set(x, wy - base_y, z, voxel_at(wy, stone, surface));
+                        const int32 top    = std::min(surface_cell, y1);
+                        const int32 bottom = std::max(y0, bottom_cell);
+
+                        for (int32 cell_y = bottom; cell_y <= top; ++cell_y) {
+                            const int32 wy = cell_y == surface_cell
+                                ? surface
+                                : cell_y * voxels_per_cell;
+
+                            writer.set(x, cell_y - base_y, z, voxel_at(wy, stone, surface));
                         }
                     }
                 }
