@@ -36,6 +36,23 @@ auto testbed_app::setup_world_grid() -> void {
         .get_entity();
 
     gs.modify_view(viewer_).set_view_distance(static_cast<int32>(view_distance_));
+
+    if (coarse_step_ > 1 && coarse_distance_ > 0) {
+        auto coarse_generator = std::make_unique<ecs::perlin_terrain_generator>(
+            registry.get_identity_pool(), registry.get_page_pool(), generator_params_
+        );
+        auto coarse_grid = std::make_unique<ecs::world_grid>(
+            world, generator_params_.world_units_per_voxel * coarse_step_
+        );
+        auto coarse_loader = std::make_unique<ecs::chunk_loader>(
+            std::move(coarse_generator), get_engine().get_jobs(), coarse_step_
+        );
+
+        gs.set_coarse_ring(
+            std::move(coarse_grid), std::move(coarse_loader), get_engine().get_jobs(),
+            coarse_step_, coarse_distance_
+        );
+    }
 }
 
 auto testbed_app::try_place_camera() -> void {

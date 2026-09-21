@@ -147,6 +147,8 @@ private:
     std::optional<voxel_pick> hovered_;
 
     uint32 view_distance_ = 10;
+    int32 coarse_step_ = 1;
+    int32 coarse_distance_ = 0;
 
     float32 bench_altitude_   = 0.0f;
     mutable bool bench_ready_ = false;
