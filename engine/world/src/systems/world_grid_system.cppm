@@ -113,17 +113,24 @@ private:
     auto clear_grid_transient_state_() -> void;
     auto clear_loader_transient_state_() -> void;
 
-    world* world_;
-    std::unique_ptr<world_grid> grid_;
-    std::unique_ptr<chunk_loader> loader_;
-    std::unique_ptr<light_baker> baker_;
-    std::unordered_set<vec2i> active_columns_;
-    std::unordered_set<vec2i> pending_active_columns_;
-    std::vector<vec2i> pending_requests_;
-    std::unordered_map<vec2i, std::unique_ptr<gen_column>> staged_columns_;
-    std::vector<vec2i> ready_columns_;
+    struct column_layer {
+        int32 voxels_per_cell = 1;
 
-    std::unordered_set<vec2i> light_dirty_;
+        std::unique_ptr<world_grid> grid;
+        std::unique_ptr<chunk_loader> loader;
+
+        std::unordered_set<vec2i> active_columns;
+        std::unordered_set<vec2i> pending_active_columns;
+        std::vector<vec2i> pending_requests;
+        std::unordered_map<vec2i, std::unique_ptr<gen_column>> staged_columns;
+        std::vector<vec2i> ready_columns;
+
+        std::unordered_set<vec2i> light_dirty;
+    };
+
+    world* world_;
+    column_layer near_;
+    std::unique_ptr<light_baker> baker_;
 
     vec2i camera_column_{};
     int32 draw_distance_ = 0;
