@@ -87,37 +87,12 @@ public:
 private:
     static constexpr int32 apron_columns = 1;
 
-    auto process_dirty_entity_(entity ent) -> bool;
-    auto process_dirty_entities_() -> bool;
-    auto stage_completed_columns_() -> void;
-    auto collect_lit_columns_() -> void;
-    auto relight_dirty_columns_() -> void;
-    auto apply_relit_column_(light_result& result) -> void;
-    auto integrate_completed_columns_() -> void;
-    auto dispatch_light_(vec2i coord) -> bool;
-    [[nodiscard]] auto column_stack_(vec2i coord, int32 bottom)
-        -> std::vector<std::shared_ptr<asset::model>>;
-    [[nodiscard]] auto column_bottom_(vec2i coord) -> std::optional<int32>;
-    [[nodiscard]] static auto already_lit_(gen_column& col) -> bool;
-    [[nodiscard]] auto column_available_(vec2i coord) const -> bool;
-    [[nodiscard]] auto column_ready_(vec2i coord) const -> bool;
-    [[nodiscard]] auto within_draw_(vec2i coord) const -> bool;
-    [[nodiscard]] auto model_at_(vec3i chunk_coord) const -> asset::model*;
-    auto queue_if_ready_(vec2i coord) -> void;
-    auto demote_column_(vec2i coord) -> void;
-    auto dispatch_column_requests_() -> void;
-    auto update_grid_stats_() -> void;
-    auto rebuild_active_set_() -> vec2i;
-    auto unload_inactive_columns_() -> void;
-    auto rebuild_pending_requests_(vec2i camera_column) -> void;
-    auto clear_grid_transient_state_() -> void;
-    auto clear_loader_transient_state_() -> void;
-
     struct column_layer {
         int32 voxels_per_cell = 1;
 
         std::unique_ptr<world_grid> grid;
         std::unique_ptr<chunk_loader> loader;
+        std::unique_ptr<light_baker> baker;
 
         std::unordered_set<vec2i> active_columns;
         std::unordered_set<vec2i> pending_active_columns;
@@ -128,9 +103,35 @@ private:
         std::unordered_set<vec2i> light_dirty;
     };
 
+
+    auto process_dirty_entity_(entity ent) -> bool;
+    auto process_dirty_entities_() -> bool;
+    auto stage_completed_columns_(column_layer& layer) -> void;
+    auto collect_lit_columns_(column_layer& layer) -> void;
+    auto relight_dirty_columns_(column_layer& layer) -> void;
+    auto apply_relit_column_(column_layer& layer, light_result& result) -> void;
+    auto integrate_completed_columns_(column_layer& layer) -> void;
+    auto dispatch_light_(column_layer& layer, vec2i coord) -> bool;
+    [[nodiscard]] auto column_stack_(column_layer& layer, vec2i coord, int32 bottom)
+        -> std::vector<std::shared_ptr<asset::model>>;
+    [[nodiscard]] auto column_bottom_(column_layer& layer, vec2i coord) -> std::optional<int32>;
+    [[nodiscard]] static auto already_lit_(gen_column& col) -> bool;
+    [[nodiscard]] auto column_available_(column_layer& layer, vec2i coord) const -> bool;
+    [[nodiscard]] auto column_ready_(column_layer& layer, vec2i coord) const -> bool;
+    [[nodiscard]] auto within_draw_(vec2i coord) const -> bool;
+    [[nodiscard]] auto model_at_(column_layer& layer, vec3i chunk_coord) const -> asset::model*;
+    auto queue_if_ready_(column_layer& layer, vec2i coord) -> void;
+    auto demote_column_(column_layer& layer, vec2i coord) -> void;
+    auto dispatch_column_requests_(column_layer& layer) -> void;
+    auto update_grid_stats_() -> void;
+    auto rebuild_active_set_() -> vec2i;
+    auto unload_inactive_columns_(column_layer& layer) -> void;
+    auto rebuild_pending_requests_(column_layer& layer, vec2i camera_column) -> void;
+    auto clear_grid_transient_state_(column_layer& layer) -> void;
+    auto clear_loader_transient_state_(column_layer& layer) -> void;
+
     world* world_;
     column_layer near_;
-    std::unique_ptr<light_baker> baker_;
 
     vec2i camera_column_{};
     int32 draw_distance_ = 0;
