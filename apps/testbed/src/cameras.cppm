@@ -66,6 +66,27 @@ private:
     uint64 frame_ = 0;
 };
 
+class cave_rig final : public camera_rig {
+public:
+    using camera_rig::camera_rig;
+
+    [[nodiscard]] auto name() const -> std::string_view override {
+        return "cave";
+    }
+
+    auto drive(const camera_hint& hint, float32 delta_time) -> void override;
+
+private:
+    static constexpr int32 probe_step   = 4;
+    static constexpr int32 probe_bottom = -448;
+    static constexpr int32 clearance    = 3;
+
+    [[nodiscard]] auto find_pocket_() const -> std::optional<vec3f>;
+
+    std::optional<vec3f> pocket_;
+    uint64 frame_ = 0;
+};
+
 class free_rig final : public camera_rig {
 public:
     using camera_rig::camera_rig;
