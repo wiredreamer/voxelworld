@@ -84,14 +84,24 @@ struct mesh_source {
     const vw::asset::chunk_occupancy* lod_cells    = nullptr;
     const voxel* lod_indices                 = nullptr;
 
+    const vw::asset::model_boundary* boundary_touched = nullptr;
+
     [[nodiscard]] auto has_boundary_slice(face_direction face) const -> bool {
         return boundary != nullptr && (boundary->valid & face_bit(face)) != 0;
     }
 
-    [[nodiscard]] auto is_boundary_solid(face_direction face, int32 x, int32 y, int32 z) const
+    // см. docs/lod-plan.md#тот-же-срез-отвечает-на-два-разных-вопроса
+    [[nodiscard]] auto covers_boundary_cell(face_direction face, int32 x, int32 y, int32 z) const
         -> bool {
         const vec2i on_plane = project_onto_face_plane(face, vec3i{x, y, z});
         return boundary->faces[face].test(on_plane.x, on_plane.y);
+    }
+
+    [[nodiscard]] auto touches_boundary_cell(face_direction face, int32 x, int32 y, int32 z) const
+        -> bool {
+        const vec2i on_plane = project_onto_face_plane(face, vec3i{x, y, z});
+        const auto* plane    = boundary_touched != nullptr ? boundary_touched : boundary;
+        return plane->faces[face].test(on_plane.x, on_plane.y);
     }
 
     [[nodiscard]] auto boundary_face(face_direction face) const
@@ -202,6 +212,7 @@ struct mesh_generation_storage {
     std::unique_ptr<vw::asset::chunk_occupancy> lod_cells;
     std::vector<voxel> lod_indices;
     vw::asset::model_boundary lod_boundary;
+    vw::asset::model_boundary lod_boundary_touched;
 
     vw::asset::chunk_link_scratch link_scratch;
 

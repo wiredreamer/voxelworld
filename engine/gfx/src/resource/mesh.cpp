@@ -285,22 +285,22 @@ auto is_solid_at(
     using enum face_direction;
 
     if (p.x >= src.cells_x() && src.has_boundary_slice(pos_x)) {
-        return src.is_boundary_solid(pos_x, 0, p.y, p.z);
+        return src.touches_boundary_cell(pos_x, 0, p.y, p.z);
     }
     if (p.x < 0 && src.has_boundary_slice(neg_x)) {
-        return src.is_boundary_solid(neg_x, 0, p.y, p.z);
+        return src.touches_boundary_cell(neg_x, 0, p.y, p.z);
     }
     if (p.y >= src.cells_y() && src.has_boundary_slice(pos_y)) {
-        return src.is_boundary_solid(pos_y, p.x, 0, p.z);
+        return src.touches_boundary_cell(pos_y, p.x, 0, p.z);
     }
     if (p.y < 0 && src.has_boundary_slice(neg_y)) {
-        return src.is_boundary_solid(neg_y, p.x, 0, p.z);
+        return src.touches_boundary_cell(neg_y, p.x, 0, p.z);
     }
     if (p.z >= src.cells_z() && src.has_boundary_slice(pos_z)) {
-        return src.is_boundary_solid(pos_z, p.x, p.y, 0);
+        return src.touches_boundary_cell(pos_z, p.x, p.y, 0);
     }
     if (p.z < 0 && src.has_boundary_slice(neg_z)) {
-        return src.is_boundary_solid(neg_z, p.x, p.y, 0);
+        return src.touches_boundary_cell(neg_z, p.x, p.y, 0);
     }
 
     return false;
@@ -329,21 +329,21 @@ auto is_solid_at(
     using enum face_direction;
 
     if (p.x >= src.cells_x()) {
-        return src.has_boundary_slice(pos_x) && !src.is_boundary_solid(pos_x, 0, p.y, p.z);
+        return src.has_boundary_slice(pos_x) && !src.touches_boundary_cell(pos_x, 0, p.y, p.z);
     }
     if (p.x < 0) {
-        return src.has_boundary_slice(neg_x) && !src.is_boundary_solid(neg_x, 0, p.y, p.z);
+        return src.has_boundary_slice(neg_x) && !src.touches_boundary_cell(neg_x, 0, p.y, p.z);
     }
     if (p.y >= src.cells_y()) {
-        return src.has_boundary_slice(pos_y) && !src.is_boundary_solid(pos_y, p.x, 0, p.z);
+        return src.has_boundary_slice(pos_y) && !src.touches_boundary_cell(pos_y, p.x, 0, p.z);
     }
     if (p.y < 0) {
-        return src.has_boundary_slice(neg_y) && !src.is_boundary_solid(neg_y, p.x, 0, p.z);
+        return src.has_boundary_slice(neg_y) && !src.touches_boundary_cell(neg_y, p.x, 0, p.z);
     }
     if (p.z >= src.cells_z()) {
-        return src.has_boundary_slice(pos_z) && !src.is_boundary_solid(pos_z, p.x, p.y, 0);
+        return src.has_boundary_slice(pos_z) && !src.touches_boundary_cell(pos_z, p.x, p.y, 0);
     }
-    return src.has_boundary_slice(neg_z) && !src.is_boundary_solid(neg_z, p.x, p.y, 0);
+    return src.has_boundary_slice(neg_z) && !src.touches_boundary_cell(neg_z, p.x, p.y, 0);
 }
 
 [[nodiscard]] auto corner_open_level(bool open_a, bool open_b, bool open_diagonal) -> uint8 {
@@ -573,7 +573,7 @@ auto is_face_visible(
     if (nx < 0 || nx >= src.cells_x() || ny < 0 || ny >= src.cells_y() || nz < 0 ||
         nz >= src.cells_z()) {
         if (src.has_boundary_slice(face)) {
-            return !src.is_boundary_solid(face, x, y, z);
+            return !src.covers_boundary_cell(face, x, y, z);
         }
         return true;
     }
@@ -949,15 +949,20 @@ auto build_cell_indices(
 }
 
 auto build_cell_boundary(
-    const vw::asset::model_boundary& fine, int32 step, vw::asset::model_boundary& out
+    const vw::asset::model_boundary& fine, int32 step, vw::asset::model_boundary& covered,
+    vw::asset::model_boundary& touched
 ) -> void {
     const int32 cells = vw::asset::face_occupancy::side / step;
 
-    out.valid = fine.valid;
+    covered.valid = fine.valid;
+    touched.valid = fine.valid;
 
     for (const face_direction face : all_face_directions) {
-        auto& plane = out.faces[face];
-        plane.clear();
+        auto& covered_plane = covered.faces[face];
+        auto& touched_plane = touched.faces[face];
+
+        covered_plane.clear();
+        touched_plane.clear();
 
         if ((fine.valid & face_bit(face)) == 0) {
             continue;
@@ -965,11 +970,14 @@ auto build_cell_boundary(
 
         const auto& source = fine.faces[face];
         for (int32 b = 0; b < cells; ++b) {
-            uint64 covered = ~uint64{0};
+            uint64 whole = ~uint64{0};
+            uint64 any   = 0;
             for (int32 db = 0; db < step; ++db) {
-                covered &= source.rows[(b * step) + db];
+                whole &= source.rows[(b * step) + db];
+                any |= source.rows[(b * step) + db];
             }
-            plane.rows[b] = compress_row_full(covered, step, cells);
+            covered_plane.rows[b] = compress_row_full(whole, step, cells);
+            touched_plane.rows[b] = compress_row(any, step, cells);
         }
     }
 }
@@ -1184,8 +1192,11 @@ auto greedy_mesh_generator::generate_mesh_data(
         detail::build_cell_indices(src.voxels, *storage.occupancy, step, storage.lod_indices);
 
         if (src.boundary != nullptr) {
-            detail::build_cell_boundary(*src.boundary, step, storage.lod_boundary);
-            src.boundary = &storage.lod_boundary;
+            detail::build_cell_boundary(
+                *src.boundary, step, storage.lod_boundary, storage.lod_boundary_touched
+            );
+            src.boundary         = &storage.lod_boundary;
+            src.boundary_touched = &storage.lod_boundary_touched;
         }
 
         src.lod_step    = step;

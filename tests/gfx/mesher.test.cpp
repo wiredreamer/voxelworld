@@ -1239,6 +1239,66 @@ TEST_CASE("a coarse step reads the neighbour at its own resolution", "[mesh][lod
     REQUIRE(*open_z.rbegin() == size - 1);
 }
 
+TEST_CASE("a coarse step keeps the roof flat across the chunk seam", "[mesh][lod]") {
+    asset::model_identity_pool identity_pool;
+    asset::page_pool pages;
+
+    constexpr int32 size    = 64;
+    constexpr int32 surface = 30;
+
+    const auto terrain = [&] {
+        auto built = std::make_shared<asset::model>(identity_pool, pages, size, size, size);
+        for (int32 x = 0; x < size; ++x) {
+            for (int32 z = 0; z < size; ++z) {
+                for (int32 y = 0; y <= surface; ++y) {
+                    built->set_voxel(x, y, z, voxels::gray[4]);
+                }
+            }
+        }
+        return built;
+    };
+
+    const auto middle = terrain();
+    const auto around = terrain();
+
+    asset::chunk_volume chunk{middle};
+    for (const face_direction face :
+         {face_direction::pos_x, face_direction::neg_x, face_direction::pos_z,
+          face_direction::neg_z}) {
+        chunk.set_boundary_slice(face, *around);
+    }
+
+    gfx::mesh_generation_storage storage;
+    const auto mesh = gfx::greedy_mesh_generator::generate_mesh_data(
+        storage,
+        gfx::mesh_source{
+            .voxels   = chunk.voxels(),
+            .boundary = chunk.share_boundary().get(),
+            .sky      = chunk.get_sky_light(),
+            .block    = chunk.get_block_light()
+        },
+        {.lod_step = 4}
+    );
+
+    const auto up = static_cast<uint8>(std::to_underlying(face_direction::pos_y));
+
+    static constexpr std::array<uint8, 4> flat{0, 0, 0, 0};
+
+    std::size_t roof_quads = 0;
+    for (const auto& q : mesh.quads) {
+        if (unpack_normal(q) != up) {
+            continue;
+        }
+        ++roof_quads;
+
+        const auto at = unpack_min(q);
+        INFO("roof quad at " << at.x << ", " << at.y << ", " << at.z);
+        REQUIRE(unpack_convex(q) == flat);
+    }
+
+    REQUIRE(roof_quads == 1);
+}
+
 TEST_CASE("every coarse step costs fewer quads than the one before", "[mesh][lod]") {
     model_fixture fixture{64};
 
