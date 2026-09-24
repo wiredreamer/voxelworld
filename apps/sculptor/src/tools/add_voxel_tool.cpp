@@ -130,10 +130,6 @@ auto add_voxel_tool::on_mouse_press(
         }
 
         const auto model = model_comp.get_model();
-        if (!model || model->category() != state_->tool.selected_voxel.category()) {
-            return;
-        }
-
         add_voxel_params params;
         params.name      = state_->edited_node();
         params.position  = hovered_voxel_;

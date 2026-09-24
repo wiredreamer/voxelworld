@@ -204,6 +204,9 @@ auto debug_window::render_panel_body(
         case panel::fog:
             render_fog_panel();
             break;
+        case panel::lod:
+            render_lod_panel();
+            break;
     }
 }
 

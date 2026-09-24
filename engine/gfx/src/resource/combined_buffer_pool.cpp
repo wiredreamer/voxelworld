@@ -260,8 +260,9 @@ auto combined_buffer_pool::update_meshes_(
             continue;
         }
 
-        auto model_id = model_comp.get_identity();
-        auto mesh_ptr = pool.get(model_id);
+        auto model_id    = model_comp.get_identity();
+        const int32 step = entity_lod_step(model_comp);
+        auto mesh_ptr    = pool.get(model_id, step);
         if (!mesh_ptr) {
             merge_buffer_.push_back(ent);
             continue;
@@ -295,13 +296,13 @@ auto combined_buffer_pool::update_meshes_(
 
             if (buffer_info.chunk_size == required_chunk_size) {
                 const auto& ent_alloc = buffer->get_entity_allocation(ent);
-                if (ent_alloc.model_index == model_id.index) {
+                if (ent_alloc.key == mesh_key_of(model_id, mesh_ptr->lod_step)) {
                     if (staging_.available() < mesh_staging_cost) {
                         merge_buffer_.push_back(ent);
                         continue;
                     }
                     buffer->write_mesh(model_id, *mesh_ptr);
-                    uploaded_models_.push_back(model_id);
+                    uploaded_models_.emplace_back(model_id, step);
                     touched_bounds_.push_back(buffer_info.bounds);
                     touched_bounds_.push_back(ent_bounds);
                     buffer_info.bounds = ent_bounds;
@@ -337,7 +338,7 @@ auto combined_buffer_pool::update_meshes_(
         const auto buffer_index = chunk_size_to_buffer_index_[required_chunk_size];
 
         buffer->allocate(ent, model_id, *mesh_ptr, transform_matrix, ent_bounds);
-        uploaded_models_.push_back(model_id);
+        uploaded_models_.emplace_back(model_id, step);
 
         entity_buffer_infos_.emplace(
             ent, entity_buffer_info{required_chunk_size, buffer_index, ent_bounds}
@@ -371,9 +372,9 @@ auto combined_buffer_pool::evict_uploaded_(
         }
     }
 
-    for (const auto& model_id : uploaded_models_) {
+    for (const auto& [model_id, step] : uploaded_models_) {
         if (!awaited_models_.contains(model_id)) {
-            pool.evict(model_id);
+            pool.evict(model_id, step);
         }
     }
 }

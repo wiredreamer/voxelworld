@@ -18,7 +18,7 @@ class column_fixture {
 public:
     explicit column_fixture(int32 chunks) {
         for (int32 i = 0; i < chunks; ++i) {
-            models_.push_back(std::make_unique<asset::model>(ids_, pages_, voxels::world::category, side, side, side));
+            models_.push_back(std::make_unique<asset::model>(ids_, pages_, side, side, side));
         }
     }
 
@@ -68,7 +68,7 @@ private:
 
 TEST_CASE("a lamp lights its own voxel and falls one level a step", "[block_light]") {
     column_fixture fixture{1};
-    fixture.set(32, 32, 32, voxels::world::glowstone);
+    fixture.set(32, 32, 32, voxels::lamp_amber);
 
     const ecs::light_column light = fixture.light();
 
@@ -85,7 +85,7 @@ TEST_CASE("a lamp lights its own voxel and falls one level a step", "[block_ligh
 
 TEST_CASE("lava carries one voxel further than a lamp", "[block_light]") {
     column_fixture fixture{1};
-    fixture.set(10, 32, 32, voxels::world::lava);
+    fixture.set(10, 32, 32, voxels::fire_red);
 
     const ecs::light_column light = fixture.light();
 
@@ -97,8 +97,8 @@ TEST_CASE("lava carries one voxel further than a lamp", "[block_light]") {
 
 TEST_CASE("a wall stops block light", "[block_light]") {
     column_fixture fixture{1};
-    fixture.set(32, 32, 32, voxels::world::glowstone);
-    fixture.fill(vec3i{34, 0, 0}, vec3i{34, side - 1, side - 1}, voxels::world::stone[0]);
+    fixture.set(32, 32, 32, voxels::lamp_amber);
+    fixture.fill(vec3i{34, 0, 0}, vec3i{34, side - 1, side - 1}, voxels::gray[4]);
 
     const ecs::light_column light = fixture.light();
 
@@ -109,7 +109,7 @@ TEST_CASE("a wall stops block light", "[block_light]") {
 
 TEST_CASE("a world with no emitters has no block light at all", "[block_light]") {
     column_fixture fixture{1};
-    fixture.fill(vec3i{0, 0, 0}, vec3i{side - 1, 20, side - 1}, voxels::world::stone[0]);
+    fixture.fill(vec3i{0, 0, 0}, vec3i{side - 1, 20, side - 1}, voxels::gray[4]);
 
     const ecs::light_column light = fixture.light();
 
@@ -128,7 +128,7 @@ TEST_CASE("a world with no emitters has no block light at all", "[block_light]")
 
 TEST_CASE("a solid page of lava lights all the way round itself", "[block_light]") {
     column_fixture fixture{1};
-    fixture.fill(vec3i{8, 8, 8}, vec3i{15, 15, 15}, voxels::world::lava);
+    fixture.fill(vec3i{8, 8, 8}, vec3i{15, 15, 15}, voxels::fire_red);
 
     const ecs::light_column light = fixture.light();
 
@@ -147,7 +147,7 @@ TEST_CASE("a solid page of lava lights all the way round itself", "[block_light]
 
 TEST_CASE("the two channels do not touch each other", "[block_light]") {
     column_fixture fixture{1};
-    fixture.set(32, 32, 32, voxels::world::glowstone);
+    fixture.set(32, 32, 32, voxels::lamp_amber);
 
     const ecs::light_column light = fixture.light();
 
@@ -160,8 +160,8 @@ TEST_CASE("the two channels do not touch each other", "[block_light]") {
 
 TEST_CASE("a baked block field reads back what was flooded", "[block_light]") {
     column_fixture fixture{1};
-    fixture.set(20, 30, 40, voxels::world::glowstone);
-    fixture.set(50, 10, 12, voxels::world::lava);
+    fixture.set(20, 30, 40, voxels::lamp_amber);
+    fixture.set(50, 10, 12, voxels::fire_red);
 
     const ecs::light_column light = fixture.light();
 
@@ -188,7 +188,7 @@ TEST_CASE("setting either light invalidates the mesh built from it", "[block_lig
     asset::model_identity_pool ids;
     asset::page_pool pages;
 
-    auto voxels = std::make_shared<asset::model>(ids, pages, voxels::world::category, side, side, side);
+    auto voxels = std::make_shared<asset::model>(ids, pages, side, side, side);
     asset::chunk_volume chunk{voxels};
 
     const asset::model_identity fresh = voxels->get_identity();

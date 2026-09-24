@@ -54,7 +54,7 @@ auto trimmed(
         return nullptr;
     }
 
-    auto result = registry.create_unnamed(source.category(), new_size);
+    auto result = registry.create_unnamed(new_size);
 
     {
         model_writer writer{*result};

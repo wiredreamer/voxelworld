@@ -7,44 +7,15 @@ import :color;
 
 export namespace vw {
 
-struct voxel_category {
-    uint8 value = 0;
-
-    constexpr voxel_category() = default;
-
-    constexpr explicit voxel_category(
-        uint8 value_
-    )
-        : value(value_) {}
-
-    constexpr auto operator==(const voxel_category&) const -> bool = default;
-};
-
 struct voxel {
-    uint16 value = 0;
+    uint8 value = 0;
 
     constexpr voxel() = default;
 
-    constexpr voxel(
-        voxel_category category, uint8 index
+    constexpr explicit voxel(
+        uint8 value_
     )
-        : value(static_cast<uint16>((static_cast<uint16>(category.value) << 8U) | index)) {}
-
-    [[nodiscard]] static constexpr auto from_raw(
-        uint16 raw
-    ) -> voxel {
-        voxel id;
-        id.value = raw;
-        return id;
-    }
-
-    [[nodiscard]] constexpr auto category() const -> voxel_category {
-        return voxel_category{static_cast<uint8>(value >> 8U)};
-    }
-
-    [[nodiscard]] constexpr auto index() const -> uint8 {
-        return static_cast<uint8>(value & 0xFFU);
-    }
+        : value(value_) {}
 
     [[nodiscard]] constexpr auto is_empty() const -> bool {
         return value == 0;
@@ -53,26 +24,11 @@ struct voxel {
     constexpr auto operator==(const voxel&) const -> bool = default;
 };
 
+inline constexpr uint32 voxel_type_capacity = 256;
+
 namespace voxels {
 inline constexpr auto air = voxel{};
 }  // namespace voxels
-
-struct voxel_index {
-    uint8 value = 0;
-
-    constexpr voxel_index() = default;
-
-    constexpr explicit voxel_index(
-        uint8 value_
-    )
-        : value(value_) {}
-
-    [[nodiscard]] constexpr auto is_empty() const -> bool {
-        return value == 0;
-    }
-
-    constexpr auto operator==(const voxel_index&) const -> bool = default;
-};
 
 struct voxel_span {
     voxel first;
@@ -81,14 +37,14 @@ struct voxel_span {
     constexpr voxel_span() = default;
 
     constexpr voxel_span(
-        voxel_category category, uint8 index, uint8 count_
+        uint8 first_value, uint8 count_
     )
-        : first(category, index), count(count_) {}
+        : first(first_value), count(count_) {}
 
     [[nodiscard]] constexpr auto operator[](
         uint32 variant
     ) const -> voxel {
-        return voxel{first.category(), static_cast<uint8>(first.index() + (variant % count))};
+        return voxel{static_cast<uint8>(first.value + (variant % count))};
     }
 
     [[nodiscard]] constexpr auto pick(
@@ -100,10 +56,7 @@ struct voxel_span {
     [[nodiscard]] constexpr auto contains(
         voxel id
     ) const -> bool {
-        return                                    //
-            id.category() == first.category() &&  //
-            id.index() >= first.index() &&        //
-            id.index() < first.index() + count;
+        return id.value >= first.value && id.value < first.value + count;
     }
 };
 
@@ -137,79 +90,15 @@ struct voxel_group {
     [[nodiscard]] constexpr auto at(
         uint8 offset
     ) const -> voxel {
-        return voxel{first.category(), static_cast<uint8>(first.index() + offset)};
+        return voxel{static_cast<uint8>(first.value + offset)};
     }
 };
-
-enum class voxel_set_kind : uint8 { palette, materials };
-
-struct voxel_set {
-    voxel_category category;
-    std::string_view name;
-
-    voxel_set_kind kind = voxel_set_kind::materials;
-
-    std::span<const voxel_group> groups;
-};
-
-struct voxel_slot {
-    uint16 value = 0;
-
-    constexpr auto operator==(const voxel_slot&) const -> bool = default;
-};
-
-inline constexpr uint32 voxel_slot_capacity = 1024;
-
-inline constexpr auto missing_voxel_slot = voxel_slot{0};
 
 struct voxel_type {
     voxel id;
-    voxel_slot slot;
     std::string_view name;
     voxel_material material;
     voxel_surface surface = voxel_surface::invisible;
-};
-
-template <typename T>
-class voxel_table {
-public:
-    voxel_table() = default;
-
-    explicit voxel_table(
-        T fallback
-    ) {
-        rows_[0].fill(fallback);
-    }
-
-    [[nodiscard]] auto get(
-        voxel id
-    ) const -> const T& {
-        return rows_[row_of_[id.category().value]][id.index()];
-    }
-
-    [[nodiscard]] auto row(
-        voxel_category category
-    ) const -> const std::array<T, 256>& {
-        return rows_[row_of_[category.value]];
-    }
-
-    auto set(
-        voxel id, T value
-    ) -> void {
-        uint16& row = row_of_[id.category().value];
-        if (row == 0) {
-            const row_type defaults = rows_.front();
-            row                     = static_cast<uint16>(rows_.size());
-            rows_.push_back(defaults);
-        }
-        rows_[row][id.index()] = std::move(value);
-    }
-
-private:
-    using row_type = std::array<T, 256>;
-
-    std::vector<row_type> rows_{1};
-    std::array<uint16, 256> row_of_{};
 };
 
 class voxel_registry {
@@ -221,47 +110,31 @@ public:
     [[nodiscard]] auto get(
         voxel id
     ) const -> const voxel_type& {
-        return by_slot_[slot_of(id).value];
+        return by_value_[id.value];
     }
 
-    [[nodiscard]] auto get(
-        voxel_slot slot
-    ) const -> const voxel_type& {
-        return by_slot_[slot.value];
-    }
-
-    [[nodiscard]] auto slot_of(
+    [[nodiscard]] auto known(
         voxel id
-    ) const -> voxel_slot {
-        return voxel_slot{slots_.get(id)};
-    }
-
-    [[nodiscard]] auto slot_row(
-        voxel_category category
-    ) const -> const std::array<uint16, 256>& {
-        return slots_.row(category);
+    ) const -> bool {
+        return known_[id.value];
     }
 
     [[nodiscard]] auto find(std::string_view name) const -> std::optional<voxel>;
 
-    [[nodiscard]] auto sets() const -> std::span<const voxel_set> {
-        return sets_;
+    [[nodiscard]] auto groups() const -> std::span<const voxel_group> {
+        return groups_;
     }
 
-    [[nodiscard]] auto set_of(voxel_category category) const -> const voxel_set*;
-
-    [[nodiscard]] auto first_set(voxel_set_kind kind) const -> const voxel_set*;
-
     [[nodiscard]] auto all() const -> std::span<const voxel_type> {
-        return by_slot_;
+        return by_value_;
     }
 
 private:
     auto add_(const voxel_desc& desc) -> void;
 
-    std::vector<voxel_type> by_slot_;
-    std::vector<voxel_set> sets_;
-    voxel_table<uint16> slots_;
+    std::vector<voxel_type> by_value_;
+    std::vector<voxel_group> groups_;
+    std::bitset<voxel_type_capacity> known_;
     std::unordered_map<std::string_view, voxel> by_name_;
 };
 

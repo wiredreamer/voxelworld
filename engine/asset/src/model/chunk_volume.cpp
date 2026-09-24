@@ -5,6 +5,15 @@ import vw.core;
 
 namespace vw::asset {
 
+auto chunk_volume::set_boundary_air(face_direction face) -> void {
+    if (boundary_ == nullptr) {
+        boundary_ = std::make_shared<model_boundary>();
+    }
+
+    boundary_->faces[face].clear();
+    boundary_->valid |= face_bit(face);
+}
+
 auto chunk_volume::set_boundary_slice(face_direction face, const model& neighbor) -> void {
     constexpr int32 side = face_occupancy::side;
 

@@ -64,24 +64,6 @@ auto socket_state::clear_all(
     socket_previews.clear();
 }
 
-auto tool_state::brush_for(
-    voxel_category category, const voxel_registry& registry
-) const -> voxel {
-    const voxel remembered = brush_of_set[category.value];
-
-    if (remembered != voxels::air && remembered.category() == category &&
-        registry.slot_of(remembered) != missing_voxel_slot) {
-        return remembered;
-    }
-
-    for (const voxel_type& type : registry.all()) {
-        if (type.id.category() == category && type.id != voxels::air) {
-            return type.id;
-        }
-    }
-    return voxels::air;
-}
-
 auto app_state::reset(
     world_type& world
 ) -> void {

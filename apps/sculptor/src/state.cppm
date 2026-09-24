@@ -211,12 +211,7 @@ struct volume_state {
 struct tool_state {
     tools selected_tool     = tools::add_voxel;
     gizmo_mode gizmo        = gizmo_mode::translate;
-    voxel selected_voxel = voxels::palette::gray[9];
-
-    std::array<voxel, 256> brush_of_set{};
-
-    [[nodiscard]] auto brush_for(voxel_category category, const voxel_registry& registry) const
-        -> voxel;
+    voxel selected_voxel = voxels::gray[9];
 };
 
 struct clip_settings {

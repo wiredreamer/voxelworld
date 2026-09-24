@@ -507,3 +507,131 @@ TEST_CASE("the apron is generated but not placed", "[world][grid]") {
 
     REQUIRE(apron_placed == 0);
 }
+
+TEST_CASE(
+    "a level change hands the chunk its neighbour slices back", "[world][grid][lod]"
+) {
+    job_system jobs;
+    world w;
+
+    settled_grid streamed{w, jobs};
+
+    auto& grid = *w.system<world_grid_system>().grid();
+    auto& lod  = w.system<lod_system>();
+
+    vec3i picked{};
+    entity owner;
+
+    grid.for_each_chunk([&](vec3i coord, const chunk& c) {
+        if (owner.is_valid() || !c.get_entity().is_valid()) {
+            return;
+        }
+        bool surrounded = true;
+        for (const face_direction face : all_face_directions) {
+            surrounded = surrounded && grid.has_chunk(coord + offset_of(face));
+        }
+        if (surrounded) {
+            picked = coord;
+            owner  = c.get_entity();
+        }
+    });
+
+    REQUIRE(owner.is_valid());
+
+    auto& volume = *grid.get_chunk(picked)->get_volume();
+
+    volume.release_boundary();
+    for (const face_direction face : all_face_directions) {
+        REQUIRE_FALSE(volume.has_boundary_slice(face));
+    }
+
+    lod.set_default_base_distance(1.0F);
+    w.update(0.016F);
+
+    REQUIRE(w.get<model_component>(owner).get_lod_level() > 0);
+
+    std::size_t back = 0;
+    for (const face_direction face : all_face_directions) {
+        back += volume.has_boundary_slice(face) ? 1U : 0U;
+    }
+
+    REQUIRE(back == all_face_directions.size());
+}
+
+TEST_CASE("open sky reaches the mesher as an air slice", "[world][grid]") {
+    job_system jobs;
+    world w;
+
+    settled_grid streamed{w, jobs};
+
+    auto& grid = *w.system<world_grid_system>().grid();
+
+    std::size_t tops    = 0;
+    std::size_t sky_set = 0;
+
+    grid.for_each_chunk([&](vec3i coord, const chunk& c) {
+        const auto levels = grid.column_levels(vec2i{coord.x, coord.z});
+        if (levels.empty() || coord.y != levels.back()) {
+            return;
+        }
+
+        ++tops;
+
+        const auto& vol = *c.get_volume();
+        if (vol.has_boundary_slice(face_direction::pos_y)) {
+            ++sky_set;
+            for (int32 a = 0; a < 64; ++a) {
+                REQUIRE_FALSE(vol.is_boundary_solid(face_direction::pos_y, a, 0, a));
+            }
+        }
+    });
+
+    REQUIRE(tops > 0);
+    REQUIRE(sky_set == tops);
+}
+
+TEST_CASE("a settled world leaves no sideways hole in any chunk", "[world][grid]") {
+    job_system jobs;
+    world w;
+
+    settled_grid streamed{w, jobs};
+
+    auto& grid = *w.system<world_grid_system>().grid();
+
+    std::size_t checked = 0;
+    std::size_t holes   = 0;
+    std::string detail;
+
+    grid.for_each_chunk([&](vec3i coord, const chunk& c) {
+        if (!c.is_drawn()) {
+            return;
+        }
+        for (const face_direction face : all_face_directions) {
+            if (axis_of(face) == 1) {
+                continue;
+            }
+            const auto at = coord + offset_of(face);
+            if (!grid.has_chunk(at)) {
+                continue;
+            }
+            ++checked;
+            if (!c.get_volume()->has_boundary_slice(face)) {
+                ++holes;
+                const auto self_levels = grid.column_levels(vec2i{coord.x, coord.z});
+                const auto near_levels = grid.column_levels(vec2i{at.x, at.z});
+                detail += std::format(
+                    "[{},{},{} face {} self {}..{} neighbour {}..{}] ", coord.x, coord.y,
+                    coord.z, static_cast<int32>(face),
+                    self_levels.empty() ? 0 : self_levels.front(),
+                    self_levels.empty() ? 0 : self_levels.back(),
+                    near_levels.empty() ? 0 : near_levels.front(),
+                    near_levels.empty() ? 0 : near_levels.back()
+                );
+            }
+        }
+    });
+
+    INFO(detail);
+    REQUIRE(checked > 0);
+    REQUIRE(holes == 0);
+}

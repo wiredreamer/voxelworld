@@ -29,9 +29,9 @@ auto add_model_component_operation::execute() -> void {
     world.modify(ent).with<ecs::model_component>();
 
     const voxel fill =
-        state_->tool.brush_for(params_.category, engine_->get_voxel_registry());
+        state_->tool.selected_voxel;
 
-    const auto model = model_reg.create(params_.name, params_.category, params_.size);
+    const auto model = model_reg.create(params_.name, params_.size);
     model->fill(fill);
 
     model->set_pivot(

@@ -44,6 +44,8 @@ vw_use_std_module(core_tests)
 catch_discover_tests(core_tests)
 
 add_executable(asset_tests
+    asset/page_pool.test.cpp
+    asset/page_format.test.cpp
     asset/model_fill.test.cpp
     asset/model_edit.test.cpp
     asset/model_trim.test.cpp
@@ -93,6 +95,7 @@ add_executable(world_tests
     world/column_staging.test.cpp
     world/surface.test.cpp
     world/terrain_step.test.cpp
+    world/lod_levels.test.cpp
     world/sky_light.test.cpp
     world/emission.test.cpp
     world/block_light.test.cpp
@@ -124,6 +127,7 @@ catch_discover_tests(world_tests)
 if(VW_BUILD_GFX)
     add_executable(gfx_tests
         gfx/mesher.test.cpp
+        gfx/mesh_pool.test.cpp
         gfx/camera.test.cpp
     )
 

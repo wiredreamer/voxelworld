@@ -16,8 +16,10 @@ testbed_app::testbed_app(
     : app{eng}
     , sun_in_bench_{args.flag("--sun")}
     , view_distance_{args.count("--view-distance", ecs::default_view_distance)}
-    , coarse_step_{args.integer("--coarse-step", 1)}
-    , coarse_distance_{args.integer("--coarse-distance", 0)}
+    , lod_distance_{args.real(
+          "--lod-distance", static_cast<float32>(ecs::default_lod_base_chunks)
+      )}
+    , lod_level_{args.text("--lod-level") ? args.integer("--lod-level", 0) : -1}
     , benching_{args.flag("--bench")}
     , clusters_{args.flag("--cluster-stats"), args.count("--verify-lights", 0)} {
     auto& renderer = get_engine().get_renderer();
@@ -71,10 +73,7 @@ testbed_app::testbed_app(
 
     setup_world_grid();
 
-    const auto reach_columns =
-        std::max(static_cast<int32>(view_distance_), coarse_distance_ * coarse_step_);
-
-    const float32 draw_reach = static_cast<float32>(reach_columns) *
+    const float32 draw_reach = static_cast<float32>(view_distance_) *
                                static_cast<float32>(ecs::chunk::size) *
                                static_cast<float32>(generator_params_.world_units_per_voxel);
 

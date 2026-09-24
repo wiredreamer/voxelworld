@@ -24,11 +24,11 @@ struct variant_fixture final {
     variant_fixture() {
         auto& models = w.resource<asset::model_registry>();
 
-        auto small = models.create_unnamed(voxels::palette::category, vec3i{4, 4, 4});
+        auto small = models.create_unnamed(vec3i{4, 4, 4});
         small->set_pivot(vec3f{2.0F, 2.0F, 2.0F});
         library.adopt(small_ref, small);
 
-        auto big = models.create_unnamed(voxels::palette::category, vec3i{8, 10, 8});
+        auto big = models.create_unnamed(vec3i{8, 10, 8});
         big->set_pivot(vec3f{4.0F, 5.0F, 4.0F});
         library.adopt(big_ref, big);
     }

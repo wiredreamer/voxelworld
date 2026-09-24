@@ -49,7 +49,6 @@ auto voxm_serializer::serialize(
 
     output << std::format("# Voxm File Version {}\n", voxm_file_version);
     output << std::format("encoding {}\n", detail::encoding_name(voxm_encoding::rle));
-    output << std::format("category {}\n", model_->category().value);
     output << std::format("size {} {} {}\n", size.x, size.y, size.z);
     output << std::format("pivot {} {} {}\n", pivot.x, pivot.y, pivot.z);
 
@@ -57,14 +56,14 @@ auto voxm_serializer::serialize(
         for (int32 y = 0; y < size.y; ++y) {
             int32 x = 0;
             while (x < size.x) {
-                const auto index = model_->get_index(x, y, z);
+                const auto index = model_->get_voxel(x, y, z);
                 if (index.is_empty()) {
                     ++x;
                     continue;
                 }
 
                 int32 run = 1;
-                while (x + run < size.x && model_->get_index(x + run, y, z) == index) {
+                while (x + run < size.x && model_->get_voxel(x + run, y, z) == index) {
                     ++run;
                 }
 
@@ -101,7 +100,6 @@ auto voxm_deserializer::deserialize(
 ) -> std::expected<std::shared_ptr<model>, error_type> {
     model_        = nullptr;
     error_        = std::nullopt;
-    has_category_ = false;
     has_size_     = false;
     pivot_        = vec3f{};
     unknown_voxels_.clear();
@@ -124,8 +122,6 @@ auto voxm_deserializer::deserialize(
             process_comment_(iss);
         } else if (cmd == "encoding") {
             process_encoding_(iss);
-        } else if (cmd == "category") {
-            process_category_(iss);
         } else if (cmd == "size") {
             process_size_(iss);
         } else if (cmd == "pivot") {
@@ -179,18 +175,6 @@ auto voxm_deserializer::process_encoding_(std::istringstream& iss) -> void {
     }
 }
 
-auto voxm_deserializer::process_category_(std::istringstream& iss) -> void {
-    uint32 value = 0;
-    iss >> value;
-    if (iss.fail() || value > std::numeric_limits<uint8>::max()) {
-        error_ = error_type::parse_error;
-        return;
-    }
-
-    category_     = voxel_category{static_cast<uint8>(value)};
-    has_category_ = true;
-}
-
 auto voxm_deserializer::process_size_(std::istringstream& iss) -> void {
     vec3i size;
     iss >> size.x >> size.y >> size.z;
@@ -235,13 +219,13 @@ auto voxm_deserializer::process_run_(std::istringstream& iss) -> void {
         return;
     }
 
-    const auto id = voxel{category_, static_cast<uint8>(index)};
+    const auto id = voxel{static_cast<uint8>(index)};
 
-    if (id != voxels::air && voxel_types_->slot_of(id) == missing_voxel_slot &&
+    if (id != voxels::air && !voxel_types_->known(id) &&
         unknown_voxels_.insert(id.value).second) {
         log::warn(
-            detail::voxm_lc, "voxel {}:{} is not in the catalog and will draw as the missing voxel",
-            category_.value, index
+            detail::voxm_lc, "voxel {} is not in the catalog and will draw as the missing voxel",
+            index
         );
     }
 
@@ -256,11 +240,11 @@ auto voxm_deserializer::ensure_model_() -> bool {
         return true;
     }
 
-    if (!has_category_ || !has_size_) {
+    if (!has_size_) {
         return false;
     }
 
-    model_ = registry_->create_unnamed(category_, size_);
+    model_ = registry_->create_unnamed(size_);
     return model_ != nullptr;
 }
 

@@ -262,8 +262,7 @@ auto light_column::seed_block_(
 
                                 const bool uniform = mode == page_mode::uniform;
                                 const uint8 fill =
-                                    uniform ? emission.row(mdl->category())
-                                                  [mdl->get_page_fill_index(px, py, pz).value]
+                                    uniform ? emission[mdl->get_page_fill(px, py, pz).value]
                                             : uint8{0};
 
                                 if (uniform && fill == 0) {
@@ -283,9 +282,7 @@ auto light_column::seed_block_(
 
     each_page([&](const model& mdl, int32 px, int32 py, int32 pz, int32 x0, int32 y0,
                   int32 z0, bool uniform, uint8 fill) {
-        const model::page_type* page = uniform ? nullptr : mdl.get_page(px, py, pz);
-
-        const auto& emits = emission.row(mdl.category());
+        const page_view page = uniform ? page_view{} : mdl.get_page(px, py, pz);
 
         for (int32 lz = 0; lz < ps; ++lz) {
             const int32 z = z0 + lz;
@@ -303,11 +300,7 @@ auto light_column::seed_block_(
                     }
 
                     const uint8 level =
-                        uniform ? fill
-                                : emits[(*page)[static_cast<std::size_t>(
-                                                    lx + (ly * ps) + (lz * ps * ps)
-                                                )]
-                                            .value];
+                        uniform ? fill : emission[page.voxel_at(lx, ly, lz).value];
                     if (level == 0) {
                         continue;
                     }

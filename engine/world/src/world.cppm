@@ -18,7 +18,7 @@ export namespace vw::ecs {
 
 using world_systems = std::tuple< //
     hierarchy_system, character_controller_system, animation_fsm_system,
-    physics_system, transform_system, model_system, spatial_system,
+    physics_system, transform_system, model_system, spatial_system, lod_system,
     light_system, socket_system, world_grid_system, animation_system,
     variant_system, structure_system
 >;

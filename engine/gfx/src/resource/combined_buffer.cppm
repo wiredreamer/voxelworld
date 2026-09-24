@@ -65,7 +65,7 @@ struct free_slot {
 
 struct entity_allocation {
     uint32 instance_index;
-    uint32 model_index;
+    mesh_key key;
 };
 
 struct mesh_allocation {
@@ -176,7 +176,7 @@ private:
     std::unique_ptr<device_storage_buffer> visibility_buffer_;
 
     std::unordered_map<entity, entity_allocation> entity_allocations_;
-    std::unordered_map<uint32, mesh_allocation> mesh_allocations_;
+    std::unordered_map<mesh_key, mesh_allocation> mesh_allocations_;
     std::unordered_map<uint32, entity> instance_indexes_;
     std::vector<free_slot> free_slots_;
     uint32 quad_used_{0};

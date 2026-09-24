@@ -27,6 +27,9 @@ public:
 
     auto set_boundary_slice(face_direction face, const model& neighbor) -> void;
 
+    // см. docs/rendering.md#открытое-небо-это-не-отсутствие-данных
+    auto set_boundary_air(face_direction face) -> void;
+
     [[nodiscard]] auto get_boundary_face(face_direction face) const -> const face_occupancy& {
         return boundary_->faces[face];
     }

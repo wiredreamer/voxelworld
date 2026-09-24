@@ -8,7 +8,7 @@ import :serial.version;
 
 export namespace vw::asset {
 
-inline constexpr std::string_view voxm_file_version = "2.0";
+inline constexpr std::string_view voxm_file_version = "3.0";
 
 enum class voxm_encoding : uint8 { rle };
 
@@ -39,7 +39,6 @@ public:
 private:
     auto process_comment_(std::istringstream& iss) -> void;
     auto process_encoding_(std::istringstream& iss) -> void;
-    auto process_category_(std::istringstream& iss) -> void;
     auto process_size_(std::istringstream& iss) -> void;
     auto process_pivot_(std::istringstream& iss) -> void;
     auto process_run_(std::istringstream& iss) -> void;
@@ -52,12 +51,10 @@ private:
     std::shared_ptr<model> model_;
     std::optional<error_type> error_;
 
-    std::unordered_set<uint16> unknown_voxels_;
+    std::unordered_set<uint8> unknown_voxels_;
 
-    voxel_category category_{};
     vec3i size_{};
     vec3f pivot_{};
-    bool has_category_ = false;
     bool has_size_     = false;
 };
 

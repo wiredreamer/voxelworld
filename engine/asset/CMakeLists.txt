@@ -6,6 +6,7 @@ target_sources(vw_asset
             src/asset.cppm
             src/model/model.cppm
             src/model/model_identity.cppm
+            src/model/model_lod.cppm
             src/model/model_occupancy.cppm
             src/model/model_links.cppm
             src/model/model_volume.cppm

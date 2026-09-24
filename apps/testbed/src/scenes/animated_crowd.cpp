@@ -191,7 +191,7 @@ auto animated_crowd_scene::spawn_() -> void {
         }
 
         models[part] = registry.create(
-            parts[part].model, parts[part].fill.category(), parts[part].size
+            parts[part].model, parts[part].size
         );
         models[part]->fill(parts[part].fill);
     }

@@ -35,7 +35,6 @@ private:
     bool need_open_ = false;
     std::string entity_name_;
     vec3i size_{8, 8, 8};
-    voxel_category category_;
     std::string error_;
 };
 
@@ -212,12 +211,6 @@ struct drag_edit {
 
 auto imgui_drag_vec3f(std::string_view label, vec3f& vec, float label_offset = 60.f) -> drag_edit;
 
-[[nodiscard]] auto edited_model_category(gfx::engine& eng, const app_state& state)
-    -> voxel_category;
-
-auto imgui_voxel_set_combo(std::string_view label, const voxel_registry& registry,
-                           voxel_category& category, float32 label_column = 0.f) -> void;
-
 [[nodiscard]] auto collect_asset_refs(const std::filesystem::path& dir, std::string_view extension)
     -> std::vector<asset::asset_ref>;
 
@@ -285,7 +278,6 @@ private:
     entity_role role_     = entity_role::model;
     volume_source source_ = volume_source::blank;
     vec3i size_{8, 8, 8};
-    voxel_category category_;
 
     std::vector<asset::asset_ref> model_files_;
     asset::asset_ref model_file_;

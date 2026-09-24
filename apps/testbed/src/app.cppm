@@ -29,14 +29,14 @@ struct voxel_choice {
 };
 
 constexpr std::array<voxel_choice, 8> voxel_menu{{
-    {"glowstone (emits 14)", voxels::world::glowstone},
-    {"lava (emits 15)", voxels::world::lava},
-    {"stone", voxels::world::stone[1]},
-    {"dark stone", voxels::world::stone_deep[1]},
-    {"grass", voxels::world::grass_dry[2]},
-    {"dirt", voxels::world::dirt[2]},
-    {"sand", voxels::world::sand[1]},
-    {"white", voxels::world::snow[2]},
+    {"glowstone (emits 14)", voxels::lamp_amber},
+    {"lava (emits 15)", voxels::fire_red},
+    {"stone", voxels::gray[5]},
+    {"dark stone", voxels::gray[2]},
+    {"grass", voxels::green[5]},
+    {"dirt", voxels::brown[2]},
+    {"sand", voxels::brown[4]},
+    {"white", voxels::white},
 }};
 
 struct voxel_pick {
@@ -147,8 +147,8 @@ private:
     std::optional<voxel_pick> hovered_;
 
     uint32 view_distance_ = 10;
-    int32 coarse_step_ = 1;
-    int32 coarse_distance_ = 0;
+    float32 lod_distance_ = static_cast<float32>(ecs::default_lod_base_chunks);
+    int32 lod_level_       = -1;
 
     float32 bench_altitude_   = 0.0f;
     mutable bool bench_ready_ = false;

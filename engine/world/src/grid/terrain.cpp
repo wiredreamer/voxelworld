@@ -580,29 +580,29 @@ auto perlin_terrain_generator::rock_voxel_at(
     int32 wy
 ) const -> voxel {
     if (wy < (params_.world_bottom_y + params_.bedrock_thickness)) {
-        return voxels::world::bedrock;
+        return terrain::bedrock;
     }
     if (wy < params_.rock_bottom_y) {
-        return voxels::world::stone_deep[0];
+        return terrain::stone_deep[0];
     }
     if (wy < params_.rock_deep_y) {
-        return voxels::world::stone_deep[1];
+        return terrain::stone_deep[1];
     }
-    return voxels::world::stone_deep[2];
+    return terrain::stone_deep[2];
 }
 
 auto perlin_terrain_generator::voxel_at(
     int32 wy, int32 stone_top, int32 surface_top
 ) const -> voxel {
     if (wy > stone_top) {
-        return wy == surface_top ? voxels::world::grass[0] : voxels::world::dirt[0];
+        return wy == surface_top ? terrain::grass[0] : terrain::dirt[0];
     }
 
     if (wy == stone_top && surface_top == stone_top) {
-        return wy > params_.snow_line ? voxels::world::snow[1] : voxels::world::stone[1];
+        return wy > params_.snow_line ? terrain::snow[1] : terrain::stone[1];
     }
     if ((stone_top - wy) < params_.rock_skin) {
-        return voxels::world::stone[0];
+        return terrain::stone[0];
     }
 
     return rock_voxel_at(wy);
@@ -702,7 +702,7 @@ auto perlin_terrain_generator::generate_chunk(
     const int32 voxels_per_cell = profile.voxels_per_cell;
 
     auto mdl = std::make_shared<vw::asset::model>(
-        *identity_pool_, *page_pool_, vw::voxels::world::category, s, s, s,
+        *identity_pool_, *page_pool_, s, s, s,
         params_.world_units_per_voxel * voxels_per_cell
     );
 

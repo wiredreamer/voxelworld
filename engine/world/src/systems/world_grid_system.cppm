@@ -39,6 +39,8 @@ struct world_grid_system_stats {
     uint64 relit_columns   = 0;
 
     uint64 relit_chunks = 0;
+
+    uint32 boundary_restored = 0;
 };
 
 class world_grid_system {
@@ -55,8 +57,6 @@ public:
 
     auto set_grid(std::unique_ptr<world_grid> grid) -> void;
     auto set_loader(std::unique_ptr<chunk_loader> loader, job_system& jobs) -> void;
-    auto set_coarse_ring(std::unique_ptr<world_grid> grid, std::unique_ptr<chunk_loader> loader,
-                         job_system& jobs, int32 voxels_per_cell, int32 draw_distance) -> void;
 
     [[nodiscard]] auto grid() -> world_grid*;
     [[nodiscard]] auto grid() const -> const world_grid*;
@@ -90,8 +90,6 @@ private:
     static constexpr int32 apron_columns = 1;
 
     struct column_layer {
-        int32 voxels_per_cell = 1;
-
         vec2i camera_column{};
         int32 draw_distance = 0;
 
@@ -123,23 +121,27 @@ private:
     [[nodiscard]] static auto already_lit_(gen_column& col) -> bool;
     [[nodiscard]] auto column_available_(column_layer& layer, vec2i coord) const -> bool;
     [[nodiscard]] auto column_ready_(column_layer& layer, vec2i coord) const -> bool;
-    [[nodiscard]] static auto within_draw_(const column_layer& layer, vec2i coord) -> bool;
+    [[nodiscard]] auto within_draw_(const column_layer& layer, vec2i coord) const -> bool;
+    [[nodiscard]] auto column_top_(column_layer& layer, vec2i coord) -> std::optional<int32>;
+    auto fill_face_(
+        column_layer& layer, asset::chunk_volume& vol, vec3i chunk_coord, face_direction face
+    ) -> bool;
+    auto refresh_boundary_(column_layer& layer, vec3i chunk_coord) -> bool;
+    auto restore_lod_boundaries_() -> void;
     auto run_layer_(column_layer& layer) -> void;
-    [[nodiscard]] auto covered_by_near_(vec2i coarse_coord) const -> bool;
     [[nodiscard]] auto model_at_(column_layer& layer, vec3i chunk_coord) const -> asset::model*;
     auto queue_if_ready_(column_layer& layer, vec2i coord) -> void;
     auto demote_column_(column_layer& layer, vec2i coord) -> void;
     auto dispatch_column_requests_(column_layer& layer) -> void;
     auto update_grid_stats_() -> void;
-    auto rebuild_active_set_() -> vec2i;
+    auto rebuild_active_set_() -> void;
     auto unload_inactive_columns_(column_layer& layer) -> void;
     auto rebuild_pending_requests_(column_layer& layer, vec2i camera_column) -> void;
     auto clear_grid_transient_state_(column_layer& layer) -> void;
     auto clear_loader_transient_state_(column_layer& layer) -> void;
 
     world* world_;
-    column_layer near_;
-    column_layer far_;
+    column_layer columns_;
 
     world_grid_system_stats stats_;
 };

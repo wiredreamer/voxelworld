@@ -369,12 +369,12 @@ auto write_voxm(const asset::model& model) -> std::string {
 TEST_CASE("a voxm volume survives a round trip", "[serial]") {
     asset::model_registry registry;
 
-    const auto source = registry.create_unnamed(voxels::palette::category, vec3i{6, 4, 3});
+    const auto source = registry.create_unnamed(vec3i{6, 4, 3});
     source->set_pivot(vec3f{2.5F, 1.5F, 0.5F});
-    source->set_voxel(vec3i{0, 0, 0}, voxels::palette::gray[7]);
-    source->set_voxel(vec3i{1, 0, 0}, voxels::palette::gray[7]);
-    source->set_voxel(vec3i{2, 0, 0}, voxels::palette::gray[8]);
-    source->set_voxel(vec3i{5, 3, 2}, voxels::palette::gray[9]);
+    source->set_voxel(vec3i{0, 0, 0}, voxels::gray[7]);
+    source->set_voxel(vec3i{1, 0, 0}, voxels::gray[7]);
+    source->set_voxel(vec3i{2, 0, 0}, voxels::gray[8]);
+    source->set_voxel(vec3i{5, 3, 2}, voxels::gray[9]);
 
     const auto restored = parse_voxm(registry, write_voxm(*source));
 
@@ -382,7 +382,6 @@ TEST_CASE("a voxm volume survives a round trip", "[serial]") {
 
     const auto& model = **restored;
     REQUIRE(model.size() == source->size());
-    REQUIRE(model.category() == source->category());
     REQUIRE(model.pivot() == source->pivot());
 
     for (int32 z = 0; z < model.depth(); ++z) {
@@ -397,9 +396,9 @@ TEST_CASE("a voxm volume survives a round trip", "[serial]") {
 TEST_CASE("a voxm run collapses a row of equal voxels", "[serial]") {
     asset::model_registry registry;
 
-    const auto source = registry.create_unnamed(voxels::world::category, vec3i{8, 1, 1});
+    const auto source = registry.create_unnamed(vec3i{8, 1, 1});
     for (int32 x = 0; x < 8; ++x) {
-        source->set_voxel(vec3i{x, 0, 0}, voxels::world::grass[0]);
+        source->set_voxel(vec3i{x, 0, 0}, voxels::green[2]);
     }
 
     const auto text = write_voxm(*source);
@@ -420,7 +419,7 @@ TEST_CASE("a voxm run collapses a row of equal voxels", "[serial]") {
 TEST_CASE("an empty voxm volume is a valid file", "[serial]") {
     asset::model_registry registry;
 
-    const auto source   = registry.create_unnamed(voxels::palette::category, vec3i{4, 4, 4});
+    const auto source   = registry.create_unnamed(vec3i{4, 4, 4});
     const auto restored = parse_voxm(registry, write_voxm(*source));
 
     REQUIRE(restored.has_value());
@@ -433,7 +432,6 @@ TEST_CASE("a voxm file of an unsupported major version is rejected", "[serial]")
     const auto restored = parse_voxm(
         registry,
         "# Voxm File Version 99.0\n"
-        "category 2\n"
         "size 2 2 2\n"
     );
 
@@ -446,7 +444,6 @@ TEST_CASE("a voxm run outside the volume is a parse error", "[serial]") {
 
     const auto restored = parse_voxm(
         registry,
-        "category 2\n"
         "size 2 2 2\n"
         "r 0 0 0 5 51\n"
     );
@@ -457,7 +454,7 @@ TEST_CASE("a voxm run outside the volume is a parse error", "[serial]") {
 TEST_CASE("a voxm file without a size is a parse error", "[serial]") {
     asset::model_registry registry;
 
-    const auto restored = parse_voxm(registry, "category 2\n");
+    const auto restored = parse_voxm(registry, "pivot 0 0 0\n");
 
     REQUIRE_FALSE(restored.has_value());
 }
@@ -467,11 +464,10 @@ TEST_CASE("a voxm voxel outside the catalog still parses", "[serial]") {
 
     const auto restored = parse_voxm(
         registry,
-        "category 200\n"
         "size 2 2 2\n"
         "r 0 0 0 1 7\n"
     );
 
     REQUIRE(restored.has_value());
-    REQUIRE((*restored)->get_voxel(0, 0, 0) == voxel{voxel_category{200}, 7});
+    REQUIRE((*restored)->get_voxel(0, 0, 0) == voxel{7});
 }

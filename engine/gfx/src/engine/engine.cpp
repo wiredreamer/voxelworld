@@ -194,7 +194,8 @@ auto engine::write_bench_report_() const -> void {
         std::back_inserter(report_text),
         "\nmeshing: {} chunks, {} quads, {:.1f} ms total\n"
         "  per chunk (us): mean {:.0f}  p50 {:.0f}  p99 {:.0f}  max {:.0f}\n"
-        "  queue: {} left, {} peak; held {}, {} peak\n",
+        "  queue: {} left, {} peak; held {}, {} peak\n"
+        "  neighbours: {} built blind, {} partial; missing +x {} -x {} +y {} -y {} +z {} -z {}\n",
         meshing.chunks,
         meshing.quads,
         meshing.total_ms,
@@ -205,7 +206,15 @@ auto engine::write_bench_report_() const -> void {
         meshing.queue_depth,
         meshing.queue_peak,
         meshing.held,
-        meshing.held_peak
+        meshing.held_peak,
+        meshing.blind,
+        meshing.partial,
+        meshing.missing[0],
+        meshing.missing[1],
+        meshing.missing[2],
+        meshing.missing[3],
+        meshing.missing[4],
+        meshing.missing[5]
     );
 
     const auto columns = world_->system<ecs::world_grid_system>().get_loader_stats();
@@ -264,23 +273,48 @@ auto engine::write_bench_report_() const -> void {
         grid.loaded_count - grid.drawn_count
     );
 
+    const auto lod = world_->system<ecs::lod_system>().get_stats();
+    std::format_to(
+        std::back_inserter(report_text),
+        "lod: {} entities levelled, {} at step 1, {} at 2, {} at 4, {} at 8; "
+        "{} raised and {} lowered on the last frame, pick {:.3f} ms\n",
+        lod.entities,
+        lod.at_level[0],
+        lod.at_level[1],
+        lod.at_level[2],
+        lod.at_level[3],
+        lod.raised,
+        lod.lowered,
+        static_cast<float64>(lod.pick_ms)
+    );
+
     const auto& pool  = world_->resource<asset::model_registry>().get_page_pool();
     const auto in_use = pool.allocated_count();
-    constexpr auto addressable = asset::page_pool::block_size * asset::page_pool::max_blocks;
 
     constexpr auto to_mb = 1.0F / (1024.0F * 1024.0F);
 
+    const auto fullest = [](uint32 used, uint32 capacity) -> float32 {
+        return 100.0F * static_cast<float32>(used) / static_cast<float32>(capacity);
+    };
+
     std::format_to(
         std::back_inserter(report_text),
-        "\npages: {} of {} in use ({:.1f}% of the addressable limit), {} free, {:.0f} MB\n"
+        "\npages: {} in use, {} free, {:.0f} MB\n"
+        "  binary {} of {} ({:.1f}%), palette {} of {} ({:.1f}%), dense {} of {} ({:.1f}%)\n"
         "memory: ram {:.0f} MB now, {:.0f} MB peak; commit {:.0f} MB now, {:.0f} MB peak; "
         "vram {:.0f} MB now, {:.0f} MB peak\n",
         in_use,
-        addressable,
-        100.0F * static_cast<float32>(in_use) / static_cast<float32>(addressable),
         pool.free_count(),
-        static_cast<float32>(in_use + pool.free_count()) *
-            static_cast<float32>(sizeof(asset::page_pool::page_type)) * to_mb,
+        static_cast<float32>(pool.bytes_reserved()) * to_mb,
+        pool.binary_count(),
+        asset::page_pool::binary_store::capacity,
+        fullest(pool.binary_count(), asset::page_pool::binary_store::capacity),
+        pool.palette_count(),
+        asset::page_pool::palette_store::capacity,
+        fullest(pool.palette_count(), asset::page_pool::palette_store::capacity),
+        pool.dense_count(),
+        asset::page_pool::dense_store::capacity,
+        fullest(pool.dense_count(), asset::page_pool::dense_store::capacity),
         static_cast<float32>(stats_.ram_usage_bytes) * to_mb,
         static_cast<float32>(stats_.ram_peak_bytes) * to_mb,
         static_cast<float32>(stats_.commit_bytes) * to_mb,

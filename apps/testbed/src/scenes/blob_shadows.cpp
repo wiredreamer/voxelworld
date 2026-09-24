@@ -32,8 +32,8 @@ auto blob_shadows_scene::spawn_() -> void {
     const auto count = std::max(bodies_asked_, 1);
 
     if (!seeded_) {
-        model_ = registry.create("blob_body", voxels::palette::category, 16, 40, 16);
-        model_->fill(voxels::palette::red[4]);
+        model_ = registry.create("blob_body", 16, 40, 16);
+        model_->fill(voxels::red[4]);
 
         pending_.reserve(static_cast<std::size_t>(count));
         for (int32 i = 0; i < count; ++i) {

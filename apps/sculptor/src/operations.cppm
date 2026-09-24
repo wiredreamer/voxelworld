@@ -113,7 +113,6 @@ export namespace vw::sculptor {
 struct add_model_component_params {
     std::string name;
     vec3i size{8, 8, 8};
-    voxel_category category;
 };
 
 class add_model_component_operation final : public base_operation {

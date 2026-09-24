@@ -11,28 +11,28 @@ TEST_CASE("only air is empty", "[voxels]") {
     REQUIRE(voxel{} == voxels::air);
     REQUIRE(voxels::air.value == 0);
 
-    REQUIRE_FALSE(voxels::world::grass[0].is_empty());
-    REQUIRE_FALSE(voxels::palette::amber[3].is_empty());
-    REQUIRE_FALSE(voxel::from_raw(0xFFFF).is_empty());
+    REQUIRE_FALSE(voxels::green[2].is_empty());
+    REQUIRE_FALSE(voxels::amber[3].is_empty());
+    REQUIRE_FALSE(voxel{255}.is_empty());
 }
 
 TEST_CASE("voxel equality", "[voxels]") {
-    REQUIRE(voxels::world::grass[0] == voxels::world::grass[0]);
-    REQUIRE_FALSE(voxels::world::grass[0] == voxels::world::grass[1]);
+    REQUIRE(voxels::green[2] == voxels::green[2]);
+    REQUIRE_FALSE(voxels::green[2] == voxels::green[3]);
 }
 
-TEST_CASE("a page entry is one byte, an identity two", "[voxels]") {
-    static_assert(sizeof(voxel_index) == 1);
-    static_assert(sizeof(voxel) == 2);
+TEST_CASE("a voxel is one byte", "[voxels]") {
+    static_assert(sizeof(voxel) == 1);
+    static_assert(voxel_type_capacity == 256);
 }
 
-TEST_CASE("index zero is empty in any set", "[voxels]") {
-    REQUIRE(voxel_index{}.is_empty());
-    REQUIRE(voxel_index{0}.is_empty());
-    REQUIRE_FALSE(voxel_index{1}.is_empty());
+TEST_CASE("value zero is empty and nothing else is", "[voxels]") {
+    REQUIRE(voxel{}.is_empty());
+    REQUIRE(voxel{0}.is_empty());
+    REQUIRE_FALSE(voxel{1}.is_empty());
 
-    REQUIRE(voxels::world::grass[0].index() >= 1);
-    REQUIRE(voxels::palette::blue[0].index() >= 1);
+    REQUIRE(voxels::green[2].value >= 1);
+    REQUIRE(voxels::blue[0].value >= 1);
 }
 
 TEST_CASE("air draws nothing and gives nothing", "[voxels]") {
@@ -44,25 +44,33 @@ TEST_CASE("air draws nothing and gives nothing", "[voxels]") {
     REQUIRE(air.material.glow == 0);
 }
 
-TEST_CASE("an ordinary voxel is unlit and unglowing", "[voxels]") {
+TEST_CASE("an ordinary colour is unlit and unglowing", "[voxels]") {
     const voxel_registry registry;
 
-    const voxel_type& grass = registry.get(voxels::world::grass[0]);
-    REQUIRE(grass.surface == voxel_surface::opaque);
-    REQUIRE(grass.material.emission == 0);
-    REQUIRE(grass.material.glow == 0);
+    const voxel_type& green = registry.get(voxels::green[2]);
+    REQUIRE(green.surface == voxel_surface::opaque);
+    REQUIRE(green.material.emission == 0);
+    REQUIRE(green.material.glow == 0);
 }
 
-TEST_CASE("an emitter carries a flood level and a glow apart", "[voxels]") {
+TEST_CASE("the three tiers differ only in emission and glow", "[voxels]") {
     const voxel_registry registry;
 
-    const voxel_type& lava = registry.get(voxels::world::lava);
-    REQUIRE(lava.material.emission == 15);
-    REQUIRE(lava.material.glow == 255);
+    const voxel_type& base = registry.get(voxels::red[4]);
+    const voxel_type& glow = registry.get(voxels::glow_red);
+    const voxel_type& lamp = registry.get(voxels::lamp_red);
+    const voxel_type& fire = registry.get(voxels::fire_red);
 
-    const voxel_type& crystal = registry.get(voxels::world::crystal[0]);
-    REQUIRE(crystal.material.emission == 0);
-    REQUIRE(crystal.material.glow > 0);
+    REQUIRE(base.material.clr == glow.material.clr);
+    REQUIRE(base.material.clr == lamp.material.clr);
+    REQUIRE(base.material.clr == fire.material.clr);
+
+    REQUIRE(glow.material.emission == 0);
+    REQUIRE(glow.material.glow > 0);
+
+    REQUIRE(lamp.material.emission == 14);
+    REQUIRE(fire.material.emission == 15);
+    REQUIRE(fire.material.glow > lamp.material.glow);
 }
 
 TEST_CASE("no voxel emits past the nibble", "[voxels]") {
@@ -76,13 +84,12 @@ TEST_CASE("no voxel emits past the nibble", "[voxels]") {
 TEST_CASE("two voxels may wear one colour", "[voxels]") {
     const voxel_registry registry;
 
-    const voxel_type& ice     = registry.get(voxels::world::ice[0]);
-    const voxel_type& crystal = registry.get(voxels::world::crystal[0]);
+    const voxel_type& base = registry.get(voxels::blue[4]);
+    const voxel_type& glow = registry.get(voxels::glow_blue);
 
-    REQUIRE(ice.material.clr == crystal.material.clr);
-    REQUIRE(ice.id != crystal.id);
-    REQUIRE(ice.slot != crystal.slot);
-    REQUIRE(ice.material.glow != crystal.material.glow);
+    REQUIRE(base.material.clr == glow.material.clr);
+    REQUIRE(base.id != glow.id);
+    REQUIRE(base.material.glow != glow.material.glow);
 }
 
 TEST_CASE("names are unique and resolve back to their voxel", "[voxels]") {
@@ -90,7 +97,7 @@ TEST_CASE("names are unique and resolve back to their voxel", "[voxels]") {
 
     std::vector<std::string_view> seen;
     for (const voxel_type& type : registry.all()) {
-        if (type.id == voxels::air) {
+        if (type.id == voxels::air || !registry.known(type.id)) {
             continue;
         }
 
@@ -103,174 +110,117 @@ TEST_CASE("names are unique and resolve back to their voxel", "[voxels]") {
 TEST_CASE("find returns nothing for a name outside the catalog", "[voxels]") {
     const voxel_registry registry;
 
-    REQUIRE_FALSE(registry.find("world.unobtainium").has_value());
+    REQUIRE_FALSE(registry.find("unobtainium").has_value());
 }
 
-TEST_CASE("slots are dense and within the quad's ten bits", "[voxels]") {
+TEST_CASE("the registry addresses every byte", "[voxels]") {
     const voxel_registry registry;
 
-    REQUIRE(registry.all().size() <= voxel_slot_capacity);
+    REQUIRE(registry.all().size() == voxel_type_capacity);
 
-    uint16 expected = 0;
+    uint32 expected = 0;
     for (const voxel_type& type : registry.all()) {
-        REQUIRE(type.slot.value == expected);
+        REQUIRE(type.id.value == expected);
         ++expected;
     }
 }
 
-TEST_CASE("a voxel outside the catalog reads as the missing slot", "[voxels]") {
+TEST_CASE("a voxel outside the catalog reads as missing", "[voxels]") {
     const voxel_registry registry;
 
-    REQUIRE(registry.slot_of(voxel{voxel_category{200}, 7}) == missing_voxel_slot);
-    REQUIRE(registry.get(voxel{voxel_category{200}, 7}).name == "missing");
-    REQUIRE(registry.slot_of(voxels::world::grass[0]) != missing_voxel_slot);
+    REQUIRE_FALSE(registry.known(voxel{200}));
+    REQUIRE(registry.get(voxel{200}).name == "missing");
+    REQUIRE(registry.known(voxels::green[2]));
 }
 
-TEST_CASE("a category is independent of every other", "[voxels]") {
-    REQUIRE(voxels::world::grass[0].category() == voxels::world::category);
-    REQUIRE(voxels::palette::blue[0].category() == voxels::palette::category);
-    REQUIRE(voxels::world::category != voxels::palette::category);
-
-    REQUIRE(voxels::world::grass[0].index() == voxels::palette::blue[0].index());
-    REQUIRE(voxels::world::grass[0] != voxels::palette::blue[0]);
+TEST_CASE("colours and tiers share one index space", "[voxels]") {
+    REQUIRE(voxels::green[2] != voxels::blue[0]);
+    REQUIRE(voxels::glow_red != voxels::red[4]);
+    REQUIRE(voxels::lamp_red != voxels::glow_red);
 }
 
-TEST_CASE("a material's variants sit next to each other", "[voxels]") {
-    constexpr voxel_span grass = voxels::world::grass;
+TEST_CASE("a colour's shades sit next to each other", "[voxels]") {
+    constexpr voxel_span green = voxels::green;
 
-    REQUIRE(grass.count == 3);
-    REQUIRE(grass[0].index() + 1 == grass[1].index());
-    REQUIRE(grass[1].index() + 1 == grass[2].index());
+    REQUIRE(green.count == 6);
+    REQUIRE(green[0].value + 1 == green[1].value);
+    REQUIRE(green[1].value + 1 == green[2].value);
 
-    REQUIRE(grass.contains(grass[0]));
-    REQUIRE(grass.contains(grass[2]));
-    REQUIRE_FALSE(grass.contains(voxels::world::dirt[0]));
-    REQUIRE_FALSE(grass.contains(voxels::palette::blue[0]));
+    REQUIRE(green.contains(green[0]));
+    REQUIRE(green.contains(green[5]));
+    REQUIRE_FALSE(green.contains(voxels::brown[0]));
+    REQUIRE_FALSE(green.contains(voxels::blue[0]));
 }
 
-TEST_CASE("picking a variant wraps on the count", "[voxels]") {
-    constexpr voxel_span grass = voxels::world::grass;
+TEST_CASE("picking a shade wraps on the count", "[voxels]") {
+    constexpr voxel_span blue = voxels::blue;
 
-    REQUIRE(grass.pick(0) == grass[0]);
-    REQUIRE(grass.pick(3) == grass[0]);
-    REQUIRE(grass.pick(4) == grass[1]);
-    REQUIRE(grass.pick(1'000'001) == grass[2]);
-}
-
-TEST_CASE("a voxel table answers with its default outside a live category", "[voxels]") {
-    voxel_table<uint8> table{7};
-
-    REQUIRE(table.get(voxel{voxel_category{9}, 4}) == 7);
-
-    table.set(voxel{voxel_category{9}, 4}, 12);
-    REQUIRE(table.get(voxel{voxel_category{9}, 4}) == 12);
-
-    REQUIRE(table.get(voxel{voxel_category{9}, 5}) == 7);
-    REQUIRE(table.get(voxel{voxel_category{10}, 4}) == 7);
+    REQUIRE(blue.pick(0) == blue[0]);
+    REQUIRE(blue.pick(6) == blue[0]);
+    REQUIRE(blue.pick(7) == blue[1]);
+    REQUIRE(blue.pick(1'000'001) == blue[5]);
 }
 
 TEST_CASE("an extension recolours a catalog voxel in place", "[voxels]") {
     const voxel_registry base;
 
-    const auto recoloured = std::array{
-        voxel_desc{voxels::world::grass[0], "world.grass_0", voxel_material{colors::red_3}}
-    };
+    const auto recoloured =
+        std::array{voxel_desc{voxels::green[2], "green_2", voxel_material{colors::red_3}}};
     const voxel_registry extended{recoloured};
 
     REQUIRE(extended.all().size() == base.all().size());
-    REQUIRE(extended.slot_of(voxels::world::grass[0]) ==
-            base.slot_of(voxels::world::grass[0]));
-    REQUIRE(extended.get(voxels::world::grass[0]).material.clr == colors::red_3);
+    REQUIRE(extended.get(voxels::green[2]).material.clr == colors::red_3);
 }
 
-TEST_CASE("an extension adds a voxel in a category of its own", "[voxels]") {
-    constexpr auto modded = voxel_category{7};
-    const auto extra      = std::array{
-        voxel_desc{voxel{modded, 3}, "mod.thing", voxel_material{colors::blue_5}}
-    };
+TEST_CASE("an extension claims a value the catalog left free", "[voxels]") {
+    constexpr auto modded = voxel{200};
+    const auto extra =
+        std::array{voxel_desc{modded, "mod.thing", voxel_material{colors::blue_5}}};
 
     const voxel_registry registry{extra};
 
-    REQUIRE(registry.all().size() == voxel_registry{}.all().size() + 1);
-    REQUIRE(registry.get(voxel{modded, 3}).name == "mod.thing");
-    REQUIRE(registry.slot_of(voxel{modded, 3}) != missing_voxel_slot);
+    REQUIRE_FALSE(voxel_registry{}.known(modded));
+    REQUIRE(registry.known(modded));
+    REQUIRE(registry.get(modded).name == "mod.thing");
 }
 
-TEST_CASE("the registry names the sets it knows", "[voxels]") {
+TEST_CASE("the groups cover the catalog once each", "[voxels]") {
     const voxel_registry registry;
 
-    REQUIRE(registry.sets().size() >= 2);
+    std::array<int32, voxel_type_capacity> seen{};
 
-    const voxel_set* world = registry.set_of(voxels::world::category);
-    REQUIRE(world != nullptr);
-    REQUIRE(world->name == "world");
-    REQUIRE_FALSE(world->groups.empty());
+    for (const voxel_group& group : registry.groups()) {
+        for (uint8 offset = 0; offset < group.count; ++offset) {
+            ++seen[group.at(offset).value];
+        }
+    }
 
-    REQUIRE(world->kind == voxel_set_kind::materials);
+    REQUIRE(seen[0] == 0);
 
-    const voxel_set* palette = registry.set_of(voxels::palette::category);
-    REQUIRE(palette != nullptr);
-    REQUIRE(palette->name == "palette");
-    REQUIRE(palette->kind == voxel_set_kind::palette);
+    for (const voxel_type& type : registry.all()) {
+        if (type.id == voxels::air || !registry.known(type.id)) {
+            continue;
+        }
+        REQUIRE(seen[type.id.value] == 1);
+    }
 }
 
-TEST_CASE("the registry finds a set by its kind", "[voxels]") {
+TEST_CASE("the catalog holds every colour exactly once as a matte voxel", "[voxels]") {
     const voxel_registry registry;
-
-    REQUIRE(registry.first_set(voxel_set_kind::palette)->category == voxels::palette::category);
-    REQUIRE(registry.first_set(voxel_set_kind::materials)->category == voxels::world::category);
-}
-
-TEST_CASE("the palette holds every colour exactly once", "[voxels]") {
-    const voxel_registry registry;
-
-    const voxel_set* palette = registry.first_set(voxel_set_kind::palette);
-    REQUIRE(palette != nullptr);
 
     for (const color& clr : colors::all) {
         const auto matte = std::ranges::count_if(registry.all(), [&](const voxel_type& type) {
-            return type.id.category() == palette->category && type.material.clr == clr &&
-                   type.material.glow == 0;
+            return registry.known(type.id) && type.material.clr == clr &&
+                   type.material.glow == 0 && type.material.emission == 0;
         });
         REQUIRE(matte == 1);
     }
 }
 
-TEST_CASE("a category outside the catalog has no set", "[voxels]") {
-    const voxel_registry registry;
-
-    REQUIRE(registry.set_of(voxel_category{200}) == nullptr);
-}
-
-TEST_CASE("the groups of a set cover it once each", "[voxels]") {
-    const voxel_registry registry;
-
-    for (const voxel_set& set : registry.sets()) {
-        std::array<int32, 256> seen{};
-
-        for (const voxel_group& group : set.groups) {
-            for (uint8 offset = 0; offset < group.count; ++offset) {
-                const voxel id = group.at(offset);
-                REQUIRE(id.category() == set.category);
-                ++seen[id.index()];
-            }
-        }
-
-        REQUIRE(seen[0] == 0);
-
-        for (const voxel_type& type : registry.all()) {
-            if (type.id.category() != set.category || type.id == voxels::air) {
-                continue;
-            }
-            REQUIRE(seen[type.id.index()] == 1);
-        }
-    }
-}
-
 TEST_CASE("a group hands out the voxels it spans", "[voxels]") {
-    constexpr auto group = voxel_group{"cool", voxels::palette::blue[0], 12};
+    constexpr auto group = voxel_group{"cool", voxels::blue[0], 12};
 
-    REQUIRE(group.at(0) == voxels::palette::blue[0]);
-    REQUIRE(group.at(5) == voxels::palette::blue[5]);
-    REQUIRE(group.at(6) == voxels::palette::green[0]);
+    REQUIRE(group.at(0) == voxels::blue[0]);
+    REQUIRE(group.at(5) == voxels::blue[5]);
+    REQUIRE(group.at(6) == voxels::green[0]);
 }

@@ -11,14 +11,13 @@ export namespace vw::asset {
 
 class model {
 public:
-    static constexpr int32 page_size   = 8;
-    static constexpr int32 page_volume = page_size * page_size * page_size;
-    using page_type                    = std::array<voxel_index, page_volume>;
+    static constexpr int32 page_size   = voxel_page_size;
+    static constexpr int32 page_volume = voxel_page_volume;
+    using page_type                    = page_pool::page_type;
 
     model(
         model_identity_pool& identity_pool,
         page_pool& pool,
-        voxel_category category,
         int32 width,
         int32 height,
         int32 depth,
@@ -43,47 +42,24 @@ public:
     [[nodiscard]] auto get_voxel(
         int32 x, int32 y, int32 z
     ) const -> voxel {
-        return to_id(get_index(x, y, z));
-    }
-
-    [[nodiscard]] auto get_index(
-        int32 x, int32 y, int32 z
-    ) const -> voxel_index {
         const auto& entry = pages_[page_index(x / page_size, y / page_size, z / page_size)];
 
         switch (entry.mode()) {
             case page_mode::empty:
-                return voxel_index{};
+                return voxel{};
             case page_mode::uniform:
-                return entry.fill_index();
-            case page_mode::sparse:
-                return pool_ptr_->get(
-                    entry.pool_index()
-                )[local_index(x % page_size, y % page_size, z % page_size)];
+                return entry.fill_voxel();
+            default:
+                return view_of(entry).voxel_at(
+                    x % page_size, y % page_size, z % page_size
+                );
         }
-        return voxel_index{};
-    }
-
-    [[nodiscard]] auto to_id(
-        voxel_index index
-    ) const -> voxel {
-        return index.is_empty() ? voxels::air : voxel{category_, index.value};
     }
 
     [[nodiscard]] auto get_voxel(
         vec3i pos
     ) const -> voxel {
         return get_voxel(pos.x, pos.y, pos.z);
-    }
-
-    [[nodiscard]] auto get_index(
-        vec3i pos
-    ) const -> voxel_index {
-        return get_index(pos.x, pos.y, pos.z);
-    }
-
-    [[nodiscard]] auto category() const -> voxel_category {
-        return category_;
     }
 
     [[nodiscard]] auto is_empty(
@@ -96,14 +72,11 @@ public:
                 return true;
             case page_mode::uniform:
                 return false;
-            case page_mode::sparse:
-                return pool_ptr_
-                    ->get(
-                        entry.pool_index()
-                    )[local_index(x % page_size, y % page_size, z % page_size)]
+            default:
+                return view_of(entry)
+                    .voxel_at(x % page_size, y % page_size, z % page_size)
                     .is_empty();
         }
-        return true;
     }
 
     [[nodiscard]] auto is_empty(
@@ -174,17 +147,16 @@ public:
         return pages_[page_index(px, py, pz)].mode();
     }
 
-    [[nodiscard]] auto get_page_fill_index(
+    [[nodiscard]] auto get_page_fill(
         int32 px, int32 py, int32 pz
-    ) const -> voxel_index {
-        return pages_[page_index(px, py, pz)].fill_index();
+    ) const -> voxel {
+        return pages_[page_index(px, py, pz)].fill_voxel();
     }
 
     [[nodiscard]] auto get_page(
         int32 px, int32 py, int32 pz
-    ) const -> const page_type* {
-        const auto& entry = pages_[page_index(px, py, pz)];
-        return entry.mode() == page_mode::sparse ? &pool_ptr_->get(entry.pool_index()) : nullptr;
+    ) const -> page_view {
+        return view_of(pages_[page_index(px, py, pz)]);
     }
 
     [[nodiscard]] auto pages_x() const -> int32 {
@@ -202,8 +174,6 @@ public:
 private:
     friend class model_writer;
 
-    [[nodiscard]] auto to_index_(voxel v) const -> voxel_index;
-
     auto set_voxel_raw_(int32 x, int32 y, int32 z, voxel v) -> void;
     auto fill_page_raw_(int32 px, int32 py, int32 pz, voxel v) -> void;
 
@@ -213,27 +183,40 @@ private:
         return px + (py * pages_x_) + (pz * pages_x_ * pages_y_);
     }
 
-    [[nodiscard]] static auto local_index(
-        int32 lx, int32 ly, int32 lz
-    ) -> int32 {
-        return lx + (ly * page_size) + (lz * page_size * page_size);
+    [[nodiscard]] auto view_of(
+        const page_entry& entry
+    ) const -> page_view {
+        switch (entry.mode()) {
+            case page_mode::dense:
+                return page_view{pool_ptr_->get_dense(entry.dense_slot())};
+            case page_mode::binary:
+                return page_view{
+                    pool_ptr_->get_binary(entry.binary_slot()), entry.fill_voxel()
+                };
+            case page_mode::palette:
+                return page_view{pool_ptr_->get_palette(entry.palette_slot())};
+            default:
+                return page_view{};
+        }
     }
 
-    auto alloc_sparse_page() -> uint32;
-    auto free_sparse_page(uint32 index) -> void;
-    auto promote_to_sparse(int32 px, int32 py, int32 pz) -> page_type&;
+    auto release_page_(page_entry entry) -> void;
+    auto release_all_pages_() -> void;
+    auto make_binary_(page_entry& entry, voxel fill, bool solid) -> binary_page&;
+    auto promote_to_dense(int32 px, int32 py, int32 pz) -> page_type&;
 
     auto increment_generation_() -> void;
 
     model_identity_pool* identity_pool_;
     page_pool* pool_ptr_;
-    voxel_category category_;
     int32 width_{0}, height_{0}, depth_{0};
     int32 world_units_per_voxel_{1};
     vec3f pivot_{0.0F, 0.0F, 0.0F};
     int32 pages_x_{0}, pages_y_{0}, pages_z_{0};
     std::vector<page_entry> pages_;
-    std::vector<uint32> owned_pages_;
+    std::vector<uint32> owned_dense_;
+    std::vector<uint32> owned_binary_;
+    std::vector<uint32> owned_palette_;
     model_identity identity_;
     mutable model_fill fill_ = model_fill::mixed;
     mutable bool fill_known_ = false;
@@ -245,14 +228,14 @@ public:
     [[nodiscard]] auto get(std::string_view name) const -> std::shared_ptr<model>;
 
     [[nodiscard]] auto create(
-        std::string_view name, voxel_category category, int32 width, int32 height, int32 depth
+        std::string_view name, int32 width, int32 height, int32 depth
     ) -> std::shared_ptr<model>;
-    [[nodiscard]] auto create(std::string_view name, voxel_category category, vec3i size)
+    [[nodiscard]] auto create(std::string_view name, vec3i size)
         -> std::shared_ptr<model>;
     [[nodiscard]] auto create_unnamed(
-        voxel_category category, int32 width, int32 height, int32 depth
+        int32 width, int32 height, int32 depth
     ) -> std::shared_ptr<model>;
-    [[nodiscard]] auto create_unnamed(voxel_category category, vec3i size)
+    [[nodiscard]] auto create_unnamed(vec3i size)
         -> std::shared_ptr<model>;
     [[nodiscard]] auto create_clone(std::string_view name) -> std::shared_ptr<model>;
 

@@ -90,10 +90,6 @@ auto paint_tool::on_mouse_press(
 
         const auto& model_comp = world.get<ecs::model_component>(ent);
         const auto model       = model_comp.get_model();
-        if (!model || model->category() != state_->tool.selected_voxel.category()) {
-            return;
-        }
-
         if (model_comp.get_voxel(hovered_voxel_) == state_->tool.selected_voxel) {
             return;
         }

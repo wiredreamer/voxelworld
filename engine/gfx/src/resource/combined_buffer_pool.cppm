@@ -147,7 +147,7 @@ private:
     std::vector<vw::spatial::aabb> touched_bounds_;
     std::vector<std::pair<float32, entity>> sort_keys_;
 
-    std::vector<vw::asset::model_identity> uploaded_models_;
+    std::vector<std::pair<vw::asset::model_identity, int32>> uploaded_models_;
     std::unordered_set<vw::asset::model_identity> awaited_models_;
 
     bool chunk_cull_enabled_ = false;

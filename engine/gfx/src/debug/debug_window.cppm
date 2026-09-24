@@ -41,15 +41,17 @@ private:
         shadows,
         lights,
         fog,
+        lod,
     };
 
-    static constexpr std::size_t panel_count = static_cast<std::size_t>(panel::fog) + 1;
+    static constexpr std::size_t panel_count = static_cast<std::size_t>(panel::lod) + 1;
     static constexpr std::size_t first_settings_panel =
         static_cast<std::size_t>(panel::view);
 
     static constexpr std::array<const char*, panel_count> panel_names{
-        "Systems", "Render",  "Buffers", "World", "Animation",
+        "Systems", "Render",   "Buffers", "World",  "Animation",
         "View",    "Lighting", "Shadows", "Lights", "Fog",
+        "LOD",
     };
 
     static constexpr std::array<const char*, panel_count> panel_titles{
@@ -58,6 +60,7 @@ private:
         "Debug Tool - Animation", "Debug Tool - View",
         "Debug Tool - Lighting",  "Debug Tool - Shadows",
         "Debug Tool - Lights",    "Debug Tool - Fog",
+        "Debug Tool - LOD",
     };
 
     auto render_main_window() -> void;
@@ -82,6 +85,7 @@ private:
     auto render_shadows_panel() -> void;
     auto render_lights_panel() -> void;
     auto render_fog_panel() -> void;
+    auto render_lod_panel() -> void;
 
     engine_type* engine_;
 

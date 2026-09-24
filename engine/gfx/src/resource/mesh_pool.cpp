@@ -11,9 +11,9 @@ namespace vw::gfx {
 
 
 mesh_pool::mesh_pool(
-    vulkan_context& context, const voxel_registry& registry, vw::job_system& jobs
+    const voxel_registry& registry, vw::job_system& jobs
 )
-    : context_{&context}, registry_{&registry}, jobs_{&jobs}, storage_(jobs.worker_count()) {}
+    : registry_{&registry}, jobs_{&jobs}, storage_(jobs.worker_count()) {}
 
 mesh_pool::~mesh_pool() {
     stop_gen_threads();
@@ -24,25 +24,27 @@ auto mesh_pool::stop_gen_threads() -> void {
 }
 
 auto mesh_pool::live_slot_(
-    const vw::asset::model_identity& identity
+    mesh_key key, uint32 generation
 ) -> mesh_slot* {
-    if (identity.index >= slots_.size()) {
+    const auto it = slot_of_.find(key);
+    if (it == slot_of_.end()) {
         return nullptr;
     }
 
-    auto& slot = slots_[identity.index];
-    return slot.generation == identity.generation ? &slot : nullptr;
+    auto& slot = slots_[it->second];
+    return slot.generation == generation ? &slot : nullptr;
 }
 
 auto mesh_pool::live_slot_(
-    const vw::asset::model_identity& identity
+    mesh_key key, uint32 generation
 ) const -> const mesh_slot* {
-    if (identity.index >= slots_.size()) {
+    const auto it = slot_of_.find(key);
+    if (it == slot_of_.end()) {
         return nullptr;
     }
 
-    const auto& slot = slots_[identity.index];
-    return slot.generation == identity.generation ? &slot : nullptr;
+    const auto& slot = slots_[it->second];
+    return slot.generation == generation ? &slot : nullptr;
 }
 
 auto mesh_pool::drop_mesh_(
@@ -58,46 +60,87 @@ auto mesh_pool::drop_mesh_(
 }
 
 auto mesh_pool::drop_pending_(
-    uint32 index
+    uint32 slot_index
 ) -> void {
-    if (index >= slots_.size() || !slots_[index].pending.valid()) {
+    if (slot_index >= slots_.size() || !slots_[slot_index].pending.valid()) {
         return;
     }
 
-    slots_[index].pending = {};
-    std::erase(pending_slots_, index);
+    slots_[slot_index].pending = {};
+    std::erase(pending_slots_, slot_index);
 }
 
-auto mesh_pool::open_slot_(
-    const vw::asset::model_identity& identity
-) -> mesh_slot& {
-    if (identity.index >= slots_.size()) {
-        slots_.resize(static_cast<std::size_t>(identity.index) + 1);
+auto mesh_pool::release_slot_(
+    uint32 slot_index
+) -> void {
+    auto& slot = slots_[slot_index];
+    if (!slot.live) {
+        return;
     }
 
-    auto& slot = slots_[identity.index];
-    if (slot.generation != identity.generation) {
-        drop_mesh_(slot);
-        drop_pending_(identity.index);
-        slot.model_ref.reset();
-        slot.chunk_ref.reset();
-        slot.generation = identity.generation;
+    drop_mesh_(slot);
+    drop_pending_(slot_index);
+
+    slot_of_.erase(slot.key);
+    slot.live = false;
+    slot.key  = {};
+    slot.model_ref.reset();
+    slot.chunk_ref.reset();
+
+    free_slots_.push_back(slot_index);
+}
+
+auto mesh_pool::retire_stale_(
+    uint32 model_index, uint32 generation
+) -> void {
+    for (int32 level = 0; level < lod_level_count; ++level) {
+        const auto it = slot_of_.find(mesh_key{model_index, static_cast<uint32>(level)});
+        if (it == slot_of_.end() || slots_[it->second].generation == generation) {
+            continue;
+        }
+        release_slot_(it->second);
+    }
+}
+
+auto mesh_pool::acquire_slot_(
+    mesh_key key, uint32 generation
+) -> uint32 {
+    retire_stale_(key.model_index, generation);
+
+    if (const auto it = slot_of_.find(key); it != slot_of_.end()) {
+        return it->second;
     }
 
-    return slot;
+    uint32 slot_index = 0;
+    if (!free_slots_.empty()) {
+        slot_index = free_slots_.back();
+        free_slots_.pop_back();
+        slots_[slot_index] = mesh_slot{};
+    } else {
+        slot_index = static_cast<uint32>(slots_.size());
+        slots_.emplace_back();
+    }
+
+    auto& slot      = slots_[slot_index];
+    slot.key        = key;
+    slot.live       = true;
+    slot.generation = generation;
+
+    slot_of_[key] = slot_index;
+    return slot_index;
 }
 
 [[nodiscard]] auto mesh_pool::has(
-    const vw::asset::model_identity& identity
+    const vw::asset::model_identity& identity, int32 lod_step
 ) const -> bool {
-    const auto* slot = live_slot_(identity);
+    const auto* slot = live_slot_(mesh_key_of(identity, lod_step), identity.generation);
     return slot != nullptr && slot->has_mesh;
 }
 
 [[nodiscard]] auto mesh_pool::is_pending(
-    const vw::asset::model_identity& identity
+    const vw::asset::model_identity& identity, int32 lod_step
 ) const -> bool {
-    const auto* slot = live_slot_(identity);
+    const auto* slot = live_slot_(mesh_key_of(identity, lod_step), identity.generation);
     return slot != nullptr && slot->pending.valid();
 }
 
@@ -108,13 +151,31 @@ auto mesh_pool::request_mesh(
 ) -> void {
     const vw::asset::model_identity identity = model_ptr->get_identity();
 
-    if (has(identity) || is_pending(identity)) {
+    if (has(identity, opts.lod_step) || is_pending(identity, opts.lod_step)) {
         return;
     }
 
-    auto& slot     = open_slot_(identity);
+    const auto slot_index = acquire_slot_(mesh_key_of(identity, opts.lod_step), identity.generation);
+
+    auto& slot     = slots_[slot_index];
     slot.model_ref = model_ptr;
     slot.chunk_ref = chunk_ptr;
+
+    if (chunk_ptr != nullptr) {
+        std::scoped_lock lock(stats_mutex_);
+        bool whole = true;
+        for (const face_direction face : all_face_directions) {
+            if (!chunk_ptr->has_boundary_slice(face)) {
+                ++missing_faces_[static_cast<std::size_t>(face)];
+                whole = false;
+            }
+        }
+        if (chunk_ptr->share_boundary() == nullptr) {
+            ++blind_requests_;
+        } else if (!whole) {
+            ++partial_requests_;
+        }
+    }
 
     auto task = std::make_unique<mesh_generation_task>(
         identity, model_ptr, chunk_ptr,
@@ -124,7 +185,7 @@ auto mesh_pool::request_mesh(
     );
 
     slot.pending = task->promise.get_future();
-    pending_slots_.push_back(identity.index);
+    pending_slots_.push_back(slot_index);
 
     jobs_->submit(
         vw::job_lane::mesh,
@@ -133,30 +194,28 @@ auto mesh_pool::request_mesh(
 }
 
 [[nodiscard]] auto mesh_pool::get(
-    const vw::asset::model_identity& identity
+    const vw::asset::model_identity& identity, int32 lod_step
 ) const -> const mesh* {
-    const auto* slot = live_slot_(identity);
+    const auto* slot = live_slot_(mesh_key_of(identity, lod_step), identity.generation);
     return slot != nullptr && slot->has_mesh ? &slot->data : nullptr;
 }
 
 auto mesh_pool::remove(
     const vw::asset::model_identity& identity
 ) -> void {
-    auto* slot = live_slot_(identity);
-    if (slot == nullptr) {
-        return;
+    for (int32 level = 0; level < lod_level_count; ++level) {
+        const auto it = slot_of_.find(mesh_key{identity.index, static_cast<uint32>(level)});
+        if (it == slot_of_.end()) {
+            continue;
+        }
+        release_slot_(it->second);
     }
-
-    drop_mesh_(*slot);
-    drop_pending_(identity.index);
-    slot->model_ref.reset();
-    slot->chunk_ref.reset();
 }
 
 auto mesh_pool::evict(
-    const vw::asset::model_identity& identity
+    const vw::asset::model_identity& identity, int32 lod_step
 ) -> void {
-    if (auto* slot = live_slot_(identity)) {
+    if (auto* slot = live_slot_(mesh_key_of(identity, lod_step), identity.generation)) {
         drop_mesh_(*slot);
     }
 }
@@ -179,18 +238,11 @@ auto mesh_pool::sweep_orphaned_() -> void {
         auto& slot       = slots_[sweep_cursor_];
         ++sweep_cursor_;
 
-        if (!slot.has_mesh && !slot.pending.valid()) {
+        if (!slot.live || !slot.model_ref.expired()) {
             continue;
         }
 
-        if (!slot.model_ref.expired()) {
-            continue;
-        }
-
-        drop_mesh_(slot);
-        drop_pending_(index);
-        slot.model_ref.reset();
-        slot.chunk_ref.reset();
+        release_slot_(index);
         ++freed;
     }
 }
@@ -261,6 +313,9 @@ auto mesh_pool::get_gen_stats() const -> mesh_gen_stats {
         out.p50_us   = summary.p50_us;
         out.p99_us   = summary.p99_us;
         out.max_us   = summary.max_us;
+        out.blind    = blind_requests_;
+        out.partial  = partial_requests_;
+        out.missing  = missing_faces_;
     }
 
     const auto lane = jobs_->get_lane_stats(vw::job_lane::mesh);
@@ -291,7 +346,7 @@ auto mesh_pool::generate_(
     try {
         const auto started = std::chrono::steady_clock::now();
         mesh data = greedy_mesh_generator::generate_mesh_data(
-            storage, source, *registry_, task.opts
+            storage, source, task.opts
         );
         const auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
             std::chrono::steady_clock::now() - started

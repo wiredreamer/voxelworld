@@ -41,7 +41,6 @@ auto create_entity_modal::open() -> void {
     name_             = std::format("new entity {}", scene.name_to_entity.size());
     parent_name_ =
         scene.name_to_entity.contains(scene.selected_name) ? scene.selected_name : scene.root_name;
-    category_ = edited_model_category(*engine_, *state_);
 
     model_files_ = collect_asset_refs(app_state::model_dir(), ".voxm");
     if (!std::ranges::contains(model_files_, model_file_)) {
@@ -189,8 +188,6 @@ auto create_entity_modal::render_model_fields_() -> void {
     }
 
     if (source_ == volume_source::blank) {
-        imgui_voxel_set_combo("Voxels", engine_->get_voxel_registry(), category_, label_column);
-
         row_label("Size");
         std::array<int32, 3> size{size_.x, size_.y, size_.z};
         if (ImGui::InputInt3("##size", size.data())) {
@@ -230,12 +227,10 @@ auto create_entity_modal::pick_model_file_(
         return;
     }
 
-    const auto& volume   = **loaded;
-    const auto size      = volume.size();
-    const voxel_set* set = engine_->get_voxel_registry().set_of(volume.category());
-    const std::string_view set_name = set != nullptr ? set->name : "unknown";
+    const auto& volume = **loaded;
+    const auto size    = volume.size();
 
-    model_file_info_ = std::format("{}x{}x{}, {}", size.x, size.y, size.z, set_name);
+    model_file_info_ = std::format("{}x{}x{}", size.x, size.y, size.z);
 }
 
 auto create_entity_modal::render_point_fields_() -> void {
@@ -340,9 +335,7 @@ auto create_entity_modal::create_entity_() -> bool {
                 parts.push_back(
                     std::make_unique<add_model_component_operation>(
                         *engine_, *state_,
-                        add_model_component_params{
-                            .name = name_, .size = size_, .category = category_
-                        }
+                        add_model_component_params{.name = name_, .size = size_}
                     )
                 );
             } else {

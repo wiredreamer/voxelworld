@@ -22,7 +22,7 @@ renderer::renderer(
 )
     : context_(&context)
     , window_(&window)
-    , mesh_pool_(context, registry, jobs)
+    , mesh_pool_(registry, jobs)
     , voxel_registry_(&registry)
     , wanted_msaa_samples_(wanted_msaa_samples) {
     vertex_shader_ =
@@ -382,7 +382,7 @@ auto renderer::sync_meshes_(world_type& world) -> void {
             it = pending_mesh_entities_.erase(it);
             continue;
         }
-        if (mesh_pool_.has(comp.get_identity())) {
+        if (mesh_pool_.has(comp.get_identity(), entity_lod_step(comp))) {
             it = pending_mesh_entities_.erase(it);
             registry.notify_changed<model_component>(ent);
         } else {
@@ -394,13 +394,15 @@ auto renderer::sync_meshes_(world_type& world) -> void {
         if (!registry.has<model_component>(ent)) continue;
         auto& comp = registry.get<model_component>(ent);
         if (!comp.has_model()) continue;
-        auto identity = comp.get_identity();
-        if (!mesh_pool_.has(identity) && !mesh_pool_.is_pending(identity)) {
+        auto identity    = comp.get_identity();
+        const int32 step = entity_lod_step(comp);
+        if (!mesh_pool_.has(identity, step) && !mesh_pool_.is_pending(identity, step)) {
             mesh_pool_.request_mesh(
                 comp.get_model(),
                 comp.get_chunk(),
                 mesh_options{
                     .build_links = combined_buffer_pool_->is_chunk_cull_enabled(),
+                    .lod_step    = step,
                 }
             );
             pending_mesh_entities_.insert(ent);

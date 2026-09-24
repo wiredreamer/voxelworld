@@ -26,7 +26,8 @@ target_sources(vw_world
             src/grid/terrain_generator.cppm
             src/grid/gen_column.cppm
             src/grid/chunk_loader.cppm
-            src/grid/perlin_terrain_generator.cppm
+            src/grid/terrain_palette.cppm
+        src/grid/perlin_terrain_generator.cppm
             src/grid/grid.cppm
             src/grid/chunk_visibility.cppm
             src/grid/chunk.cppm
@@ -46,6 +47,7 @@ target_sources(vw_world
             src/systems/variant_system.cppm
             src/systems/structure_system.cppm
             src/systems/world_grid_system.cppm
+            src/systems/lod_system.cppm
     PRIVATE
         src/world.cpp
         src/scene/scene_codecs.cpp
@@ -68,6 +70,7 @@ target_sources(vw_world
         src/systems/spatial_system.cpp
         src/systems/transform_system.cpp
         src/systems/world_grid_system.cpp
+        src/systems/lod_system.cpp
 )
 
 target_link_libraries(vw_world PUBLIC vw_core vw_asset vw_ecs)

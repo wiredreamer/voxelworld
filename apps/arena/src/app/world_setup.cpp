@@ -30,6 +30,13 @@ auto setup_world_grid(gfx::engine& engine) -> world_setup_result {
         std::make_unique<ecs::chunk_loader>(std::move(generator), jobs), jobs
     );
 
+    const auto chunk_units =
+        static_cast<float32>(ecs::chunk::size * params.world_units_per_voxel);
+
+    world.system<ecs::lod_system>().set_default_base_distance(
+        static_cast<float32>(ecs::default_lod_base_chunks) * chunk_units
+    );
+
     return {.generator_params = params};
 }
 

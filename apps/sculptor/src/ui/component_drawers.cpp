@@ -119,18 +119,9 @@ auto register_model(component_drawer_registry& drawers) -> void {
             }
         }
 
-        const auto model     = model_comp.get_model();
-        const voxel_set* set = model ?
-            in.engine.get_voxel_registry().set_of(model->category()) :
-            nullptr;
-        const std::string_view set_name = set != nullptr ? set->name : "unknown";
-
         const auto model_size = model_comp.size();
         field_label("Size");
-        ImGui::TextDisabled(
-            "%dx%dx%d, %.*s", model_size.x, model_size.y, model_size.z,
-            static_cast<int>(set_name.size()), set_name.data()
-        );
+        ImGui::TextDisabled("%dx%dx%d", model_size.x, model_size.y, model_size.z);
 
         const auto& bounds  = in.state.volume.occupied;
         const bool can_trim = bounds.has_value() && bounds->size() != model_size;

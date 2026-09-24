@@ -41,7 +41,7 @@ auto voxel_palette_panel::swatch_(
         ImGui::SameLine(0, 0);
     }
 
-    ImGui::PushID(static_cast<int>(type.slot.value));
+    ImGui::PushID(static_cast<int>(type.id.value));
 
     constexpr ImGuiColorEditFlags btn_flags =  //
         ImGuiColorEditFlags_NoAlpha |          //
@@ -62,14 +62,6 @@ auto voxel_palette_panel::render(
     [[maybe_unused]] float delta_time
 ) -> void {
     const voxel_registry& registry = engine_->get_voxel_registry();
-    const voxel_category shown     = edited_model_category(*engine_, *state_);
-
-    state_->tool.brush_of_set[state_->tool.selected_voxel.category().value] =
-        state_->tool.selected_voxel;
-
-    if (state_->tool.selected_voxel.category() != shown) {
-        state_->tool.selected_voxel = state_->tool.brush_for(shown, registry);
-    }
 
     begin_panel(*state_, panel_slot::bottom, "Voxel Palette");
 
@@ -84,12 +76,11 @@ auto voxel_palette_panel::render(
     );
     ImGui::Text("%.*s", static_cast<int>(selected.name.size()), selected.name.data());
     ImGui::Text(
-        "#%02X%02X%02X  %u:%u",
+        "#%02X%02X%02X  %u",
         selected_color.r(),
         selected_color.g(),
         selected_color.b(),
-        selected.id.category().value,
-        selected.id.index()
+        selected.id.value
     );
 
     if (selected.material.emission != 0 || selected.material.glow != 0) {
@@ -102,33 +93,17 @@ auto voxel_palette_panel::render(
     ImGui::Separator();
     ImGui::Spacing();
 
-    const voxel_set* set = registry.set_of(shown);
+    for (const voxel_group& group : registry.groups()) {
+        ImGui::SeparatorText(std::string{group.name}.c_str());
 
-    if (set != nullptr) {
-        for (const voxel_group& group : set->groups) {
-            ImGui::SeparatorText(std::string{group.name}.c_str());
-
-            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
-            int32 in_row = 0;
-            for (uint8 offset = 0; offset < group.count; ++offset) {
-                const voxel_type& type = registry.get(group.at(offset));
-                if (type.slot == missing_voxel_slot) {
-                    continue;
-                }
-                swatch_(type, in_row);
-                ++in_row;
-            }
-            ImGui::PopStyleVar();
-        }
-    } else {
-        ImGui::SeparatorText("voxels");
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
         int32 in_row = 0;
-        for (const voxel_type& type : registry.all()) {
-            if (type.id == voxels::air || type.id.category() != shown) {
+        for (uint8 offset = 0; offset < group.count; ++offset) {
+            const voxel& id = group.at(offset);
+            if (!registry.known(id)) {
                 continue;
             }
-            swatch_(type, in_row);
+            swatch_(registry.get(id), in_row);
             ++in_row;
         }
         ImGui::PopStyleVar();

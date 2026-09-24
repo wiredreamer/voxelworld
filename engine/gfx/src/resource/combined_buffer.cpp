@@ -141,13 +141,15 @@ auto combined_buffer::allocate(
     const mat4f& transform_matrix, const vw::spatial::aabb& bounds
 ) -> void {
 
-    if (!mesh_allocations_.contains(model_id.index)) {
+    const auto key = mesh_key_of(model_id, mesh_data.lod_step);
+
+    if (!mesh_allocations_.contains(key)) {
         allocate_mesh(model_id, mesh_data);
     } else {
         write_mesh(model_id, mesh_data);
     }
 
-    auto& mesh_alloc = mesh_allocations_[model_id.index];
+    auto& mesh_alloc = mesh_allocations_[key];
 
     const auto instance_index = static_cast<uint32>(entity_allocations_.size());
     if (instance_index >= instance_capacity_) {
@@ -186,7 +188,7 @@ auto combined_buffer::allocate(
 
     const entity_allocation ent_alloc{
         .instance_index = instance_index,
-        .model_index    = model_id.index,
+        .key            = key,
     };
     entity_allocations_[e] = ent_alloc;
 
@@ -276,13 +278,14 @@ auto combined_buffer::allocate_mesh(
     new_mesh_alloc.ref_count   = 0;
     new_mesh_alloc.face_counts = mesh_data.face_counts;
 
-    mesh_allocations_[model_id.index] = new_mesh_alloc;
+    mesh_allocations_[mesh_key_of(model_id, mesh_data.lod_step)] = new_mesh_alloc;
 }
 
 auto combined_buffer::write_mesh(
     vw::asset::model_identity model_id, const mesh& mesh_data
 ) -> void {
-    auto& mesh_alloc = mesh_allocations_[model_id.index];
+    const auto key   = mesh_key_of(model_id, mesh_data.lod_step);
+    auto& mesh_alloc = mesh_allocations_[key];
     if (mesh_alloc.generation == model_id.generation) {
         return;
     }
@@ -302,7 +305,7 @@ auto combined_buffer::write_mesh(
     mesh_alloc.face_counts = mesh_data.face_counts;
 
     for (const auto& [ent, ent_alloc] : entity_allocations_) {
-        if (ent_alloc.model_index == model_id.index) {
+        if (ent_alloc.key == key) {
             write_draw_command_(ent_alloc.instance_index, mesh_alloc);
         }
     }
@@ -311,7 +314,7 @@ auto combined_buffer::write_mesh(
 auto combined_buffer::write_transform(
     entity ent, const mat4f& transform_matrix, const vw::spatial::aabb& bounds
 ) -> void {
-    auto& [instance_index, model_index] = entity_allocations_[ent];
+    auto& [instance_index, key] = entity_allocations_[ent];
     const auto model_staged = staging_->stage_struct(transform_matrix);
     staging_->copy_to(
         model_matrix_buffer_->get_buffer(),
@@ -350,12 +353,12 @@ auto combined_buffer::free(
 ) -> std::optional<entity> {
     auto& ent_alloc = entity_allocations_[ent];
 
-    auto& mesh_alloc = mesh_allocations_[ent_alloc.model_index];
+    auto& mesh_alloc = mesh_allocations_[ent_alloc.key];
     mesh_alloc.ref_count--;
 
     if (mesh_alloc.ref_count <= 0) {
         free_slots_.push_back({.quad_offset = mesh_alloc.quad_offset});
-        mesh_allocations_.erase(ent_alloc.model_index);
+        mesh_allocations_.erase(ent_alloc.key);
     }
 
     std::optional<entity> swapped_entity;
@@ -367,7 +370,7 @@ auto combined_buffer::free(
         entity last_ent      = instance_indexes_[last_index];
         auto& last_ent_alloc = entity_allocations_[last_ent];
 
-        const auto& last_mesh_alloc = mesh_allocations_[last_ent_alloc.model_index];
+        const auto& last_mesh_alloc = mesh_allocations_[last_ent_alloc.key];
         write_draw_command_(ent_alloc.instance_index, last_mesh_alloc);
 
         last_ent_alloc.instance_index = ent_alloc.instance_index;

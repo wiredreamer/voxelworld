@@ -4,6 +4,7 @@ export import :systems.hooks;
 export import :systems.hierarchy;
 export import :systems.transform;
 export import :systems.model;
+export import :systems.lod;
 export import :systems.light;
 export import :systems.spatial;
 export import :systems.physics;

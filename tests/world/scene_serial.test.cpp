@@ -107,11 +107,11 @@ TEST_CASE("the pivot of a parent does not move its child", "[scene]") {
     const asset::asset_ref root_ref{"models/m_human/root.voxm"};
     const asset::asset_ref hand_ref{"models/m_human/hand_right.voxm"};
 
-    auto root_volume = models.create_unnamed(voxels::world::category, vec3i{12, 12, 12});
+    auto root_volume = models.create_unnamed(vec3i{12, 12, 12});
     root_volume->set_pivot(vec3f{6.0F, 6.0F, 6.0F});
     fx.library.adopt(root_ref, root_volume);
 
-    auto hand_volume = models.create_unnamed(voxels::world::category, vec3i{5, 7, 5});
+    auto hand_volume = models.create_unnamed(vec3i{5, 7, 5});
     hand_volume->set_pivot(vec3f{2.5F, 3.5F, 2.5F});
     fx.library.adopt(hand_ref, hand_volume);
 
@@ -230,7 +230,7 @@ TEST_CASE("a model ref survives a round trip through the world", "[scene]") {
     auto& models = w.resource<asset::model_registry>();
 
     const asset::asset_ref ref{"models/m_human/body.voxm"};
-    fx.library.adopt(ref, models.create_unnamed(voxels::world::category, vec3i{4, 4, 4}));
+    fx.library.adopt(ref, models.create_unnamed(vec3i{4, 4, 4}));
 
     asset::vox_prefab_data prefab;
     prefab.root_name = "body";
@@ -288,8 +288,8 @@ TEST_CASE("moving the pivot reports a transform change", "[scene]") {
     world w;
     auto& models = w.resource<asset::model_registry>();
 
-    auto model = models.create_unnamed(voxels::world::category, vec3i{4, 4, 4});
-    model->fill(voxels::world::grass[0]);
+    auto model = models.create_unnamed(vec3i{4, 4, 4});
+    model->fill(voxels::green[2]);
 
     const auto ent = w.create()
         .with<transform_component>()

@@ -23,7 +23,6 @@ auto add_model_component_modal::open(const std::string& entity_name) -> void {
     need_open_   = true;
     entity_name_ = entity_name;
     size_        = {8, 8, 8};
-    category_    = edited_model_category(*engine_, *state_);
     error_.clear();
 }
 
@@ -44,7 +43,6 @@ auto add_model_component_modal::render() -> void {
         ImGui::Text("Entity: %s", entity_name_.c_str());
         ImGui::Separator();
 
-        imgui_voxel_set_combo("Voxels", engine_->get_voxel_registry(), category_);
         imgui_input_int_left("Size X", &size_.x);
         imgui_input_int_left("Size Y", &size_.y);
         imgui_input_int_left("Size Z", &size_.z);
@@ -74,9 +72,7 @@ auto add_model_component_modal::confirm_() -> bool {
 
     auto op = std::make_unique<add_model_component_operation>(
         *engine_, *state_,
-        add_model_component_params{
-            .name = entity_name_, .size = size_, .category = category_
-        }
+        add_model_component_params{.name = entity_name_, .size = size_}
     );
     op_manager_->execute(std::move(op));
     return true;

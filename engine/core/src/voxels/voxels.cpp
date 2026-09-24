@@ -6,12 +6,9 @@ namespace vw {
 
 namespace {
 
-constexpr auto missing_desc = voxel_desc{
-    voxel{},
-    "missing",
-    voxel_material{color{0xFF00FFFF}},
-    voxel_surface::opaque,
-};
+constexpr auto missing_material = voxel_material{color{0xFF00FFFF}};
+
+constexpr std::string_view missing_name = "missing";
 
 }  // namespace
 
@@ -21,14 +18,15 @@ voxel_registry::voxel_registry()
 voxel_registry::voxel_registry(
     std::span<const voxel_desc> extra
 ) {
-    by_slot_.reserve(default_voxel_catalog.size() + extra.size() + 1);
-    by_slot_.push_back(voxel_type{
-        missing_desc.id,
-        missing_voxel_slot,
-        missing_desc.name,
-        missing_desc.material,
-        missing_desc.surface,
-    });
+    by_value_.reserve(voxel_type_capacity);
+    for (uint32 value = 0; value < voxel_type_capacity; ++value) {
+        by_value_.push_back(voxel_type{
+            voxel{static_cast<uint8>(value)},
+            missing_name,
+            missing_material,
+            voxel_surface::opaque,
+        });
+    }
 
     for (const voxel_desc& desc : default_voxel_catalog) {
         add_(desc);
@@ -37,42 +35,14 @@ voxel_registry::voxel_registry(
         add_(desc);
     }
 
-    sets_.assign(default_voxel_sets.begin(), default_voxel_sets.end());
-}
-
-auto voxel_registry::set_of(
-    voxel_category category
-) const -> const voxel_set* {
-    const auto it = std::ranges::find(sets_, category, &voxel_set::category);
-    return it == sets_.end() ? nullptr : &*it;
-}
-
-auto voxel_registry::first_set(
-    voxel_set_kind kind
-) const -> const voxel_set* {
-    const auto it = std::ranges::find(sets_, kind, &voxel_set::kind);
-    return it == sets_.end() ? nullptr : &*it;
+    groups_.assign(voxels::groups.begin(), voxels::groups.end());
 }
 
 auto voxel_registry::add_(
     const voxel_desc& desc
 ) -> void {
-    const voxel_slot known = slot_of(desc.id);
-
-    if (known != missing_voxel_slot) {
-        by_slot_[known.value] =
-            voxel_type{desc.id, known, desc.name, desc.material, desc.surface};
-        by_name_.insert_or_assign(desc.name, desc.id);
-        return;
-    }
-
-    if (by_slot_.size() >= voxel_slot_capacity) {
-        throw std::runtime_error{"voxel catalog does not fit the quad's ten slot bits"};
-    }
-
-    const auto slot = voxel_slot{static_cast<uint16>(by_slot_.size())};
-    by_slot_.push_back(voxel_type{desc.id, slot, desc.name, desc.material, desc.surface});
-    slots_.set(desc.id, slot.value);
+    by_value_[desc.id.value] = voxel_type{desc.id, desc.name, desc.material, desc.surface};
+    known_.set(desc.id.value);
     by_name_.insert_or_assign(desc.name, desc.id);
 }
 

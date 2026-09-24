@@ -1,6 +1,7 @@
 export module vw.asset:model;
 
 export import :model.identity;
+export import :model.lod;
 export import :model.occupancy;
 export import :model.links;
 export import :model.light_channel;

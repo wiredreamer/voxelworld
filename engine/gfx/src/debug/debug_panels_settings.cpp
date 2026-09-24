@@ -235,4 +235,78 @@ auto debug_window::render_fog_panel() -> void {
     ImGui::PopItemWidth();
 }
 
+// см. docs/lod-plan.md#подобранные-умолчания
+auto debug_window::render_lod_panel() -> void {
+    auto& world = engine_->get_world();
+    auto& lod   = world.system<ecs::lod_system>();
+
+    const auto* grid   = world.system<ecs::world_grid_system>().grid();
+    const auto in_chunk = static_cast<float32>(
+        ecs::chunk::size * (grid != nullptr ? grid->world_units_per_voxel() : 1)
+    );
+
+    ImGui::PushItemWidth(item_width);
+
+    float32 base = lod.get_default_base_distance() / in_chunk;
+    if (ImGui::SliderFloat("base (chunks)", &base, 0.0f, 32.0f, "%.1f")) {
+        lod.set_default_base_distance(base * in_chunk);
+    }
+    ImGui::TextUnformatted("the slider rebuilds the whole ladder as base x 2^L");
+
+    ImGui::Spacing();
+
+    const auto& ladder = lod.get_level_distances();
+    for (uint32 level = 1; level < ladder.size(); ++level) {
+        const auto label =
+            std::format("step {} from (chunks)", asset::lod_step_of(static_cast<int32>(level)));
+
+        float32 at = ladder[level] / in_chunk;
+        if (ImGui::SliderFloat(label.c_str(), &at, 0.0f, 96.0f, "%.1f")) {
+            lod.set_level_distance(level, at * in_chunk);
+        }
+    }
+    ImGui::TextUnformatted("zero parks a step and every step above it");
+
+    ImGui::Spacing();
+
+    static constexpr std::array<const char*, asset::lod_level_count + 1> forced_names{
+        "by distance", "1", "2", "4", "8"
+    };
+
+    int32 forced = lod.get_forced_level() + 1;
+    if (ImGui::Combo(
+            "force step", &forced, forced_names.data(), static_cast<int32>(forced_names.size())
+        )) {
+        lod.set_forced_level(forced - 1);
+    }
+
+    ImGui::PopItemWidth();
+    ImGui::Separator();
+
+    const auto& stats = lod.get_stats();
+
+    ImGui::Text("levelled %u entities, pick %.3f ms", stats.entities, stats.pick_ms);
+    ImGui::Text("last frame: %u raised, %u lowered", stats.raised, stats.lowered);
+
+    ImGui::Spacing();
+
+    for (uint32 level = 0; level < stats.at_level.size(); ++level) {
+        const auto count = stats.at_level[level];
+        const auto share = stats.entities > 0
+            ? 100.0f * static_cast<float32>(count) / static_cast<float32>(stats.entities)
+            : 0.0f;
+
+        ImGui::Text(
+            "step %d: %6u  %5.1f%%", asset::lod_step_of(static_cast<int32>(level)), count, share
+        );
+    }
+
+    if (reset_button("reset##lod")) {
+        lod.set_default_base_distance(
+            static_cast<float32>(ecs::default_lod_base_chunks) * in_chunk
+        );
+        lod.set_forced_level(-1);
+    }
+}
+
 }  // namespace vw::gfx

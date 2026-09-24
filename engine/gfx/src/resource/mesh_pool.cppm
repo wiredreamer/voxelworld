@@ -53,12 +53,14 @@ struct mesh_gen_stats {
     uint32 queue_peak   = 0;
     uint32 held         = 0;
     uint32 held_peak    = 0;
+    uint64 blind        = 0;
+    uint64 partial      = 0;
+    std::array<uint64, face_direction_count> missing{};
 };
 
 class mesh_pool final {
 public:
-    explicit mesh_pool(vulkan_context& context, const voxel_registry& registry,
-                       vw::job_system& jobs);
+    explicit mesh_pool(const voxel_registry& registry, vw::job_system& jobs);
     ~mesh_pool();
 
     mesh_pool(const mesh_pool&)                    = delete;
@@ -67,23 +69,30 @@ public:
     auto operator=(mesh_pool&&) -> mesh_pool&      = delete;
 
     auto stop_gen_threads() -> void;
-    [[nodiscard]] auto has(const vw::asset::model_identity& identity) const -> bool;
-    [[nodiscard]] auto is_pending(const vw::asset::model_identity& identity) const -> bool;
+    [[nodiscard]] auto has(const vw::asset::model_identity& identity, int32 lod_step = 1) const
+        -> bool;
+    [[nodiscard]] auto is_pending(
+        const vw::asset::model_identity& identity, int32 lod_step = 1
+    ) const -> bool;
     auto request_mesh(
         const std::shared_ptr<vw::asset::model>& model_ptr,
         const std::shared_ptr<vw::asset::chunk_volume>& chunk_ptr,
         mesh_options opts = {}
     ) -> void;
-    [[nodiscard]] auto get(const vw::asset::model_identity& identity) const -> const mesh*;
+    [[nodiscard]] auto get(const vw::asset::model_identity& identity, int32 lod_step = 1) const
+        -> const mesh*;
     auto remove(const vw::asset::model_identity& identity) -> void;
-    auto evict(const vw::asset::model_identity& identity) -> void;
+    auto evict(const vw::asset::model_identity& identity, int32 lod_step = 1) -> void;
     auto process_completed(uint32 max_meshes) -> void;
     [[nodiscard]] auto get_pending_count() const -> uint32;
     [[nodiscard]] auto get_gen_stats() const -> mesh_gen_stats;
 
 private:
     // см. docs/optimization.md#что-измерено-и-переоткрывать-не-надо
+    // см. docs/lod-plan.md#одна-модель-на-двух-расстояниях
     struct mesh_slot {
+        mesh_key key{};
+        bool live         = false;
         uint32 generation = 0;
         bool has_mesh     = false;
         mesh data;
@@ -96,17 +105,19 @@ private:
     auto sweep_orphaned_() -> void;
     auto record_chunk_(uint64 elapsed_ns, uint64 quads) -> void;
 
-    [[nodiscard]] auto live_slot_(const vw::asset::model_identity& identity) -> mesh_slot*;
-    [[nodiscard]] auto live_slot_(const vw::asset::model_identity& identity) const
-        -> const mesh_slot*;
-    auto open_slot_(const vw::asset::model_identity& identity) -> mesh_slot&;
+    [[nodiscard]] auto live_slot_(mesh_key key, uint32 generation) -> mesh_slot*;
+    [[nodiscard]] auto live_slot_(mesh_key key, uint32 generation) const -> const mesh_slot*;
+    [[nodiscard]] auto acquire_slot_(mesh_key key, uint32 generation) -> uint32;
+    auto retire_stale_(uint32 model_index, uint32 generation) -> void;
+    auto release_slot_(uint32 slot_index) -> void;
     auto drop_mesh_(mesh_slot& slot) -> void;
-    auto drop_pending_(uint32 index) -> void;
+    auto drop_pending_(uint32 slot_index) -> void;
 
-    vulkan_context* context_;
     const voxel_registry* registry_;
 
     std::vector<mesh_slot> slots_;
+    std::unordered_map<mesh_key, uint32> slot_of_;
+    std::vector<uint32> free_slots_;
     std::vector<uint32> pending_slots_;
     uint32 held_ = 0;
 
@@ -119,6 +130,9 @@ private:
     mutable std::mutex stats_mutex_;
     vw::latency_histogram gen_latency_;
     uint64 gen_quads_ = 0;
+    uint64 blind_requests_ = 0;
+    uint64 partial_requests_ = 0;
+    std::array<uint64, face_direction_count> missing_faces_{};
     uint32 held_peak_ = 0;
 };
 

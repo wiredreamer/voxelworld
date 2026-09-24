@@ -1,0 +1,5 @@
+# Vox File Version 4.0
+root root
+entity root
+	transform 0 0 0	-0 -0 -0	1 1 1
+	model models/p_test/root.voxm

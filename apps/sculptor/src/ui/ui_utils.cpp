@@ -185,23 +185,6 @@ auto imgui_drag_vec3f(std::string_view label, vec3f& vec, float label_offset) ->
     return edit;
 }
 
-auto edited_model_category(
-    gfx::engine& eng, const app_state& state
-) -> voxel_category {
-    const auto it = state.scene.name_to_entity.find(state.edited_node());
-    if (it == state.scene.name_to_entity.end()) {
-        return state.tool.selected_voxel.category();
-    }
-
-    const auto& world = eng.get_world();
-    if (!world.has<ecs::model_component>(it->second)) {
-        return state.tool.selected_voxel.category();
-    }
-
-    const auto model = world.get<ecs::model_component>(it->second).get_model();
-    return model ? model->category() : state.tool.selected_voxel.category();
-}
-
 auto collect_asset_refs(
     const std::filesystem::path& dir, std::string_view extension
 ) -> std::vector<asset::asset_ref> {
@@ -227,34 +210,6 @@ auto collect_asset_refs(
     }
 
     return refs;
-}
-
-auto imgui_voxel_set_combo(
-    std::string_view label, const voxel_registry& registry, voxel_category& category,
-    float32 label_column
-) -> void {
-    const voxel_set* current = registry.set_of(category);
-    const std::string_view preview = current != nullptr ? current->name : "unknown";
-
-    ImGui::AlignTextToFramePadding();
-    ImGui::TextUnformatted(label.data(), label.data() + label.size());
-    ImGui::SameLine(label_column);
-
-    const auto hidden_label = std::format("##{}", label);
-    if (!ImGui::BeginCombo(hidden_label.c_str(), std::string{preview}.c_str())) {
-        return;
-    }
-
-    for (const voxel_set& set : registry.sets()) {
-        const bool selected = set.category == category;
-        if (ImGui::Selectable(std::string{set.name}.c_str(), selected)) {
-            category = set.category;
-        }
-        if (selected) {
-            ImGui::SetItemDefaultFocus();
-        }
-    }
-    ImGui::EndCombo();
 }
 
 }  // namespace vw::sculptor

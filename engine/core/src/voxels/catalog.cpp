@@ -17,21 +17,18 @@ namespace {
     return true;
 }
 
-[[nodiscard]] consteval auto groups_tile_sets() -> bool {
-    for (const voxel_set& set : default_voxel_sets) {
-        uint32 next = 1;
-        for (const voxel_group& group : set.groups) {
-            if (group.first.category() != set.category || group.first.index() != next) {
-                return false;
-            }
-            next += group.count;
+[[nodiscard]] consteval auto groups_tile_catalog() -> bool {
+    uint32 next = 1;
+    for (const voxel_group& group : voxels::groups) {
+        if (group.first.value != next) {
+            return false;
         }
+        next += group.count;
+    }
 
-        for (const voxel_desc& desc : default_voxel_catalog) {
-            const bool mine = desc.id.category() == set.category && desc.id != voxels::air;
-            if (mine && desc.id.index() >= next) {
-                return false;
-            }
+    for (const voxel_desc& desc : default_voxel_catalog) {
+        if (desc.id != voxels::air && desc.id.value >= next) {
+            return false;
         }
     }
     return true;
@@ -49,48 +46,36 @@ namespace {
     return true;
 }
 
-[[nodiscard]] consteval auto palette_covers_colours() -> bool {
-    for (const voxel_set& set : default_voxel_sets) {
-        if (set.kind != voxel_set_kind::palette) {
-            continue;
+[[nodiscard]] consteval auto catalog_covers_colours() -> bool {
+    for (const color& clr : colors::all) {
+        bool found = false;
+        for (const voxel_desc& desc : default_voxel_catalog) {
+            if (desc.material == voxel_material{clr}) {
+                found = true;
+                break;
+            }
         }
-
-        for (const color& clr : colors::all) {
-            bool found = false;
-            for (const voxel_desc& desc : default_voxel_catalog) {
-                if (desc.id.category() == set.category && desc.material.clr == clr) {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                return false;
-            }
+        if (!found) {
+            return false;
         }
     }
     return true;
 }
 
-[[nodiscard]] consteval auto palette_materials_unique() -> bool {
-    for (const voxel_set& set : default_voxel_sets) {
-        if (set.kind != voxel_set_kind::palette) {
+[[nodiscard]] consteval auto catalog_materials_unique() -> bool {
+    for (std::size_t i = 0; i < default_voxel_catalog.size(); ++i) {
+        const voxel_desc& left = default_voxel_catalog[i];
+        if (left.id == voxels::air) {
             continue;
         }
 
-        for (std::size_t i = 0; i < default_voxel_catalog.size(); ++i) {
-            const voxel_desc& left = default_voxel_catalog[i];
-            if (left.id.category() != set.category || left.id == voxels::air) {
+        for (std::size_t j = i + 1; j < default_voxel_catalog.size(); ++j) {
+            const voxel_desc& right = default_voxel_catalog[j];
+            if (right.id == voxels::air) {
                 continue;
             }
-
-            for (std::size_t j = i + 1; j < default_voxel_catalog.size(); ++j) {
-                const voxel_desc& right = default_voxel_catalog[j];
-                if (right.id.category() != set.category || right.id == voxels::air) {
-                    continue;
-                }
-                if (left.material == right.material) {
-                    return false;
-                }
+            if (left.material == right.material) {
+                return false;
             }
         }
     }
@@ -100,13 +85,13 @@ namespace {
 }  // namespace
 
 static_assert(
-    default_voxel_catalog.size() <= voxel_slot_capacity,
-    "каталог не влезает в десять бит слота в кваде"
+    default_voxel_catalog.size() <= voxel_type_capacity,
+    "каталог не влезает в байт вокселя"
 );
 static_assert(catalog_ids_unique(), "в каталоге повторяется идентификатор");
-static_assert(groups_tile_sets(), "разделы не покрывают набор подряд и без дыр");
+static_assert(groups_tile_catalog(), "разделы не покрывают каталог подряд и без дыр");
 static_assert(catalog_colours_are_palette(), "в каталоге цвет мимо палитры");
-static_assert(palette_covers_colours(), "палитра не покрывает палитру целиком");
-static_assert(palette_materials_unique(), "в палитре повторяется материал");
+static_assert(catalog_covers_colours(), "каталог не покрывает палитру целиком");
+static_assert(catalog_materials_unique(), "в каталоге повторяется материал");
 
 }  // namespace vw

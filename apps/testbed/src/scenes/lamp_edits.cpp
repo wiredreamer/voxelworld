@@ -65,7 +65,7 @@ auto lamp_edits_scene::tick(float32) -> void {
 
         stand().grid().set_voxel(
             {vx * scale, (*surface + 1) * scale, vz * scale},
-            inert_ ? voxels::world::stone[1] : voxels::world::glowstone
+            inert_ ? voxels::gray[5] : voxels::lamp_amber
         );
 
         ++placed_;

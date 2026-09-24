@@ -41,8 +41,8 @@ TEST_CASE("a model survives a round trip through the library", "[library]") {
     const voxel_registry voxel_types;
     asset::model_library library{registry, voxel_types, root.path()};
 
-    auto source = registry.create_unnamed(voxels::world::category, vec3i{4, 4, 4});
-    source->set_voxel(1, 2, 3, voxels::world::grass[0]);
+    auto source = registry.create_unnamed(vec3i{4, 4, 4});
+    source->set_voxel(1, 2, 3, voxels::green[2]);
     source->set_pivot(vec3f{1.5F, 2.5F, 3.5F});
 
     const asset::asset_ref ref{"models/m_human/body.voxm"};
@@ -56,7 +56,7 @@ TEST_CASE("a model survives a round trip through the library", "[library]") {
     const auto restored = other.load(ref);
     REQUIRE(restored.has_value());
     REQUIRE((*restored)->size() == vec3i{4, 4, 4});
-    REQUIRE((*restored)->get_voxel(1, 2, 3) == voxels::world::grass[0]);
+    REQUIRE((*restored)->get_voxel(1, 2, 3) == voxels::green[2]);
     REQUIRE((*restored)->pivot() == vec3f{1.5F, 2.5F, 3.5F});
 }
 
@@ -66,7 +66,7 @@ TEST_CASE("the library hands out one model per ref", "[library]") {
     const voxel_registry voxel_types;
     asset::model_library library{registry, voxel_types, root.path()};
 
-    auto source = registry.create_unnamed(voxels::world::category, vec3i{2, 2, 2});
+    auto source = registry.create_unnamed(vec3i{2, 2, 2});
     const asset::asset_ref ref{"models/head.voxm"};
     REQUIRE(library.save(ref, *source).has_value());
 
@@ -96,7 +96,7 @@ TEST_CASE("an adopted model answers the next lookup", "[library]") {
     const voxel_registry voxel_types;
     asset::model_library library{registry, voxel_types, root.path()};
 
-    auto source = registry.create_unnamed(voxels::world::category, vec3i{2, 2, 2});
+    auto source = registry.create_unnamed(vec3i{2, 2, 2});
     const asset::asset_ref ref{"models/hand.voxm"};
 
     REQUIRE(library.find(ref) == nullptr);
