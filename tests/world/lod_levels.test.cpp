@@ -18,7 +18,11 @@ auto place(world& w, asset::model_registry& models, const char* name, vec3f at) 
     auto model = models.create(name, 4, 4, 4);
     model->fill(voxels::green[2]);
 
-    const auto ent = w.create().with<transform_component>().with<model_component>().get_entity();
+    const auto ent = w.create()
+                         .with<transform_component>()
+                         .with<model_component>()
+                         .with<lod_component>()
+                         .get_entity();
     w.system<model_system>().modify(ent).set_model(std::move(model));
     w.system<transform_system>().modify(ent).set_position(at);
     return ent;
@@ -228,4 +232,29 @@ TEST_CASE("rebuilding the base wipes a hand-set level", "[world][lod]") {
 
     lod.set_default_base_distance(base);
     REQUIRE(lod.get_level_distances()[2] == base * 4.0F);
+}
+
+TEST_CASE("a model without the component keeps its full detail", "[world][lod]") {
+    world w;
+    auto& models = w.resource<asset::model_registry>();
+    auto& lod    = w.system<lod_system>();
+
+    lod.set_default_base_distance(base);
+    place_viewer(w, vec3f{0.0F, 0.0F, 0.0F});
+
+    auto model = models.create("prop", 4, 4, 4);
+    model->fill(voxels::green[2]);
+
+    const auto prop =
+        w.create().with<transform_component>().with<model_component>().get_entity();
+    w.system<model_system>().modify(prop).set_model(std::move(model));
+    w.system<transform_system>().modify(prop).set_position(vec3f{base * 8.0F, 0.0F, 0.0F});
+
+    const auto chunk = place(w, models, "chunk", vec3f{base * 8.0F, 0.0F, 0.0F});
+
+    w.update(0.016F);
+
+    REQUIRE(w.get<model_component>(chunk).get_lod_level() == 3);
+    REQUIRE(w.get<model_component>(prop).get_lod_level() == 0);
+    REQUIRE(lod.get_stats().entities == 1);
 }

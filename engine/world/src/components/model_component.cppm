@@ -84,26 +84,21 @@ struct model_component final {
         return visible_;
     }
 
-    // см. docs/lod-plan.md#выбор-уровня
+    // см. docs/lod-plan.md#уровень-живёт-рядом-с-моделью
     [[nodiscard]] auto get_lod_level() const -> uint32 {
         return lod_level_;
-    }
-
-    [[nodiscard]] auto get_lod_base_distance() const -> float32 {
-        return lod_base_distance_;
     }
 
 private:
     friend class model_system;
     friend class lod_system;
 
+    uint32 lod_level_ = 0;
+
     std::shared_ptr<asset::model> model_;
     std::shared_ptr<asset::chunk_volume> chunk_;
     asset::asset_ref source_;
     bool visible_ = true;
-
-    uint32 lod_level_          = 0;
-    float32 lod_base_distance_ = 0.0F;
 };
 
 [[nodiscard]] inline auto model_matrix(

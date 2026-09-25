@@ -10,6 +10,7 @@ target_sources(vw_world
             src/components/components.cppm
             src/components/transform_component.cppm
             src/components/model_component.cppm
+            src/components/lod_component.cppm
             src/components/spatial_component.cppm
             src/components/light_component.cppm
             src/components/physics_components.cppm

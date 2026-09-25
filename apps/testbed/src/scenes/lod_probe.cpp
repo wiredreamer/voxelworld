@@ -77,6 +77,7 @@ auto lod_probe_scene::build_step_(
                              .with<ecs::transform_component>()
                              .with<ecs::spatial_component>()
                              .with<ecs::model_component>()
+                             .with<ecs::lod_component>()
                              .get_entity();
 
         model_sys.modify(ent).set_chunk(volume);

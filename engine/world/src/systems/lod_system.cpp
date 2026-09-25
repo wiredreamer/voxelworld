@@ -65,12 +65,12 @@ auto lod_system::set_base_distance(
     entity ent, float32 distance
 ) -> void {
     auto& reg = world_->registry();
-    if (!reg.has<model_component>(ent)) {
+    if (!reg.has<lod_component>(ent)) {
         return;
     }
 
-    reg.get<model_component>(ent).lod_base_distance_ = std::max(distance, 0.0F);
-    any_override_ = true;
+    reg.get<lod_component>(ent).base_distance_ = std::max(distance, 0.0F);
+    any_override_                              = true;
 }
 
 auto lod_system::get_stats() const -> const lod_system_stats& {
@@ -146,9 +146,10 @@ auto lod_system::update(
 
     changed_.clear();
 
-    reg.for_each<model_component, transform_component>(
-        [&](entity ent, model_component& mc, const transform_component& tc) {
-            const bool overridden = mc.lod_base_distance_ > 0.0F;
+    reg.for_each<lod_component, model_component, transform_component>(
+        [&](entity ent, const lod_component& lc, model_component& mc,
+            const transform_component& tc) {
+            const bool overridden = lc.base_distance_ > 0.0F;
             if (forced_level_ < 0 && !overridden && !ladder_reaches_anything_()) {
                 return;
             }
@@ -162,7 +163,7 @@ auto lod_system::update(
             const float32 distance = std::sqrt((dx * dx) + (dz * dz));
 
             const uint32 level = forced_level_ >= 0 ? static_cast<uint32>(forced_level_)
-                : overridden ? pick_level(distance, mc.lod_base_distance_, mc.lod_level_)
+                : overridden ? pick_level(distance, lc.base_distance_, mc.lod_level_)
                              : pick_level(distance, level_distance_, mc.lod_level_);
 
             ++stats_.at_level[level];

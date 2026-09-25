@@ -38,6 +38,7 @@ auto chunk::create_entity_() -> void {
     ent_ = w.create()
         .with<transform_component>()
         .with<model_component>()
+        .with<lod_component>()
         .with<spatial_component>()
         .get_entity();
 
