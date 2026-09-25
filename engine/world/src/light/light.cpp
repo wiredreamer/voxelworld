@@ -506,6 +506,36 @@ auto gather_boundary(
         }
     }
 
+    for (const vec3i step : all_shell_steps()) {
+        const int32 span = shell_span(step);
+        if (span == 1) {
+            continue;
+        }
+
+        const auto beyond = [](int32 s, int32 along) -> int32 {
+            if (s == 0) {
+                return along;
+            }
+            return s > 0 ? side : -1;
+        };
+
+        if (span == 3) {
+            out.set_corner_level(
+                step,
+                at(beyond(step.x, 0), y_base + beyond(step.y, 0), beyond(step.z, 0))
+            );
+            continue;
+        }
+
+        for (int32 along = 0; along < side; ++along) {
+            out.set_edge_level(
+                step, along,
+                at(beyond(step.x, along), y_base + beyond(step.y, along),
+                   beyond(step.z, along))
+            );
+        }
+    }
+
     return out;
 }
 

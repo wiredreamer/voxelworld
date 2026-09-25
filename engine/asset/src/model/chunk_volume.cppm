@@ -30,12 +30,31 @@ public:
     // см. docs/rendering.md#открытое-небо-это-не-отсутствие-данных
     auto set_boundary_air(face_direction face) -> void;
 
+    // см. docs/lod-plan.md#у-мешера-двадцать-шесть-соседей
+    auto set_boundary_shell(vec3i step, const model& neighbor) -> void;
+
+    auto set_boundary_shell_air(vec3i step) -> void;
+
     [[nodiscard]] auto get_boundary_face(face_direction face) const -> const face_occupancy& {
         return boundary_->faces[face];
     }
 
     [[nodiscard]] auto has_boundary_slice(face_direction face) const -> bool {
         return boundary_ != nullptr && (boundary_->valid & face_bit(face)) != 0;
+    }
+
+    [[nodiscard]] auto has_boundary_shell(vec3i step) const -> bool {
+        if (boundary_ == nullptr) {
+            return false;
+        }
+        switch (shell_span(step)) {
+            case 1:
+                return (boundary_->valid & face_bit(shell_face(step))) != 0;
+            case 2:
+                return boundary_->has_edge(step);
+            default:
+                return boundary_->has_corner(step);
+        }
     }
 
     [[nodiscard]] auto is_boundary_solid(face_direction face, int32 x, int32 y, int32 z) const

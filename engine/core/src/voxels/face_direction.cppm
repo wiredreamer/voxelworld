@@ -115,4 +115,53 @@ struct per_face {
     auto operator==(const per_face&) const -> bool = default;
 };
 
+// см. docs/lod-plan.md#у-мешера-двадцать-шесть-соседей
+inline constexpr int32 shell_edge_count      = 12;
+inline constexpr int32 shell_corner_count    = 8;
+inline constexpr int32 shell_direction_count = face_direction_count + shell_edge_count +
+                                               shell_corner_count;
+
+[[nodiscard]] constexpr auto shell_span(vec3i step) -> int32 {
+    return static_cast<int32>(step.x != 0) + static_cast<int32>(step.y != 0) +
+           static_cast<int32>(step.z != 0);
+}
+
+[[nodiscard]] constexpr auto shell_face(vec3i step) -> face_direction {
+    const int32 axis = step.x != 0 ? 0 : (step.y != 0 ? 1 : 2);
+    return static_cast<face_direction>((axis * 2) + (step[axis] > 0 ? 0 : 1));
+}
+
+[[nodiscard]] constexpr auto shell_free_axis(vec3i step) -> int32 {
+    return step.x == 0 ? 0 : (step.y == 0 ? 1 : 2);
+}
+
+[[nodiscard]] constexpr auto shell_edge_index(vec3i step) -> int32 {
+    const int32 free = shell_free_axis(step);
+    const int32 a    = (free + 1) % 3;
+    const int32 b    = (free + 2) % 3;
+    return (free * 4) + (step[a] > 0 ? 2 : 0) + (step[b] > 0 ? 1 : 0);
+}
+
+[[nodiscard]] constexpr auto shell_corner_index(vec3i step) -> int32 {
+    return (step.x > 0 ? 4 : 0) + (step.y > 0 ? 2 : 0) + (step.z > 0 ? 1 : 0);
+}
+
+[[nodiscard]] constexpr auto all_shell_steps() -> std::array<vec3i, shell_direction_count> {
+    std::array<vec3i, shell_direction_count> steps{};
+
+    std::size_t at = 0;
+    for (int32 x = -1; x <= 1; ++x) {
+        for (int32 y = -1; y <= 1; ++y) {
+            for (int32 z = -1; z <= 1; ++z) {
+                if (x == 0 && y == 0 && z == 0) {
+                    continue;
+                }
+                steps[at++] = vec3i{x, y, z};
+            }
+        }
+    }
+
+    return steps;
+}
+
 }  // namespace vw

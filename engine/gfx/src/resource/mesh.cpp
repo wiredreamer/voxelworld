@@ -268,42 +268,52 @@ face_axis_mapping::face_axis_mapping(
     }
 }
 
+//см. docs/lod-plan.md#у-мешера-двадцать-шесть-соседей
+enum class shell_sample : uint8 { air, solid, unknown };
+
+auto sample_at(
+    mesh_source src, vec3i p
+) -> shell_sample {
+    const auto beyond = [](int32 v, int32 cells) -> int32 {
+        return v < 0 ? -1 : (v >= cells ? 1 : 0);
+    };
+
+    const vec3i step{
+        beyond(p.x, src.cells_x()), beyond(p.y, src.cells_y()), beyond(p.z, src.cells_z())
+    };
+
+    const auto answer = [](bool solid) {
+        return solid ? shell_sample::solid : shell_sample::air;
+    };
+
+    switch (shell_span(step)) {
+        case 0:
+            return answer(!src.cell_empty(p.x, p.y, p.z));
+        case 1: {
+            const face_direction face = shell_face(step);
+            if (!src.has_boundary_slice(face)) {
+                return shell_sample::unknown;
+            }
+            return answer(src.touches_boundary_cell(face, p.x, p.y, p.z));
+        }
+        case 2: {
+            if (!src.has_boundary_edge(step)) {
+                return shell_sample::unknown;
+            }
+            return answer(src.touches_boundary_edge(step, p[shell_free_axis(step)]));
+        }
+        default:
+            if (!src.has_boundary_corner(step)) {
+                return shell_sample::unknown;
+            }
+            return answer(src.touches_boundary_corner(step));
+    }
+}
+
 auto is_solid_at(
     mesh_source src, vec3i p
 ) -> bool {
-    const bool ox = p.x < 0 || p.x >= src.cells_x();
-    const bool oy = p.y < 0 || p.y >= src.cells_y();
-    const bool oz = p.z < 0 || p.z >= src.cells_z();
-
-    if (!ox && !oy && !oz) {
-        return !src.cell_empty(p.x, p.y, p.z);
-    }
-    if (static_cast<int32>(ox) + static_cast<int32>(oy) + static_cast<int32>(oz) > 1) {
-        return false;
-    }
-
-    using enum face_direction;
-
-    if (p.x >= src.cells_x() && src.has_boundary_slice(pos_x)) {
-        return src.touches_boundary_cell(pos_x, 0, p.y, p.z);
-    }
-    if (p.x < 0 && src.has_boundary_slice(neg_x)) {
-        return src.touches_boundary_cell(neg_x, 0, p.y, p.z);
-    }
-    if (p.y >= src.cells_y() && src.has_boundary_slice(pos_y)) {
-        return src.touches_boundary_cell(pos_y, p.x, 0, p.z);
-    }
-    if (p.y < 0 && src.has_boundary_slice(neg_y)) {
-        return src.touches_boundary_cell(neg_y, p.x, 0, p.z);
-    }
-    if (p.z >= src.cells_z() && src.has_boundary_slice(pos_z)) {
-        return src.touches_boundary_cell(pos_z, p.x, p.y, 0);
-    }
-    if (p.z < 0 && src.has_boundary_slice(neg_z)) {
-        return src.touches_boundary_cell(neg_z, p.x, p.y, 0);
-    }
-
-    return false;
+    return sample_at(src, p) == shell_sample::solid;
 }
 
 [[nodiscard]] auto corner_level(bool edge_a, bool edge_b, bool diagonal) -> uint8 {
@@ -315,35 +325,7 @@ auto is_solid_at(
 }
 
 [[nodiscard]] auto is_open_at(mesh_source src, vec3i p) -> bool {
-    const bool ox = p.x < 0 || p.x >= src.cells_x();
-    const bool oy = p.y < 0 || p.y >= src.cells_y();
-    const bool oz = p.z < 0 || p.z >= src.cells_z();
-
-    if (!ox && !oy && !oz) {
-        return src.cell_empty(p.x, p.y, p.z);
-    }
-    if (static_cast<int32>(ox) + static_cast<int32>(oy) + static_cast<int32>(oz) > 1) {
-        return false;
-    }
-
-    using enum face_direction;
-
-    if (p.x >= src.cells_x()) {
-        return src.has_boundary_slice(pos_x) && !src.touches_boundary_cell(pos_x, 0, p.y, p.z);
-    }
-    if (p.x < 0) {
-        return src.has_boundary_slice(neg_x) && !src.touches_boundary_cell(neg_x, 0, p.y, p.z);
-    }
-    if (p.y >= src.cells_y()) {
-        return src.has_boundary_slice(pos_y) && !src.touches_boundary_cell(pos_y, p.x, 0, p.z);
-    }
-    if (p.y < 0) {
-        return src.has_boundary_slice(neg_y) && !src.touches_boundary_cell(neg_y, p.x, 0, p.z);
-    }
-    if (p.z >= src.cells_z()) {
-        return src.has_boundary_slice(pos_z) && !src.touches_boundary_cell(pos_z, p.x, p.y, 0);
-    }
-    return src.has_boundary_slice(neg_z) && !src.touches_boundary_cell(neg_z, p.x, p.y, 0);
+    return sample_at(src, p) == shell_sample::air;
 }
 
 [[nodiscard]] auto corner_open_level(bool open_a, bool open_b, bool open_diagonal) -> uint8 {
@@ -433,6 +415,61 @@ auto compute_corner_darkness(
 constexpr std::size_t front_cell_slot = patch_slot(0, 0);
 constexpr uint32 front_cell_bit       = patch_bit(0, 0);
 
+constexpr int32 max_light_level = 15;
+
+struct voxel_span {
+    int32 lo;
+    int32 hi;
+};
+
+// см. docs/lod-plan.md#свет-сворачивается-тем-же-правилом-что-занятость
+auto outside_cell_light(
+    const vw::asset::light_field& field, mesh_source src, vec3i cell
+) -> int32 {
+    constexpr int32 side = vw::asset::light_field::side;
+
+    const auto span = [step = src.lod_step](int32 c, int32 cells) -> voxel_span {
+        if (c < 0) {
+            return voxel_span{.lo = -1, .hi = -1};
+        }
+        if (c >= cells) {
+            return voxel_span{.lo = side, .hi = side};
+        }
+        return voxel_span{.lo = c * step, .hi = (c * step) + step - 1};
+    };
+
+    const voxel_span sx = span(cell.x, src.cells_x());
+    const voxel_span sy = span(cell.y, src.cells_y());
+    const voxel_span sz = span(cell.z, src.cells_z());
+
+    int32 best = 0;
+
+    for (int32 z = sz.lo; z <= sz.hi; ++z) {
+        for (int32 y = sy.lo; y <= sy.hi; ++y) {
+            for (int32 x = sx.lo; x <= sx.hi; ++x) {
+                best = std::max(best, static_cast<int32>(field.level_around(x, y, z)));
+                if (best == max_light_level) {
+                    return best;
+                }
+            }
+        }
+    }
+
+    return best;
+}
+
+auto cell_light(
+    const vw::asset::light_field& field, const uint8* cells, mesh_source src, vec3i cell
+) -> int32 {
+    if (src.lod_step == 1) {
+        return field.level_around(cell.x, cell.y, cell.z);
+    }
+    if (cells != nullptr && src.cell_inside(cell)) {
+        return cells[src.cell_offset(cell.x, cell.y, cell.z)];
+    }
+    return outside_cell_light(field, src, cell);
+}
+
 auto corners_from_patch(
     mesh_source src, vec3i n, vec3i u, vec3i v, uint32 open_patch
 ) -> corner_light {
@@ -467,12 +504,11 @@ auto corners_from_patch(
 
             open[slot] = (open_patch & patch_bit(du, dv)) != 0 ? 1 : 0;
             if (open[slot] != 0) {
-                const vec3i at = src.cell_center_voxel(cell);
                 if (walk_sky) {
-                    lit_sky[slot] = sky->level_around(at.x, at.y, at.z);
+                    lit_sky[slot] = cell_light(*sky, src.lod_sky, src, cell);
                 }
                 if (walk_block) {
-                    lit_block[slot] = block->level_around(at.x, at.y, at.z);
+                    lit_block[slot] = cell_light(*block, src.lod_block, src, cell);
                 }
             }
 
@@ -534,7 +570,7 @@ auto compute_corner_light(
                 at = at + v;
             }
 
-            open_patch |= is_solid_at(src, at) ? 0U : patch_bit(du, dv);
+            open_patch |= sample_at(src, at) != shell_sample::solid ? patch_bit(du, dv) : 0U;
         }
     }
 
@@ -948,6 +984,39 @@ auto build_cell_indices(
     }
 }
 
+// см. docs/lod-plan.md#свет-сворачивается-тем-же-правилом-что-занятость
+auto build_cell_light(
+    const vw::asset::light_field& field, int32 step, std::vector<uint8>& out
+) -> void {
+    constexpr int32 side = vw::asset::light_field::side;
+
+    const int32 cells = side / step;
+
+    out.assign(static_cast<std::size_t>(cells) * cells * cells, 0);
+
+    for (int32 cz = 0; cz < cells; ++cz) {
+        for (int32 cy = 0; cy < cells; ++cy) {
+            for (int32 cx = 0; cx < cells; ++cx) {
+                uint8 best = 0;
+
+                for (int32 dz = 0; dz < step && best < max_light_level; ++dz) {
+                    for (int32 dy = 0; dy < step && best < max_light_level; ++dy) {
+                        for (int32 dx = 0; dx < step && best < max_light_level; ++dx) {
+                            best = std::max(
+                                best, field.level_at(
+                                          (cx * step) + dx, (cy * step) + dy, (cz * step) + dz
+                                      )
+                            );
+                        }
+                    }
+                }
+
+                out[static_cast<std::size_t>((((cz * cells) + cy) * cells) + cx)] = best;
+            }
+        }
+    }
+}
+
 auto build_cell_boundary(
     const vw::asset::model_boundary& fine, int32 step, vw::asset::model_boundary& covered,
     vw::asset::model_boundary& touched
@@ -956,6 +1025,14 @@ auto build_cell_boundary(
 
     covered.valid = fine.valid;
     touched.valid = fine.valid;
+
+    touched.edges_valid   = fine.edges_valid;
+    touched.corners_valid = fine.corners_valid;
+    touched.corners       = fine.corners;
+
+    for (std::size_t edge = 0; edge < fine.edges.size(); ++edge) {
+        touched.edges[edge] = compress_row(fine.edges[edge], step, cells);
+    }
 
     for (const face_direction face : all_face_directions) {
         auto& covered_plane = covered.faces[face];
@@ -1197,6 +1274,15 @@ auto greedy_mesh_generator::generate_mesh_data(
             );
             src.boundary         = &storage.lod_boundary;
             src.boundary_touched = &storage.lod_boundary_touched;
+        }
+
+        if (src.sky != nullptr && !src.sky->is_uniform()) {
+            detail::build_cell_light(*src.sky, step, storage.lod_sky);
+            src.lod_sky = storage.lod_sky.data();
+        }
+        if (src.block != nullptr && !src.block->is_uniform()) {
+            detail::build_cell_light(*src.block, step, storage.lod_block);
+            src.lod_block = storage.lod_block.data();
         }
 
         src.lod_step    = step;

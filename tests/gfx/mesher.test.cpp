@@ -124,15 +124,6 @@ auto expected_corner_light(
     };
 
     const auto level = [&column, channel](vec3i p) -> int32 {
-        const auto out = [](int32 v) { return v < 0 || v >= side; };
-
-        if (out(p.x)) {
-            p.y = std::clamp(p.y, 0, side - 1);
-            p.z = std::clamp(p.z, 0, side - 1);
-        } else if (out(p.y)) {
-            p.z = std::clamp(p.z, 0, side - 1);
-        }
-
         if (p.y < 0) {
             return 0;
         }
@@ -1297,6 +1288,282 @@ TEST_CASE("a coarse step keeps the roof flat across the chunk seam", "[mesh][lod
     }
 
     REQUIRE(roof_quads == 1);
+}
+
+TEST_CASE("a diagonal neighbour shades the corner it touches", "[mesh][seam]") {
+    asset::model_identity_pool identity_pool;
+    asset::page_pool pages;
+
+    constexpr int32 size    = 64;
+    constexpr int32 surface = 30;
+    constexpr int32 last    = size - 1;
+
+    const auto flat = [&] {
+        auto built = std::make_shared<asset::model>(identity_pool, pages, size, size, size);
+        for (int32 y = 0; y <= surface; ++y) {
+            for (int32 z = 0; z < size; ++z) {
+                for (int32 x = 0; x < size; ++x) {
+                    built->set_voxel(x, y, z, voxels::gray[4]);
+                }
+            }
+        }
+        return built;
+    };
+
+    const auto plain  = flat();
+    const auto pillar = flat();
+    const auto notch  = flat();
+
+    pillar->set_voxel(last, surface + 1, 0, voxels::gray[4]);
+    notch->set_voxel(0, surface, last, voxels::air);
+
+    asset::chunk_volume chunk{flat()};
+    for (const face_direction face :
+         {face_direction::pos_x, face_direction::neg_x, face_direction::pos_z,
+          face_direction::neg_z}) {
+        chunk.set_boundary_slice(face, *plain);
+    }
+    chunk.set_boundary_shell(vec3i{-1, 0, 1}, *pillar);
+    chunk.set_boundary_shell(vec3i{1, 0, -1}, *notch);
+
+    gfx::mesh_generation_storage storage;
+    const auto mesh = gfx::greedy_mesh_generator::generate_mesh_data(
+        storage,
+        gfx::mesh_source{
+            .voxels = chunk.voxels(), .boundary = chunk.share_boundary().get()
+        },
+        {}
+    );
+
+    const auto up = static_cast<uint8>(std::to_underlying(face_direction::pos_y));
+
+    const auto roof_over = [&](int32 x, int32 z) -> std::optional<gfx::quad> {
+        for (const auto& q : mesh.quads) {
+            const auto lo = unpack_min(q);
+            const auto hi = unpack_max(q);
+            if (unpack_normal(q) == up && lo.x <= x && x < hi.x && lo.z <= z && z < hi.z) {
+                return q;
+            }
+        }
+        return std::nullopt;
+    };
+
+    const auto brightest = [](const std::array<uint8, 4>& corners) {
+        return *std::ranges::max_element(corners);
+    };
+
+    const auto shaded = roof_over(0, last);
+    REQUIRE(shaded.has_value());
+    const auto shaded_ao = unpack_ao(*shaded);
+    INFO("corner quad ao " << int32{shaded_ao[0]} << " " << int32{shaded_ao[1]} << " "
+                           << int32{shaded_ao[2]} << " " << int32{shaded_ao[3]});
+    REQUIRE(brightest(shaded_ao) == 1);
+
+    const auto bulged = roof_over(last, 0);
+    REQUIRE(bulged.has_value());
+    const auto bulged_convex = unpack_convex(*bulged);
+    INFO("corner quad convex " << int32{bulged_convex[0]} << " " << int32{bulged_convex[1]}
+                               << " " << int32{bulged_convex[2]} << " "
+                               << int32{bulged_convex[3]});
+    REQUIRE(brightest(bulged_convex) == 1);
+
+    const auto plainly = roof_over(size / 2, size / 2);
+    REQUIRE(plainly.has_value());
+    REQUIRE(brightest(unpack_ao(*plainly)) == 0);
+    REQUIRE(brightest(unpack_convex(*plainly)) == 0);
+}
+
+TEST_CASE("the corner where four chunks meet keeps the sky it sees", "[mesh][seam]") {
+    asset::model_identity_pool identity_pool;
+    asset::page_pool pages;
+
+    constexpr int32 size    = 64;
+    constexpr int32 surface = 30;
+    constexpr uint8 full_sky = 15;
+
+    const auto flat = [&] {
+        auto built = std::make_shared<asset::model>(identity_pool, pages, size, size, size);
+        for (int32 y = 0; y <= surface; ++y) {
+            for (int32 z = 0; z < size; ++z) {
+                for (int32 x = 0; x < size; ++x) {
+                    built->set_voxel(x, y, z, voxels::gray[4]);
+                }
+            }
+        }
+        return built;
+    };
+
+    const auto solid = [&] {
+        auto built = std::make_shared<asset::model>(identity_pool, pages, size, size, size);
+        for (int32 y = 0; y < size; ++y) {
+            for (int32 z = 0; z < size; ++z) {
+                for (int32 x = 0; x < size; ++x) {
+                    built->set_voxel(x, y, z, voxels::gray[4]);
+                }
+            }
+        }
+        return built;
+    };
+
+    const auto middle = flat();
+    const auto ahead  = flat();
+    const auto across = flat();
+    const auto wall   = solid();
+
+    asset::chunk_occupancy middle_cells;
+    asset::chunk_occupancy ahead_cells;
+    asset::chunk_occupancy across_cells;
+    asset::chunk_occupancy wall_cells;
+
+    REQUIRE(middle->build_occupancy(middle_cells));
+    REQUIRE(ahead->build_occupancy(ahead_cells));
+    REQUIRE(across->build_occupancy(across_cells));
+    REQUIRE(wall->build_occupancy(wall_cells));
+
+    const asset::chunk_occupancy* middle_stack[1] = {&middle_cells};
+    const asset::chunk_occupancy* ahead_stack[1]  = {&ahead_cells};
+    const asset::chunk_occupancy* across_stack[1] = {&across_cells};
+    const asset::chunk_occupancy* wall_stack[1]   = {&wall_cells};
+
+    const auto slice = [](const asset::chunk_occupancy* const* stack) {
+        return ecs::light_column::column_slice{
+            .occupancy = std::span<const asset::chunk_occupancy* const>{stack, 1}, .models = {}
+        };
+    };
+
+    ecs::light_column::neighbourhood around{};
+    for (std::size_t at = 0; at < around.size(); ++at) {
+        around[at] = slice(across_stack);
+    }
+    around[4] = slice(middle_stack);
+    around[3] = slice(wall_stack);
+    around[7] = slice(ahead_stack);
+
+    const ecs::light_column column{around, ecs::emission_table{}, {}};
+
+    asset::chunk_volume chunk{middle};
+    chunk.set_boundary_slice(face_direction::neg_x, *wall);
+    chunk.set_boundary_slice(face_direction::pos_x, *across);
+    chunk.set_boundary_slice(face_direction::neg_z, *across);
+    chunk.set_boundary_slice(face_direction::pos_z, *ahead);
+    chunk.set_sky_light(column.bake(0, asset::light_channel::sky));
+
+    gfx::mesh_generation_storage storage;
+    const auto mesh = gfx::greedy_mesh_generator::generate_mesh_data(
+        storage,
+        gfx::mesh_source{
+            .voxels   = chunk.voxels(),
+            .boundary = chunk.share_boundary().get(),
+            .sky      = chunk.get_sky_light(),
+            .block    = chunk.get_block_light()
+        },
+        {}
+    );
+
+    const auto up = static_cast<uint8>(std::to_underlying(face_direction::pos_y));
+
+    bool saw_corner = false;
+    for (const auto& q : mesh.quads) {
+        if (unpack_normal(q) != up) {
+            continue;
+        }
+
+        const auto lo  = unpack_min(q);
+        const auto hi  = unpack_max(q);
+        const auto sky = unpack_sky(q);
+
+        INFO(
+            "roof quad x " << lo.x << ".." << hi.x << " z " << lo.z << ".." << hi.z << " sky "
+                           << int32{sky[0]} << " " << int32{sky[1]} << " " << int32{sky[2]}
+                           << " " << int32{sky[3]}
+        );
+        REQUIRE(*std::ranges::min_element(sky) == full_sky);
+
+        saw_corner = saw_corner || (lo.x == 0 && hi.z == size);
+    }
+
+    REQUIRE(saw_corner);
+}
+
+TEST_CASE("a coarse cell takes the brightest sky it holds", "[mesh][lod]") {
+    model_fixture fixture{64};
+    auto& mdl = *fixture.get();
+
+    constexpr int32 side      = 64;
+    constexpr int32 floor_top = 20;
+    constexpr int32 slab_from = 30;
+    constexpr int32 slab_to   = 34;
+    constexpr int32 opening   = 9;
+    constexpr int32 step      = 4;
+    constexpr int32 edge      = opening - 1;
+    constexpr uint8 full_sky  = 15;
+
+    {
+        asset::model_writer writer{mdl};
+
+        for (int32 y = 0; y < floor_top; ++y) {
+            for (int32 z = 0; z < side; ++z) {
+                for (int32 x = 0; x < side; ++x) {
+                    writer.set(x, y, z, voxels::gray[5]);
+                }
+            }
+        }
+        for (int32 y = slab_from; y < slab_to; ++y) {
+            for (int32 z = 0; z < side; ++z) {
+                for (int32 x = opening; x < side; ++x) {
+                    writer.set(x, y, z, voxels::gray[5]);
+                }
+            }
+        }
+    }
+
+    asset::chunk_occupancy occupancy;
+    REQUIRE(mdl.build_occupancy(occupancy));
+
+    const asset::chunk_occupancy* stack[1] = {&occupancy};
+    const ecs::light_column column{
+        std::span<const asset::chunk_occupancy* const>{stack, 1}
+    };
+    fixture.chunk().set_sky_light(column.bake(0, asset::light_channel::sky));
+
+    const auto sky_at = [&column](int32 x) {
+        return column.level_at(x, floor_top, 0, asset::light_channel::sky);
+    };
+
+    REQUIRE(sky_at(edge) == full_sky);
+    REQUIRE(sky_at(edge + (step / 2)) < full_sky);
+
+    const auto mesh = fixture.greedy({.lod_step = step});
+
+    const auto up = static_cast<uint8>(std::to_underlying(face_direction::pos_y));
+
+    int32 floor_plane = std::numeric_limits<int32>::max();
+    for (const auto& q : mesh.quads) {
+        if (unpack_normal(q) == up) {
+            floor_plane = std::min(floor_plane, unpack_min(q).y);
+        }
+    }
+    REQUIRE(floor_plane != std::numeric_limits<int32>::max());
+
+    std::size_t checked = 0;
+    for (const auto& q : mesh.quads) {
+        const auto lo = unpack_min(q);
+        const auto hi = unpack_max(q);
+
+        if (unpack_normal(q) != up || lo.y != floor_plane || lo.x > edge || hi.x <= edge) {
+            continue;
+        }
+
+        const auto sky = unpack_sky(q);
+        INFO(
+            "floor quad x " << lo.x << ".." << hi.x << " sky " << int32{sky[0]} << " "
+                            << int32{sky[1]} << " " << int32{sky[2]} << " " << int32{sky[3]}
+        );
+        REQUIRE(*std::ranges::max_element(sky) == full_sky);
+        ++checked;
+    }
+
+    REQUIRE(checked > 0);
 }
 
 TEST_CASE("every coarse step costs fewer quads than the one before", "[mesh][lod]") {

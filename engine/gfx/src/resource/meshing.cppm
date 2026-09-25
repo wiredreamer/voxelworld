@@ -86,6 +86,10 @@ struct mesh_source {
 
     const vw::asset::model_boundary* boundary_touched = nullptr;
 
+    // см. docs/lod-plan.md#свет-сворачивается-тем-же-правилом-что-занятость
+    const uint8* lod_sky   = nullptr;
+    const uint8* lod_block = nullptr;
+
     [[nodiscard]] auto has_boundary_slice(face_direction face) const -> bool {
         return boundary != nullptr && (boundary->valid & face_bit(face)) != 0;
     }
@@ -107,6 +111,27 @@ struct mesh_source {
     [[nodiscard]] auto boundary_face(face_direction face) const
         -> const vw::asset::face_occupancy& {
         return boundary->faces[face];
+    }
+
+    // см. docs/lod-plan.md#у-мешера-двадцать-шесть-соседей
+    [[nodiscard]] auto shell() const -> const vw::asset::model_boundary& {
+        return *(boundary_touched != nullptr ? boundary_touched : boundary);
+    }
+
+    [[nodiscard]] auto has_boundary_edge(vec3i step) const -> bool {
+        return boundary != nullptr && shell().has_edge(step);
+    }
+
+    [[nodiscard]] auto touches_boundary_edge(vec3i step, int32 along) const -> bool {
+        return shell().edge_holds(step, along);
+    }
+
+    [[nodiscard]] auto has_boundary_corner(vec3i step) const -> bool {
+        return boundary != nullptr && shell().has_corner(step);
+    }
+
+    [[nodiscard]] auto touches_boundary_corner(vec3i step) const -> bool {
+        return shell().corner_holds(step);
     }
 
     [[nodiscard]] auto sky_light() const -> const vw::asset::light_field* {
@@ -136,17 +161,20 @@ struct mesh_source {
         return !lod_cells->test(x, y, z);
     }
 
+    [[nodiscard]] auto cell_offset(int32 x, int32 y, int32 z) const -> int32 {
+        return (((z * cells_y()) + y) * cells_x()) + x;
+    }
+
+    [[nodiscard]] auto cell_inside(vec3i cell) const -> bool {
+        return cell.x >= 0 && cell.y >= 0 && cell.z >= 0 && cell.x < cells_x() &&
+               cell.y < cells_y() && cell.z < cells_z();
+    }
+
     [[nodiscard]] auto cell_index(int32 x, int32 y, int32 z) const -> voxel {
         if (lod_step == 1) {
             return voxels.get_voxel(x, y, z);
         }
-        const int32 at = (((z * cells_y()) + y) * cells_x()) + x;
-        return lod_indices[at];
-    }
-
-    [[nodiscard]] auto cell_center_voxel(vec3i cell) const -> vec3i {
-        const int32 half = lod_step / 2;
-        return (cell * lod_step) + vec3i{half, half, half};
+        return lod_indices[cell_offset(x, y, z)];
     }
 };
 
@@ -213,6 +241,8 @@ struct mesh_generation_storage {
     std::vector<voxel> lod_indices;
     vw::asset::model_boundary lod_boundary;
     vw::asset::model_boundary lod_boundary_touched;
+    std::vector<uint8> lod_sky;
+    std::vector<uint8> lod_block;
 
     vw::asset::chunk_link_scratch link_scratch;
 

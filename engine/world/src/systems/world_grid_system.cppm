@@ -123,8 +123,8 @@ private:
     [[nodiscard]] auto column_ready_(column_layer& layer, vec2i coord) const -> bool;
     [[nodiscard]] auto within_draw_(const column_layer& layer, vec2i coord) const -> bool;
     [[nodiscard]] auto column_top_(column_layer& layer, vec2i coord) -> std::optional<int32>;
-    auto fill_face_(
-        column_layer& layer, asset::chunk_volume& vol, vec3i chunk_coord, face_direction face
+    auto fill_shell_(
+        column_layer& layer, asset::chunk_volume& vol, vec3i chunk_coord, vec3i step
     ) -> bool;
     auto refresh_boundary_(column_layer& layer, vec3i chunk_coord) -> bool;
     auto restore_lod_boundaries_() -> void;

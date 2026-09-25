@@ -19,9 +19,43 @@ public:
 
     using page_type = std::array<uint8, page_bytes>;
 
+    // см. docs/lod-plan.md#у-мешера-двадцать-шесть-соседей
     struct boundary_light {
         per_face<uint8> uniform{};
         per_face<std::vector<uint8>> packed{};
+
+        std::array<std::array<uint8, side / 2>, shell_edge_count> edges{};
+        std::array<uint8, shell_corner_count / 2> corners{};
+
+        [[nodiscard]] static auto unpack(uint8 pair, int32 at) -> uint8 {
+            return static_cast<uint8>((at % 2) == 0 ? (pair & 0xFU) : (pair >> 4));
+        }
+
+        static auto pack(uint8& pair, int32 at, uint8 level) -> void {
+            pair = static_cast<uint8>(
+                (at % 2) == 0 ? ((pair & 0xF0U) | level) : ((pair & 0x0FU) | (level << 4))
+            );
+        }
+
+        [[nodiscard]] auto edge_level(vec3i step, int32 along) const -> uint8 {
+            const auto& line = edges[static_cast<std::size_t>(shell_edge_index(step))];
+            return unpack(line[static_cast<std::size_t>(along / 2)], along);
+        }
+
+        auto set_edge_level(vec3i step, int32 along, uint8 level) -> void {
+            auto& line = edges[static_cast<std::size_t>(shell_edge_index(step))];
+            pack(line[static_cast<std::size_t>(along / 2)], along, level);
+        }
+
+        [[nodiscard]] auto corner_level(vec3i step) const -> uint8 {
+            const int32 at = shell_corner_index(step);
+            return unpack(corners[static_cast<std::size_t>(at / 2)], at);
+        }
+
+        auto set_corner_level(vec3i step, uint8 level) -> void {
+            const int32 at = shell_corner_index(step);
+            pack(corners[static_cast<std::size_t>(at / 2)], at, level);
+        }
 
         [[nodiscard]] auto level_at(face_direction face, int32 a, int32 b) const -> uint8 {
             const auto& plane = packed[face];
@@ -77,27 +111,27 @@ public:
         return level_at(pos.x, pos.y, pos.z);
     }
 
+    // см. docs/lod-plan.md#у-мешера-двадцать-шесть-соседей
     [[nodiscard]] auto level_around(int32 x, int32 y, int32 z) const -> uint8 {
-        const bool inside = x >= 0 && y >= 0 && z >= 0 && x < side && y < side && z < side;
-        if (inside) {
-            return level_at(x, y, z);
-        }
+        const auto beyond = [](int32 v) -> int32 { return v < 0 ? -1 : (v >= side ? 1 : 0); };
 
-        const auto clamp = [](int32 v) -> int32 { return std::clamp(v, 0, side - 1); };
+        const vec3i step{beyond(x), beyond(y), beyond(z)};
 
-        if (x < 0 || x >= side) {
-            return around_.level_at(
-                x < 0 ? face_direction::neg_x : face_direction::pos_x, clamp(y), clamp(z)
-            );
+        switch (shell_span(step)) {
+            case 0:
+                return level_at(x, y, z);
+            case 1: {
+                const face_direction face = shell_face(step);
+                const vec2i on_plane      = project_onto_face_plane(face, vec3i{x, y, z});
+                return around_.level_at(face, on_plane.x, on_plane.y);
+            }
+            case 2: {
+                const int32 free = shell_free_axis(step);
+                return around_.edge_level(step, vec3i{x, y, z}[free]);
+            }
+            default:
+                return around_.corner_level(step);
         }
-        if (y < 0 || y >= side) {
-            return around_.level_at(
-                y < 0 ? face_direction::neg_y : face_direction::pos_y, clamp(x), clamp(z)
-            );
-        }
-        return around_.level_at(
-            z < 0 ? face_direction::neg_z : face_direction::pos_z, clamp(x), clamp(y)
-        );
     }
 
     [[nodiscard]] auto is_uniform() const -> bool {
