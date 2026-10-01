@@ -107,3 +107,26 @@ TEST_CASE("an adopted model answers the next lookup", "[library]") {
     REQUIRE(loaded.has_value());
     REQUIRE(*loaded == source);
 }
+
+TEST_CASE("a forgotten model is read from disk again", "[library]") {
+    const temp_root root{"library_forget"};
+    asset::model_registry registry;
+    const voxel_registry voxel_types;
+    asset::model_library library{registry, voxel_types, root.path()};
+
+    auto saved = registry.create_unnamed(vec3i{2, 2, 2});
+    const asset::asset_ref ref{"models/foot.voxm"};
+    REQUIRE(library.save(ref, *saved).has_value());
+
+    auto edited = registry.create_unnamed(vec3i{2, 2, 2});
+    edited->set_voxel(0, 0, 0, voxels::green[2]);
+    library.adopt(ref, edited);
+
+    library.forget(ref);
+    REQUIRE(library.find(ref) == nullptr);
+
+    const auto loaded = library.load(ref);
+    REQUIRE(loaded.has_value());
+    REQUIRE(*loaded != edited);
+    REQUIRE((*loaded)->is_empty(0, 0, 0));
+}

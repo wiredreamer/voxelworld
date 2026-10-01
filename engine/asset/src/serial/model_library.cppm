@@ -26,6 +26,8 @@ public:
 
     auto adopt(const asset_ref& ref, std::shared_ptr<model> volume) -> void;
 
+    auto forget(const asset_ref& ref) -> void;
+
     [[nodiscard]] auto find(const asset_ref& ref) const -> std::shared_ptr<model>;
 
     [[nodiscard]] auto path_of(const asset_ref& ref) const -> std::filesystem::path;

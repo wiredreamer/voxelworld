@@ -55,4 +55,39 @@ auto default_model_ref(
     return asset_ref{std::format("{}/{}/{}.voxm", dirs::models, prefab.stem(), entity_name)};
 }
 
+auto rehomed_model_ref(
+    const asset_ref& model, const asset_ref& from_prefab, const asset_ref& to_prefab
+) -> std::optional<asset_ref> {
+    if (from_prefab.stem().empty() || to_prefab.stem().empty()) {
+        return std::nullopt;
+    }
+
+    const auto home = std::format("{}/{}/", dirs::models, from_prefab.stem());
+    const std::string_view path{model.str()};
+    if (!path.starts_with(home)) {
+        return std::nullopt;
+    }
+
+    return asset_ref{
+        std::format("{}/{}/{}", dirs::models, to_prefab.stem(), path.substr(home.size()))
+    };
+}
+
+auto renamed_model_ref(
+    const asset_ref& model, std::string_view stem
+) -> std::optional<asset_ref> {
+    constexpr std::string_view forbidden_characters = "/\\:*?\"<>|.";
+
+    if (model.empty() || stem.empty() ||
+        stem.find_first_of(forbidden_characters) != std::string_view::npos) {
+        return std::nullopt;
+    }
+
+    const std::string_view path{model.str()};
+    const auto file_name_size = model.stem().size() + model.extension().size();
+    const auto folder         = path.substr(0, path.size() - file_name_size);
+
+    return asset_ref{std::format("{}{}{}", folder, stem, model.extension())};
+}
+
 }  // namespace vw::asset

@@ -63,6 +63,12 @@ auto model_library::adopt(
     loaded_[ref] = std::move(volume);
 }
 
+auto model_library::forget(
+    const asset_ref& ref
+) -> void {
+    loaded_.erase(ref);
+}
+
 auto model_library::find(
     const asset_ref& ref
 ) const -> std::shared_ptr<model> {

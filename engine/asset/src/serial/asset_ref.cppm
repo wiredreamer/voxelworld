@@ -38,6 +38,13 @@ private:
 [[nodiscard]] auto default_model_ref(const asset_ref& prefab, std::string_view entity_name)
     -> asset_ref;
 
+[[nodiscard]] auto rehomed_model_ref(
+    const asset_ref& model, const asset_ref& from_prefab, const asset_ref& to_prefab
+) -> std::optional<asset_ref>;
+
+[[nodiscard]] auto renamed_model_ref(const asset_ref& model, std::string_view stem)
+    -> std::optional<asset_ref>;
+
 }  // namespace vw::asset
 
 export template <>
