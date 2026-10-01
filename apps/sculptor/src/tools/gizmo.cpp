@@ -25,6 +25,13 @@ constexpr float32 ring_radius  = 0.75F;
 constexpr float32 tube_radius  = 0.022F;
 constexpr float32 handle_half  = 0.05F;
 
+constexpr float32 plane_handle_inner = 0.28F;
+constexpr float32 plane_handle_outer = 0.46F;
+constexpr float32 plane_min_facing   = 0.15F;
+
+constexpr uint8 plane_alpha             = 0x70;
+constexpr uint8 plane_alpha_highlighted = 0xD0;
+
 constexpr float32 screen_height_fraction = 0.18F;
 
 constexpr float32 pick_tolerance_of_gizmo_size = 0.09F;
@@ -38,6 +45,33 @@ constexpr float32 snap_scale     = 0.1F;
 constexpr auto axis_x = vec3f{1.0F, 0.0F, 0.0F};
 constexpr auto axis_y = vec3f{0.0F, 1.0F, 0.0F};
 constexpr auto axis_z = vec3f{0.0F, 0.0F, 1.0F};
+
+constexpr std::array<gizmo_handle, 3> axis_handles{gizmo_handle::x, gizmo_handle::y, gizmo_handle::z};
+constexpr std::array<gizmo_handle, 3> plane_handles{
+    gizmo_handle::xy, gizmo_handle::yz, gizmo_handle::zx
+};
+
+struct plane_axes {
+    std::size_t first;
+    std::size_t second;
+    std::size_t normal;
+};
+
+auto is_plane(gizmo_handle handle) -> bool {
+    return handle == gizmo_handle::xy || handle == gizmo_handle::yz || handle == gizmo_handle::zx;
+}
+
+auto plane_axes_of(gizmo_handle plane) -> plane_axes {
+    switch (plane) {
+        case gizmo_handle::yz: return {.first = 1, .second = 2, .normal = 0};
+        case gizmo_handle::zx: return {.first = 2, .second = 0, .normal = 1};
+        default: return {.first = 0, .second = 1, .normal = 2};
+    }
+}
+
+auto with_alpha(color col, uint8 alpha) -> color {
+    return color{col.r(), col.g(), col.b(), alpha};
+}
 
 auto basis_of(const vec3f& axis) -> std::pair<vec3f, vec3f> {
     const auto ax = std::abs(axis.x);
@@ -57,19 +91,19 @@ auto quat_from_axis_angle(const vec3f& axis, float32 angle) -> quat {
     return quat{axis.x * s, axis.y * s, axis.z * s, std::cos(half)};
 }
 
-auto axis_index(gizmo_axis axis) -> std::size_t {
+auto axis_index(gizmo_handle axis) -> std::size_t {
     switch (axis) {
-        case gizmo_axis::y: return 1;
-        case gizmo_axis::z: return 2;
+        case gizmo_handle::y: return 1;
+        case gizmo_handle::z: return 2;
         default: return 0;
     }
 }
 
-auto axis_color(gizmo_axis axis, bool highlighted) -> color {
+auto axis_color(gizmo_handle axis, bool highlighted) -> color {
     const auto base = [axis]() -> color {
         switch (axis) {
-            case gizmo_axis::y: return colors::green_4;
-            case gizmo_axis::z: return colors::red_4;
+            case gizmo_handle::y: return colors::green_4;
+            case gizmo_handle::z: return colors::red_4;
             default: return colors::blue_4;
         }
     }();
@@ -191,21 +225,31 @@ auto gizmo::build_frame_(
     return fr;
 }
 
-auto gizmo::pick_(
-    const frame& fr
-) const -> gizmo_axis {
+auto gizmo::cursor_ray_() const -> spatial::ray {
     const auto& window = engine_->get_window();
     const auto& camera = engine_->get_camera();
-    const auto r = camera.screen_to_world_ray(window.get_cursor_pos(), window.get_size());
+    return camera.screen_to_world_ray(window.get_cursor_pos(), window.get_size());
+}
+
+auto gizmo::plane_faces_camera_(
+    const frame& fr, gizmo_handle plane
+) const -> bool {
+    const auto& normal = fr.axes[plane_axes_of(plane).normal];
+    const auto view    = math::normalize(fr.pivot - engine_->get_camera().get_position());
+    return std::abs(math::dot(normal, view)) > plane_min_facing;
+}
+
+auto gizmo::pick_(
+    const frame& fr
+) const -> gizmo_handle {
+    const auto r = cursor_ray_();
 
     const auto tolerance = pick_tolerance_of_gizmo_size * fr.scale;
 
-    auto best      = gizmo_axis::none;
+    auto best      = gizmo_handle::none;
     auto best_dist = std::numeric_limits<float32>::max();
 
-    constexpr std::array<gizmo_axis, 3> axes{gizmo_axis::x, gizmo_axis::y, gizmo_axis::z};
-
-    for (const auto axis_id : axes) {
+    for (const auto axis_id : axis_handles) {
         const auto& axis = fr.axes[axis_index(axis_id)];
 
         if (mode_() == gizmo_mode::rotate) {
@@ -264,6 +308,40 @@ auto gizmo::pick_(
         }
     }
 
+    if (mode_() != gizmo_mode::translate) {
+        return best;
+    }
+
+    for (const auto plane_id : plane_handles) {
+        if (!plane_faces_camera_(fr, plane_id)) {
+            continue;
+        }
+
+        const auto plane = plane_axes_of(plane_id);
+
+        vec3f hit;
+        if (!ray_plane(fr.pivot, fr.axes[plane.normal], r, hit)) {
+            continue;
+        }
+
+        const auto offset       = hit - fr.pivot;
+        const auto along_first  = math::dot(offset, fr.axes[plane.first]) / fr.scale;
+        const auto along_second = math::dot(offset, fr.axes[plane.second]) / fr.scale;
+
+        const auto inside = [](float32 along) -> bool {
+            return along >= plane_handle_inner && along <= plane_handle_outer;
+        };
+        if (!inside(along_first) || !inside(along_second)) {
+            continue;
+        }
+
+        const auto depth = math::length(hit - r.start);
+        if (depth < best_dist) {
+            best_dist = depth;
+            best      = plane_id;
+        }
+    }
+
     return best;
 }
 
@@ -276,6 +354,9 @@ auto gizmo::on_mouse_move(
 ) -> void {
     const auto fr = build_frame_(ent);
     if (!fr.has_value()) {
+        if (!dragging_) {
+            hovered_ = gizmo_handle::none;
+        }
         return;
     }
 
@@ -305,7 +386,7 @@ auto gizmo::on_mouse_press(
     }
 
     const auto axis_id = pick_(*fr);
-    if (axis_id == gizmo_axis::none) {
+    if (axis_id == gizmo_handle::none) {
         return false;
     }
 
@@ -322,10 +403,15 @@ auto gizmo::on_mouse_press(
         start_pivot_ = world.get<ecs::model_component>(ent).get_pivot();
     }
 
-    const auto& window = engine_->get_window();
-    const auto& camera = engine_->get_camera();
-    const auto r       = camera.screen_to_world_ray(window.get_cursor_pos(), window.get_size());
-    const auto& axis   = fr->axes[axis_index(axis_id)];
+    const auto r = cursor_ray_();
+
+    if (is_plane(axis_id)) {
+        start_plane_point_ = fr->pivot;
+        ray_plane(fr->pivot, fr->axes[plane_axes_of(axis_id).normal], r, start_plane_point_);
+        return true;
+    }
+
+    const auto& axis = fr->axes[axis_index(axis_id)];
 
     if (mode_() == gizmo_mode::rotate) {
         vec3f hit;
@@ -349,7 +435,7 @@ auto gizmo::on_mouse_release() -> void {
     }
 
     dragging_ = false;
-    active_   = gizmo_axis::none;
+    active_   = gizmo_handle::none;
 
     if (commit_ == gizmo_commit::preview) {
         return;
@@ -385,68 +471,77 @@ auto gizmo::on_mouse_release() -> void {
     op_manager_->execute(std::move(op));
 }
 
+auto gizmo::translation_delta_(
+    const frame& fr, std::optional<float32> snap_step
+) const -> std::optional<vec3f> {
+    if (active_ == gizmo_handle::none) {
+        return std::nullopt;
+    }
+
+    const auto r = cursor_ray_();
+
+    std::array<float32, 3> delta{};
+
+    if (is_plane(active_)) {
+        const auto plane = plane_axes_of(active_);
+
+        vec3f hit;
+        if (!ray_plane(fr.pivot, fr.axes[plane.normal], r, hit)) {
+            return std::nullopt;
+        }
+
+        const auto offset   = hit - start_plane_point_;
+        delta[plane.first]  = math::dot(offset, fr.axes[plane.first]);
+        delta[plane.second] = math::dot(offset, fr.axes[plane.second]);
+    } else {
+        float32 t = 0.0F;
+        if (!closest_on_axis(fr.pivot, fr.axes[axis_index(active_)], r, t)) {
+            return std::nullopt;
+        }
+
+        delta[axis_index(active_)] = t - start_offset_;
+    }
+
+    if (snap_step.has_value()) {
+        for (auto& component : delta) {
+            component = snapped(component, *snap_step);
+        }
+    }
+
+    return vec3f{delta[0], delta[1], delta[2]};
+}
+
 auto gizmo::apply_translate_(
     ecs::entity ent, const frame& fr
 ) -> void {
-    const auto& window = engine_->get_window();
-    const auto& camera = engine_->get_camera();
-    const auto r       = camera.screen_to_world_ray(window.get_cursor_pos(), window.get_size());
-    const auto& axis   = fr.axes[axis_index(active_)];
-
-    float32 t = 0.0F;
-    if (!closest_on_axis(fr.pivot, axis, r, t)) {
+    const auto delta = translation_delta_(
+        fr, snap_enabled_() ? std::optional<float32>{snap_translate} : std::nullopt
+    );
+    if (!delta.has_value()) {
         return;
     }
 
-    auto delta = t - start_offset_;
-    if (snap_enabled_()) {
-        delta = snapped(delta, snap_translate);
-    }
-
-    auto next = start_transform_.get_position();
-    switch (active_) {
-        case gizmo_axis::x: next.x += delta; break;
-        case gizmo_axis::y: next.y += delta; break;
-        case gizmo_axis::z: next.z += delta; break;
-        default: return;
-    }
-
-    engine_->get_world().system<ecs::transform_system>().modify(ent).set_position(next);
+    engine_->get_world().system<ecs::transform_system>().modify(ent).set_position(
+        start_transform_.get_position() + *delta
+    );
 }
 
 auto gizmo::apply_pivot_(
     ecs::entity ent, const frame& fr
 ) -> void {
-    const auto& window = engine_->get_window();
-    const auto& camera = engine_->get_camera();
-    const auto r       = camera.screen_to_world_ray(window.get_cursor_pos(), window.get_size());
-    const auto& axis   = fr.axes[axis_index(active_)];
-
-    float32 t = 0.0F;
-    if (!closest_on_axis(fr.pivot, axis, r, t)) {
+    const auto delta = translation_delta_(fr, snap_pivot);
+    if (!delta.has_value()) {
         return;
     }
 
-    const auto delta = snapped(t - start_offset_, snap_pivot);
-
-    auto next = start_pivot_;
-    switch (active_) {
-        case gizmo_axis::x: next.x += delta; break;
-        case gizmo_axis::y: next.y += delta; break;
-        case gizmo_axis::z: next.z += delta; break;
-        default: return;
-    }
-
-    engine_->get_world().system<ecs::model_system>().modify(ent).set_pivot(next);
+    engine_->get_world().system<ecs::model_system>().modify(ent).set_pivot(start_pivot_ + *delta);
 }
 
 auto gizmo::apply_rotate_(
     ecs::entity ent, const frame& fr
 ) -> void {
-    const auto& window = engine_->get_window();
-    const auto& camera = engine_->get_camera();
-    const auto r       = camera.screen_to_world_ray(window.get_cursor_pos(), window.get_size());
-    const auto& axis   = fr.axes[axis_index(active_)];
+    const auto r     = cursor_ray_();
+    const auto& axis = fr.axes[axis_index(active_)];
 
     vec3f hit;
     if (!ray_plane(fr.pivot, axis, r, hit)) {
@@ -472,10 +567,8 @@ auto gizmo::apply_rotate_(
 auto gizmo::apply_scale_(
     ecs::entity ent, const frame& fr
 ) -> void {
-    const auto& window = engine_->get_window();
-    const auto& camera = engine_->get_camera();
-    const auto r       = camera.screen_to_world_ray(window.get_cursor_pos(), window.get_size());
-    const auto& axis   = fr.axes[axis_index(active_)];
+    const auto r     = cursor_ray_();
+    const auto& axis = fr.axes[axis_index(active_)];
 
     float32 t = 0.0F;
     if (!closest_on_axis(fr.pivot, axis, r, t)) {
@@ -492,9 +585,9 @@ auto gizmo::apply_scale_(
 
     auto next = start_transform_.get_scale();
     switch (active_) {
-        case gizmo_axis::x: next.x *= factor; break;
-        case gizmo_axis::y: next.y *= factor; break;
-        case gizmo_axis::z: next.z *= factor; break;
+        case gizmo_handle::x: next.x *= factor; break;
+        case gizmo_handle::y: next.y *= factor; break;
+        case gizmo_handle::z: next.z *= factor; break;
         default: return;
     }
 
@@ -511,9 +604,7 @@ auto gizmo::render(
 
     const auto lit = dragging_ ? active_ : hovered_;
 
-    constexpr std::array<gizmo_axis, 3> axes{gizmo_axis::x, gizmo_axis::y, gizmo_axis::z};
-
-    for (const auto axis_id : axes) {
+    for (const auto axis_id : axis_handles) {
         const auto& axis = fr->axes[axis_index(axis_id)];
         const auto col   = axis_color(axis_id, axis_id == lit);
 
@@ -528,6 +619,42 @@ auto gizmo::render(
             }
         }
     }
+
+    if (mode_() != gizmo_mode::translate) {
+        return;
+    }
+
+    for (const auto plane_id : plane_handles) {
+        const bool highlighted = plane_id == lit;
+        if (!highlighted && !plane_faces_camera_(*fr, plane_id)) {
+            continue;
+        }
+
+        const auto normal_axis = axis_handles[plane_axes_of(plane_id).normal];
+        draw_plane_handle_(
+            *fr, plane_id,
+            with_alpha(
+                axis_color(normal_axis, highlighted),
+                highlighted ? plane_alpha_highlighted : plane_alpha
+            )
+        );
+    }
+}
+
+auto gizmo::draw_plane_handle_(
+    const frame& fr, gizmo_handle plane_id, color col
+) -> void {
+    const auto plane = plane_axes_of(plane_id);
+
+    const auto first_inner  = fr.axes[plane.first] * (plane_handle_inner * fr.scale);
+    const auto first_outer  = fr.axes[plane.first] * (plane_handle_outer * fr.scale);
+    const auto second_inner = fr.axes[plane.second] * (plane_handle_inner * fr.scale);
+    const auto second_outer = fr.axes[plane.second] * (plane_handle_outer * fr.scale);
+
+    engine_->get_renderer().draw_quad(
+        fr.pivot + first_inner + second_inner, fr.pivot + first_outer + second_inner,
+        fr.pivot + first_outer + second_outer, fr.pivot + first_inner + second_outer, col
+    );
 }
 
 auto gizmo::draw_arrow_(

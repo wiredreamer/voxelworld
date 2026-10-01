@@ -42,13 +42,24 @@ auto select_entity_tool::on_key_press(
 auto select_entity_tool::on_mouse_move(
     [[maybe_unused]] const plat::mouse_move_event& ev
 ) -> void {
-    if (state_->scene.name_to_entity.contains(state_->scene.selected_name)) {
-        gizmo_.on_mouse_move(state_->scene.name_to_entity[state_->scene.selected_name]);
+    const auto selected = state_->scene.name_to_entity.find(state_->scene.selected_name);
+    if (selected == state_->scene.name_to_entity.end()) {
+        update_hovered_entity_();
+        return;
     }
 
-    if (!gizmo_.is_dragging()) {
-        update_hovered_entity_();
+    gizmo_.on_mouse_move(selected->second);
+
+    if (gizmo_.is_dragging()) {
+        return;
     }
+
+    if (gizmo_.is_hovered()) {
+        hovered_entity_ = ecs::invalid_entity;
+        return;
+    }
+
+    update_hovered_entity_();
 }
 
 auto select_entity_tool::on_mouse_press(

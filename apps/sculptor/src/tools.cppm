@@ -144,7 +144,7 @@ export namespace vw::sculptor {
 
 enum class gizmo_target : uint8 { node, pivot };
 
-enum class gizmo_axis : uint8 { none, x, y, z };
+enum class gizmo_handle : uint8 { none, x, y, z, xy, yz, zx };
 
 enum class gizmo_commit : uint8 { history, preview };
 
@@ -169,6 +169,10 @@ public:
         return dragging_;
     }
 
+    [[nodiscard]] auto is_hovered() const -> bool {
+        return hovered_ != gizmo_handle::none;
+    }
+
 private:
     [[nodiscard]] auto mode_() const -> gizmo_mode;
 
@@ -179,8 +183,14 @@ private:
     };
 
     [[nodiscard]] auto build_frame_(ecs::entity ent) const -> std::optional<frame>;
-    [[nodiscard]] auto pick_(const frame& fr) const -> gizmo_axis;
+    [[nodiscard]] auto cursor_ray_() const -> spatial::ray;
+    [[nodiscard]] auto pick_(const frame& fr) const -> gizmo_handle;
+    [[nodiscard]] auto plane_faces_camera_(const frame& fr, gizmo_handle plane) const -> bool;
     [[nodiscard]] auto snap_enabled_() const -> bool;
+
+    [[nodiscard]] auto translation_delta_(
+        const frame& fr, std::optional<float32> snap_step
+    ) const -> std::optional<vec3f>;
 
     auto apply_translate_(ecs::entity ent, const frame& fr) -> void;
     auto apply_pivot_(ecs::entity ent, const frame& fr) -> void;
@@ -188,6 +198,7 @@ private:
     auto apply_scale_(ecs::entity ent, const frame& fr) -> void;
 
     auto draw_arrow_(const frame& fr, const vec3f& axis, color col) -> void;
+    auto draw_plane_handle_(const frame& fr, gizmo_handle plane, color col) -> void;
     auto draw_torus_(const frame& fr, const vec3f& axis, color col) -> void;
     auto draw_handle_box_(const vec3f& center, float32 half, color col) -> void;
 
@@ -198,13 +209,14 @@ private:
     gizmo_target target_;
     gizmo_commit commit_;
 
-    gizmo_axis hovered_ = gizmo_axis::none;
-    gizmo_axis active_  = gizmo_axis::none;
+    gizmo_handle hovered_ = gizmo_handle::none;
+    gizmo_handle active_  = gizmo_handle::none;
 
     bool dragging_ = false;
 
     transform start_transform_;
     vec3f start_pivot_{};
+    vec3f start_plane_point_{};
     float32 start_offset_ = 0.0F;
     float32 start_angle_  = 0.0F;
 
