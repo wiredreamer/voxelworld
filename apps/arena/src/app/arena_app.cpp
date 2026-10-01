@@ -108,7 +108,7 @@ auto arena_app::render(
 }
 
 auto arena_app::load_assets() -> void {
-    assets_.load_prefab("m_human", asset::asset_ref{"prefabs/m_human.vox"});
+    assets_.load_prefab("p_humanoid", asset::asset_ref{"prefabs/p_humanoid.vox"});
     assets_.load_prefab("m_sword", asset::asset_ref{"prefabs/m_sword.vox"});
 }
 

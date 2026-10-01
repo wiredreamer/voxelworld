@@ -40,18 +40,18 @@ player::player(
 
     world.system<ecs::spatial_system>().modify(root_).set_layer(ecs::spatial_layer::character);
 
-    body_       = create_body_part("m_human", "body");
-    head_       = create_body_part("m_human", "head");
-    hand_right_ = create_body_part("m_human", "hand_right");
-    hand_left_  = create_body_part("m_human", "hand_left");
-    foot_right_ = create_body_part("m_human", "foot_right");
-    foot_left_  = create_body_part("m_human", "foot_left");
+    body_       = create_body_part("p_humanoid", "body");
+    head_       = create_body_part("p_humanoid", "head");
+    hand_right_ = create_body_part("p_humanoid", "hand_right");
+    hand_left_  = create_body_part("p_humanoid", "hand_left");
+    foot_right_ = create_body_part("p_humanoid", "foot_right");
+    foot_left_  = create_body_part("p_humanoid", "foot_left");
 
     attach_machines_();
 }
 
 auto player::attach_machines_() const -> void {
-    const auto* prefab = assets_.get_prefab("m_human");
+    const auto* prefab = assets_.get_prefab("p_humanoid");
     if (prefab == nullptr) {
         return;
     }
