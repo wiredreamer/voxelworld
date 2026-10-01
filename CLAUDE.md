@@ -12,7 +12,8 @@
 `vw.sculptor` и `vw.arena`. Заголовков движка не существует, только `import`.
 
 - **vw.core** (`engine/core/src/`, таргет `vw_core`) — типы, math, transform,
-  лог, воксели, геометрия `vw::spatial`; каталоги `types/ math/ utils/ spatial/ voxels/ log/`
+  лог, воксели, геометрия `vw::spatial`, JSON `vw::json`; каталоги
+  `types/ math/ utils/ spatial/ voxels/ log/ json/`
 - **vw.asset** (`engine/asset/src/`, таргет `vw_asset`) — модели, анимации,
   форматы `.vox`/`.voxa`, хранилище ассетов. Зависит только от `vw.core` и
   ничего не знает про ECS; каталоги `model/ anim/ serial/`
@@ -37,7 +38,7 @@
 первичный интерфейс модуля. Имя партиции повторяет каталог
 (`vw.world:systems.transform`), а крупные партиции — агрегаторы из `export import`.
 
-Пространства имён: `vw` (core), `vw::spatial` (геометрия), `vw::asset` (данные
+Пространства имён: `vw` (core), `vw::spatial` (геометрия), `vw::json`, `vw::asset` (данные
 ассетов), `vw::ecs` (реестр, мир, компоненты, системы), `vw::plat` (окно и ввод),
 `vw::gfx`, `vw::sculptor`. Модуль ≠ namespace: `vw.world` экспортирует `vw::ecs`,
 включая сериализацию сцены в `:scene.*`, а `vw.asset` — одноимённое `vw::asset`.

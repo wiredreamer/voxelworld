@@ -31,6 +31,12 @@ add_executable(core_tests
     core/log.test.cpp
     core/latency.test.cpp
     core/jobs.test.cpp
+    core/json.test.cpp
+    core/json_suite.test.cpp
+)
+
+target_compile_definitions(core_tests PRIVATE
+    VW_JSON_SUITE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data/json_test_suite/test_parsing"
 )
 
 target_link_libraries(core_tests PRIVATE

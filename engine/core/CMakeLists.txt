@@ -22,6 +22,7 @@ target_sources(vw_core
             src/voxels/catalog.cppm
             src/voxels/face_direction.cppm
             src/log/log.cppm
+            src/json/json.cppm
     PRIVATE
         src/utils/latency.cpp
         src/utils/jobs.cpp
@@ -31,6 +32,7 @@ target_sources(vw_core
         src/voxels/voxels.cpp
         src/voxels/catalog.cpp
         src/log/log.cpp
+        src/json/json.cpp
 )
 
 target_compile_definitions(vw_core PRIVATE VW_LOG_MIN_LEVEL=${VW_LOG_MIN_LEVEL})

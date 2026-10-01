@@ -116,6 +116,16 @@ jobs:
           -max_total_time=60 -print_final_stats=1 -artifact_prefix=voxa-
           corpus/voxa assets/animations
 
+      - name: Fuzz the JSON parser
+        env:
+          ASAN_OPTIONS: detect_leaks=1:detect_stack_use_after_return=1
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+        run: >
+          mkdir -p corpus/json &&
+          ./build-fuzz/tests/fuzz/json_parse_fuzzer
+          -max_total_time=60 -print_final_stats=1 -artifact_prefix=json-
+          corpus/json tests/data/json_test_suite/test_parsing
+
       - name: Upload crashing inputs
         if: failure()
         uses: actions/upload-artifact@v4
@@ -124,6 +134,7 @@ jobs:
           path: |
             vox-*
             voxa-*
+            json-*
           if-no-files-found: ignore
 
   coverage:

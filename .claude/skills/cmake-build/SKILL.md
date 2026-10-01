@@ -59,7 +59,7 @@ cmake -S . -B build/headless -G Ninja -DCMAKE_BUILD_TYPE=Release \
 | `core_tests` `asset_tests` `ecs_tests` `world_tests` | тесты Catch2; линкуются на модульные таргеты, никогда на `vwengine` |
 | `gfx_tests` | тесты мешера и камеры на CPU; только при `VW_BUILD_GFX=ON` |
 | `view_bench` | микробенчмарк обхода ECS (регрессионный сторож из M2) |
-| `vox_parse_fuzzer` `voxa_parse_fuzzer` | фаззеры разборщиков; только при `VW_BUILD_FUZZERS=ON`, см. «Фаззинг» |
+| `vox_parse_fuzzer` `voxa_parse_fuzzer` `json_parse_fuzzer` | фаззеры разборщиков; только при `VW_BUILD_FUZZERS=ON`, см. «Фаззинг» |
 
 Опции: `VW_BUILD_GFX` (по умолчанию ON), `VW_BUILD_APPS`, `VW_BUILD_TESTS`,
 `VW_BUILD_FUZZERS` (OFF, только Clang), `VW_WARNINGS_AS_ERRORS` (OFF),
@@ -195,7 +195,7 @@ push, `release.yml` — на тег `v*`. Версии инструментов 
 | `ci.yml` | `linux` | ubuntu-24.04, Clang + libc++, триплет `x64-linux-libcxx`, полная конфигурация |
 | `ci.yml` | `lint` | `python scripts/lint_modules.py` |
 | `analysis.yml` | `sanitizers` | Linux, ASan+UBSan и TSan на headless-сборке |
-| `analysis.yml` | `fuzz` | Linux, минута libFuzzer на разборщики `.vox` и `.voxa` |
+| `analysis.yml` | `fuzz` | Linux, по минуте libFuzzer на разборщики `.vox`, `.voxa` и JSON |
 | `analysis.yml` | `coverage` | Linux, llvm-cov по headless-тестам, отчёт в summary джоба |
 | `analysis.yml` | `asan-windows` | MSVC ASan, gfx включён — под санитайзер попадает мешер |
 | `release.yml` | `build-windows` `build-linux` `release` | пакеты `sculptor` и GitHub Release |
@@ -244,10 +244,13 @@ cmake -S . -B build/asan -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DVW_BUILD_A
 
 `VW_BUILD_FUZZERS=ON` подключает `tests/fuzz/` независимо от `VW_BUILD_TESTS`;
 без Clang конфигурация падает — libFuzzer есть только у него. `vw_add_fuzzer(name
-source)` вешает `-fsanitize=fuzzer-no-link`/`-fsanitize=fuzzer` на свой таргет, а
-ASan и UBSan ожидаются снаружи в `CMAKE_CXX_FLAGS`/`CMAKE_EXE_LINKER_FLAGS`, как
-в шаге Configure джоба `fuzz`. Отдельного корпуса нет: затравка — `assets/models`
-и `assets/animations`, ctest-тесты `fuzz_*_seed_corpus` прогоняют её с
+source)` вешает `-fsanitize=fuzzer-no-link`/`-fsanitize=fuzzer` на свой таргет;
+`fuzzer-no-link` получают и сами `vw_core` с `vw_asset` — без него покрытие
+снимается только с обвязки, и фаззер перебирает входы вслепую. ASan и UBSan
+ожидаются снаружи в `CMAKE_CXX_FLAGS`/`CMAKE_EXE_LINKER_FLAGS`, как
+в шаге Configure джоба `fuzz`. Отдельного корпуса нет: затравка — `assets/models`,
+`assets/animations` и, для JSON, `tests/data/json_test_suite/test_parsing`;
+ctest-тесты `fuzz_*_seed_corpus` прогоняют её с
 `-runs=0`. Упавшие входы джоб выгружает артефактом `fuzz-crashes`.
 
 - libFuzzer пишет всё найденное в **первый** каталог-аргумент. Первым ставь

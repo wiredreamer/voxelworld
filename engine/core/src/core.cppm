@@ -5,6 +5,7 @@ export import :timing;
 export import :latency;
 export import :jobs;
 export import :log;
+export import :json;
 export import :vector;
 export import :matrix;
 export import :transform;
