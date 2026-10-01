@@ -49,6 +49,10 @@ private:
     std::vector<std::unique_ptr<base_operation>> parts_;
 };
 
+auto replace_volume(
+    gfx::engine& engine, std::shared_ptr<asset::model> current, std::shared_ptr<asset::model> next
+) -> void;
+
 }  // namespace vw::sculptor
 
 export namespace vw::sculptor {
@@ -568,6 +572,108 @@ private:
     engine_type* engine_;
     app_state* state_;
     trim_model_params params_;
+
+    std::shared_ptr<asset::model> previous_;
+};
+
+}  // namespace vw::sculptor
+
+export namespace vw::sculptor {
+
+struct reorient_model_params {
+    std::string name;
+    asset::voxel_orientation how;
+};
+
+class reorient_model_operation final : public base_operation {
+public:
+    using engine_type = gfx::engine;
+
+    reorient_model_operation(
+        engine_type& eng, app_state& st, const reorient_model_params& params
+    );
+
+    auto execute() -> void override;
+    auto undo() -> void override;
+
+private:
+    engine_type* engine_;
+    app_state* state_;
+    reorient_model_params params_;
+
+    std::shared_ptr<asset::model> previous_;
+};
+
+}  // namespace vw::sculptor
+
+export namespace vw::sculptor {
+
+struct erase_voxels_params {
+    std::string name;
+    asset::voxel_bounds region;
+};
+
+class erase_voxels_operation final : public base_operation {
+public:
+    using engine_type = gfx::engine;
+
+    erase_voxels_operation(engine_type& eng, app_state& st, const erase_voxels_params& params);
+
+    auto execute() -> void override;
+    auto undo() -> void override;
+
+private:
+    engine_type* engine_;
+    app_state* state_;
+    erase_voxels_params params_;
+
+    std::shared_ptr<asset::model> previous_;
+};
+
+struct fill_voxels_params {
+    std::string name;
+    asset::voxel_bounds region;
+    voxel value;
+    asset::fill_scope scope = asset::fill_scope::every_cell;
+};
+
+class fill_voxels_operation final : public base_operation {
+public:
+    using engine_type = gfx::engine;
+
+    fill_voxels_operation(engine_type& eng, app_state& st, const fill_voxels_params& params);
+
+    auto execute() -> void override;
+    auto undo() -> void override;
+
+private:
+    engine_type* engine_;
+    app_state* state_;
+    fill_voxels_params params_;
+
+    std::shared_ptr<asset::model> previous_;
+};
+
+struct paste_voxels_params {
+    std::string name;
+    asset::voxel_clip clip;
+    vec3i origin;
+    asset::paste_mode mode = asset::paste_mode::keep_air;
+};
+
+class paste_voxels_operation final : public base_operation {
+public:
+    using engine_type = gfx::engine;
+
+    paste_voxels_operation(engine_type& eng, app_state& st, paste_voxels_params params);
+
+    auto execute() -> void override;
+    auto undo() -> void override;
+
+private:
+    engine_type* engine_;
+    app_state* state_;
+    paste_voxels_params params_;
 
     std::shared_ptr<asset::model> previous_;
 };

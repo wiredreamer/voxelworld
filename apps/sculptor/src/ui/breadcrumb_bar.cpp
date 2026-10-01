@@ -34,6 +34,8 @@ auto breadcrumb_bar::render(
     const std::string& document =
         state_->file.filename.empty() ? std::string{"untitled"} : state_->file.filename;
 
+    ImGui::BeginDisabled(state_->ctx.in_paste());
+
     if (ImGui::Button(document.c_str())) {
         leave_to_(0);
     }
@@ -48,6 +50,8 @@ auto breadcrumb_bar::render(
             leave_to_(i + 1);
         }
     }
+
+    ImGui::EndDisabled();
 
     end_panel(*state_, panel_slot::left);
 }
@@ -82,6 +86,10 @@ auto breadcrumb_bar::label_of_(
     if (ctx.kind == edit_kind::fsm) {
         return state_->fsm.is_open() ? std::string{state_->fsm.source.stem()} + ".voxf"
                                      : std::string{"machine"};
+    }
+
+    if (ctx.kind == edit_kind::paste) {
+        return std::string{"paste"};
     }
 
     if (ctx.kind != edit_kind::model) {

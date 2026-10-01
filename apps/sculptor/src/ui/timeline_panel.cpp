@@ -164,6 +164,7 @@ auto timeline_panel::render_toolbar(
     }
 
     render_clip_controls_();
+    ImGui::Separator();
     render_target_hint_();
 
     render_playback_controls(clip);
@@ -328,15 +329,11 @@ auto timeline_panel::render_clip_controls_() -> void {
 
     if (current_layer > 0) {
         ImGui::SameLine();
-        if (ImGui::SmallButton("Fade")) {
+        if (ImGui::SmallButton("Layer Blend")) {
             layer_blend_modal_.open();
         }
+        ImGui::SetItemTooltip("Fade this layer in and out over the layers below it");
     }
-
-    ImGui::SameLine();
-    ImGui::TextDisabled("|");
-    ImGui::SameLine();
-    render_clip_blend_controls_();
 
     if (state_->ui.need_close_clip) {
         state_->ui.need_close_clip = false;
@@ -776,7 +773,8 @@ auto timeline_panel::render_clip_blend_controls_() const -> void {
     auto& cs = state_->anim.get_clip_settings_mut(state_->anim.selected_clip_name);
 
     ImGui::AlignTextToFramePadding();
-    ImGui::Text("Blend");
+    ImGui::Text("Clip Blend");
+    ImGui::SetItemTooltip("Cross-fade from the clip this layer was playing before");
     ImGui::SameLine();
     ImGui::PushItemWidth(60.f);
     ImGui::DragFloat("##BlendDur", &cs.blend_transition.duration, 0.01f, 0.f, 10.f, "%.2fs");

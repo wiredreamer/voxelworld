@@ -102,6 +102,43 @@ private:
 
 export namespace vw::sculptor {
 
+class clipboard_service final {
+public:
+    using engine_type = gfx::engine;
+
+    clipboard_service(engine_type& eng, app_state& state, operation_manager& op_manager);
+
+    auto select_all() -> void;
+    auto deselect() -> void;
+
+    auto copy() -> void;
+    auto cut() -> void;
+    auto erase() -> void;
+    auto fill(asset::fill_scope scope) -> void;
+
+    auto begin_paste() -> void;
+    auto reorient_paste(const asset::voxel_orientation& how) -> void;
+    auto apply_paste() -> void;
+    auto cancel_paste() -> void;
+
+    auto sync() -> void;
+
+private:
+    [[nodiscard]] auto volume_entity_(const std::string& node_name) const -> ecs::entity;
+    [[nodiscard]] auto edited_volume_() const -> std::shared_ptr<asset::model>;
+
+    auto drop_stale_selection_() -> void;
+    auto leave_paste_() -> void;
+
+    engine_type* engine_;
+    app_state* state_;
+    operation_manager* op_manager_;
+};
+
+}  // namespace vw::sculptor
+
+export namespace vw::sculptor {
+
 class keyframe_service final {
 public:
     using engine_type = gfx::engine;

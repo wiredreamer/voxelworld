@@ -29,6 +29,7 @@ public:
 private:
     auto handle_key_press(const plat::key_press_event& ev) -> void;
     auto run_command_(command cmd) -> void;
+    auto cancel_() -> void;
     auto handle_mouse_move(const plat::mouse_move_event& ev) -> void;
     auto handle_mouse_press(const plat::mouse_press_event& ev) -> void;
     auto handle_mouse_release(const plat::mouse_release_event& ev) -> void;
@@ -59,6 +60,7 @@ private:
     playback_service playback_service_;
     keyframe_service keyframe_service_;
     fsm_service fsm_service_;
+    clipboard_service clipboard_service_;
 
     tools active_tool_ = tools::add_voxel;
     std::unordered_map<tools, std::unique_ptr<base_tool>> tools_;
@@ -66,6 +68,8 @@ private:
     menu_bar menu_bar_;
     breadcrumb_bar breadcrumb_bar_;
     tool_panel tool_panel_;
+    selection_panel selection_panel_;
+    paste_panel paste_panel_;
     gizmo_panel gizmo_panel_;
     voxel_palette_panel voxel_palette_panel_;
     entity_properties_panel entity_properties_panel_;

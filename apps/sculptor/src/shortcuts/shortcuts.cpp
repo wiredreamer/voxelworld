@@ -3,6 +3,7 @@ module vw.sculptor;
 import std;
 
 import vw.core;
+import vw.asset;
 import vw.platform;
 
 namespace vw::sculptor {
@@ -33,11 +34,36 @@ auto match(
 auto is_available(
     command cmd, const app_state& state
 ) -> bool {
+    if (state.ctx.in_paste()) {
+        return cmd == command::confirm || cmd == command::cancel;
+    }
+
     if (const auto tool = tool_of(cmd); tool != tools::invalid) {
         return state.ctx.allows_tool(tool);
     }
 
+    const bool has_selection = state.ctx.allows_volume_edit() && state.volume.selection.has_value();
+
     switch (cmd) {
+        case command::select_all: return state.ctx.allows_volume_edit();
+
+        case command::copy:
+        case command::cut:
+        case command::erase_selection: return has_selection;
+
+        case command::cancel:
+            if (state.ctx.in_clip()) {
+                return state.anim.selected_keyframe_id != asset::invalid_keyframe_id ||
+                    !state.scene.selected_name.empty();
+            }
+            return has_selection ||
+                (state.ctx.in_prefab() && !state.scene.selected_name.empty());
+
+        case command::paste:
+            return state.ctx.allows_volume_edit() && !state.clipboard.clip.empty();
+
+        case command::confirm: return false;
+
         case command::gizmo_move:
         case command::gizmo_rotate:
         case command::gizmo_scale: return state.ctx.allows_node_select();
@@ -83,6 +109,7 @@ auto tool_of(
         case command::tool_paint: return tools::paint_voxel;
         case command::tool_color_picker: return tools::color_picker;
         case command::tool_move_pivot: return tools::move_pivot;
+        case command::tool_select_box: return tools::select_box;
         case command::tool_pose: return tools::pose;
         default: return tools::invalid;
     }
@@ -98,7 +125,9 @@ auto command_for_tool(
         case tools::paint_voxel: return command::tool_paint;
         case tools::color_picker: return command::tool_color_picker;
         case tools::move_pivot: return command::tool_move_pivot;
+        case tools::select_box: return command::tool_select_box;
         case tools::pose: return command::tool_pose;
+        case tools::place_paste:
         case tools::invalid: break;
     }
     return std::nullopt;

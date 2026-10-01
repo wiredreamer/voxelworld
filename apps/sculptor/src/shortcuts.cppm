@@ -12,6 +12,14 @@ enum class command : uint8 {
     undo,
     redo,
 
+    select_all,
+    copy,
+    cut,
+    paste,
+    erase_selection,
+    confirm,
+    cancel,
+
     file_new,
     file_open,
     file_save,
@@ -23,6 +31,7 @@ enum class command : uint8 {
     tool_paint,
     tool_color_picker,
     tool_move_pivot,
+    tool_select_box,
     tool_pose,
 
     gizmo_move,
@@ -65,6 +74,23 @@ inline constexpr std::array shortcuts{
         plat::keyboard::keys::Z, mod_ctrl | mod_shift, command::redo, "Edit", "Ctrl+Shift+Z",
         "Redo"
     },
+    shortcut{
+        plat::keyboard::keys::A, mod_ctrl, command::select_all, "Edit", "Ctrl+A", "Select all"
+    },
+    shortcut{plat::keyboard::keys::C, mod_ctrl, command::copy, "Edit", "Ctrl+C", "Copy"},
+    shortcut{plat::keyboard::keys::X, mod_ctrl, command::cut, "Edit", "Ctrl+X", "Cut"},
+    shortcut{plat::keyboard::keys::V, mod_ctrl, command::paste, "Edit", "Ctrl+V", "Paste"},
+    shortcut{
+        plat::keyboard::keys::DELETE, mod_none, command::erase_selection, "Edit", "Delete",
+        "Erase selection"
+    },
+    shortcut{
+        plat::keyboard::keys::ENTER, mod_none, command::confirm, "Edit", "Enter", "Apply paste"
+    },
+    shortcut{
+        plat::keyboard::keys::ESCAPE, mod_none, command::cancel, "Edit", "Esc",
+        "Cancel / deselect"
+    },
 
     shortcut{plat::keyboard::keys::N, mod_ctrl, command::file_new, "Prefab", "Ctrl+N", "New"},
     shortcut{plat::keyboard::keys::O, mod_ctrl, command::file_open, "Prefab", "Ctrl+O", "Open"},
@@ -84,6 +110,9 @@ inline constexpr std::array shortcuts{
         plat::keyboard::keys::V, mod_none, command::tool_color_picker, "Tools", "V", "Color picker"
     },
     shortcut{plat::keyboard::keys::G, mod_none, command::tool_move_pivot, "Tools", "G", "Move pivot"},
+    shortcut{
+        plat::keyboard::keys::M, mod_none, command::tool_select_box, "Tools", "M", "Select box"
+    },
     shortcut{plat::keyboard::keys::P, mod_none, command::tool_pose, "Tools", "P", "Pose"},
 
     shortcut{plat::keyboard::keys::E, mod_none, command::gizmo_move, "Gizmo", "E", "Move"},

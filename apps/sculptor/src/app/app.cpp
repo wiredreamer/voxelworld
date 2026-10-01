@@ -31,10 +31,13 @@ app::app(
     , playback_service_(eng, state_)
     , keyframe_service_(eng, state_, op_manager_)
     , fsm_service_(eng, state_, model_library_)
+    , clipboard_service_(eng, state_, op_manager_)
 
-    , menu_bar_(eng, state_, op_manager_, file_service_)
+    , menu_bar_(eng, state_, op_manager_, file_service_, clipboard_service_)
     , breadcrumb_bar_(eng, state_, clip_service_)
     , tool_panel_(state_)
+    , selection_panel_(state_, clipboard_service_)
+    , paste_panel_(state_, clipboard_service_)
     , gizmo_panel_(state_)
     , voxel_palette_panel_(eng, state_)
     , entity_properties_panel_(eng, state_, op_manager_, model_library_)
@@ -65,6 +68,8 @@ app::app(
     tools_[tools::paint_voxel]   = std::make_unique<paint_tool>(eng, state_, op_manager_);
     tools_[tools::color_picker]  = std::make_unique<color_picker_tool>(eng, state_, op_manager_);
     tools_[tools::move_pivot]    = std::make_unique<move_pivot_tool>(eng, state_, op_manager_);
+    tools_[tools::select_box]    = std::make_unique<select_box_tool>(eng, state_, op_manager_);
+    tools_[tools::place_paste]   = std::make_unique<place_paste_tool>(eng, state_, op_manager_);
     tools_[tools::pose]          = std::make_unique<pose_tool>(eng, state_, op_manager_);
 
     camera_controller_.setup(window, camera);
@@ -112,6 +117,7 @@ auto app::render(
 ) -> void {
     file_service_.collect_dirty_models();
     prune_contexts_();
+    clipboard_service_.sync();
     refresh_volume_bounds_();
     sync_visibility_();
 
@@ -223,6 +229,12 @@ auto app::render_panels_(
     if (state_.ctx.shows(panels::tools)) {
         tool_panel_.render(delta_time);
     }
+    if (state_.ctx.shows(panels::selection)) {
+        selection_panel_.render(delta_time);
+    }
+    if (state_.ctx.shows(panels::paste)) {
+        paste_panel_.render(delta_time);
+    }
 
     if (state_.ctx.shows(panels::timeline) && state_.ui.show_timeline) {
         timeline_panel_.render(delta_time);
@@ -260,6 +272,12 @@ auto app::handle_key_press(
         return;
     }
 
+    constexpr ImGuiPopupFlags any_popup =
+        ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel;
+    if (ImGui::IsPopupOpen(static_cast<const char*>(nullptr), any_popup)) {
+        return;
+    }
+
     if (const auto cmd = match(ev)) {
         run_command_(*cmd);
     }
@@ -282,6 +300,15 @@ auto app::run_command_(
     switch (cmd) {
         case command::undo: op_manager_.undo(); break;
         case command::redo: op_manager_.redo(); break;
+
+        case command::select_all: clipboard_service_.select_all(); break;
+        case command::copy: clipboard_service_.copy(); break;
+        case command::cut: clipboard_service_.cut(); break;
+        case command::paste: clipboard_service_.begin_paste(); break;
+        case command::erase_selection: clipboard_service_.erase(); break;
+        case command::confirm: clipboard_service_.apply_paste(); break;
+
+        case command::cancel: cancel_(); break;
 
         case command::file_new: state_.ui.need_new_file_modal = true; break;
         case command::file_open: state_.ui.need_open_file_modal = true; break;
@@ -318,7 +345,37 @@ auto app::run_command_(
         case command::tool_remove_voxel:
         case command::tool_paint:
         case command::tool_color_picker:
-        case command::tool_move_pivot: break;
+        case command::tool_move_pivot:
+        case command::tool_select_box:
+        case command::tool_pose: break;
+    }
+}
+
+auto app::cancel_() -> void {
+    if (state_.ctx.in_paste()) {
+        clipboard_service_.cancel_paste();
+        return;
+    }
+
+    if (state_.ctx.allows_volume_edit()) {
+        clipboard_service_.deselect();
+        return;
+    }
+
+    const bool mid_gesture =
+        get_engine().get_window().is_mouse_button_pressed(plat::mouse::buttons::LEFT);
+    if (mid_gesture) {
+        return;
+    }
+
+    if (state_.ctx.in_clip() && state_.anim.selected_keyframe_id != asset::invalid_keyframe_id) {
+        state_.anim.selected_keyframe_id = asset::invalid_keyframe_id;
+        return;
+    }
+
+    if (state_.ctx.in_prefab() || state_.ctx.in_clip()) {
+        state_.scene.selected_name.clear();
+        state_.anim.selected_track_name.clear();
     }
 }
 
@@ -465,8 +522,8 @@ auto app::prune_contexts_() -> void {
         if (ctx.kind == edit_kind::fsm) {
             return ctx.layer >= machine_count;
         }
-        return ctx.kind == edit_kind::model &&
-               !state_.scene.name_to_entity.contains(ctx.node_name);
+        const bool names_volume = ctx.kind == edit_kind::model || ctx.kind == edit_kind::paste;
+        return names_volume && !state_.scene.name_to_entity.contains(ctx.node_name);
     };
 
     const auto it = std::ranges::find_if(stack, gone);
@@ -490,8 +547,7 @@ auto app::sync_visibility_() -> void {
     auto& world     = get_engine().get_world();
     auto& model_sys = world.system<ecs::model_system>();
 
-    const auto edited = state_.ctx.kind() == edit_kind::model ? state_.ctx.node_name()
-                                                              : std::string_view{};
+    const auto edited = state_.ctx.shows_volume() ? state_.ctx.node_name() : std::string_view{};
 
     std::vector<std::pair<ecs::entity, bool>> pending{{root->second, false}};
 
@@ -546,7 +602,7 @@ auto app::refresh_volume_bounds_() -> void {
 }
 
 auto app::render_volume_overlay_() -> void {
-    if (state_.ctx.kind() != edit_kind::model) {
+    if (!state_.ctx.shows_volume()) {
         return;
     }
 
@@ -583,6 +639,27 @@ auto app::render_volume_overlay_() -> void {
                 static_cast<float32>(size.z),
             },
             colors::amber_4
+        );
+    }
+
+    if (state_.volume.selection && state_.ctx.allows_volume_edit()) {
+        const auto& box = state_.volume.selection->box;
+        const auto size = box.size();
+
+        const auto corner = vec3f{
+            static_cast<float32>(box.min.x),
+            static_cast<float32>(box.min.y),
+            static_cast<float32>(box.min.z),
+        };
+
+        renderer.draw_box(
+            ecs::model_matrix(transform_comp, model_comp) * math::translation_matrix(corner),
+            vec3f{
+                static_cast<float32>(size.x),
+                static_cast<float32>(size.y),
+                static_cast<float32>(size.z),
+            },
+            colors::white
         );
     }
 

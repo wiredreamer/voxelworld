@@ -69,7 +69,10 @@ auto app_state::reset(
 ) -> void {
     scene.clear_entities(world);
     sockets.clear_all(world);
-    *this = app_state{};
+
+    auto kept_clipboard = std::move(clipboard);
+    *this               = app_state{};
+    clipboard           = std::move(kept_clipboard);
 }
 
 auto animation_state::has_unsaved_clip(

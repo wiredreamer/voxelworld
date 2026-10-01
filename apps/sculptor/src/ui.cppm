@@ -211,6 +211,8 @@ struct drag_edit {
 
 auto imgui_drag_vec3f(std::string_view label, vec3f& vec, float label_offset = 60.f) -> drag_edit;
 
+auto imgui_drag_vec3i(std::string_view label, vec3i& vec, float32 label_offset = 60.f) -> bool;
+
 [[nodiscard]] auto collect_asset_refs(const std::filesystem::path& dir, std::string_view extension)
     -> std::vector<asset::asset_ref>;
 
@@ -560,16 +562,22 @@ class menu_bar final {
 public:
     using engine_type = gfx::engine;
 
-    menu_bar(engine_type& eng, app_state& state, operation_manager& op_manager,
-             file_service& file_svc);
+    menu_bar(
+        engine_type& eng, app_state& state, operation_manager& op_manager,
+        file_service& file_svc, clipboard_service& clipboard_svc
+    );
 
     auto render(float delta_time) const -> void;
 
 private:
+    auto render_edit_menu_() const -> void;
+    auto render_volume_menu_() const -> void;
+
     engine_type* engine_;
     app_state* state_;
     operation_manager* op_manager_;
     file_service* file_service_;
+    clipboard_service* clipboard_service_;
 };
 
 }  // namespace vw::sculptor
@@ -926,6 +934,36 @@ private:
     app_state* state_;
 
     auto render_tool_button(tools tool, std::string_view label) const -> void;
+};
+
+}  // namespace vw::sculptor
+
+export namespace vw::sculptor {
+
+class selection_panel final {
+public:
+    selection_panel(app_state& st, clipboard_service& clipboard_svc);
+
+    auto render(float delta_time) const -> void;
+
+private:
+    app_state* state_;
+    clipboard_service* clipboard_service_;
+};
+
+}  // namespace vw::sculptor
+
+export namespace vw::sculptor {
+
+class paste_panel final {
+public:
+    paste_panel(app_state& st, clipboard_service& clipboard_svc);
+
+    auto render(float delta_time) const -> void;
+
+private:
+    app_state* state_;
+    clipboard_service* clipboard_service_;
 };
 
 }  // namespace vw::sculptor

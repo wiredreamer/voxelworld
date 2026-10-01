@@ -1,6 +1,6 @@
 ---
 name: sculptor
-description: Редактор вокселей Sculptor — apps/sculptor, модуль vw.sculptor с партициями :state, :shortcuts, :operations, :services, :tools, :ui, :app. Рецепты нового инструмента (base_tool, регистрация, кнопка, горячая клавиша) и операции с undo/redo (base_operation, composite_operation, operation_manager); сервисы и панели ImGui; ловушки записи .voxm и общих объёмов, контекста правки после undo, кисти чужого набора, ключей анимации и правок посреди обхода ImGui. Читай перед правкой apps/sculptor.
+description: Редактор вокселей Sculptor — apps/sculptor, модуль vw.sculptor с партициями :state, :shortcuts, :operations, :services, :tools, :ui, :app. Рецепты нового инструмента (base_tool, регистрация, кнопка, горячая клавиша) и операции с undo/redo (base_operation, composite_operation, operation_manager); сервисы и панели ImGui; ловушки записи .voxm и общих объёмов, контекста правки после undo, выделения, буфера и режима вставки, ключей анимации и правок посреди обхода ImGui. Читай перед правкой apps/sculptor.
 ---
 
 # Sculptor
@@ -12,7 +12,7 @@ description: Редактор вокселей Sculptor — apps/sculptor, мо�
 | `:state` | `state.cppm` | `app/app_state.cpp` | `app_state`: документ, контекст правки, сцена, кисть, анимация; `enum class tools`, `panels` |
 | `:shortcuts` | `shortcuts.cppm` | `shortcuts/shortcuts.cpp` | `enum class command`, таблица `shortcuts`, `tool_of`, `command_for_tool` |
 | `:operations` | `operations.cppm` | `operations/*.cpp` | `base_operation`, `composite_operation`, `operation_manager`, все операции |
-| `:services` | `services.cppm` | `services/*.cpp` | `file_service`, `clip_service`, `keyframe_service`, `playback_service`, `fsm_service` |
+| `:services` | `services.cppm` | `services/*.cpp` | `file_service`, `clip_service`, `clipboard_service`, `keyframe_service`, `playback_service`, `fsm_service` |
 | `:tools` | `tools.cppm` | `tools/*.cpp` | `base_tool`, инструменты, `gizmo` |
 | `:ui` | `ui.cppm` | `ui/*.cpp` | панели, модальные окна, `component_drawer` |
 | `:app` | `app.cppm` | `app/app.cpp` | `app`: владеет всем перечисленным, кадр, ввод |
@@ -160,21 +160,78 @@ undo и redo, а выделение не трогает. Вход и выход 
 `selected_name` читай лишь там, где речь именно о выделении: выбор в префабе,
 сокеты, ключи клипа.
 
-## Кисть и наборы
+## Выделение, буфер и вставка
 
-**Воксель чужого набора роняет движок.** Если категория вокселя не совпадает с
-`model::category()`, `model::to_index_` зовёт `std::terminate`. Инструменты
-категорию не проверяют: `tool.selected_voxel` переводит в набор модели
-`voxel_palette_panel::render` через `tool_state::brush_for`. Он делает это
-каждый кадр, но только в контексте объёма, где видна панель. Код, который
-кладёт в модель воксель не из этой кисти или вне контекста объёма, сверяет
-`voxel.category()` с `model->category()` сам.
+**Правка формы объёма — это новый объём.** Размер `asset::model` неизменяем,
+поэтому обрезка, поворот и отражение, стирание области и вставка строят новый
+объём функцией движка (`asset::trimmed`, `reoriented`, `erased`, `pasted` в
+`model_edit.cppm`) и ставят его узлу через `model_system::modify(ent).set_model`.
+Операция хранит прежний `std::shared_ptr<asset::model>` и возвращает его в
+`undo()`. Образцы — `trim_model_operation`, `reorient_model_operation`,
+`operations/clip_operations.cpp`. Поворот и отражение идут относительно pivot:
+он пересчитывается вместе с вокселями, и деталь остаётся на месте в узле.
 
-Сама панель берёт набор через `edited_model_category` — по `edited_node()`, а не
-по выделению: после undo, вернувшего объём другого набора, выделение остаётся
-прежним, и по нему кисть подстроилась бы не под ту модель. Вдобавок
-`add_voxel_tool` и `paint_tool` не пишут вовсе, когда набор кисти разошёлся с
-набором объёма.
+Действия над целым объёмом — Flip, Rotate и Trim — живут в меню Edit → Volume
+(`menu_bar::render_volume_menu_`), а не в дроере Model: дроер показывает
+характеристики объёма, правка формы идёт через меню и инструменты. Действия над
+выделением — Fill и Recolor (`asset::filled` с `fill_scope`, операция
+`fill_voxels_operation`) — кнопки окна Selection. Каждое действие — своя кнопка
+или пункт: поведение не переключается модификатором или режимом.
+
+**Выделение — бокс в `state.volume.selection`.** Вместе с боксом лежат имя узла
+и размер объёма, для которого он задан. В историю выделение не попадает.
+`clipboard_service::sync` сбрасывает его, когда сменился узел правки или размер
+объёма: расширение в отрицательную сторону сдвигает координаты, и старый бокс
+указывал бы не туда. Код, который меняет размер объёма, сам выделение не чинит.
+
+**Буфер переживает смену контекста и префаба.** `state.clipboard.clip` —
+`asset::voxel_clip`: плотный блок вокселей и его угол относительно pivot
+источника. `app_state::reset` буфер сохраняет. Вставка по умолчанию ложится в
+`pivot цели + corner_from_pivot` (`asset::paste_origin`), поэтому фрагмент
+попадает на то же место относительно сустава в объёме другого размера.
+`pasted` расширяет объём до занятых вокселей фрагмента и сдвигает pivot.
+
+**Вставка — отдельный контекст `edit_kind::paste`.** `clipboard_service::begin_paste`
+кладёт его поверх контекста объёма, и пока он на вершине стека, доступно
+только размещение фрагмента:
+- `allows_tool` пропускает один `tools::place_paste`, `allows_volume_edit()`
+  ложно, панели инструментов, палитры, свойств и дерева скрыты;
+- `is_available` в этом контексте разрешает только `command::confirm` и
+  `command::cancel`; меню Prefab, Edit, Animation и крошки выключены через
+  `ImGui::BeginDisabled`.
+
+Новую команду, пункт меню или панель, способные менять документ, закрывай тем
+же способом, иначе правка пройдёт посреди вставки. Две страховки на случай
+пропущенного пути: `app::handle_key_press` не исполняет команды, пока открыт
+любой попап ImGui (иначе `Ctrl+V` за окном Save As начал бы вставку), а
+`file_service::write_` отказывается писать, пока `state.paste.active()`, — на
+диск не попадает объём-предпросмотр.
+
+**Общий объём меняй через `replace_volume`.** `set_model` меняет указатель у
+одного узла, а объём по одной ссылке держат все узлы, которые на неё ссылаются.
+`replace_volume(engine, current, next)` ставит `next` каждой сущности с
+указателем `current`; через него идут trim, expand, reorient, стирание, вставка
+и её предпросмотр. Кеш `model_library` при этом обновляется только при записи
+(`adopt`), поэтому кандидат варианта, загруженный до сохранения, получит
+прежний объём.
+
+**Предпросмотр вставки — подмена объёма узла.** `state.paste` хранит исходный
+объём (`base`), фрагмент, смещение и режим. Гизмо (`gizmo_target::fragment`) и
+панель меняют только эти поля и ставят `preview_stale`; объём узла
+перестраивает `clipboard_service::sync` раз в кадр. Отмена возвращает `base`.
+Подтверждение делает три шага строго в этом порядке: вернуть `base`, выйти из
+контекста вставки, выполнить `paste_voxels_operation`. `operation_manager`
+запоминает `ctx.stack` в момент `execute`, и операция, выполненная до выхода,
+после undo вернула бы редактор в режим вставки без фрагмента.
+
+`sync` заодно сверяет состояние с контекстом: если `state.paste` активно, а
+контекст уже не `paste` (или узел пропал), вставка отменяется и объём
+возвращается. Новый путь выхода из контекста достаточно не ломать этой сверкой.
+Места, где раньше стояло `kind() == edit_kind::model` ради показа объёма,
+спрашивают `ctx.shows_volume()`: он истинен и в контексте вставки.
+
+Предпросмотр помечает узел в `dirty_models`, и после отмены метка остаётся:
+ближайшее сохранение перепишет `.voxm` тем же содержимым.
 
 ## Анимация
 

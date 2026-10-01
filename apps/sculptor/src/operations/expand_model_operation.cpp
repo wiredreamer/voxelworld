@@ -20,7 +20,6 @@ auto expand_model_operation::execute() -> void {
 
     auto& world        = engine_->get_world();
     auto& model_reg = world.resource<asset::model_registry>();
-    auto& model_sys = world.system<ecs::model_system>();
 
     const auto& model_comp = world.get<ecs::model_component>(ent);
     const auto model = model_comp.get_model();
@@ -63,7 +62,7 @@ auto expand_model_operation::execute() -> void {
         static_cast<float32>(zeroed_dir.z)
     });
 
-    model_sys.modify(ent).set_model(new_model);
+    replace_volume(*engine_, model, new_model);
     state_->file.has_unsaved_changes = true;
 }
 
@@ -72,7 +71,6 @@ auto expand_model_operation::undo() -> void {
 
     auto& world        = engine_->get_world();
     auto& model_reg = world.resource<asset::model_registry>();
-    auto& model_sys = world.system<ecs::model_system>();
 
     auto& model_comp = world.get<ecs::model_component>(ent);
     auto model = model_comp.get_model();
@@ -125,7 +123,7 @@ auto expand_model_operation::undo() -> void {
         static_cast<float32>(zeroed_dir.z)
     });
 
-    model_sys.modify(ent).set_model(new_model);
+    replace_volume(*engine_, model, new_model);
     state_->file.has_unsaved_changes = true;
 }
 

@@ -140,9 +140,21 @@ private:
 
 }  // namespace vw::sculptor
 
+namespace vw::sculptor {
+
+auto closest_on_axis(
+    const vec3f& origin, const vec3f& axis, const spatial::ray& r, float32& t_out
+) -> bool;
+
+auto distance_to_ray(const vec3f& point, const spatial::ray& r) -> float32;
+
+auto draw_handle_box(gfx::engine& engine, const vec3f& center, float32 half, color col) -> void;
+
+}  // namespace vw::sculptor
+
 export namespace vw::sculptor {
 
-enum class gizmo_target : uint8 { node, pivot };
+enum class gizmo_target : uint8 { node, pivot, fragment };
 
 enum class gizmo_handle : uint8 { none, x, y, z, xy, yz, zx };
 
@@ -194,6 +206,7 @@ private:
 
     auto apply_translate_(ecs::entity ent, const frame& fr) -> void;
     auto apply_pivot_(ecs::entity ent, const frame& fr) -> void;
+    auto apply_fragment_(const frame& fr) -> void;
     auto apply_rotate_(ecs::entity ent, const frame& fr) -> void;
     auto apply_scale_(ecs::entity ent, const frame& fr) -> void;
 
@@ -216,6 +229,7 @@ private:
 
     transform start_transform_;
     vec3f start_pivot_{};
+    vec3i start_origin_{};
     vec3f start_plane_point_{};
     float32 start_offset_ = 0.0F;
     float32 start_angle_  = 0.0F;
@@ -233,6 +247,90 @@ public:
     using engine_type = gfx::engine;
 
     move_pivot_tool(engine_type& eng, app_state& st, operation_manager& op_manager);
+
+    auto render(float delta_time) -> void override;
+    auto on_key_press(const plat::key_press_event& ev) -> void override;
+    auto on_mouse_move(const plat::mouse_move_event& ev) -> void override;
+    auto on_mouse_press(const plat::mouse_press_event& ev) -> void override;
+    auto on_mouse_release(const plat::mouse_release_event& ev) -> void override;
+    auto on_activate() -> void override;
+
+private:
+    [[nodiscard]] auto target_entity_() const -> ecs::entity;
+
+    engine_type* engine_;
+    app_state* state_;
+
+    gizmo gizmo_;
+};
+
+}  // namespace vw::sculptor
+
+export namespace vw::sculptor {
+
+class select_box_tool final : public base_tool {
+public:
+    using engine_type = gfx::engine;
+
+    select_box_tool(engine_type& eng, app_state& st, operation_manager& op_manager);
+
+    auto render(float delta_time) -> void override;
+    auto on_key_press(const plat::key_press_event& ev) -> void override;
+    auto on_mouse_move(const plat::mouse_move_event& ev) -> void override;
+    auto on_mouse_press(const plat::mouse_press_event& ev) -> void override;
+    auto on_mouse_release(const plat::mouse_release_event& ev) -> void override;
+    auto on_activate() -> void override;
+
+private:
+    struct face_handle {
+        std::size_t axis = 0;
+        bool high        = false;
+
+        [[nodiscard]] auto operator==(const face_handle&) const -> bool = default;
+    };
+
+    struct face_grip {
+        vec3f center;
+        vec3f outward;
+        float32 half             = 0.0F;
+        float32 world_per_voxel = 1.0F;
+    };
+
+    [[nodiscard]] auto edited_entity_() const -> ecs::entity;
+    [[nodiscard]] auto cursor_ray_() const -> spatial::ray;
+    [[nodiscard]] auto voxel_under_cursor_() -> std::optional<vec3i>;
+
+    [[nodiscard]] auto shows_handles_() const -> bool;
+    [[nodiscard]] auto grip_of_(face_handle handle) const -> std::optional<face_grip>;
+    [[nodiscard]] auto handle_under_cursor_() const -> std::optional<face_handle>;
+
+    auto select_between_(vec3i first, vec3i second) -> void;
+    auto drag_face_() -> void;
+
+    engine_type* engine_;
+    app_state* state_;
+
+    std::vector<ecs::entity> ray_cast_entities_;
+    std::optional<vec3i> hovered_voxel_;
+    vec3i drag_start_{};
+    bool dragging_ = false;
+
+    std::optional<face_handle> hovered_handle_;
+    std::optional<face_handle> active_handle_;
+    face_grip active_grip_{};
+    float32 active_start_along_ = 0.0F;
+    int32 active_start_face_    = 0;
+};
+
+}  // namespace vw::sculptor
+
+export namespace vw::sculptor {
+
+class place_paste_tool final : public base_tool {
+public:
+    using engine_type = gfx::engine;
+
+    place_paste_tool(engine_type& eng, app_state& st, operation_manager& op_manager);
 
     auto render(float delta_time) -> void override;
     auto on_key_press(const plat::key_press_event& ev) -> void override;

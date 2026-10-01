@@ -308,6 +308,11 @@ auto file_service::write_(
         return false;
     }
 
+    if (state_->paste.active()) {
+        log::warn(lc_file, "refusing to write '{}' while a paste is being placed", prefab_ref.str());
+        return false;
+    }
+
     collect_dirty_models();
     assign_missing_refs_(prefab_ref);
     write_dirty_models_();

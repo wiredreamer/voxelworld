@@ -58,7 +58,11 @@ target_sources(${PROJECT_NAME}
         src/operations/structure_operations.cpp
         src/operations/set_transform_operation.cpp
         src/operations/trim_model_operation.cpp
+        src/operations/reorient_model_operation.cpp
+        src/operations/replace_volume.cpp
+        src/operations/clip_operations.cpp
         src/services/clip_service.cpp
+        src/services/clipboard_service.cpp
         src/services/file_service.cpp
         src/services/fsm_service.cpp
         src/services/keyframe_service.cpp
@@ -69,12 +73,16 @@ target_sources(${PROJECT_NAME}
         src/tools/move_pivot_tool.cpp
         src/tools/paint_tool.cpp
         src/tools/pose_tool.cpp
+        src/tools/select_box_tool.cpp
+        src/tools/place_paste_tool.cpp
         src/tools/remove_voxel_tool.cpp
         src/tools/gizmo.cpp
         src/tools/select_entity_tool.cpp
         src/ui/add_candidate_modal.cpp
         src/ui/add_model_component_modal.cpp
         src/ui/open_clip_modal.cpp
+        src/ui/paste_panel.cpp
+        src/ui/selection_panel.cpp
         src/ui/voxel_palette_panel.cpp
         src/ui/breadcrumb_bar.cpp
         src/ui/create_clip_modal.cpp

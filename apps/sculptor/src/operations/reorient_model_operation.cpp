@@ -11,12 +11,12 @@ import vw.gfx;
 
 namespace vw::sculptor {
 
-trim_model_operation::trim_model_operation(
-    engine_type& eng, app_state& st, const trim_model_params& params
+reorient_model_operation::reorient_model_operation(
+    engine_type& eng, app_state& st, const reorient_model_params& params
 )
     : engine_(&eng), state_(&st), params_(params) {}
 
-auto trim_model_operation::execute() -> void {
+auto reorient_model_operation::execute() -> void {
     const auto ent = state_->scene.name_to_entity[params_.name];
 
     auto& world     = engine_->get_world();
@@ -28,17 +28,15 @@ auto trim_model_operation::execute() -> void {
         return;
     }
 
-    auto cut = asset::trimmed(*model, model_reg);
-    if (!cut) {
-        return;
-    }
+    auto turned = asset::reoriented(*model, params_.how, model_reg);
 
     previous_ = model;
-    replace_volume(*engine_, model, std::move(cut));
+    replace_volume(*engine_, model, std::move(turned));
+    state_->volume.selection.reset();
     state_->file.has_unsaved_changes = true;
 }
 
-auto trim_model_operation::undo() -> void {
+auto reorient_model_operation::undo() -> void {
     if (!previous_) {
         return;
     }
@@ -47,6 +45,7 @@ auto trim_model_operation::undo() -> void {
 
     auto& world = engine_->get_world();
     replace_volume(*engine_, world.get<ecs::model_component>(ent).get_model(), previous_);
+    state_->volume.selection.reset();
     state_->file.has_unsaved_changes = true;
 }
 

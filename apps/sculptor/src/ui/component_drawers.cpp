@@ -154,14 +154,6 @@ auto register_model(component_drawer_registry& drawers) -> void {
             );
         }
 
-        if (in.state.ctx.allows_volume_edit() && can_trim && ImGui::Button("Trim")) {
-            in.ops.execute(
-                std::make_unique<trim_model_operation>(
-                    in.engine, in.state, trim_model_params{.name = in.node_name}
-                )
-            );
-        }
-
         if (in.state.ctx.in_prefab() && ImGui::Button("Edit")) {
             in.state.ctx.enter(edit_context::model(in.node_name));
         }

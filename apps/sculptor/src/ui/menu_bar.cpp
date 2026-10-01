@@ -24,9 +24,129 @@ namespace vw::sculptor {
 
 menu_bar::menu_bar(
     engine_type& eng, app_state& state, operation_manager& op_manager,
-    file_service& file_svc
+    file_service& file_svc, clipboard_service& clipboard_svc
 )
-    : engine_(&eng), state_(&state), op_manager_(&op_manager), file_service_(&file_svc) {}
+    : engine_(&eng)
+    , state_(&state)
+    , op_manager_(&op_manager)
+    , file_service_(&file_svc)
+    , clipboard_service_(&clipboard_svc) {}
+
+auto menu_bar::render_edit_menu_() const -> void {
+    if (ImGui::MenuItem("Undo", "Ctrl+Z", false, !op_manager_->is_undo_empty())) {
+        op_manager_->undo();
+    }
+    if (ImGui::MenuItem("Redo", "Ctrl+Shift+Z", false, !op_manager_->is_redo_empty())) {
+        op_manager_->redo();
+    }
+
+    ImGui::Separator();
+
+    const auto item = [this](const char* label, command cmd) -> bool {
+        const auto keys = std::string{keys_of(cmd)};
+        return ImGui::MenuItem(label, keys.c_str(), false, is_available(cmd, *state_));
+    };
+
+    if (item("Cut", command::cut)) {
+        clipboard_service_->cut();
+    }
+    if (item("Copy", command::copy)) {
+        clipboard_service_->copy();
+    }
+    if (item("Paste", command::paste)) {
+        clipboard_service_->begin_paste();
+    }
+    if (item("Erase Selection", command::erase_selection)) {
+        clipboard_service_->erase();
+    }
+
+    ImGui::Separator();
+
+    if (item("Select All", command::select_all)) {
+        clipboard_service_->select_all();
+    }
+    const bool has_selection =
+        state_->ctx.allows_volume_edit() && state_->volume.selection.has_value();
+    const auto deselect_keys = std::string{keys_of(command::cancel)};
+    if (ImGui::MenuItem("Deselect", deselect_keys.c_str(), false, has_selection)) {
+        clipboard_service_->deselect();
+    }
+
+    ImGui::Separator();
+
+    if (ImGui::BeginMenu("Volume", state_->ctx.allows_volume_edit())) {
+        render_volume_menu_();
+        ImGui::EndMenu();
+    }
+}
+
+auto menu_bar::render_volume_menu_() const -> void {
+    struct axis_item {
+        asset::voxel_axis axis;
+        const char* flip;
+        const char* turn_forward;
+        const char* turn_back;
+    };
+
+    constexpr std::array axis_items{
+        axis_item{asset::voxel_axis::x, "Flip X", "Rotate X +90", "Rotate X -90"},
+        axis_item{asset::voxel_axis::y, "Flip Y", "Rotate Y +90", "Rotate Y -90"},
+        axis_item{asset::voxel_axis::z, "Flip Z", "Rotate Z +90", "Rotate Z -90"},
+    };
+
+    const auto& node_name = state_->edited_node();
+
+    const auto it = state_->scene.name_to_entity.find(node_name);
+    if (it == state_->scene.name_to_entity.end()) {
+        return;
+    }
+
+    const auto& world = engine_->get_world();
+    if (!world.has<ecs::model_component>(it->second) ||
+        !world.get<ecs::model_component>(it->second).has_model()) {
+        return;
+    }
+
+    std::optional<asset::voxel_orientation> how;
+
+    for (const auto& entry : axis_items) {
+        if (ImGui::MenuItem(entry.flip)) {
+            how = asset::mirrored_orientation(entry.axis);
+        }
+    }
+
+    ImGui::Separator();
+
+    for (const auto& entry : axis_items) {
+        if (ImGui::MenuItem(entry.turn_forward)) {
+            how = asset::rotated_orientation(entry.axis, 1);
+        }
+        if (ImGui::MenuItem(entry.turn_back)) {
+            how = asset::rotated_orientation(entry.axis, -1);
+        }
+    }
+
+    ImGui::Separator();
+
+    const auto& occupied = state_->volume.occupied;
+    const bool can_trim  = occupied.has_value() &&
+                          occupied->size() != world.get<ecs::model_component>(it->second).size();
+    const bool trims     = ImGui::MenuItem("Trim", nullptr, false, can_trim);
+
+    if (how) {
+        op_manager_->execute(
+            std::make_unique<reorient_model_operation>(
+                *engine_, *state_, reorient_model_params{.name = node_name, .how = *how}
+            )
+        );
+    } else if (trims) {
+        op_manager_->execute(
+            std::make_unique<trim_model_operation>(
+                *engine_, *state_, trim_model_params{.name = node_name}
+            )
+        );
+    }
+}
 
 auto menu_bar::render(
     float
@@ -53,6 +173,10 @@ auto menu_bar::render(
     ImGui::PopStyleVar(3);
 
     ImGui::BeginMenuBar();
+
+    const bool placing_paste = state_->ctx.in_paste();
+
+    ImGui::BeginDisabled(placing_paste);
 
     const bool has_prefab = !state_->file.filename.empty();
     if (ImGui::BeginMenu("Prefab")) {
@@ -97,15 +221,11 @@ auto menu_bar::render(
     }
 
     if (ImGui::BeginMenu("Edit")) {
-        if (ImGui::MenuItem("Undo", "Ctrl+Z", false, !op_manager_->is_undo_empty())) {
-            op_manager_->undo();
-        }
-        if (ImGui::MenuItem("Redo", "Ctrl+Shift+Z", false, !op_manager_->is_redo_empty())) {
-            op_manager_->redo();
-        }
-
+        render_edit_menu_();
         ImGui::EndMenu();
     }
+
+    ImGui::EndDisabled();
 
     if (ImGui::BeginMenu("View")) {
         if (ImGui::MenuItem("Sockets", "Alt+S", state_->ui.show_sockets)) {
@@ -123,6 +243,8 @@ auto menu_bar::render(
         }
         ImGui::EndMenu();
     }
+
+    ImGui::BeginDisabled(placing_paste);
 
     const bool has_clip = !state_->anim.selected_clip_name.empty();
     if (ImGui::BeginMenu("Animation")) {
@@ -165,6 +287,8 @@ auto menu_bar::render(
         }
         ImGui::EndMenu();
     }
+
+    ImGui::EndDisabled();
 
     state_->ui.left_offset += 20.0f;
     state_->ui.right_offset += 20.0f;

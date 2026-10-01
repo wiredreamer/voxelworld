@@ -32,6 +32,7 @@ auto tool_panel::render(
     render_tool_button(tools::paint_voxel, "Paint voxel");
     render_tool_button(tools::color_picker, "Color picker");
     render_tool_button(tools::move_pivot, "Move pivot");
+    render_tool_button(tools::select_box, "Select box");
 
     ImGui::PopStyleVar(1);
 

@@ -38,8 +38,9 @@ constexpr float32 pick_tolerance_of_gizmo_size = 0.09F;
 
 constexpr float32 snap_translate = 0.5F;
 
-constexpr float32 snap_pivot = 0.5F;
-constexpr float32 snap_rotate    = 15.0F * math::deg_to_rad;
+constexpr float32 snap_pivot    = 0.5F;
+constexpr float32 snap_fragment = 1.0F;
+constexpr float32 snap_rotate   = 15.0F * math::deg_to_rad;
 constexpr float32 snap_scale     = 0.1F;
 
 constexpr auto axis_x = vec3f{1.0F, 0.0F, 0.0F};
@@ -111,33 +112,6 @@ auto axis_color(gizmo_handle axis, bool highlighted) -> color {
     return highlighted ? colors::amber_5 : base;
 }
 
-auto closest_on_axis(
-    const vec3f& origin, const vec3f& axis, const spatial::ray& r, float32& t_out
-) -> bool {
-    const auto& d = r.direction;
-    const auto w  = origin - r.start;
-
-    const auto ad = math::dot(axis, d);
-    const auto det = 1.0F - (ad * ad);
-    if (std::abs(det) < 1e-5F) {
-        return false;
-    }
-
-    const auto aw = math::dot(axis, w);
-    const auto dw = math::dot(d, w);
-
-    t_out = ((ad * dw) - aw) / det;
-    return true;
-}
-
-auto distance_to_ray(const vec3f& point, const spatial::ray& r) -> float32 {
-    const auto w = point - r.start;
-
-    const auto t       = std::max(math::dot(w, r.direction), 0.0F);
-    const auto closest = r.start + (r.direction * t);
-    return math::length(point - closest);
-}
-
 auto ray_plane(
     const vec3f& origin, const vec3f& normal, const spatial::ray& r, vec3f& hit_out
 ) -> bool {
@@ -165,6 +139,61 @@ auto snapped(float32 value, float32 step) -> float32 {
 
 }  // namespace
 
+auto closest_on_axis(
+    const vec3f& origin, const vec3f& axis, const spatial::ray& r, float32& t_out
+) -> bool {
+    const auto& d = r.direction;
+    const auto w  = origin - r.start;
+
+    const auto ad = math::dot(axis, d);
+    const auto det = 1.0F - (ad * ad);
+    if (std::abs(det) < 1e-5F) {
+        return false;
+    }
+
+    const auto aw = math::dot(axis, w);
+    const auto dw = math::dot(d, w);
+
+    t_out = ((ad * dw) - aw) / det;
+    return true;
+}
+
+auto distance_to_ray(
+    const vec3f& point, const spatial::ray& r
+) -> float32 {
+    const auto w = point - r.start;
+
+    const auto t       = std::max(math::dot(w, r.direction), 0.0F);
+    const auto closest = r.start + (r.direction * t);
+    return math::length(point - closest);
+}
+
+auto draw_handle_box(
+    gfx::engine& engine, const vec3f& center, float32 half, color col
+) -> void {
+    auto& renderer = engine.get_renderer();
+
+    const auto p = [&](float32 x, float32 y, float32 z) -> vec3f {
+        return center + vec3f{x * half, y * half, z * half};
+    };
+
+    const auto v000 = p(-1, -1, -1);
+    const auto v100 = p(+1, -1, -1);
+    const auto v110 = p(+1, +1, -1);
+    const auto v010 = p(-1, +1, -1);
+    const auto v001 = p(-1, -1, +1);
+    const auto v101 = p(+1, -1, +1);
+    const auto v111 = p(+1, +1, +1);
+    const auto v011 = p(-1, +1, +1);
+
+    renderer.draw_quad(v000, v010, v110, v100, col);
+    renderer.draw_quad(v001, v101, v111, v011, col);
+    renderer.draw_quad(v000, v100, v101, v001, col);
+    renderer.draw_quad(v010, v011, v111, v110, col);
+    renderer.draw_quad(v000, v001, v011, v010, col);
+    renderer.draw_quad(v100, v110, v111, v101, col);
+}
+
 gizmo::gizmo(
     engine_type& eng, app_state& st, operation_manager& op_manager, gizmo_target target,
     gizmo_commit commit
@@ -179,7 +208,7 @@ auto gizmo::mode_() const -> gizmo_mode {
     if (dragging_) {
         return drag_mode_;
     }
-    return target_ == gizmo_target::pivot ? gizmo_mode::translate : state_->tool.gizmo;
+    return target_ == gizmo_target::node ? state_->tool.gizmo : gizmo_mode::translate;
 }
 
 auto gizmo::build_frame_(
@@ -192,13 +221,20 @@ auto gizmo::build_frame_(
 
     const auto& tc = world.get<ecs::transform_component>(ent);
 
-    const auto pivot = tc.get_world_matrix() * vec3f{0.0F, 0.0F, 0.0F};
+    if (target_ == gizmo_target::fragment && !state_->paste.active()) {
+        return std::nullopt;
+    }
+
+    const auto pivot = target_ == gizmo_target::fragment
+                           ? state_->paste.base_matrix(tc.get_world_matrix()) *
+                                 state_->paste.centre()
+                           : tc.get_world_matrix() * vec3f{0.0F, 0.0F, 0.0F};
 
     frame fr;
     fr.pivot = pivot;
     fr.axes  = {axis_x, axis_y, axis_z};
 
-    if (target_ == gizmo_target::pivot) {
+    if (target_ != gizmo_target::node) {
         const auto& node_matrix = tc.get_world_matrix();
         const auto base         = node_matrix * vec3f{0.0F, 0.0F, 0.0F};
         for (std::size_t i = 0; i < fr.axes.size(); ++i) {
@@ -370,6 +406,11 @@ auto gizmo::on_mouse_move(
         return;
     }
 
+    if (target_ == gizmo_target::fragment) {
+        apply_fragment_(drag_frame_);
+        return;
+    }
+
     switch (mode_()) {
         case gizmo_mode::translate: apply_translate_(ent, drag_frame_); break;
         case gizmo_mode::rotate: apply_rotate_(ent, drag_frame_); break;
@@ -401,6 +442,10 @@ auto gizmo::on_mouse_press(
 
     if (target_ == gizmo_target::pivot && world.has<ecs::model_component>(ent)) {
         start_pivot_ = world.get<ecs::model_component>(ent).get_pivot();
+    }
+
+    if (target_ == gizmo_target::fragment) {
+        start_origin_ = state_->paste.origin;
     }
 
     const auto r = cursor_ray_();
@@ -535,6 +580,27 @@ auto gizmo::apply_pivot_(
     }
 
     engine_->get_world().system<ecs::model_system>().modify(ent).set_pivot(start_pivot_ + *delta);
+}
+
+auto gizmo::apply_fragment_(
+    const frame& fr
+) -> void {
+    const auto delta = translation_delta_(fr, snap_fragment);
+    if (!delta.has_value() || !state_->paste.active()) {
+        return;
+    }
+
+    const auto origin = vec3i{
+        start_origin_.x + static_cast<int32>(std::lround(delta->x)),
+        start_origin_.y + static_cast<int32>(std::lround(delta->y)),
+        start_origin_.z + static_cast<int32>(std::lround(delta->z)),
+    };
+    if (origin == state_->paste.origin) {
+        return;
+    }
+
+    state_->paste.origin        = origin;
+    state_->paste.preview_stale = true;
 }
 
 auto gizmo::apply_rotate_(
@@ -726,27 +792,7 @@ auto gizmo::draw_torus_(
 auto gizmo::draw_handle_box_(
     const vec3f& center, float32 half, color col
 ) -> void {
-    auto& renderer = engine_->get_renderer();
-
-    const auto p = [&](float32 x, float32 y, float32 z) -> vec3f {
-        return center + vec3f{x * half, y * half, z * half};
-    };
-
-    const auto v000 = p(-1, -1, -1);
-    const auto v100 = p(+1, -1, -1);
-    const auto v110 = p(+1, +1, -1);
-    const auto v010 = p(-1, +1, -1);
-    const auto v001 = p(-1, -1, +1);
-    const auto v101 = p(+1, -1, +1);
-    const auto v111 = p(+1, +1, +1);
-    const auto v011 = p(-1, +1, +1);
-
-    renderer.draw_quad(v000, v010, v110, v100, col);
-    renderer.draw_quad(v001, v101, v111, v011, col);
-    renderer.draw_quad(v000, v100, v101, v001, col);
-    renderer.draw_quad(v010, v011, v111, v110, col);
-    renderer.draw_quad(v000, v001, v011, v010, col);
-    renderer.draw_quad(v100, v110, v111, v101, col);
+    draw_handle_box(*engine_, center, half, col);
 }
 
 }  // namespace vw::sculptor

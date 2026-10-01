@@ -22,6 +22,8 @@ enum class tools : uint8 {
     paint_voxel,
     color_picker,
     move_pivot,
+    select_box,
+    place_paste,
 
     pose,
 };
@@ -38,6 +40,8 @@ enum class panels : uint8 {
     timeline,
     keyframe,
     fsm,
+    paste,
+    selection,
 };
 
 struct ui_state {
@@ -79,7 +83,7 @@ struct file_state {
     std::unordered_set<ecs::entity> dirty_models;
 };
 
-enum class edit_kind : uint8 { prefab, model, clip, fsm };
+enum class edit_kind : uint8 { prefab, model, clip, fsm, paste };
 
 struct edit_context {
     edit_kind kind = edit_kind::model;
@@ -89,6 +93,10 @@ struct edit_context {
 
     [[nodiscard]] static auto model(std::string node_name) -> edit_context {
         return edit_context{.kind = edit_kind::model, .node_name = std::move(node_name)};
+    }
+
+    [[nodiscard]] static auto paste(std::string node_name) -> edit_context {
+        return edit_context{.kind = edit_kind::paste, .node_name = std::move(node_name)};
     }
 
     [[nodiscard]] static auto clip() -> edit_context {
@@ -127,8 +135,16 @@ struct context_state {
         return kind() == edit_kind::prefab || kind() == edit_kind::clip;
     }
 
+    [[nodiscard]] auto in_paste() const -> bool {
+        return kind() == edit_kind::paste;
+    }
+
     [[nodiscard]] auto allows_volume_edit() const -> bool {
         return kind() == edit_kind::model;
+    }
+
+    [[nodiscard]] auto shows_volume() const -> bool {
+        return kind() == edit_kind::model || kind() == edit_kind::paste;
     }
 
     [[nodiscard]] auto node_name() const -> std::string_view {
@@ -143,7 +159,9 @@ struct context_state {
             case tools::remove_voxel:
             case tools::paint_voxel:
             case tools::color_picker:
-            case tools::move_pivot: return kind() == edit_kind::model;
+            case tools::move_pivot:
+            case tools::select_box: return kind() == edit_kind::model;
+            case tools::place_paste: return in_paste();
             case tools::invalid: break;
         }
         return false;
@@ -153,6 +171,7 @@ struct context_state {
         switch (kind()) {
             case edit_kind::model: return tools::add_voxel;
             case edit_kind::clip: return tools::pose;
+            case edit_kind::paste: return tools::place_paste;
             case edit_kind::prefab:
             case edit_kind::fsm: break;
         }
@@ -178,6 +197,10 @@ struct context_state {
             case panels::keyframe: return in_clip();
 
             case panels::fsm: return in_fsm();
+
+            case panels::paste: return in_paste();
+
+            case panels::selection: return kind() == edit_kind::model;
         }
         return false;
     }
@@ -205,13 +228,51 @@ struct scene_state {
     auto clear_entities(world_type& world) -> void;
 };
 
+struct volume_selection {
+    asset::voxel_bounds box;
+    std::string node_name;
+    vec3i volume_size;
+};
+
 struct volume_state {
     asset::model_identity source = asset::invalid_model_identity;
     std::optional<asset::voxel_bounds> occupied;
+    std::optional<volume_selection> selection;
+};
+
+struct clipboard_state {
+    asset::voxel_clip clip;
+};
+
+struct paste_state {
+    asset::voxel_clip clip;
+    vec3i origin;
+    asset::paste_mode mode = asset::paste_mode::keep_air;
+
+    std::string node_name;
+    std::shared_ptr<asset::model> base;
+    bool preview_stale = false;
+
+    [[nodiscard]] auto active() const -> bool {
+        return base != nullptr;
+    }
+
+    [[nodiscard]] auto base_matrix(const mat4f& node_world_matrix) const -> mat4f {
+        return node_world_matrix * math::translation_matrix(-base->pivot());
+    }
+
+    [[nodiscard]] auto centre() const -> vec3f {
+        return vec3f{
+            static_cast<float32>(origin.x) + (static_cast<float32>(clip.size.x) * 0.5F),
+            static_cast<float32>(origin.y) + (static_cast<float32>(clip.size.y) * 0.5F),
+            static_cast<float32>(origin.z) + (static_cast<float32>(clip.size.z) * 0.5F),
+        };
+    }
 };
 
 struct tool_state {
     tools selected_tool     = tools::add_voxel;
+    tools tool_before_paste = tools::add_voxel;
     gizmo_mode gizmo        = gizmo_mode::translate;
     voxel selected_voxel = voxels::gray[9];
 };
@@ -341,6 +402,8 @@ struct app_state {
     fsm_document fsm;
     scene_state scene;
     volume_state volume;
+    clipboard_state clipboard;
+    paste_state paste;
     tool_state tool;
     animation_state anim;
     socket_state sockets;

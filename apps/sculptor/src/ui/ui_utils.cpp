@@ -185,6 +185,37 @@ auto imgui_drag_vec3f(std::string_view label, vec3f& vec, float label_offset) ->
     return edit;
 }
 
+auto imgui_drag_vec3i(
+    std::string_view label, vec3i& vec, float32 label_offset
+) -> bool {
+    constexpr float32 field_width = 60.f;
+    constexpr float32 drag_speed  = 0.1f;
+
+    bool changed = false;
+
+    const auto field_id = std::format("##drag_vec3i_{}", label);
+    ImGui::PushID(field_id.c_str());
+
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted(label.data(), label.data() + label.size());
+    ImGui::SameLine(label_offset);
+
+    ImGui::SetNextItemWidth(field_width);
+    changed |= ImGui::DragInt("##X", &vec.x, drag_speed);
+    ImGui::SameLine();
+
+    ImGui::SetNextItemWidth(field_width);
+    changed |= ImGui::DragInt("##Y", &vec.y, drag_speed);
+    ImGui::SameLine();
+
+    ImGui::SetNextItemWidth(field_width);
+    changed |= ImGui::DragInt("##Z", &vec.z, drag_speed);
+
+    ImGui::PopID();
+
+    return changed;
+}
+
 auto collect_asset_refs(
     const std::filesystem::path& dir, std::string_view extension
 ) -> std::vector<asset::asset_ref> {
