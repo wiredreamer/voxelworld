@@ -224,7 +224,6 @@ TEST_CASE("a bare node survives a write and a read", "[serial]") {
 TEST_CASE("the voxa parser reads a clip out of a stream", "[serial]") {
     const auto clip = parse_voxa(
         "# comment\n"
-        "clip walk\n"
         "track body 60\n"
         "  channel position\n"
         "    k 0 0 0 0 linear 0 1\n"
@@ -233,14 +232,13 @@ TEST_CASE("the voxa parser reads a clip out of a stream", "[serial]") {
 
     REQUIRE(clip.has_value());
     REQUIRE(*clip != nullptr);
-    REQUIRE((*clip)->get_name() == "walk");
+    REQUIRE((*clip)->get_name().empty());
     REQUIRE((*clip)->has_track("body"));
     REQUIRE((*clip)->get_tracks().size() == 1);
 }
 
 TEST_CASE("a truncated voxa keyframe is a parse error", "[serial]") {
     const auto clip = parse_voxa(
-        "clip walk\n"
         "track body 60\n"
         "  channel position\n"
         "    k 0 0\n"
@@ -320,7 +318,18 @@ TEST_CASE("a vox file without a version header parses", "[serial]") {
 TEST_CASE("a voxa file of an unsupported major version is rejected", "[serial]") {
     const auto clip = parse_voxa(
         "# Voxa File Version 99.0\n"
-        "clip walk 60\n"
+        "rig humanoid\n"
+    );
+
+    REQUIRE_FALSE(clip.has_value());
+    REQUIRE(clip.error() == asset::voxa_deserializer::error_type::unsupported_version);
+}
+
+TEST_CASE("a voxa file that still names its clip inside is rejected", "[serial]") {
+    const auto clip = parse_voxa(
+        "# Voxa File Version 1.1\n"
+        "clip walk\n"
+        "rig humanoid\n"
     );
 
     REQUIRE_FALSE(clip.has_value());
@@ -329,8 +338,7 @@ TEST_CASE("a voxa file of an unsupported major version is rejected", "[serial]")
 
 TEST_CASE("a voxa file of the current version parses", "[serial]") {
     const auto clip = parse_voxa(
-        "# Voxa File Version 1.1\n"
-        "clip walk 60\n"
+        "# Voxa File Version 2.0\n"
         "rig humanoid\n"
     );
 
@@ -340,12 +348,40 @@ TEST_CASE("a voxa file of the current version parses", "[serial]") {
 
 TEST_CASE("a voxa file without a rig parses as one without a rig", "[serial]") {
     const auto clip = parse_voxa(
-        "# Voxa File Version 1.0\n"
-        "clip walk 60\n"
+        "# Voxa File Version 2.0\n"
+        "track body 60\n"
     );
 
     REQUIRE(clip.has_value());
     REQUIRE((*clip)->get_rig().empty());
+}
+
+TEST_CASE("a clip takes its name from the file it was read from", "[serial]") {
+    namespace fs = std::filesystem;
+
+    const auto dir = fs::temp_directory_path() / "vw_voxa_name_test";
+    fs::create_directories(dir);
+    const auto path = dir / "a_wave.voxa";
+
+    asset::animation_clip written{"something_else"};
+    written.set_rig("humanoid");
+    REQUIRE(asset::voxa_serializer{written}.serialize(path).has_value());
+
+    {
+        std::ifstream file{path};
+        const std::string text{std::istreambuf_iterator<char>{file}, {}};
+        REQUIRE(text.find("something_else") == std::string::npos);
+        REQUIRE(text.find("clip") == std::string::npos);
+    }
+
+    asset::voxa_deserializer deserializer;
+    const auto clip = deserializer.deserialize(path);
+
+    REQUIRE(clip.has_value());
+    REQUIRE((*clip)->get_name() == "a_wave");
+    REQUIRE((*clip)->get_rig() == "humanoid");
+
+    fs::remove_all(dir);
 }
 
 namespace {

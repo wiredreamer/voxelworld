@@ -283,7 +283,6 @@ auto voxa_serializer::serialize(
 
 auto voxa_serializer::write_header_(std::ofstream& file) -> void {
     file << std::format("# Voxa File Version {}\n", voxa_file_version);
-    file << std::format("clip {}\n", clip_->get_name());
     if (!clip_->get_rig().empty()) {
         file << std::format("rig {}\n", clip_->get_rig());
     }
@@ -368,14 +367,17 @@ auto voxa_deserializer::deserialize(
     auto result = deserialize(file);
     if (!result) {
         log::warn(detail::voxa_deserializer_lc, "parse error in file: {}", filepath.string());
+        return result;
     }
+
+    (*result)->set_name(filepath.stem().string());
     return result;
 }
 
 auto voxa_deserializer::deserialize(
     std::istream& input
 ) -> std::expected<std::shared_ptr<animation_clip>, error_type> {
-    clip_ = nullptr;
+    clip_ = std::make_shared<animation_clip>(std::string{});
     current_track_ = nullptr;
     has_current_channel_ = false;
     error_ = std::nullopt;
@@ -400,9 +402,7 @@ auto voxa_deserializer::deserialize(
             continue;
         }
 
-        if (cmd == "clip") {
-            process_clip_(iss);
-        } else if (cmd == "rig") {
+        if (cmd == "rig") {
             process_rig_(iss);
         } else if (cmd == "track") {
             process_track_(iss);
@@ -422,7 +422,7 @@ auto voxa_deserializer::deserialize(
     finalize_channel_();
     finalize_track_();
 
-    if (clip_ && !rig_.empty()) {
+    if (!rig_.empty()) {
         clip_->set_rig(rig_);
     }
 
@@ -442,16 +442,6 @@ auto voxa_deserializer::process_comment_(std::istringstream& iss) -> void {
         );
         error_ = error_type::unsupported_version;
     }
-}
-
-auto voxa_deserializer::process_clip_(std::istringstream& iss) -> void {
-    std::string name;
-    iss >> name;
-    if (iss.fail()) {
-        error_ = error_type::parse_error;
-        return;
-    }
-    clip_ = std::make_shared<animation_clip>(name);
 }
 
 auto voxa_deserializer::process_rig_(std::istringstream& iss) -> void {

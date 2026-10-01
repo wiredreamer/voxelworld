@@ -40,7 +40,6 @@ public:
 
 private:
     auto process_comment_(std::istringstream& iss) -> void;
-    auto process_clip_(std::istringstream& iss) -> void;
     auto process_rig_(std::istringstream& iss) -> void;
     auto process_track_(std::istringstream& iss) -> void;
     auto process_channel_(std::istringstream& iss) -> void;

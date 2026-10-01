@@ -127,6 +127,6 @@ private:
     auto write_entity_(std::ostream& output, const vox_entity_data& ent) -> void;
 };
 
-inline constexpr std::string_view voxa_file_version = "1.1";
+inline constexpr std::string_view voxa_file_version = "2.0";
 
 }  // namespace vw::asset
