@@ -54,18 +54,22 @@ auto menu_bar::render(
 
     ImGui::BeginMenuBar();
 
-    if (ImGui::BeginMenu("File")) {
-        if (ImGui::MenuItem("New File", "Ctrl+N")) {
+    const bool has_prefab = !state_->file.filename.empty();
+    if (ImGui::BeginMenu("Prefab")) {
+        if (ImGui::MenuItem("New", "Ctrl+N")) {
             state_->ui.need_new_file_modal = true;
         }
-        if (ImGui::MenuItem("Open File", "Ctrl+O")) {
+        if (ImGui::MenuItem("Open", "Ctrl+O")) {
             state_->ui.need_open_file_modal = true;
         }
-        if (ImGui::MenuItem("Save File", "Ctrl+S")) {
+        if (ImGui::MenuItem("Save", "Ctrl+S", false, has_prefab)) {
             file_service_->save();
         }
-        if (ImGui::MenuItem("Save As", "Ctrl+Shift+S")) {
+        if (ImGui::MenuItem("Save As", "Ctrl+Shift+S", false, has_prefab)) {
             state_->ui.need_save_as_modal = true;
+        }
+        if (ImGui::MenuItem("Close", nullptr, false, has_prefab)) {
+            state_->ui.need_close_file = true;
         }
 
         ImGui::Separator();

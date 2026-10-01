@@ -33,12 +33,12 @@ auto startup_modal::render(
     if (ImGui::BeginPopupModal("Welcome to Sculptor", nullptr, dialog_flags)) {
         ImGui::Text("Select next step to get started:");
         ImGui::Spacing();
-        if (ImGui::Button("New File")) {
+        if (ImGui::Button("New Prefab")) {
             state_->ui.need_new_file_modal = true;
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();
-        if (ImGui::Button("Open File")) {
+        if (ImGui::Button("Open Prefab")) {
             state_->ui.need_open_file_modal = true;
             ImGui::CloseCurrentPopup();
         }

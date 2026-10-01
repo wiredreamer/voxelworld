@@ -49,7 +49,7 @@ auto save_as_modal::render(
 }
 
 auto save_as_modal::render_overwrite_confirmation() -> void {
-    ImGui::TextColored(ImVec4{1.0f, 1.0f, 0.0f, 1.0f}, "File already exists. Overwrite?");
+    ImGui::TextColored(ImVec4{1.0f, 1.0f, 0.0f, 1.0f}, "Prefab already exists. Overwrite?");
     ImGui::Spacing();
 
     if (ImGui::Button("Yes")) {
@@ -106,7 +106,7 @@ auto save_as_modal::save_file_() -> bool {
     }
 
     if (!file_service_->save_as(filename.generic_string())) {
-        error_ = "Failed to save file.";
+        error_ = "Failed to save prefab.";
         return false;
     }
 

@@ -49,6 +49,7 @@ struct ui_state {
     bool need_new_file_modal  = false;
     bool need_open_file_modal = false;
     bool need_save_as_modal   = false;
+    bool need_close_file      = false;
     bool need_shortcuts_modal = false;
 
     float32 bottom_panel_height = 400.f;
@@ -57,6 +58,7 @@ struct ui_state {
 
     bool need_enter_animation   = false;
     std::string need_add_model_for;
+    std::string need_rename_model_for;
 
     std::string need_add_candidate_for;
 
@@ -348,6 +350,11 @@ struct app_state {
             return ctx.stack.back().node_name;
         }
         return scene.selected_name;
+    }
+
+    [[nodiscard]] auto has_unsaved_changes() const -> bool {
+        return file.has_unsaved_changes || fsm.has_unsaved_changes ||
+            anim.has_any_unsaved_clip();
     }
 
     auto reset(world_type& world) -> void;

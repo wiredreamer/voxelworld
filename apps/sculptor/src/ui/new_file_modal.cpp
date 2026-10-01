@@ -23,7 +23,7 @@ auto new_file_modal::render(
     float
 ) -> void {
     if (state_->ui.need_new_file_modal) {
-        ImGui::OpenPopup("New File");
+        ImGui::OpenPopup("New Prefab");
         state_->ui.need_new_file_modal = false;
 
         filename_.clear();
@@ -35,7 +35,7 @@ auto new_file_modal::render(
     ImGuiWindowFlags dialog_flags =          //
         ImGuiWindowFlags_AlwaysAutoResize |  //
         ImGuiWindowFlags_NoMove;
-    if (ImGui::BeginPopupModal("New File", nullptr, dialog_flags)) {
+    if (ImGui::BeginPopupModal("New Prefab", nullptr, dialog_flags)) {
         if (need_overwrite_confirmation_) {
             render_overwrite_confirmation();
         } else {
@@ -46,7 +46,7 @@ auto new_file_modal::render(
 }
 
 auto new_file_modal::render_overwrite_confirmation() -> void {
-    ImGui::TextColored(ImVec4{1.0f, 1.0f, 0.0f, 1.0f}, "File already exists. Overwrite?");
+    ImGui::TextColored(ImVec4{1.0f, 1.0f, 0.0f, 1.0f}, "Prefab already exists. Overwrite?");
     ImGui::Spacing();
 
     if (ImGui::Button("Yes")) {
@@ -107,7 +107,7 @@ auto new_file_modal::create_file_() -> bool {
 
     auto file = std::ofstream(filepath, std::ios::trunc);
     if (!file.is_open()) {
-        error_ = "Failed to create file.";
+        error_ = "Failed to create prefab.";
         return false;
     }
 

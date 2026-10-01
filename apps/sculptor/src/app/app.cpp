@@ -26,7 +26,7 @@ app::app(
           eng.get_world().resource<asset::model_registry>(), eng.get_voxel_registry(),
           app_state::asset_root_name
       )
-    , file_service_(eng, state_, model_library_)
+    , file_service_(eng, state_, model_library_, op_manager_)
     , clip_service_(eng, state_, op_manager_)
     , playback_service_(eng, state_)
     , keyframe_service_(eng, state_, op_manager_)
@@ -47,6 +47,8 @@ app::app(
     , new_file_modal_(eng, state_, op_manager_)
     , open_file_modal_(eng, state_, model_library_, op_manager_)
     , save_as_modal_(eng, state_, file_service_)
+    , unsaved_changes_modal_(state_, file_service_)
+    , rename_model_modal_(eng, state_, file_service_)
     , add_machine_modal_(eng, state_, op_manager_, fsm_service_)
     , shortcuts_modal_(state_)
     , create_clip_modal_(eng, state_, op_manager_)
@@ -148,9 +150,11 @@ auto app::render(
     render_panels_(delta_time);
 
     startup_modal_.render(delta_time);
+    unsaved_changes_modal_.render();
     new_file_modal_.render(delta_time);
     open_file_modal_.render(delta_time);
     save_as_modal_.render(delta_time);
+    rename_model_modal_.render();
     add_machine_modal_.render();
 
     if (state_.ui.need_create_clip_modal) {

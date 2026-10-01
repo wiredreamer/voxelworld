@@ -117,6 +117,13 @@ auto register_model(component_drawer_registry& drawers) -> void {
             if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
                 ImGui::SetTooltip("%s", source.str().c_str());
             }
+
+            if (in.state.ctx.allows_volume_edit() && !in.state.file.filename.empty()) {
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Rename")) {
+                    in.state.ui.need_rename_model_for = in.node_name;
+                }
+            }
         }
 
         const auto model_size = model_comp.size();

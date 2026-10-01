@@ -66,11 +66,11 @@ inline constexpr std::array shortcuts{
         "Redo"
     },
 
-    shortcut{plat::keyboard::keys::N, mod_ctrl, command::file_new, "File", "Ctrl+N", "New file"},
-    shortcut{plat::keyboard::keys::O, mod_ctrl, command::file_open, "File", "Ctrl+O", "Open file"},
-    shortcut{plat::keyboard::keys::S, mod_ctrl, command::file_save, "File", "Ctrl+S", "Save"},
+    shortcut{plat::keyboard::keys::N, mod_ctrl, command::file_new, "Prefab", "Ctrl+N", "New"},
+    shortcut{plat::keyboard::keys::O, mod_ctrl, command::file_open, "Prefab", "Ctrl+O", "Open"},
+    shortcut{plat::keyboard::keys::S, mod_ctrl, command::file_save, "Prefab", "Ctrl+S", "Save"},
     shortcut{
-        plat::keyboard::keys::S, mod_ctrl | mod_shift, command::file_save_as, "File",
+        plat::keyboard::keys::S, mod_ctrl | mod_shift, command::file_save_as, "Prefab",
         "Ctrl+Shift+S", "Save as"
     },
 

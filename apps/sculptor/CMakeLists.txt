@@ -91,7 +91,9 @@ target_sources(${PROJECT_NAME}
         src/ui/menu_bar.cpp
         src/ui/new_file_modal.cpp
         src/ui/open_file_modal.cpp
+        src/ui/rename_model_modal.cpp
         src/ui/save_as_modal.cpp
+        src/ui/unsaved_changes_modal.cpp
         src/ui/add_machine_modal.cpp
         src/ui/fsm_panel.cpp
         src/ui/gizmo_panel.cpp

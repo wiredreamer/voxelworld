@@ -25,7 +25,7 @@ auto open_file_modal::render(
     float
 ) -> void {
     if (state_->ui.need_open_file_modal) {
-        ImGui::OpenPopup("Open File");
+        ImGui::OpenPopup("Open Prefab");
         state_->ui.need_open_file_modal = false;
 
         filename_.clear();
@@ -35,8 +35,8 @@ auto open_file_modal::render(
     constexpr ImGuiWindowFlags dialog_flags =  //
         ImGuiWindowFlags_AlwaysAutoResize |    //
         ImGuiWindowFlags_NoMove;
-    if (ImGui::BeginPopupModal("Open File", nullptr, dialog_flags)) {
-        ImGui::Text("Existing Files:");
+    if (ImGui::BeginPopupModal("Open Prefab", nullptr, dialog_flags)) {
+        ImGui::Text("Existing Prefabs:");
         ImGui::Spacing();
 
         const float list_height = ImGui::GetTextLineHeightWithSpacing() * 7.5f;
@@ -105,7 +105,7 @@ auto open_file_modal::open_file_() -> bool {
     const fs::path filepath = app_state::prefab_dir() / fs::path{filename_};
     auto result = deserializer.deserialize(filepath);
     if (!result.has_value()) {
-        error_ = std::format("Failed to open file: {}", filepath.string());
+        error_ = std::format("Failed to open prefab: {}", filepath.string());
         return false;
     }
 

@@ -662,6 +662,58 @@ private:
 
 export namespace vw::sculptor {
 
+class rename_model_modal final {
+public:
+    using engine_type = gfx::engine;
+
+    rename_model_modal(engine_type& eng, app_state& st, file_service& file_svc);
+
+    auto render() -> void;
+
+private:
+    auto open_(const std::string& node_name) -> void;
+    auto render_overwrite_confirmation_() -> void;
+    auto render_rename_form_() -> void;
+    auto rename_() -> bool;
+
+    engine_type* engine_;
+    app_state* state_;
+    file_service* file_service_;
+
+    asset::asset_ref source_;
+    std::string stem_;
+    std::string error_;
+
+    bool need_overwrite_confirmation_ = false;
+    bool has_overwrite_confirmation_  = false;
+};
+
+}  // namespace vw::sculptor
+
+export namespace vw::sculptor {
+
+class unsaved_changes_modal final {
+public:
+    unsaved_changes_modal(app_state& st, file_service& file_svc);
+
+    auto render() -> void;
+
+private:
+    enum class action : uint8 { close_file, new_file, open_file };
+
+    [[nodiscard]] auto take_request_() const -> std::optional<action>;
+    auto proceed_(action confirmed) const -> void;
+
+    app_state* state_;
+    file_service* file_service_;
+
+    action pending_ = action::close_file;
+};
+
+}  // namespace vw::sculptor
+
+export namespace vw::sculptor {
+
 class breadcrumb_bar final {
 public:
     using engine_type = gfx::engine;

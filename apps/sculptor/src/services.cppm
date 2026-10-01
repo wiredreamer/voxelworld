@@ -54,19 +54,40 @@ private:
 
 export namespace vw::sculptor {
 
+enum class rename_model_error : uint8 { invalid_name, name_in_use, file_exists, write_failed };
+
 class file_service final {
 public:
     using engine_type = gfx::engine;
 
-    file_service(engine_type& eng, app_state& state, asset::model_library& library);
+    file_service(
+        engine_type& eng, app_state& state, asset::model_library& library,
+        operation_manager& op_manager
+    );
 
     auto save() -> bool;
     auto save_as(std::string_view filename) -> bool;
+    auto close() -> void;
+
+    auto rename_model(const asset::asset_ref& ref, std::string_view stem, bool overwrite)
+        -> std::expected<void, rename_model_error>;
 
     auto collect_dirty_models() -> void;
 
 private:
+    using model_moves = std::unordered_map<asset::asset_ref, asset::asset_ref>;
+
     auto write_(const asset::asset_ref& prefab_ref) -> bool;
+
+    [[nodiscard]] auto is_model_referenced_(const asset::asset_ref& ref) const -> bool;
+    [[nodiscard]] auto write_model_copy_(const asset::asset_ref& from, const asset::asset_ref& to)
+        -> bool;
+
+    [[nodiscard]] auto plan_model_moves_(
+        const asset::asset_ref& from_prefab, const asset::asset_ref& to_prefab
+    ) const -> model_moves;
+    auto copy_detached_models_(const model_moves& moves) -> void;
+    auto retarget_models_(const model_moves& moves) -> void;
 
     auto assign_missing_refs_(const asset::asset_ref& prefab_ref) -> void;
     auto write_dirty_models_() -> void;
@@ -74,6 +95,7 @@ private:
     engine_type* engine_;
     app_state* state_;
     asset::model_library* library_;
+    operation_manager* op_manager_;
 };
 
 }  // namespace vw::sculptor

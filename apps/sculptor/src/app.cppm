@@ -79,6 +79,8 @@ private:
     new_file_modal new_file_modal_;
     open_file_modal open_file_modal_;
     save_as_modal save_as_modal_;
+    unsaved_changes_modal unsaved_changes_modal_;
+    rename_model_modal rename_model_modal_;
     add_machine_modal add_machine_modal_;
     shortcuts_modal shortcuts_modal_;
     create_clip_modal create_clip_modal_;
