@@ -388,6 +388,15 @@ struct fsm_document {
     }
 };
 
+struct mcp_status {
+    bool enabled    = false;
+    bool listening  = false;
+    uint16 port     = 0;
+    uint64 requests = 0;
+    std::string last_tool;
+    std::string failure;
+};
+
 struct app_state {
     static constexpr std::string_view asset_root_name = VW_SCULPTOR_ASSET_ROOT;
 
@@ -407,6 +416,7 @@ struct app_state {
     tool_state tool;
     animation_state anim;
     socket_state sockets;
+    mcp_status mcp;
 
     [[nodiscard]] auto edited_node() const -> const std::string& {
         if (!ctx.stack.empty() && !ctx.stack.back().node_name.empty()) {

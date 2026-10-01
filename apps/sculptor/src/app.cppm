@@ -14,14 +14,25 @@ import :operations;
 import :services;
 import :tools;
 import :ui;
+import :mcp;
 
 export namespace vw::sculptor {
+
+struct launch_options {
+    std::optional<uint16> mcp_port;
+    bool show_usage = false;
+};
+
+[[nodiscard]] auto parse_launch_options(std::span<const std::string_view> arguments)
+    -> std::expected<launch_options, std::string>;
+
+[[nodiscard]] auto launch_usage() -> std::string_view;
 
 class app final : public gfx::app {
 public:
     using engine_type = gfx::engine;
 
-    explicit app(engine_type& eng);
+    explicit app(engine_type& eng, const launch_options& options = {});
     ~app() override;
 
     auto update(float delta_time) -> void override;
@@ -44,6 +55,7 @@ private:
     auto render_volume_overlay_() -> void;
     auto update_title_() -> void;
     static auto init_asset_dirs_() -> void;
+    auto start_mcp_(uint16 port) -> void;
 
     gfx::free_camera_controller camera_controller_;
     bool camera_movement_enabled_ = false;
@@ -90,6 +102,8 @@ private:
     shortcuts_modal shortcuts_modal_;
     create_clip_modal create_clip_modal_;
     open_clip_modal open_clip_modal_;
+
+    std::unique_ptr<mcp_server> mcp_server_;
 };
 
 }  // namespace vw::sculptor

@@ -17,7 +17,7 @@ import vw.gfx;
 namespace vw::sculptor {
 
 app::app(
-    engine_type& eng
+    engine_type& eng, const launch_options& options
 )
     : gfx::app(eng)
     , camera_controller_(0.1f, 5.0f)
@@ -105,6 +105,23 @@ app::app(
 
     auto& dir_light_settings     = renderer.get_directional_light_settings();
     dir_light_settings.direction = math::normalize(vec3f{+0.4f, -1.0f, +0.4f});
+
+    if (options.mcp_port) {
+        start_mcp_(*options.mcp_port);
+    }
+}
+
+auto app::start_mcp_(
+    uint16 port
+) -> void {
+    mcp_server_ = std::make_unique<mcp_server>(
+        port, mcp_bindings{.engine = &get_engine(), .state = &state_}
+    );
+    state_.mcp = mcp_server_->status();
+
+    if (!state_.mcp.listening) {
+        log::error("MCP server is not listening: {}", state_.mcp.failure);
+    }
 }
 
 app::~app() {
@@ -115,6 +132,11 @@ app::~app() {
 auto app::update(
     float
 ) -> void {
+    if (mcp_server_) {
+        mcp_server_->poll();
+        state_.mcp = mcp_server_->status();
+    }
+
     file_service_.collect_dirty_models();
     prune_contexts_();
     clipboard_service_.sync();

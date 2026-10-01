@@ -6,4 +6,5 @@ export import :operations;
 export import :services;
 export import :tools;
 export import :ui;
+export import :mcp;
 export import :app;

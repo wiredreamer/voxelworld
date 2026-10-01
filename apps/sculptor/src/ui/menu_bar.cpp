@@ -148,6 +148,37 @@ auto menu_bar::render_volume_menu_() const -> void {
     }
 }
 
+auto menu_bar::render_mcp_status_() const -> void {
+    const mcp_status& mcp = state_->mcp;
+    if (!mcp.enabled) {
+        return;
+    }
+
+    const std::string label = mcp.listening
+        ? std::format("MCP :{} | {}", mcp.port, mcp.requests)
+        : std::string{"MCP off"};
+
+    constexpr float32 right_margin = 12.0f;
+    const float32 label_width      = ImGui::CalcTextSize(label.c_str()).x;
+    ImGui::SameLine(ImGui::GetWindowWidth() - label_width - right_margin);
+
+    if (mcp.listening) {
+        ImGui::TextUnformatted(label.c_str());
+    } else {
+        ImGui::TextDisabled("%s", label.c_str());
+    }
+
+    if (ImGui::IsItemHovered()) {
+        const std::string hint = mcp.listening
+            ? std::format(
+                  "MCP server on 127.0.0.1:{}, {} requests, last tool: {}", mcp.port, mcp.requests,
+                  mcp.last_tool.empty() ? std::string_view{"none"} : std::string_view{mcp.last_tool}
+              )
+            : std::format("MCP server is not listening: {}", mcp.failure);
+        ImGui::SetTooltip("%s", hint.c_str());
+    }
+}
+
 auto menu_bar::render(
     float
 ) const -> void {
@@ -292,6 +323,8 @@ auto menu_bar::render(
 
     state_->ui.left_offset += 20.0f;
     state_->ui.right_offset += 20.0f;
+
+    render_mcp_status_();
 
     ImGui::EndMenuBar();
 

@@ -572,6 +572,7 @@ public:
 private:
     auto render_edit_menu_() const -> void;
     auto render_volume_menu_() const -> void;
+    auto render_mcp_status_() const -> void;
 
     engine_type* engine_;
     app_state* state_;

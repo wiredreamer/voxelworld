@@ -67,6 +67,11 @@ cmake -S . -B build/headless -G Ninja -DCMAKE_BUILD_TYPE=Release \
 `VW_BUILD_APPS=ON` при `VW_BUILD_GFX=OFF` — ошибка конфигурации: приложениям
 нужно окно.
 
+`VW_SCULPTOR_MCP` (ON) — собирать ли в Sculptor сервер MCP: при ON в сборку идут
+`src/mcp/*.cpp` и на Windows линкуется `ws2_32`, при OFF — один
+`src/mcp/server_disabled.cpp`. Слушает ли сервер порт, решает флаг запуска
+`--mcp`, а не сборка (`docs/mcp.md`). CI собирает только ON.
+
 `VW_SCULPTOR_ASSET_ROOT` (по умолчанию `${CMAKE_SOURCE_DIR}/assets`) — каталог,
 который Sculptor открывает и в который пишет: `prefabs/`, `models/`,
 `animations/` и `fsm/` ищутся в нём (имена — `vw::asset::dirs`). Редактор правит

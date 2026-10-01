@@ -71,8 +71,10 @@ auto app_state::reset(
     sockets.clear_all(world);
 
     auto kept_clipboard = std::move(clipboard);
+    auto kept_mcp       = std::move(mcp);
     *this               = app_state{};
     clipboard           = std::move(kept_clipboard);
+    mcp                 = std::move(kept_mcp);
 }
 
 auto animation_state::has_unsaved_clip(

@@ -3,6 +3,8 @@ project(sculptor VERSION 0.2.0 LANGUAGES CXX)
 set(VW_SCULPTOR_ASSET_ROOT "${CMAKE_SOURCE_DIR}/assets"
     CACHE PATH "Asset directory Sculptor reads and writes")
 
+option(VW_SCULPTOR_MCP "Build the MCP server into Sculptor" ON)
+
 find_package(imgui CONFIG REQUIRED)
 
 add_executable(${PROJECT_NAME})
@@ -17,11 +19,13 @@ target_sources(${PROJECT_NAME}
             src/services.cppm
             src/tools.cppm
             src/ui.cppm
+            src/mcp.cppm
             src/app.cppm
     PRIVATE
         src/main.cpp
         src/app/app.cpp
         src/app/app_state.cpp
+        src/app/launch_options.cpp
         src/operations/add_animation_target_operation.cpp
         src/operations/add_keyframe_operation.cpp
         src/operations/add_model_component_operation.cpp
@@ -114,7 +118,22 @@ target_sources(${PROJECT_NAME}
         src/ui/ui_utils.cpp
 )
 
+if (VW_SCULPTOR_MCP)
+    target_sources(${PROJECT_NAME} PRIVATE
+        src/mcp/editor_tools.cpp
+        src/mcp/http_listener.cpp
+        src/mcp/protocol.cpp
+        src/mcp/server.cpp
+    )
+else()
+    target_sources(${PROJECT_NAME} PRIVATE src/mcp/server_disabled.cpp)
+endif()
+
 target_link_libraries(${PROJECT_NAME} PRIVATE vwengine imgui::imgui)
+
+if (VW_SCULPTOR_MCP AND WIN32)
+    target_link_libraries(${PROJECT_NAME} PRIVATE ws2_32)
+endif()
 target_compile_definitions(${PROJECT_NAME}
     PRIVATE VW_SCULPTOR_ASSET_ROOT="${VW_SCULPTOR_ASSET_ROOT}")
 vw_use_std_module(${PROJECT_NAME})

@@ -15,7 +15,8 @@ description: Редактор вокселей Sculptor — apps/sculptor, мо�
 | `:services` | `services.cppm` | `services/*.cpp` | `file_service`, `clip_service`, `clipboard_service`, `keyframe_service`, `playback_service`, `fsm_service` |
 | `:tools` | `tools.cppm` | `tools/*.cpp` | `base_tool`, инструменты, `gizmo` |
 | `:ui` | `ui.cppm` | `ui/*.cpp` | панели, модальные окна, `component_drawer` |
-| `:app` | `app.cppm` | `app/app.cpp` | `app`: владеет всем перечисленным, кадр, ввод |
+| `:mcp` | `mcp.cppm` | `mcp/*.cpp` | `mcp_server`: слушатель HTTP, диспетчер JSON-RPC, инструменты агента |
+| `:app` | `app.cppm` | `app/app.cpp`, `app/launch_options.cpp` | `app`: владеет всем перечисленным, тик, кадр, ввод; разбор флагов запуска |
 
 Партиция — один `.cppm` без подпартиций: новый класс дописывается в него
 отдельным блоком `export namespace vw::sculptor { … }`, список `.cppm` в CMake
@@ -36,6 +37,34 @@ sculptor`; тестов у приложения нет.
 `update`: в `render` он пропадёт на всё время, пока окно свёрнуто. Вызовы
 ImGui и `renderer.draw_*` в `update` запрещены — кадра там может не быть, а
 отладочные примитивы копились бы без очистки.
+
+## MCP
+
+Устройство сервера, HTTP и протокол — `docs/mcp.md`. Здесь только то, что нужно
+при правке.
+
+**Новый инструмент агента** — запись `mcp_tool` в `make_editor_tools`
+(`mcp/editor_tools.cpp`): `name`, `description`, `input_schema` текстом JSON
+Schema и `run`, который получает аргументы объектом `json::value` и возвращает
+`tool_success(значение)` либо `tool_failure("причина")`.
+
+- Аргументы читай через `json::cursor`: его ошибка уже содержит путь до поля,
+  её текст и отдаётся в `tool_failure`.
+- Сбой — это `tool_failure`, а не исключение и не молчаливый выход: агент
+  исправляется по тексту причины, поэтому в нём должно быть сказано, что
+  допустимо («узла `hand` нет; есть: …»).
+- Схема разбирается при старте; битая пишет ошибку в лог и заменяется на пустой
+  объект. Проверяй лог после добавления инструмента.
+- Доступ к редактору — через `mcp_bindings`. Новую зависимость (сервис,
+  `operation_manager`) добавляй полем туда и в `app::start_mcp_`.
+- `run` исполняется на главном потоке из `app::update`: ImGui и
+  `renderer.draw_*` там звать нельзя (см. «Тик и кадр»), а проверка открытого
+  попапа через `ImGui::IsPopupOpen` допустима — она только читает состояние.
+- Правящий инструмент обязан отказать, если `busy_reason` непуст, и менять
+  документ только через `op_manager.execute`, как любой другой код редактора.
+
+После правки в `mcp/` прогони `python tools/mcp_smoke.py` по запущенному
+`sculptor --mcp` — на видимом и на свёрнутом окне.
 
 ## Новый инструмент
 

@@ -4,7 +4,8 @@
 вокселей). Описание движка — `docs/ENGINE.md`, продукт — `docs/PRD.md`.
 Подсистемы подробно: `docs/lighting.md` (свет), `docs/rendering.md` (рендер),
 `docs/world.md` (мировая сетка). Что уже оптимизировано, что нет и что станет
-дорого при росте — `docs/optimization.md`.
+дорого при росте — `docs/optimization.md`. Управление редактором по MCP —
+`docs/mcp.md`.
 
 ## Architecture
 
@@ -29,7 +30,7 @@
   каталоги `camera/ resource/ render/ debug/ engine/`
 
 - **Apps** — `apps/sculptor/` (модуль `vw.sculptor`, партиции `:state`,
-  `:shortcuts`, `:operations`, `:services`, `:tools`, `:ui`, `:app`), `apps/testbed/`
+  `:shortcuts`, `:operations`, `:services`, `:tools`, `:ui`, `:mcp`, `:app`), `apps/testbed/`
   (`vw.testbed`: стенд `:app`, сцена на партицию в `:scenes.*`, пути камеры
   `:cameras`, приборы `:probes.*`), `apps/arena/` (`vw.arena`)
 - **Shaders** — GLSL → SPIR-V (`shaders/`)
