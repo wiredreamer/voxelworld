@@ -118,4 +118,68 @@ struct voxel_bounds {
 [[nodiscard]] auto trimmed(const model& source, model_registry& registry)
     -> std::shared_ptr<model>;
 
+enum class voxel_axis : uint8 { x, y, z };
+
+struct voxel_orientation {
+    std::array<voxel_axis, 3> source_axis{voxel_axis::x, voxel_axis::y, voxel_axis::z};
+    std::array<bool, 3> flipped{};
+
+    [[nodiscard]] auto operator==(const voxel_orientation&) const -> bool = default;
+};
+
+[[nodiscard]] auto mirrored_orientation(voxel_axis axis) -> voxel_orientation;
+
+[[nodiscard]] auto rotated_orientation(voxel_axis axis, int32 quarter_turns) -> voxel_orientation;
+
+[[nodiscard]] auto reoriented(
+    const model& source, const voxel_orientation& how, model_registry& registry
+) -> std::shared_ptr<model>;
+
+struct voxel_clip {
+    vec3i size;
+    std::vector<voxel> voxels;
+    vec3f corner_from_pivot;
+
+    [[nodiscard]] auto empty() const -> bool {
+        return voxels.empty();
+    }
+
+    [[nodiscard]] auto at(vec3i pos) const -> voxel {
+        return voxels[index_of(pos)];
+    }
+
+    [[nodiscard]] auto index_of(vec3i pos) const -> std::size_t {
+        return static_cast<std::size_t>(pos.x + (pos.y * size.x) + (pos.z * size.x * size.y));
+    }
+};
+
+enum class paste_mode : uint8 { keep_air, replace };
+
+[[nodiscard]] auto clamped(const voxel_bounds& region, vec3i size) -> std::optional<voxel_bounds>;
+
+[[nodiscard]] auto copied(const model& source, const voxel_bounds& region) -> voxel_clip;
+
+[[nodiscard]] auto erased(
+    const model& source, const voxel_bounds& region, model_registry& registry
+) -> std::shared_ptr<model>;
+
+enum class fill_scope : uint8 { every_cell, solid_only };
+
+[[nodiscard]] auto filled(
+    const model& source, const voxel_bounds& region, voxel value, fill_scope scope,
+    model_registry& registry
+) -> std::shared_ptr<model>;
+
+[[nodiscard]] auto occupied_bounds(const voxel_clip& clip) -> std::optional<voxel_bounds>;
+
+[[nodiscard]] auto paste_origin(const model& target, const voxel_clip& clip) -> vec3i;
+
+[[nodiscard]] auto pasted(
+    const model& target, const voxel_clip& clip, vec3i origin, paste_mode mode,
+    model_registry& registry
+) -> std::shared_ptr<model>;
+
+[[nodiscard]] auto reoriented(const voxel_clip& source, const voxel_orientation& how)
+    -> voxel_clip;
+
 }  // namespace vw::asset
