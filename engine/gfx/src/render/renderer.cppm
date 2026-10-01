@@ -52,6 +52,8 @@ public:
 
     auto handle_resize() -> void;
 
+    [[nodiscard]] auto has_drawable_surface() const -> bool;
+
     auto set_render_mode(render_mode mode) -> void;
 
     [[nodiscard]] auto get_render_mode() const -> render_mode;
@@ -294,6 +296,7 @@ private:
     uint64 frame_counter_       = 0;
     uint32 current_image_index_ = 0;
     bool framebuffer_resized_     = false;
+    bool swapchain_stale_         = false;
     vec4f clear_color_            = {0.1f, 0.1f, 0.1f, 1.0f};
     render_mode current_render_mode_ = render_mode::lit;
 

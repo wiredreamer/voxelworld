@@ -25,6 +25,8 @@ namespace vw::gfx {
 namespace {
 constexpr log::log_category lc_bench_{"bench"};
 
+constexpr std::chrono::milliseconds hidden_window_tick{16};
+
 constexpr std::string_view build_config =
 #ifdef NDEBUG
     "Release";
@@ -132,14 +134,18 @@ auto engine::main_loop() -> void {
 
         window_->poll_events();
 
-        render(delta_time);
+        const bool presented = render(delta_time);
 
         update_stats();
         last_frame_time_ = current_time;
         ++frame_index_;
 
-        if (bench_.enabled()) {
+        if (bench_.enabled() && presented) {
             bench_tick_();
+        }
+
+        if (!presented && !renderer_->has_drawable_surface()) {
+            std::this_thread::sleep_for(hidden_window_tick);
         }
     }
 }
@@ -447,11 +453,14 @@ auto engine::write_bench_report_() const -> void {
 
 auto engine::render(
     float delta_time
-) -> void {
+) -> bool {
     stats_.world_update_ms = measure_ms([&] { world_->update(delta_time); });
 
+    app_->update(delta_time);
+
+    bool opened = false;
+
     stats_.world_render_ms = measure_ms([&] {
-        bool opened = false;
         stats_.begin_frame_ms = measure_ms([&] { opened = renderer_->begin_frame(); });
         if (!opened) {
             return;
@@ -465,6 +474,8 @@ auto engine::render(
     });
 
     world_->clear_changed();
+
+    return opened;
 }
 
 auto engine::get_stats() const -> const engine_stats& {

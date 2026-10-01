@@ -24,6 +24,7 @@ public:
     explicit app(engine_type& eng);
     ~app() override;
 
+    auto update(float delta_time) -> void override;
     auto render(float delta_time) -> void override;
 
 private:

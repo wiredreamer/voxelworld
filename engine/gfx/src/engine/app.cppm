@@ -18,6 +18,8 @@ public:
     app(const app&)                    = delete;
     auto operator=(const app&) -> app& = delete;
 
+    virtual auto update([[maybe_unused]] float32 delta_time) -> void {}
+
     virtual auto render([[maybe_unused]] float32 delta_time) -> void {}
 
     [[nodiscard]] virtual auto is_bench_ready() const -> bool {

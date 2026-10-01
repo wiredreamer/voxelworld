@@ -23,10 +23,24 @@ description: Редактор вокселей Sculptor — apps/sculptor, мо�
 `apps/sculptor/CMakeLists.txt`. Проверка — `cmake --build build/release --target
 sculptor`; тестов у приложения нет.
 
+## Тик и кадр
+
+`app::update` движок зовёт каждую итерацию цикла, даже когда окно свёрнуто и
+кадра нет; `app::render` — только когда кадр открылся (см.
+`docs/ENGINE.md#главный-цикл`). В `update` живёт обслуживание состояния, без
+которого документ расходится с миром: `collect_dirty_models`, `prune_contexts_`,
+`clipboard_service::sync`, границы объёма, видимость, допустимость инструмента.
+В `render` — всё, что рисует: ImGui, отладочные линии, камера, инструменты.
+
+Новый шаг, от которого зависит сохранение или целостность документа, клади в
+`update`: в `render` он пропадёт на всё время, пока окно свёрнуто. Вызовы
+ImGui и `renderer.draw_*` в `update` запрещены — кадра там может не быть, а
+отладочные примитивы копились бы без очистки.
+
 ## Новый инструмент
 
 1. `state.cppm`: значение в `enum class tools` и ветка в
-   `context_state::allows_tool`. Без ветки `app::render` каждый кадр сбрасывает
+   `context_state::allows_tool`. Без ветки `app::update` каждый тик сбрасывает
    выбор на `default_tool()`, и инструмент молча не включается. Основной
    инструмент контекста — ещё и в `default_tool`.
 2. `tools.cppm`: `class <name>_tool final : public base_tool` с конструктором

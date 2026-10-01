@@ -62,7 +62,7 @@ public:
 private:
     auto main_loop() -> void;
 
-    auto render(float32 delta_time) -> void;
+    [[nodiscard]] auto render(float32 delta_time) -> bool;
 
     auto bench_tick_() -> void;
     auto write_bench_report_() const -> void;

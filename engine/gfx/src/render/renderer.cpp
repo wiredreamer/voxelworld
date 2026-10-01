@@ -136,6 +136,13 @@ renderer::~renderer() {
 }
 
 auto renderer::begin_frame() -> bool {
+    if (swapchain_stale_ || !has_drawable_surface()) {
+        recreate_swapchain();
+        if (swapchain_stale_) {
+            return false;
+        }
+    }
+
     const vk::Device device = context_->get_device();
     vk_must(
         device.waitForFences(in_flight_fences_[current_frame_], vk::True, std::numeric_limits<uint64>::max()),
@@ -354,6 +361,11 @@ auto renderer::wait_idle() const -> void {
 
 auto renderer::handle_resize() -> void {
     framebuffer_resized_ = true;
+}
+
+auto renderer::has_drawable_surface() const -> bool {
+    const vec2i size = window_->framebuffer_size();
+    return size.x > 0 && size.y > 0;
 }
 
 auto renderer::set_render_mode(
@@ -1504,12 +1516,9 @@ auto renderer::cleanup_depth_resources() -> void {
 }
 
 auto renderer::recreate_swapchain() -> void {
-    vec2i size = window_->framebuffer_size();
-    while (size.x == 0 || size.y == 0) {
-        size = window_->framebuffer_size();
-        window_->poll_events();
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(16));
+    swapchain_stale_ = !has_drawable_surface();
+    if (swapchain_stale_) {
+        return;
     }
 
     wait_idle();

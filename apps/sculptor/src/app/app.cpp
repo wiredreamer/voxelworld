@@ -112,8 +112,8 @@ app::~app() {
     state_.sockets.clear_all(get_engine().get_world());
 }
 
-auto app::render(
-    float delta_time
+auto app::update(
+    float
 ) -> void {
     file_service_.collect_dirty_models();
     prune_contexts_();
@@ -129,7 +129,11 @@ auto app::render(
         active_tool_ = state_.tool.selected_tool;
         tools_[active_tool_]->on_activate();
     }
+}
 
+auto app::render(
+    float delta_time
+) -> void {
     camera_controller_.update(delta_time);
 
     auto& renderer = get_engine().get_renderer();
