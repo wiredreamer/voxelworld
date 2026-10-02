@@ -12,7 +12,7 @@ description: Редактор вокселей Sculptor — apps/sculptor, мо�
 | `:state` | `state.cppm` | `app/app_state.cpp` | `app_state`: документ, контекст правки, сцена, кисть, анимация; `enum class tools`, `panels` |
 | `:shortcuts` | `shortcuts.cppm` | `shortcuts/shortcuts.cpp` | `enum class command`, таблица `shortcuts`, `tool_of`, `command_for_tool` |
 | `:operations` | `operations.cppm` | `operations/*.cpp` | `base_operation`, `composite_operation`, `operation_manager`, все операции |
-| `:services` | `services.cppm` | `services/*.cpp` | `file_service`, `clip_service`, `clipboard_service`, `keyframe_service`, `playback_service`, `fsm_service` |
+| `:services` | `services.cppm` | `services/*.cpp` | `file_service`, `node_service`, `clip_service`, `clipboard_service`, `keyframe_service`, `playback_service`, `fsm_service` |
 | `:tools` | `tools.cppm` | `tools/*.cpp` | `base_tool`, инструменты, `gizmo` |
 | `:ui` | `ui.cppm` | `ui/*.cpp` | панели, модальные окна, `component_drawer` |
 | `:mcp` | `mcp.cppm` | `mcp/*.cpp` | `mcp_server`: слушатель HTTP, диспетчер JSON-RPC, инструменты агента |
@@ -66,8 +66,15 @@ Schema и `run`, который получает аргументы объект
   `op_manager.execute` и сервисы, как любой другой код редактора.
 - Координаты, размеры и прочие `float32` отдавай через `json_of`: прямое
   расширение до `float64` пишет `0.9900000095367432` вместо `0.99`.
+- Аргументы разбирает `argument_reader`: он копит первую ошибку с путём до
+  поля, поэтому тело инструмента читает все поля подряд и один раз проверяет
+  `failed()`. Первым делом зови `allow({...})` со списком полей схемы —
+  неизвестное поле станет ошибкой, а не будет молча пропущено.
+- Проверки живут в сервисе, а не в инструменте. `node_service` возвращает
+  `std::expected<void, std::string>` и сам собирает операции; инструмент только
+  переводит JSON в `node_spec` и `component_changes` и отдаёт текст ошибки.
 - Инструменты разложены по файлам: `editor_tools.cpp` — состояние, списки,
-  undo; `prefab_tools.cpp` — префаб. Новая группа — новый файл с функцией
+  undo; `prefab_tools.cpp` — префаб; `node_tools.cpp` — узлы и компоненты. Новая группа — новый файл с функцией
   `append_<группа>_tools`, объявленной в `mcp.cppm` вне `export`.
 
 После правки в `mcp/` прогони `python tools/mcp_smoke.py --scenario` по
@@ -111,6 +118,31 @@ Schema и `run`, который получает аргументы объект
 
 Инструмент меняет документ только операцией через `op_manager_->execute`, а
 узел берёт через `state_->edited_node()` (см. «Контекст правки и undo»).
+
+## Узлы: `node_service`
+
+Операции ничего не проверяют и не сообщают о неудаче, поэтому программная
+правка структуры идёт через `node_service` (`services/node_service.cpp`):
+`create`, `remove`, `reparent`, `set_transform`, `set_components`, `set_rig`.
+Каждый метод проверяет вход, возвращает причину отказа текстом и исполняет
+одну операцию — составную, если шагов несколько.
+
+- **Новый компонент узла** — поле `component_change<T>` в `component_changes`,
+  метод `plan_<имя>_` и строка в списке `plan_components_`. `requested` значит
+  «компонент назван в запросе», пустое `value` — «снять». План сравнивает
+  желаемое с текущим и кладёт в `steps` только нужные операции; для нового
+  узла `existing` пуст, и компонент считается отсутствующим.
+- **Операции в плане ищут узел по имени при исполнении**, поэтому составная
+  операция из `create_entity_operation` и шагов над ещё не созданным узлом
+  работает: шаги идут по порядку.
+- **Удаление — всегда поддерево.** `delete_entity_operation` снимает узел со
+  всеми потомками и содержимым вариантов. Снимок для undo — `vox_prefab_data`
+  поддерева (`vox_serializer::extract`), плюс точные трансформы и указатели
+  объёмов: трансформ в `.vox` хранится эйлерами и через текст вернулся бы
+  неточно, а объём без ссылки в снимок не попадает вовсе.
+- **Перед правкой сервис возвращает контекст префаба** (`require_document_`).
+  Из клипа — только через `clip_service::exit_animation_mode`: он возвращает
+  позы покоя, без этого трансформ узла записался бы позой клипа.
 
 ## Новая операция (undo/redo)
 

@@ -30,7 +30,7 @@ entity_tree_panel::entity_tree_panel(
     , state_(&st)
     , op_manager_(&op_manager)
     , creation_modal_(eng, st, op_manager, library)
-    , deletion_modal_(eng, st, op_manager) {}
+    , deletion_modal_(eng, st, op_manager, library) {}
 
 auto entity_tree_panel::render(
     float delta_time
@@ -151,7 +151,7 @@ auto entity_tree_panel::render_entity_node(
             if (ImGui::MenuItem("Create child")) {
                 creation_modal_.open();
             }
-            if (!has_children && ImGui::MenuItem("Delete")) {
+            if (ImGui::MenuItem("Delete")) {
                 deletion_modal_.open(name);
             }
             ImGui::EndPopup();

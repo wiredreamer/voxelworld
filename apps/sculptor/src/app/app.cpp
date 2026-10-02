@@ -32,6 +32,7 @@ app::app(
     , keyframe_service_(eng, state_, op_manager_)
     , fsm_service_(eng, state_, model_library_)
     , clipboard_service_(eng, state_, op_manager_)
+    , node_service_(eng, state_, model_library_, op_manager_, clip_service_)
 
     , menu_bar_(eng, state_, op_manager_, file_service_, clipboard_service_)
     , breadcrumb_bar_(eng, state_, clip_service_)
@@ -121,6 +122,7 @@ auto app::start_mcp_(
             .state      = &state_,
             .operations = &op_manager_,
             .files      = &file_service_,
+            .nodes      = &node_service_,
         }
     );
     state_.mcp = mcp_server_->status();

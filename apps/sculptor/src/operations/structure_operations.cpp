@@ -19,7 +19,9 @@ auto set_structure_operation::execute() -> void {
     const auto ent = state_->scene.name_to_entity[params_.name];
 
     previous_.name = params_.name;
-    if (world.has<ecs::structure_component>(ent)) {
+
+    existed_before_ = world.has<ecs::structure_component>(ent);
+    if (existed_before_) {
         const auto& structure = world.get<ecs::structure_component>(ent);
         const auto races      = structure.get_races();
 
@@ -33,7 +35,15 @@ auto set_structure_operation::execute() -> void {
 }
 
 auto set_structure_operation::undo() -> void {
-    apply_(previous_);
+    if (existed_before_) {
+        apply_(previous_);
+        return;
+    }
+
+    engine_->get_world()
+        .modify(state_->scene.name_to_entity[params_.name])
+        .without<ecs::structure_component>();
+    state_->file.has_unsaved_changes = true;
 }
 
 auto set_structure_operation::apply_(
@@ -51,6 +61,56 @@ auto set_structure_operation::apply_(
     structure.set_races(params.races);
     structure.set_tier(params.tier);
     structure.set_size(params.size);
+
+    state_->file.has_unsaved_changes = true;
+}
+
+remove_structure_operation::remove_structure_operation(
+    engine_type& engine, app_state& st, remove_structure_params params
+)
+    : engine_(&engine), state_(&st), params_(std::move(params)) {}
+
+auto remove_structure_operation::execute() -> void {
+    removed_.reset();
+
+    const auto node = state_->scene.name_to_entity.find(params_.name);
+    if (node == state_->scene.name_to_entity.end()) {
+        return;
+    }
+
+    auto& world = engine_->get_world();
+    if (!world.has<ecs::structure_component>(node->second)) {
+        return;
+    }
+
+    const auto& structure = world.get<ecs::structure_component>(node->second);
+    const auto races      = structure.get_races();
+    removed_              = set_structure_params{
+        .name  = params_.name,
+        .type  = structure.get_type(),
+        .races = {races.begin(), races.end()},
+        .tier  = structure.get_tier(),
+        .size  = structure.get_size(),
+    };
+
+    world.modify(node->second).without<ecs::structure_component>();
+    state_->file.has_unsaved_changes = true;
+}
+
+auto remove_structure_operation::undo() -> void {
+    const auto node = state_->scene.name_to_entity.find(params_.name);
+    if (!removed_ || node == state_->scene.name_to_entity.end()) {
+        return;
+    }
+
+    auto& world = engine_->get_world();
+    world.modify(node->second).with<ecs::structure_component>();
+
+    auto structure = world.system<ecs::structure_system>().modify(node->second);
+    structure.set_type(removed_->type);
+    structure.set_races(removed_->races);
+    structure.set_tier(removed_->tier);
+    structure.set_size(removed_->size);
 
     state_->file.has_unsaved_changes = true;
 }

@@ -18,6 +18,7 @@ struct mcp_bindings {
     app_state* state              = nullptr;
     operation_manager* operations = nullptr;
     file_service* files           = nullptr;
+    node_service* nodes           = nullptr;
 };
 
 class mcp_server final {
@@ -100,6 +101,41 @@ using tool_body = std::function<tool_outcome(const json::value& arguments)>;
 [[nodiscard]] auto make_editor_tools(const mcp_bindings& bindings) -> std::vector<mcp_tool>;
 
 auto append_prefab_tools(std::vector<mcp_tool>& tools, const mcp_bindings& bindings) -> void;
+auto append_node_tools(std::vector<mcp_tool>& tools, const mcp_bindings& bindings) -> void;
+
+[[nodiscard]] auto describe_node(const mcp_bindings& bindings, std::string_view name)
+    -> json::value;
+
+class argument_reader final {
+public:
+    explicit argument_reader(const json::value& arguments);
+    explicit argument_reader(json::cursor at);
+
+    auto allow(std::initializer_list<std::string_view> known) -> void;
+
+    [[nodiscard]] auto has(std::string_view key) const -> bool;
+    [[nodiscard]] auto is_null(std::string_view key) const -> bool;
+    [[nodiscard]] auto at(std::string_view key) const -> json::cursor;
+
+    [[nodiscard]] auto text(std::string_view key) -> std::string;
+    [[nodiscard]] auto optional_text(std::string_view key) -> std::optional<std::string>;
+    [[nodiscard]] auto flag_or(std::string_view key, bool fallback) -> bool;
+    [[nodiscard]] auto optional_index(std::string_view key) -> std::optional<std::size_t>;
+    [[nodiscard]] auto optional_vec3f(std::string_view key) -> std::optional<vec3f>;
+    [[nodiscard]] auto optional_vec3i(std::string_view key) -> std::optional<vec3i>;
+    [[nodiscard]] auto text_list(std::string_view key) -> std::vector<std::string>;
+
+    auto fail(std::string message) -> void;
+
+    [[nodiscard]] auto failed() const -> bool;
+    [[nodiscard]] auto error() const -> const std::string&;
+
+private:
+    auto note_(const json::access_error& error) -> void;
+
+    json::cursor at_;
+    std::string error_;
+};
 
 [[nodiscard]] auto editor_busy_reason(const app_state& state) -> std::string_view;
 [[nodiscard]] auto when_idle(const mcp_bindings& bindings, tool_body body) -> tool_body;

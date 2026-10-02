@@ -117,6 +117,7 @@ export namespace vw::sculptor {
 struct add_model_component_params {
     std::string name;
     vec3i size{8, 8, 8};
+    std::optional<voxel> fill;
 };
 
 class add_model_component_operation final : public base_operation {
@@ -387,21 +388,31 @@ public:
     using engine_type = gfx::engine;
 
     delete_entity_operation(
-        engine_type& engine, app_state& state, const delete_entity_params& params
+        engine_type& engine, app_state& state, asset::model_library& library,
+        const delete_entity_params& params
     );
 
     auto execute() -> void override;
     auto undo() -> void override;
 
 private:
+    struct saved_node {
+        std::string name;
+        transform placement;
+        std::shared_ptr<asset::model> volume;
+        asset::asset_ref source;
+    };
+
     engine_type* engine_;
     app_state* state_;
+    asset::model_library* library_;
     delete_entity_params params_;
 
+    asset::vox_prefab_data snapshot_;
+    std::vector<saved_node> saved_nodes_;
     std::string parent_name_;
-    transform transform_;
-    bool with_model_ = false;
-    std::shared_ptr<asset::model> saved_model_;
+    std::size_t index_among_siblings_ = 0;
+    bool was_root_                    = false;
 };
 
 }  // namespace vw::sculptor
@@ -1139,6 +1150,29 @@ private:
     app_state* state_;
     set_structure_params params_;
     set_structure_params previous_;
+    bool existed_before_ = false;
+};
+
+struct remove_structure_params {
+    std::string name;
+};
+
+class remove_structure_operation final : public base_operation {
+public:
+    using engine_type = gfx::engine;
+
+    remove_structure_operation(
+        engine_type& engine, app_state& st, remove_structure_params params
+    );
+
+    auto execute() -> void override;
+    auto undo() -> void override;
+
+private:
+    engine_type* engine_;
+    app_state* state_;
+    remove_structure_params params_;
+    std::optional<set_structure_params> removed_;
 };
 
 enum class point_kind : uint8 { furniture, connection };

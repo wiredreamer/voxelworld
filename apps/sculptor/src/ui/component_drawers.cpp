@@ -594,10 +594,11 @@ auto register_structure(component_drawer_registry& drawers) -> void {
     add_by_operation(drawer);
 
     drawer.remove = [](const component_drawer_context& in) {
-        in.engine.get_world()
-            .modify(in.state.scene.name_to_entity.at(in.node_name))
-            .without<ecs::structure_component>();
-        in.state.file.has_unsaved_changes = true;
+        in.ops.execute(
+            std::make_unique<remove_structure_operation>(
+                in.engine, in.state, remove_structure_params{.name = in.node_name}
+            )
+        );
     };
 
     drawers.register_for<ecs::structure_component>(std::move(drawer));

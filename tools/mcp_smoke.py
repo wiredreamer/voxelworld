@@ -229,9 +229,9 @@ def run_prefab_scenario(probe):
         str(head.get("volume")),
     )
     probe.check(
-        "prefab_get keeps other components as tags",
-        any(tag.get("name") == "anim_target" for tag in head.get("tags", [])),
-        str(head.get("tags")),
+        "prefab_get gives the other components typed",
+        head.get("anim_target") == "head" and head.get("variant", {}).get("selected") == 0,
+        str(head),
     )
     print(f"     head: {json.dumps(head, ensure_ascii=False)}")
 
@@ -286,6 +286,222 @@ def run_prefab_scenario(probe):
     remove_scratch_assets(asset_root)
 
 
+def close_to(left, right, tolerance=1e-3):
+    if isinstance(left, bool) or isinstance(right, bool):
+        return left == right
+    if isinstance(left, (int, float)) and isinstance(right, (int, float)):
+        return abs(left - right) <= tolerance
+    if isinstance(left, list) and isinstance(right, list):
+        return len(left) == len(right) and all(close_to(a, b, tolerance) for a, b in zip(left, right))
+    if isinstance(left, dict) and isinstance(right, dict):
+        return left.keys() == right.keys() and all(close_to(left[key], right[key], tolerance) for key in left)
+    return left == right
+
+
+def nodes_of(probe):
+    ok, prefab = tool(probe, "prefab_get")
+    return {node["name"]: node for node in prefab.get("nodes", [])} if ok else {}
+
+
+def run_node_scenario(probe):
+    scratch = SCRATCH_PREFABS[0]
+    ok, state = tool(probe, "editor_state")
+    asset_root = pathlib.Path(state["asset_root"])
+    remove_scratch_assets(asset_root)
+    tool(probe, "prefab_close", {"discard_unsaved": True})
+
+    ok, text = tool(probe, "node_create", {"name": "root"})
+    probe.check("node_create refuses without a prefab", not ok and "no prefab is open" in text, str(text))
+
+    tool(probe, "prefab_new", {"name": scratch})
+
+    ok, text = tool(probe, "node_create", {"name": "body", "parent": "root"})
+    probe.check("the first node takes no parent", not ok and "without a parent" in text, str(text))
+
+    ok, root = tool(probe, "node_create", {"name": "root"})
+    probe.check("node_create makes the root", ok and root.get("parent") is None and root.get("position") == [0, 0, 0], str(root))
+
+    ok, text = tool(probe, "node_create", {"name": "root"})
+    probe.check("node_create refuses a taken name", not ok and "already exists" in text, str(text))
+
+    ok, text = tool(probe, "node_create", {"name": "body"})
+    probe.check("node_create asks for the parent and names the root", not ok and "'root'" in text, str(text))
+
+    ok, text = tool(probe, "node_create", {"name": "two words", "parent": "root"})
+    probe.check("node_create refuses a name with a space", not ok and "cannot name a node" in text, str(text))
+
+    ok, text = tool(probe, "node_create", {"nam": "body", "parent": "root"})
+    probe.check("an unknown field is named", not ok and "unknown field 'nam'" in text, str(text))
+
+    ok, text = tool(probe, "node_create", {"name": "body", "parent": "root", "position": [1, 2]})
+    probe.check("a short vector is refused with its path", not ok and "arguments.position" in text, str(text))
+
+    ok, text = tool(probe, "node_create", {"name": "body", "parent": "root", "volume": {"size": [0, 4, 4]}})
+    probe.check("a volume side of zero is refused", not ok and "volume.size" in text, str(text))
+    probe.check("a refused create leaves nothing behind", "body" not in nodes_of(probe), str(list(nodes_of(probe))))
+
+    ok, body = tool(
+        probe,
+        "node_create",
+        {"name": "body", "parent": "root", "position": [0, 2, 0], "volume": {"size": [4, 6, 3]}, "anim_target": True},
+    )
+    probe.check(
+        "node_create places a node with an empty volume",
+        ok and body.get("position") == [0, 2, 0] and body.get("volume", {}).get("size") == [4, 6, 3],
+        str(body),
+    )
+    probe.check("a new volume has its pivot in the middle", ok and body.get("volume", {}).get("pivot") == [2, 3, 1.5], str(body))
+    probe.check("anim_target true takes the node name", ok and body.get("anim_target") == "body", str(body))
+
+    ok, head = tool(
+        probe,
+        "node_create",
+        {
+            "name": "head",
+            "parent": "body",
+            "position": [0, 5, 0],
+            "rotation_degrees": [10, 20, 30],
+            "scale": [0.99, 0.99, 0.99],
+            "volume": {"ref": "models/p_humanoid/m_head.voxm"},
+            "sockets": [{"name": "hat", "position": [0, 4, 0], "rotation_degrees": [0, 45, 0]}],
+        },
+    )
+    probe.check("rotation in degrees comes back as given", ok and close_to(head.get("rotation_degrees"), [10, 20, 30]), str(head))
+    probe.check("a float32 is written short", ok and head.get("scale") == [0.99, 0.99, 0.99], str(head))
+    probe.check("node_create attaches a volume file", ok and head.get("volume", {}).get("size") == [11, 9, 10], str(head))
+    probe.check(
+        "node_create adds a socket",
+        ok and len(head.get("sockets", [])) == 1 and close_to(head["sockets"][0].get("rotation_degrees"), [0, 45, 0]),
+        str(head.get("sockets")),
+    )
+
+    ok, text = tool(probe, "node_set_transform", {"name": "hat", "position": [0, 0, 0]})
+    probe.check("an unknown node is refused with the list of nodes", not ok and "body, head, root" in text, str(text))
+
+    ok, text = tool(probe, "node_set_transform", {"name": "head"})
+    probe.check("node_set_transform wants something to set", not ok and "at least one" in text, str(text))
+
+    ok, moved = tool(probe, "node_set_transform", {"name": "head", "position": [0, 6, 0]})
+    probe.check(
+        "node_set_transform changes one field and keeps the rest",
+        ok and moved.get("position") == [0, 6, 0] and close_to(moved.get("rotation_degrees"), [10, 20, 30]),
+        str(moved),
+    )
+
+    ok, text = tool(probe, "node_set_components", {"name": "head"})
+    probe.check("node_set_components wants a component", not ok and "at least one component" in text, str(text))
+
+    ok, text = tool(probe, "node_set_components", {"name": "head", "anim_target": "body"})
+    probe.check("a taken animation target is refused", not ok and "already taken by node 'body'" in text, str(text))
+
+    ok, changed = tool(
+        probe,
+        "node_set_components",
+        {
+            "name": "head",
+            "anim_target": "head",
+            "sockets": [{"name": "hat", "position": [0, 5, 0]}, {"name": "mask"}],
+            "structure": {"type": "house", "races": ["human", "elf"], "tier": 2, "size": "M"},
+            "furniture": "chair",
+            "connection": "door",
+            "variant": {"candidates": ["models/p_humanoid/m_head.voxm"], "selected": 0},
+        },
+    )
+    sockets = {socket["name"]: socket for socket in changed.get("sockets", [])} if ok else {}
+    probe.check("sockets are replaced as a list", ok and set(sockets) == {"hat", "mask"} and sockets["hat"]["position"] == [0, 5, 0], str(sockets))
+    probe.check(
+        "structure, points and the target are set together",
+        ok
+        and changed.get("structure") == {"type": "house", "races": ["human", "elf"], "tier": 2, "size": "M"}
+        and changed.get("furniture") == "chair"
+        and changed.get("connection") == "door"
+        and changed.get("anim_target") == "head",
+        str(changed),
+    )
+    probe.check(
+        "a variant slot takes its candidate",
+        ok and changed.get("variant", {}).get("candidates") == ["models/p_humanoid/m_head.voxm"] and changed["variant"].get("selected") == 0,
+        str(changed.get("variant")),
+    )
+
+    ok, text = tool(probe, "node_set_components", {"name": "head", "variant": {"candidates": ["models/none.voxm"]}})
+    probe.check("a variant candidate that is not a file is refused", not ok and "there is no file" in text, str(text))
+
+    ok, text = tool(probe, "node_set_components", {"name": "head", "structure": {"tier": 9}})
+    probe.check("a structure tier out of range is refused", not ok and "structure.tier" in text, str(text))
+
+    ok, _ = tool(probe, "undo")
+    probe.check("one undo takes back the whole component call", ok and "structure" not in nodes_of(probe).get("head", {}), str(nodes_of(probe).get("head")))
+    ok, _ = tool(probe, "redo")
+    probe.check("redo brings it back", ok and nodes_of(probe).get("head", {}).get("furniture") == "chair", str(nodes_of(probe).get("head")))
+
+    ok, cleared = tool(
+        probe,
+        "node_set_components",
+        {"name": "head", "sockets": None, "structure": None, "furniture": None, "connection": None, "variant": None},
+    )
+    probe.check(
+        "null removes components",
+        ok and not any(key in cleared for key in ("sockets", "structure", "furniture", "connection", "variant")),
+        str(cleared),
+    )
+
+    ok, text = tool(probe, "node_move", {"name": "root", "parent": "head"})
+    probe.check("the root cannot be moved", not ok and "root node" in text, str(text))
+
+    ok, text = tool(probe, "node_move", {"name": "body", "parent": "head"})
+    probe.check("a node cannot go under its own descendant", not ok and "descendants" in text, str(text))
+
+    ok, lifted = tool(probe, "node_move", {"name": "head", "parent": "root", "index": 0})
+    probe.check(
+        "node_move keeps the node where it was in the world",
+        ok and lifted.get("parent") == "root" and close_to(lifted.get("position"), [0, 8, 0]),
+        str(lifted),
+    )
+
+    ok, prefab = tool(probe, "prefab_get")
+    order = [node["name"] for node in prefab.get("nodes", [])] if ok else []
+    probe.check("node_move puts it first among the children", order == ["root", "head", "body"], str(order))
+
+    tool(probe, "node_move", {"name": "head", "parent": "body"})
+    tool(probe, "prefab_set_rig", {"rig": "smoke_rig"})
+    tool(probe, "node_create", {"name": "hand", "parent": "head", "position": [3, 0, 0], "volume": {"size": [2, 2, 2]}})
+    before = nodes_of(probe)
+
+    ok, gone = tool(probe, "node_delete", {"name": "body"})
+    probe.check("node_delete takes the subtree with it", ok and gone.get("node_count") == 1, str(gone))
+
+    ok, _ = tool(probe, "undo")
+    after = nodes_of(probe)
+    probe.check("undo restores every node of the subtree", set(after) == set(before), str(list(after)))
+    probe.check("undo restores them exactly", close_to(after, before, 1e-6), json.dumps(after))
+
+    ok, text = tool(probe, "prefab_open", {"name": "p_humanoid"})
+    probe.check("prefab_open refuses over unsaved changes and names them", not ok and "the prefab" in text and "discard_unsaved" in text, str(text))
+
+    ok, saved = tool(probe, "prefab_save")
+    volumes = sorted(path.name for path in (asset_root / "models" / scratch).glob("*.voxm"))
+    probe.check("prefab_save writes the prefab", ok and saved.get("unsaved") is False, str(saved))
+    probe.check("new volumes are written into the folder of the prefab", volumes == ["body.voxm", "hand.voxm"], str(volumes))
+
+    in_memory = nodes_of(probe)
+    ok, prefab = tool(probe, "prefab_get")
+    probe.check("prefab_set_rig names the rig", ok and prefab.get("rig") == "smoke_rig", str(prefab.get("rig")))
+
+    tool(probe, "prefab_close")
+    ok, _ = tool(probe, "prefab_open", {"name": scratch})
+    from_disk = nodes_of(probe)
+    probe.check("the saved prefab reads back the same from disk", close_to(from_disk, in_memory), json.dumps(from_disk))
+
+    ok, gone = tool(probe, "node_delete", {"name": "root"})
+    probe.check("deleting the root empties the prefab", ok and gone.get("node_count") == 0 and gone.get("root_node") is None, str(gone))
+    ok, _ = tool(probe, "undo")
+    probe.check("and undo brings the prefab back", close_to(nodes_of(probe), in_memory), json.dumps(nodes_of(probe)))
+
+    tool(probe, "prefab_close", {"discard_unsaved": True})
+    remove_scratch_assets(asset_root)
+
+
 def main():
     port = DEFAULT_PORT
     with_scenario = False
@@ -304,6 +520,7 @@ def main():
         run(probe)
         if with_scenario:
             run_prefab_scenario(probe)
+            run_node_scenario(probe)
     except OSError as error:
         print(f"FAIL cannot reach Sculptor on {DEFAULT_HOST}:{port} -- {error}")
         print("     start it with: sculptor --mcp")

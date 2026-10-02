@@ -54,8 +54,6 @@ constexpr std::string_view save_as_schema = R"({
     "additionalProperties": false
 })";
 
-constexpr std::array<std::string_view, 2> typed_tags{"transform", "model"};
-
 [[nodiscard]] auto flag(const json::value& arguments, std::string_view name)
     -> std::expected<bool, std::string> {
     const json::cursor field = json::cursor{arguments, "arguments"}[name];
@@ -152,65 +150,6 @@ constexpr std::array<std::string_view, 2> typed_tags{"transform", "model"};
     };
 }
 
-[[nodiscard]] auto describe_tag(const asset::vox_tag& tag) -> json::value {
-    json::object entry{{"name", tag.name}};
-    if (!tag.value.empty()) {
-        entry.set("value", tag.value);
-    }
-    if (!tag.props.empty()) {
-        json::object props;
-        for (const auto& [key, value] : tag.props) {
-            props.set(key, value);
-        }
-        entry.set("props", std::move(props));
-    }
-    return entry;
-}
-
-[[nodiscard]] auto describe_node(
-    ecs::world& world, ecs::entity ent, const asset::vox_entity_data& data
-) -> json::value {
-    json::object node{
-        {"name", data.name},
-        {"parent", json_or_null(data.parent_name)},
-    };
-
-    if (world.has<ecs::transform_component>(ent)) {
-        const auto& placement = world.get<ecs::transform_component>(ent);
-        const vec3f euler     = placement.get_rotation_euler();
-
-        node.set("position", json_of(placement.get_position()));
-        node.set(
-            "rotation_degrees",
-            json_of(vec3f{math::degrees(euler.x), math::degrees(euler.y), math::degrees(euler.z)})
-        );
-        node.set("scale", json_of(placement.get_scale()));
-    }
-
-    if (world.has<ecs::model_component>(ent)) {
-        const auto& model_comp = world.get<ecs::model_component>(ent);
-
-        json::object volume{{"ref", json_or_null(model_comp.get_source().str())}};
-        if (model_comp.has_model()) {
-            volume.set("size", json_of(model_comp.get_model()->size()));
-            volume.set("pivot", json_of(model_comp.get_model()->pivot()));
-        }
-        node.set("volume", std::move(volume));
-    }
-
-    json::array tags;
-    for (const asset::vox_tag& tag : data.tags) {
-        if (!std::ranges::contains(typed_tags, std::string_view{tag.name})) {
-            tags.push_back(describe_tag(tag));
-        }
-    }
-    if (!tags.empty()) {
-        node.set("tags", std::move(tags));
-    }
-
-    return node;
-}
-
 [[nodiscard]] auto describe_prefab(const mcp_bindings& bindings) -> tool_outcome {
     const app_state& state = *bindings.state;
 
@@ -245,10 +184,7 @@ constexpr std::array<std::string_view, 2> typed_tags{"transform", "model"};
 
     json::array nodes;
     for (const asset::vox_entity_data& node : data.entities) {
-        const auto found = state.scene.name_to_entity.find(node.name);
-        if (found != state.scene.name_to_entity.end()) {
-            nodes.push_back(describe_node(world, found->second, node));
-        }
+        nodes.push_back(describe_node(bindings, node.name));
     }
 
     prefab.set("root_node", data.root_name);
@@ -265,8 +201,8 @@ auto append_prefab_tools(std::vector<mcp_tool>& tools, const mcp_bindings& bindi
         .name = "prefab_get",
         .description =
             "Read the open prefab: its rig, its state machines and every node with its parent, "
-            "position, rotation in degrees, scale and volume (file, size in voxels, pivot). "
-            "Other components of a node come as tags, the way the .vox file stores them.",
+            "position, rotation in degrees, scale, volume (file, size in voxels, pivot) and the "
+            "other components, in the same shape node_set_components takes them.",
         .input_schema = no_arguments,
         .run =
             [bindings](const json::value&) -> tool_outcome { return describe_prefab(bindings); },

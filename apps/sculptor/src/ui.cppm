@@ -333,7 +333,10 @@ class delete_entity_modal final {
 public:
     using engine_type = gfx::engine;
 
-    delete_entity_modal(engine_type& eng, app_state& state, operation_manager& op_manager);
+    delete_entity_modal(
+        engine_type& eng, app_state& state, operation_manager& op_manager,
+        asset::model_library& library
+    );
 
     auto open(const std::string& delete_name) -> void;
 
@@ -343,6 +346,7 @@ private:
     engine_type* engine_;
     app_state* state_;
     operation_manager* op_manager_;
+    asset::model_library* library_;
 
     bool need_open_ = false;
 

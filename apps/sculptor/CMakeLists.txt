@@ -68,6 +68,7 @@ target_sources(${PROJECT_NAME}
         src/services/clip_service.cpp
         src/services/clipboard_service.cpp
         src/services/file_service.cpp
+        src/services/node_service.cpp
         src/services/fsm_service.cpp
         src/services/keyframe_service.cpp
         src/services/playback_service.cpp
@@ -122,6 +123,8 @@ if (VW_SCULPTOR_MCP)
     target_sources(${PROJECT_NAME} PRIVATE
         src/mcp/editor_tools.cpp
         src/mcp/http_listener.cpp
+        src/mcp/arguments.cpp
+        src/mcp/node_tools.cpp
         src/mcp/prefab_tools.cpp
         src/mcp/protocol.cpp
         src/mcp/server.cpp

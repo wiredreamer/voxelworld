@@ -320,6 +320,7 @@ auto make_editor_tools(const mcp_bindings& bindings) -> std::vector<mcp_tool> {
     });
 
     append_prefab_tools(tools, bindings);
+    append_node_tools(tools, bindings);
 
     return tools;
 }

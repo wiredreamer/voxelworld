@@ -248,3 +248,122 @@ private:
 };
 
 }  // namespace vw::sculptor
+
+export namespace vw::sculptor {
+
+struct volume_spec {
+    std::optional<vec3i> blank_size;
+    asset::asset_ref source;
+};
+
+struct socket_spec {
+    std::string name;
+    vec3f position{};
+    quat rotation{};
+    vec3f scale{1.0F, 1.0F, 1.0F};
+};
+
+struct variant_spec {
+    std::vector<asset::asset_ref> candidates;
+    std::size_t selected = 0;
+};
+
+struct structure_spec {
+    std::string type;
+    std::vector<std::string> races;
+    uint8 tier               = 0;
+    ecs::structure_size size = ecs::structure_size::unspecified;
+};
+
+template <typename T>
+struct component_change {
+    bool requested = false;
+    std::optional<T> value;
+};
+
+struct component_changes {
+    component_change<volume_spec> volume;
+    component_change<std::string> anim_target;
+    component_change<std::vector<socket_spec>> sockets;
+    component_change<variant_spec> variant;
+    component_change<structure_spec> structure;
+    component_change<std::string> furniture;
+    component_change<std::string> connection;
+};
+
+struct node_spec {
+    std::string name;
+    std::string parent;
+    transform placement;
+    component_changes components;
+};
+
+inline constexpr int32 max_volume_side = 256;
+
+class node_service final {
+public:
+    using engine_type = gfx::engine;
+    using outcome     = std::expected<void, std::string>;
+
+    node_service(
+        engine_type& eng, app_state& state, asset::model_library& library,
+        operation_manager& op_manager, clip_service& clips
+    );
+
+    [[nodiscard]] auto names() const -> std::vector<std::string>;
+
+    auto create(const node_spec& spec) -> outcome;
+    auto remove(std::string_view name) -> outcome;
+    auto reparent(std::string_view name, std::string_view parent, std::optional<std::size_t> index)
+        -> outcome;
+    auto set_transform(std::string_view name, const transform& placement) -> outcome;
+    auto set_components(std::string_view name, const component_changes& changes) -> outcome;
+    auto set_rig(std::string_view rig) -> outcome;
+
+private:
+    using parts = std::vector<std::unique_ptr<base_operation>>;
+
+    [[nodiscard]] auto require_document_() -> outcome;
+    [[nodiscard]] auto find_(std::string_view name) const
+        -> std::expected<ecs::entity, std::string>;
+    auto run_(parts steps) -> void;
+    [[nodiscard]] auto verify_variant_(const std::string& name, const component_changes& changes)
+        -> outcome;
+
+    [[nodiscard]] auto plan_components_(
+        const std::string& name, std::optional<ecs::entity> existing,
+        const component_changes& changes, parts& steps
+    ) const -> outcome;
+    [[nodiscard]] auto plan_volume_(
+        const std::string& name, std::optional<ecs::entity> existing,
+        const component_changes& changes, parts& steps
+    ) const -> outcome;
+    [[nodiscard]] auto plan_anim_target_(
+        const std::string& name, std::optional<ecs::entity> existing,
+        const component_changes& changes, parts& steps
+    ) const -> outcome;
+    [[nodiscard]] auto plan_sockets_(
+        const std::string& name, std::optional<ecs::entity> existing,
+        const component_changes& changes, parts& steps
+    ) const -> outcome;
+    [[nodiscard]] auto plan_variant_(
+        const std::string& name, std::optional<ecs::entity> existing,
+        const component_changes& changes, parts& steps
+    ) const -> outcome;
+    [[nodiscard]] auto plan_structure_(
+        const std::string& name, std::optional<ecs::entity> existing,
+        const component_changes& changes, parts& steps
+    ) const -> outcome;
+    [[nodiscard]] auto plan_points_(
+        const std::string& name, std::optional<ecs::entity> existing,
+        const component_changes& changes, parts& steps
+    ) const -> outcome;
+
+    engine_type* engine_;
+    app_state* state_;
+    asset::model_library* library_;
+    operation_manager* op_manager_;
+    clip_service* clips_;
+};
+
+}  // namespace vw::sculptor

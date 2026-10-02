@@ -28,8 +28,7 @@ auto add_model_component_operation::execute() -> void {
 
     world.modify(ent).with<ecs::model_component>();
 
-    const voxel fill =
-        state_->tool.selected_voxel;
+    const voxel fill = params_.fill.value_or(state_->tool.selected_voxel);
 
     const auto model = model_reg.create(params_.name, params_.size);
     model->fill(fill);
