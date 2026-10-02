@@ -184,7 +184,7 @@ auto player::toggle_sword() -> void {
             .with<ecs::model_component>()
             .get_entity();
 
-        world.system<ecs::model_system>().modify(sword_).set_model(assets_.get_model("m_sword", "root"));
+        world.system<ecs::model_system>().modify(sword_).set_model(assets_.get_model("p_sword", "root"));
         world.system<ecs::socket_system>().modify(hand_ent).attach("hand_right", sword_);
         world.system<ecs::spatial_system>().modify(sword_).set_layer(ecs::spatial_layer::character);
     }

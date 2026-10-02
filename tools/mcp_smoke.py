@@ -1522,20 +1522,20 @@ def run_copy_scenario(probe):
     probe.check("an empty list shows everything", ok and hidden.get("hidden") == [] and "hidden" not in nodes_of(probe).get("arm_l", {}), str(hidden))
 
     count = len(nodes_of(probe))
-    ok, shown = tool(probe, "socket_preview", {"node": "arm_r", "socket": "grip", "prefab": "m_sword"})
+    ok, shown = tool(probe, "socket_preview", {"node": "arm_r", "socket": "grip", "prefab": "p_sword"})
     probe.check(
         "socket_preview shows a prefab in the socket without adding nodes",
-        ok and shown.get("sockets", [{}])[0].get("preview") == "m_sword.vox" and len(nodes_of(probe)) == count,
+        ok and shown.get("sockets", [{}])[0].get("preview") == "p_sword.vox" and len(nodes_of(probe)) == count,
         str(shown),
     )
     ok, state = tool(probe, "editor_state")
     probe.check("a preview does not change the prefab", ok and state.get("unsaved", {}).get("prefab") is False, str(state.get("unsaved")))
-    ok, text = tool(probe, "socket_preview", {"node": "arm_r", "socket": "palm", "prefab": "m_sword"})
+    ok, text = tool(probe, "socket_preview", {"node": "arm_r", "socket": "palm", "prefab": "p_sword"})
     probe.check("socket_preview names the sockets for an unknown one", not ok and "its sockets are: grip" in text, str(text))
     ok, text = tool(probe, "socket_preview", {"node": "arm_r", "socket": "grip", "prefab": "no_such_prefab"})
     probe.check("socket_preview refuses a prefab that is not there", not ok and "there is no prefab" in text, str(text))
-    ok, other = tool(probe, "socket_preview", {"node": "arm_r", "socket": "grip", "prefab": "m_shield.vox"})
-    probe.check("another prefab replaces the preview", ok and other.get("sockets", [{}])[0].get("preview") == "m_shield.vox", str(other))
+    ok, other = tool(probe, "socket_preview", {"node": "arm_r", "socket": "grip", "prefab": "p_shield.vox"})
+    probe.check("another prefab replaces the preview", ok and other.get("sockets", [{}])[0].get("preview") == "p_shield.vox", str(other))
 
     tool(probe, "node_set_transform", {"name": "spare", "position": [0, 1, 0]})
     tool(probe, "prefab_save")
@@ -1543,7 +1543,7 @@ def run_copy_scenario(probe):
     tool(probe, "prefab_open", {"name": scratch})
     probe.check("a preview is not saved with the prefab", len(nodes_of(probe)) == count and "preview" not in nodes_of(probe).get("arm_r", {}).get("sockets", [{}])[0], str(sorted(nodes_of(probe))))
 
-    tool(probe, "socket_preview", {"node": "arm_r", "socket": "grip", "prefab": "m_sword"})
+    tool(probe, "socket_preview", {"node": "arm_r", "socket": "grip", "prefab": "p_sword"})
     ok, gone = tool(probe, "socket_preview", {"node": "arm_r", "socket": "grip", "prefab": None})
     probe.check("null takes the preview away", ok and "preview" not in gone.get("sockets", [{}])[0], str(gone))
 
