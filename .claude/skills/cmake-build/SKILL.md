@@ -83,7 +83,7 @@ cmake -S . -B build/headless -G Ninja -DCMAKE_BUILD_TYPE=Release \
 Арене ассеты копирует `vw_setup_assets` (см. «Шейдеры и ассеты») — она их только
 читает.
 
-Зависимости gfx (glfw3, imgui, vulkan-headers) вынесены в vcpkg-фичу `gfx`,
+Зависимости gfx (glfw3, imgui, vulkan-headers, stb) вынесены в vcpkg-фичу `gfx`,
 включённую по умолчанию; `-DVCPKG_MANIFEST_NO_DEFAULT_FEATURES=ON` оставляет
 только Catch2.
 

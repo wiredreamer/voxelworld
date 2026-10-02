@@ -216,6 +216,8 @@ auto renderer::end_frame() -> void {
 
     const vk::Result result = context_->get_present_queue().presentKHR(&present_info);
 
+    resolve_capture_();
+
     if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR || framebuffer_resized_) {
         framebuffer_resized_ = false;
         recreate_swapchain();
@@ -551,7 +553,141 @@ auto renderer::render(
 
     gpu_timer_->end(cmd, gpu_stage::frame);
 
+    record_capture_();
+
     vk_must(command_buffers_[current_frame_].end(), "record command buffer");
+}
+
+auto renderer::has_pending_meshes() const -> bool {
+    return !pending_mesh_entities_.empty() || mesh_pool_.get_pending_count() > 0;
+}
+
+auto renderer::request_capture(
+    const frame_capture_request& request
+) -> bool {
+    if (!capture_supported_ || !has_drawable_surface()) {
+        return false;
+    }
+
+    capture_request_ = request;
+    captured_.reset();
+    return true;
+}
+
+auto renderer::take_capture() -> std::optional<image_rgba> {
+    return std::exchange(captured_, std::nullopt);
+}
+
+auto renderer::draws_interface_() const -> bool {
+    return !capture_request_ || capture_request_->with_interface;
+}
+
+auto renderer::draws_overlays_() const -> bool {
+    return !capture_request_ || capture_request_->with_overlays;
+}
+
+auto renderer::record_capture_() -> void {
+    if (!capture_request_) {
+        return;
+    }
+
+    const auto cmd         = command_buffers_[current_frame_];
+    const vk::Image shown  = swapchain_images_[current_image_index_];
+    const vk::DeviceSize bytes =
+        static_cast<vk::DeviceSize>(swapchain_extent_.width) * swapchain_extent_.height *
+        image_rgba::channels;
+
+    if (!capture_buffer_ || capture_buffer_->get_size() < bytes) {
+        capture_buffer_ = std::make_unique<buffer>(
+            *context_, bytes, vk::BufferUsageFlagBits::eTransferDst,
+            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent
+        );
+    }
+
+    vk::ImageSubresourceRange whole_image{};
+    whole_image.aspectMask = vk::ImageAspectFlagBits::eColor;
+    whole_image.levelCount = 1;
+    whole_image.layerCount = 1;
+
+    vk::ImageMemoryBarrier to_source{};
+    to_source.srcAccessMask       = vk::AccessFlagBits::eColorAttachmentWrite;
+    to_source.dstAccessMask       = vk::AccessFlagBits::eTransferRead;
+    to_source.oldLayout           = vk::ImageLayout::ePresentSrcKHR;
+    to_source.newLayout           = vk::ImageLayout::eTransferSrcOptimal;
+    to_source.srcQueueFamilyIndex = vk::QueueFamilyIgnored;
+    to_source.dstQueueFamilyIndex = vk::QueueFamilyIgnored;
+    to_source.image               = shown;
+    to_source.subresourceRange    = whole_image;
+
+    cmd.pipelineBarrier(
+        vk::PipelineStageFlagBits::eColorAttachmentOutput, vk::PipelineStageFlagBits::eTransfer,
+        {}, nullptr, nullptr, to_source
+    );
+
+    vk::BufferImageCopy region{};
+    region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+    region.imageSubresource.layerCount = 1;
+    region.imageExtent = vk::Extent3D{swapchain_extent_.width, swapchain_extent_.height, 1};
+
+    cmd.copyImageToBuffer(
+        shown, vk::ImageLayout::eTransferSrcOptimal, capture_buffer_->get_buffer(), region
+    );
+
+    vk::ImageMemoryBarrier to_present{};
+    to_present.srcAccessMask       = vk::AccessFlagBits::eTransferRead;
+    to_present.dstAccessMask       = {};
+    to_present.oldLayout           = vk::ImageLayout::eTransferSrcOptimal;
+    to_present.newLayout           = vk::ImageLayout::ePresentSrcKHR;
+    to_present.srcQueueFamilyIndex = vk::QueueFamilyIgnored;
+    to_present.dstQueueFamilyIndex = vk::QueueFamilyIgnored;
+    to_present.image               = shown;
+    to_present.subresourceRange    = whole_image;
+
+    cmd.pipelineBarrier(
+        vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eBottomOfPipe, {},
+        nullptr, nullptr, to_present
+    );
+
+    capture_extent_   = swapchain_extent_;
+    capture_recorded_ = true;
+}
+
+auto renderer::resolve_capture_() -> void {
+    if (!capture_recorded_) {
+        return;
+    }
+    capture_recorded_ = false;
+    capture_request_.reset();
+
+    vk_must(
+        context_->get_device().waitForFences(
+            in_flight_fences_[current_frame_], vk::True, std::numeric_limits<uint64>::max()
+        ),
+        "wait for the captured frame"
+    );
+
+    image_rgba frame{
+        .width  = capture_extent_.width,
+        .height = capture_extent_.height,
+        .pixels = {},
+    };
+    frame.pixels.resize(
+        static_cast<std::size_t>(frame.width) * frame.height * image_rgba::channels
+    );
+    capture_buffer_->copy_to(frame.pixels.data(), frame.pixels.size());
+    capture_buffer_->unmap();
+
+    const bool blue_first = swapchain_image_format_ == vk::Format::eB8G8R8A8Srgb ||
+        swapchain_image_format_ == vk::Format::eB8G8R8A8Unorm;
+
+    for (std::size_t at = 0; at < frame.pixels.size(); at += image_rgba::channels) {
+        if (blue_first) {
+            std::swap(frame.pixels[at], frame.pixels[at + 2]);
+        }
+        frame.pixels[at + 3] = 255;
+    }
+
+    captured_ = std::move(frame);
 }
 
 auto renderer::draw_line(
@@ -630,6 +766,19 @@ auto renderer::create_swapchain() -> void {
     create_info.imageExtent      = extent;
     create_info.imageArrayLayers = 1;
     create_info.imageUsage       = vk::ImageUsageFlagBits::eColorAttachment;
+
+    const bool can_copy_out = static_cast<bool>(
+        swapchain_support.capabilities.supportedUsageFlags & vk::ImageUsageFlagBits::eTransferSrc
+    );
+    const bool known_layout = surface_format.format == vk::Format::eB8G8R8A8Srgb ||
+        surface_format.format == vk::Format::eB8G8R8A8Unorm ||
+        surface_format.format == vk::Format::eR8G8B8A8Srgb ||
+        surface_format.format == vk::Format::eR8G8B8A8Unorm;
+
+    capture_supported_ = can_copy_out && known_layout;
+    if (capture_supported_) {
+        create_info.imageUsage |= vk::ImageUsageFlagBits::eTransferSrc;
+    }
     create_info.imageSharingMode = vk::SharingMode::eExclusive;
     create_info.preTransform     = swapchain_support.capabilities.currentTransform;
     create_info.compositeAlpha   = vk::CompositeAlphaFlagBitsKHR::eOpaque;
@@ -1587,8 +1736,10 @@ auto renderer::render_world_pass(
 
     stats_.timing.world_pass_debug_ms = measure_ms([&] {
         gpu_timer_->begin(cmd, gpu_stage::world_debug);
-        render_debug_primitives();
-        render_debug_solids();
+        if (draws_overlays_()) {
+            render_debug_primitives();
+            render_debug_solids();
+        }
         gpu_timer_->end(cmd, gpu_stage::world_debug);
     });
 
@@ -1860,7 +2011,9 @@ auto renderer::update_debug_solid_vertex_buffer() -> void {
 
 auto renderer::render_imgui() const -> void {
     ImGui::Render();
-    ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), command_buffers_[current_frame_]);
+    if (draws_interface_()) {
+        ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), command_buffers_[current_frame_]);
+    }
 }
 
 auto renderer::get_shadow_map_texture_id(

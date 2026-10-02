@@ -1,7 +1,9 @@
+import base64
 import http.client
 import json
 import pathlib
 import shutil
+import struct
 import sys
 
 SCRATCH_PREFABS = ("_mcp_smoke", "_mcp_smoke_copy")
@@ -681,6 +683,97 @@ def run_volume_scenario(probe):
     remove_scratch_assets(asset_root)
 
 
+def picture(probe, arguments=None):
+    _, reply, _ = probe.call("tools/call", {"name": "view_screenshot", "arguments": arguments or {}})
+    result = (reply or {}).get("result", {})
+    images = [block for block in result.get("content", []) if block.get("type") == "image"]
+    texts = [block.get("text", "") for block in result.get("content", []) if block.get("type") == "text"]
+    if result.get("isError") is not False or not images:
+        return None, texts[0] if texts else json.dumps(reply)
+    return base64.b64decode(images[0]["data"]), json.loads(texts[0])
+
+
+def png_size(data):
+    return struct.unpack(">II", data[16:24])
+
+
+def run_view_scenario(probe):
+    scratch = SCRATCH_PREFABS[0]
+    ok, state = tool(probe, "editor_state")
+    asset_root = pathlib.Path(state["asset_root"])
+    window_visible = state.get("window_visible")
+    remove_scratch_assets(asset_root)
+    tool(probe, "prefab_close", {"discard_unsaved": True})
+
+    ok, text = tool(probe, "view_set", {})
+    probe.check("view_set refuses with nothing open", not ok and "nothing to look at" in text, str(text))
+
+    tool(probe, "prefab_new", {"name": scratch})
+    tool(probe, "node_create", {"name": "root"})
+    tool(probe, "node_create", {"name": "cube", "parent": "root", "position": [10, 0, 0], "volume": {"size": [4, 4, 4]}})
+    tool(probe, "volume_write", {"node": "cube", "boxes": [{"min": [0, 0, 0], "max": [3, 3, 3], "voxel": "red_3"}]})
+
+    ok, view = tool(probe, "view_set", {"node": "cube", "from": "+x"})
+    probe.check(
+        "view_set aims at the node from the side asked for",
+        ok and close_to(view.get("target"), [10, 0, 0]) and view.get("yaw_degrees") == -90 and view.get("pitch_degrees") == 0
+        and view.get("position", [0])[0] > 10 and close_to(view.get("position", [0, 1, 1])[1:], [0, 0], 1e-2),
+        str(view),
+    )
+
+    ok, view = tool(probe, "view_set", {"node": "cube", "yaw_degrees": 0, "pitch_degrees": -45, "distance": 20})
+    probe.check(
+        "view_set takes yaw, pitch and distance",
+        ok and view.get("distance") == 20 and close_to(view.get("position"), [10, 14.142, -14.142], 1e-2),
+        str(view),
+    )
+
+    ok, text = tool(probe, "view_set", {"node": "ghost"})
+    probe.check("view_set names the nodes for an unknown one", not ok and "cube, root" in text, str(text))
+
+    ok, text = tool(probe, "view_set", {"from": "north"})
+    probe.check("view_set refuses an unknown side", not ok and "arguments.from" in text, str(text))
+
+    tool(probe, "view_set", {"node": "cube", "from": "iso"})
+
+    if not window_visible:
+        data, text = picture(probe)
+        probe.check("view_screenshot says a minimised editor draws nothing", data is None and "minimised" in text, str(text))
+        tool(probe, "prefab_close", {"discard_unsaved": True})
+        remove_scratch_assets(asset_root)
+        return
+
+    data, info = picture(probe, {"max_size": 256})
+    probe.check("view_screenshot returns a png", data is not None and data[:8] == b"\x89PNG\r\n\x1a\n", str(info))
+    if data is None:
+        return
+    width, height = png_size(data)
+    probe.check(
+        "the picture fits max_size and says its size",
+        max(width, height) == 256 and info.get("width") == width and info.get("height") == height,
+        f"{width}x{height} {info}",
+    )
+
+    tool(probe, "volume_write", {"node": "cube", "boxes": [{"min": [0, 0, 0], "max": [3, 3, 3], "voxel": "green_3"}]})
+    repainted, _ = picture(probe, {"max_size": 256})
+    probe.check("a picture taken right after a write shows the write", repainted is not None and repainted != data, "the two pictures are equal")
+
+    again, _ = picture(probe, {"max_size": 256})
+    probe.check("an unchanged scene gives the same picture", again == repainted, "the two pictures differ")
+
+    with_overlays, _ = picture(probe, {"max_size": 256, "overlays": True})
+    probe.check("overlays change the picture", with_overlays is not None and with_overlays != repainted, "the two pictures are equal")
+
+    full, info = picture(probe, {"max_size": 2048})
+    probe.check("a large max_size does not enlarge the window", full is not None and max(png_size(full)) <= 2048, str(info))
+
+    data, text = picture(probe, {"max_size": 10})
+    probe.check("view_screenshot refuses a size out of range", data is None and "max_size" in text, str(text))
+
+    tool(probe, "prefab_close", {"discard_unsaved": True})
+    remove_scratch_assets(asset_root)
+
+
 def main():
     port = DEFAULT_PORT
     with_scenario = False
@@ -701,6 +794,7 @@ def main():
             run_prefab_scenario(probe)
             run_node_scenario(probe)
             run_volume_scenario(probe)
+            run_view_scenario(probe)
     except OSError as error:
         print(f"FAIL cannot reach Sculptor on {DEFAULT_HOST}:{port} -- {error}")
         print("     start it with: sculptor --mcp")

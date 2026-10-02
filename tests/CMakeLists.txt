@@ -138,6 +138,7 @@ if(VW_BUILD_GFX)
         gfx/mesher.test.cpp
         gfx/mesh_pool.test.cpp
         gfx/camera.test.cpp
+        gfx/image.test.cpp
     )
 
     target_link_libraries(gfx_tests PRIVATE

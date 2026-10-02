@@ -82,9 +82,21 @@ private:
     std::unique_ptr<impl> impl_;
 };
 
+struct tool_image {
+    std::string media_type;
+    std::vector<uint8> bytes;
+};
+
 struct tool_outcome {
     std::string text;
     bool failed = false;
+    std::optional<tool_image> image;
+    std::function<std::optional<tool_outcome>()> later;
+};
+
+struct dispatch_result {
+    std::optional<http_response> ready;
+    std::function<std::optional<http_response>()> later;
 };
 
 [[nodiscard]] auto tool_success(const json::value& payload) -> tool_outcome;
@@ -104,6 +116,7 @@ using tool_body = std::function<tool_outcome(const json::value& arguments)>;
 auto append_prefab_tools(std::vector<mcp_tool>& tools, const mcp_bindings& bindings) -> void;
 auto append_node_tools(std::vector<mcp_tool>& tools, const mcp_bindings& bindings) -> void;
 auto append_volume_tools(std::vector<mcp_tool>& tools, const mcp_bindings& bindings) -> void;
+auto append_view_tools(std::vector<mcp_tool>& tools, const mcp_bindings& bindings) -> void;
 
 [[nodiscard]] auto describe_node(const mcp_bindings& bindings, std::string_view name)
     -> json::value;
@@ -151,7 +164,7 @@ class mcp_dispatcher final {
 public:
     explicit mcp_dispatcher(std::vector<mcp_tool> tools);
 
-    [[nodiscard]] auto handle(const http_request& request) -> http_response;
+    [[nodiscard]] auto handle(const http_request& request) -> dispatch_result;
 
     [[nodiscard]] auto request_count() const -> uint64;
     [[nodiscard]] auto last_tool() const -> const std::string&;
@@ -162,11 +175,16 @@ private:
         json::value input_schema;
     };
 
-    [[nodiscard]] auto answer_(const json::value& message) -> std::optional<json::value>;
+    struct rpc_answer {
+        std::optional<json::value> reply;
+        std::function<std::optional<json::value>()> later;
+    };
+
+    [[nodiscard]] auto answer_(const json::value& message) -> rpc_answer;
     [[nodiscard]] auto initialize_(const json::value& params) const -> json::value;
     [[nodiscard]] auto list_tools_() const -> json::value;
     [[nodiscard]] auto call_tool_(const json::value& params)
-        -> std::expected<json::value, std::string>;
+        -> std::expected<tool_outcome, std::string>;
 
     std::vector<registered_tool> tools_;
     uint64 request_count_ = 0;

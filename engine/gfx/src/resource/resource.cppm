@@ -8,6 +8,7 @@ export import :resource.light_buffer;
 export import :resource.light_grid;
 export import :resource.combined_buffer;
 export import :resource.combined_buffer_pool;
+export import :resource.image;
 
 import std;
 

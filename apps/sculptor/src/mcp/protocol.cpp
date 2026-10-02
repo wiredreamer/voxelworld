@@ -68,14 +68,55 @@ constexpr int64 invalid_params_code   = -32602;
     };
 }
 
+[[nodiscard]] auto base64_of(std::span<const uint8> bytes) -> std::string {
+    constexpr std::string_view alphabet =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+    std::string text;
+    text.reserve(((bytes.size() + 2) / 3) * 4);
+
+    for (std::size_t at = 0; at < bytes.size(); at += 3) {
+        const std::size_t left = bytes.size() - at;
+
+        const uint32 group = (static_cast<uint32>(bytes[at]) << 16) |
+            (left > 1 ? static_cast<uint32>(bytes[at + 1]) << 8 : 0U) |
+            (left > 2 ? static_cast<uint32>(bytes[at + 2]) : 0U);
+
+        text.push_back(alphabet[(group >> 18) & 0x3F]);
+        text.push_back(alphabet[(group >> 12) & 0x3F]);
+        text.push_back(left > 1 ? alphabet[(group >> 6) & 0x3F] : '=');
+        text.push_back(left > 2 ? alphabet[group & 0x3F] : '=');
+    }
+    return text;
+}
+
+[[nodiscard]] auto tool_result(const tool_outcome& outcome) -> json::value {
+    json::array content;
+    if (outcome.image) {
+        content.emplace_back(json::object{
+            {"type", "image"},
+            {"data", base64_of(outcome.image->bytes)},
+            {"mimeType", outcome.image->media_type},
+        });
+    }
+    if (!outcome.text.empty() || !outcome.image) {
+        content.emplace_back(json::object{{"type", "text"}, {"text", outcome.text}});
+    }
+
+    return json::object{
+        {"content", std::move(content)},
+        {"isError", outcome.failed},
+    };
+}
+
 }  // namespace
 
 auto tool_success(const json::value& payload) -> tool_outcome {
-    return tool_outcome{.text = json::dump(payload), .failed = false};
+    return tool_outcome{.text = json::dump(payload), .failed = false, .image = {}, .later = {}};
 }
 
 auto tool_failure(std::string reason) -> tool_outcome {
-    return tool_outcome{.text = std::move(reason), .failed = true};
+    return tool_outcome{.text = std::move(reason), .failed = true, .image = {}, .later = {}};
 }
 
 mcp_dispatcher::mcp_dispatcher(std::vector<mcp_tool> tools) {
@@ -101,59 +142,76 @@ auto mcp_dispatcher::last_tool() const -> const std::string& {
     return last_tool_;
 }
 
-auto mcp_dispatcher::handle(const http_request& request) -> http_response {
+auto mcp_dispatcher::handle(const http_request& request) -> dispatch_result {
+    const auto at_once = [](http_response response) {
+        return dispatch_result{.ready = std::move(response), .later = {}};
+    };
+
     if (path_of(request.target) != endpoint_path) {
-        return http_response{
+        return at_once(http_response{
             .status       = 404,
             .content_type = "text/plain; charset=utf-8",
             .allow        = {},
             .body         = "the MCP endpoint is /mcp",
-        };
+        });
     }
     if (request.method != "POST") {
-        return http_response{
+        return at_once(http_response{
             .status       = 405,
             .content_type = "text/plain; charset=utf-8",
             .allow        = "POST",
             .body         = "the MCP endpoint answers POST only",
-        };
+        });
     }
 
     ++request_count_;
 
     const auto message = json::parse(request.body);
     if (!message) {
-        return json_reply(
+        return at_once(json_reply(
             400, rpc_error(json::value{}, parse_error_code, json::describe(message.error()))
-        );
+        ));
     }
     if (!message->is_object()) {
-        return json_reply(
+        return at_once(json_reply(
             400, rpc_error(json::value{}, invalid_request_code, "expected a single request object")
-        );
+        ));
     }
 
-    const auto reply = answer_(*message);
-    return reply ? json_reply(200, *reply) : accepted();
+    auto answer = answer_(*message);
+    if (answer.later) {
+        return dispatch_result{
+            .ready = {},
+            .later = [later = std::move(answer.later)]() -> std::optional<http_response> {
+                const auto reply = later();
+                return reply ? std::optional{json_reply(200, *reply)} : std::nullopt;
+            },
+        };
+    }
+    return at_once(answer.reply ? json_reply(200, *answer.reply) : accepted());
 }
 
-auto mcp_dispatcher::answer_(const json::value& message) -> std::optional<json::value> {
+auto mcp_dispatcher::answer_(const json::value& message) -> rpc_answer {
+    const auto at_once = [](std::optional<json::value> reply) {
+        return rpc_answer{.reply = std::move(reply), .later = {}};
+    };
+
     const json::value* id_field     = message.find("id");
     const json::value* method_field = message.find("method");
     const std::string* method = method_field == nullptr ? nullptr : method_field->as_string();
 
     if (method == nullptr) {
         if (message.find("result") != nullptr || message.find("error") != nullptr) {
-            return std::nullopt;
+            return at_once(std::nullopt);
         }
-        return rpc_error(
+        return at_once(rpc_error(
             id_field == nullptr ? json::value{} : *id_field, invalid_request_code,
             "the request has no method"
-        );
+        ));
     }
 
     if (id_field == nullptr) {
-        return std::nullopt;
+        return at_once(std::nullopt);
     }
 
     const json::value& id        = *id_field;
@@ -162,23 +220,41 @@ auto mcp_dispatcher::answer_(const json::value& message) -> std::optional<json::
     const json::value& arguments = params == nullptr ? no_params : *params;
 
     if (*method == "initialize") {
-        return rpc_result(id, initialize_(arguments));
+        return at_once(rpc_result(id, initialize_(arguments)));
     }
     if (*method == "ping") {
-        return rpc_result(id, json::object{});
+        return at_once(rpc_result(id, json::object{}));
     }
     if (*method == "tools/list") {
-        return rpc_result(id, list_tools_());
+        return at_once(rpc_result(id, list_tools_()));
     }
     if (*method == "tools/call") {
         auto called = call_tool_(arguments);
         if (!called) {
-            return rpc_error(id, invalid_params_code, called.error());
+            return at_once(rpc_error(id, invalid_params_code, called.error()));
         }
-        return rpc_result(id, std::move(*called));
+        if (!called->later) {
+            return at_once(rpc_result(id, tool_result(*called)));
+        }
+
+        return rpc_answer{
+            .reply = {},
+            .later = [id, later = std::move(called->later)]() -> std::optional<json::value> {
+                const auto finished = later();
+                if (!finished) {
+                    return std::nullopt;
+                }
+                if (finished->failed) {
+                    log::warn(lc_, "a deferred tool failed: {}", finished->text);
+                }
+                return rpc_result(id, tool_result(*finished));
+            },
+        };
     }
 
-    return rpc_error(id, method_not_found_code, std::format("unknown method {}", *method));
+    return at_once(
+        rpc_error(id, method_not_found_code, std::format("unknown method {}", *method))
+    );
 }
 
 auto mcp_dispatcher::initialize_(const json::value& params) const -> json::value {
@@ -219,7 +295,7 @@ auto mcp_dispatcher::list_tools_() const -> json::value {
 }
 
 auto mcp_dispatcher::call_tool_(const json::value& params)
-    -> std::expected<json::value, std::string> {
+    -> std::expected<tool_outcome, std::string> {
     const auto name = json::cursor{params, "params"}["name"].string();
     if (!name) {
         return std::unexpected(json::describe(name.error()));
@@ -241,15 +317,11 @@ auto mcp_dispatcher::call_tool_(const json::value& params)
 
     last_tool_ = found->tool.name;
 
-    const tool_outcome outcome = found->tool.run(fields);
+    tool_outcome outcome = found->tool.run(fields);
     if (outcome.failed) {
         log::warn(lc_, "{} failed: {}", found->tool.name, outcome.text);
     }
-
-    return json::object{
-        {"content", json::array{json::object{{"type", "text"}, {"text", outcome.text}}}},
-        {"isError", outcome.failed},
-    };
+    return outcome;
 }
 
 }  // namespace vw::sculptor

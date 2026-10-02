@@ -129,6 +129,7 @@ if (VW_SCULPTOR_MCP)
         src/mcp/prefab_tools.cpp
         src/mcp/protocol.cpp
         src/mcp/server.cpp
+        src/mcp/view_tools.cpp
         src/mcp/volume_tools.cpp
     )
 else()

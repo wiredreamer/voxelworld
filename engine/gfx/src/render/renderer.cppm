@@ -25,6 +25,11 @@ using namespace ::vw::plat;
 export namespace vw::gfx {
 
 
+struct frame_capture_request {
+    bool with_interface = false;
+    bool with_overlays  = false;
+};
+
 class renderer final {
 public:
     using world_type                = world;
@@ -53,6 +58,11 @@ public:
     auto handle_resize() -> void;
 
     [[nodiscard]] auto has_drawable_surface() const -> bool;
+
+    [[nodiscard]] auto has_pending_meshes() const -> bool;
+
+    [[nodiscard]] auto request_capture(const frame_capture_request& request) -> bool;
+    [[nodiscard]] auto take_capture() -> std::optional<image_rgba>;
 
     auto set_render_mode(render_mode mode) -> void;
 
@@ -202,6 +212,11 @@ private:
 
     auto render_imgui() const -> void;
 
+    auto record_capture_() -> void;
+    auto resolve_capture_() -> void;
+    [[nodiscard]] auto draws_interface_() const -> bool;
+    [[nodiscard]] auto draws_overlays_() const -> bool;
+
     [[nodiscard]]
     auto find_depth_format() -> vk::Format;
 
@@ -297,6 +312,13 @@ private:
     uint32 current_image_index_ = 0;
     bool framebuffer_resized_     = false;
     bool swapchain_stale_         = false;
+
+    bool capture_supported_ = false;
+    bool capture_recorded_  = false;
+    vk::Extent2D capture_extent_{};
+    std::optional<frame_capture_request> capture_request_;
+    std::unique_ptr<buffer> capture_buffer_;
+    std::optional<image_rgba> captured_;
     vec4f clear_color_            = {0.1f, 0.1f, 0.1f, 1.0f};
     render_mode current_render_mode_ = render_mode::lit;
 

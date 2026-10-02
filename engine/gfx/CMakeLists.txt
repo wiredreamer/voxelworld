@@ -1,6 +1,7 @@
 find_package(Vulkan REQUIRED)
 find_package(glfw3 CONFIG REQUIRED)
 find_package(imgui CONFIG REQUIRED)
+find_package(Stb REQUIRED)
 
 vw_add_vulkan_module()
 
@@ -31,6 +32,7 @@ target_sources(vw_gfx
             src/resource/light_grid.cppm
             src/resource/combined_buffer.cppm
             src/resource/combined_buffer_pool.cppm
+            src/resource/image.cppm
             src/render/render.cppm
             src/render/vulkan_context.cppm
             src/render/gpu_timer.cppm
@@ -66,6 +68,7 @@ target_sources(vw_gfx
         src/resource/light_grid.cpp
         src/resource/combined_buffer.cpp
         src/resource/combined_buffer_pool.cpp
+        src/resource/image.cpp
         src/render/vulkan_context.cpp
         src/render/gpu_timer.cpp
         src/render/shadow_map.cpp
@@ -85,5 +88,6 @@ target_link_libraries(vw_gfx
     PUBLIC vw_core vw_asset vw_ecs vw_world vw_platform VulkanHppModule
     PRIVATE glfw imgui::imgui)
 target_compile_features(vw_gfx PUBLIC cxx_std_23)
+target_include_directories(vw_gfx SYSTEM PRIVATE ${Stb_INCLUDE_DIR})
 vw_use_std_module(vw_gfx)
 vw_set_warnings(vw_gfx)
