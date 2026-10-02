@@ -51,6 +51,8 @@ using voxf_clip_resolver = std::function<std::shared_ptr<animation_clip>(const a
 
 auto apply_defaults(const voxf_data& data, fsm_blackboard& board) -> void;
 
+[[nodiscard]] auto find_problems(const voxf_data& data) -> std::vector<std::string>;
+
 class voxf_serializer final {
 public:
     enum class error_type : uint8 { file_open_failed, write_failed };

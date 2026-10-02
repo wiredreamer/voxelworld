@@ -330,6 +330,7 @@ auto make_editor_tools(const mcp_bindings& bindings) -> std::vector<mcp_tool> {
     append_volume_tools(tools, bindings);
     append_view_tools(tools, bindings);
     append_clip_tools(tools, bindings);
+    append_fsm_tools(tools, bindings);
 
     return tools;
 }

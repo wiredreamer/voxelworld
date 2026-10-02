@@ -621,4 +621,164 @@ auto voxf_deserializer::process_rule_prop_(
     log::warn(detail::voxf_lc, "unknown transition property: {}", name);
 }
 
+namespace {
+
+[[nodiscard]] auto is_one_word(std::string_view text) -> bool {
+    return !text.empty() && std::ranges::none_of(text, [](char symbol) {
+        return symbol == ' ' || symbol == '\t' || symbol == '\n' || symbol == '\r';
+    });
+}
+
+[[nodiscard]] auto listed(const std::vector<std::string_view>& names) -> std::string {
+    std::string list;
+    for (const std::string_view name : names) {
+        if (!list.empty()) {
+            list += ", ";
+        }
+        list += name;
+    }
+    return list.empty() ? std::string{"none"} : list;
+}
+
+class problem_finder final {
+public:
+    explicit problem_finder(const voxf_data& data)
+        : data_(&data) {
+        for (const voxf_state& state : data.states) {
+            states_.emplace_back(state.name);
+        }
+        for (const voxf_param& param : data.params) {
+            (param.type == voxf_param_type::trigger ? triggers_ : values_).emplace_back(param.name);
+        }
+    }
+
+    [[nodiscard]] auto run() -> std::vector<std::string> {
+        check_header_();
+        check_params_();
+
+        for (const voxf_state& state : data_->states) {
+            check_state_(state);
+        }
+        for (std::size_t index = 0; index < data_->any_transitions.size(); ++index) {
+            check_rule_(std::format("any transition {}", index), data_->any_transitions[index]);
+        }
+        return std::move(problems_);
+    }
+
+private:
+    template <typename... Args>
+    auto note_(std::format_string<Args...> text, Args&&... args) -> void {
+        problems_.push_back(std::format(text, std::forward<Args>(args)...));
+    }
+
+    auto check_header_() -> void {
+        if (!data_->rig.empty() && !is_one_word(data_->rig)) {
+            note_("the rig '{}' must be one word", data_->rig);
+        }
+        if (data_->states.empty()) {
+            note_("the machine has no states");
+            return;
+        }
+        if (!std::ranges::contains(states_, std::string_view{data_->entry_state})) {
+            note_(
+                "the entry '{}' is not a state; the states are: {}", data_->entry_state,
+                listed(states_)
+            );
+        }
+    }
+
+    auto check_params_() -> void {
+        for (std::size_t index = 0; index < data_->params.size(); ++index) {
+            const voxf_param& param = data_->params[index];
+            if (!is_one_word(param.name)) {
+                note_("parameter {}: the name '{}' must be one word", index, param.name);
+                continue;
+            }
+
+            const auto same = std::ranges::count(data_->params, param.name, &voxf_param::name);
+            if (same > 1 && first_named_(data_->params, param.name) == index) {
+                note_("the parameter '{}' is declared {} times", param.name, same);
+            }
+        }
+    }
+
+    template <typename Range>
+    [[nodiscard]] static auto first_named_(const Range& items, std::string_view name)
+        -> std::size_t {
+        const auto found = std::ranges::find(items, name, [](const auto& item) -> std::string_view {
+            return item.name;
+        });
+        return static_cast<std::size_t>(std::distance(std::ranges::begin(items), found));
+    }
+
+    auto check_state_(const voxf_state& state) -> void {
+        const auto index = static_cast<std::size_t>(&state - data_->states.data());
+
+        if (!is_one_word(state.name)) {
+            note_("state {}: the name '{}' must be one word", index, state.name);
+            return;
+        }
+
+        const auto same = std::ranges::count(data_->states, state.name, &voxf_state::name);
+        if (same > 1 && first_named_(data_->states, state.name) == index) {
+            note_("the state '{}' is declared {} times", state.name, same);
+        }
+
+        if (state.rate <= 0.0F) {
+            note_("state '{}': the rate must be above zero, got {}", state.name, state.rate);
+        }
+        if (state.fade_in.duration < 0.0F || state.fade_out.duration < 0.0F) {
+            note_("state '{}': a fade cannot last a negative time", state.name);
+        }
+
+        for (std::size_t rule = 0; rule < state.transitions.size(); ++rule) {
+            check_rule_(
+                std::format("state '{}', transition {}", state.name, rule), state.transitions[rule]
+            );
+        }
+    }
+
+    auto check_rule_(const std::string& where, const animation_fsm::transition_rule& rule) -> void {
+        if (!std::ranges::contains(states_, std::string_view{rule.target_state})) {
+            note_(
+                "{}: the target '{}' is not a state; the states are: {}", where, rule.target_state,
+                listed(states_)
+            );
+        }
+        if (!rule.trigger_name.empty() &&
+            !std::ranges::contains(triggers_, std::string_view{rule.trigger_name})) {
+            note_(
+                "{}: '{}' is not a trigger parameter; the triggers are: {}", where,
+                rule.trigger_name, listed(triggers_)
+            );
+        }
+        for (const fsm_condition& condition : rule.conditions) {
+            if (!std::ranges::contains(values_, std::string_view{condition.parameter})) {
+                note_(
+                    "{}: the condition reads '{}', which is not a value parameter; the value "
+                    "parameters are: {}",
+                    where, condition.parameter, listed(values_)
+                );
+            }
+        }
+        if (rule.blend.duration < 0.0F) {
+            note_("{}: a blend cannot last a negative time", where);
+        }
+    }
+
+    const voxf_data* data_;
+    std::vector<std::string_view> states_;
+    std::vector<std::string_view> triggers_;
+    std::vector<std::string_view> values_;
+    std::vector<std::string> problems_;
+};
+
+}  // namespace
+
+auto find_problems(
+    const voxf_data& data
+) -> std::vector<std::string> {
+    return problem_finder{data}.run();
+}
+
 }  // namespace vw::asset

@@ -14,13 +14,23 @@ set_fsm_operation::set_fsm_operation(
 )
     : state_(&st), params_(std::move(params)) {}
 
+auto set_fsm_operation::edits_open_machine_() const -> bool {
+    return params_.machine.empty() || state_->fsm.source == params_.machine;
+}
+
 auto set_fsm_operation::execute() -> void {
-    state_->fsm.data                 = params_.after;
+    if (!edits_open_machine_()) {
+        return;
+    }
+    state_->fsm.data                = params_.after;
     state_->fsm.has_unsaved_changes = true;
 }
 
 auto set_fsm_operation::undo() -> void {
-    state_->fsm.data                 = params_.before;
+    if (!edits_open_machine_()) {
+        return;
+    }
+    state_->fsm.data                = params_.before;
     state_->fsm.has_unsaved_changes = true;
 }
 

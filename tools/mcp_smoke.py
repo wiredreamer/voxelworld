@@ -8,6 +8,7 @@ import sys
 
 SCRATCH_PREFABS = ("_mcp_smoke", "_mcp_smoke_copy")
 SCRATCH_CLIP = "_mcp_smoke_clip"
+SCRATCH_MACHINE = "_mcp_smoke_fsm"
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 17800
@@ -171,6 +172,7 @@ def remove_scratch_assets(asset_root):
         (asset_root / "prefabs" / f"{name}.vox").unlink(missing_ok=True)
         shutil.rmtree(asset_root / "models" / name, ignore_errors=True)
     (asset_root / "animations" / f"{SCRATCH_CLIP}.voxa").unlink(missing_ok=True)
+    (asset_root / "fsm" / f"{SCRATCH_MACHINE}.voxf").unlink(missing_ok=True)
 
 
 def run_prefab_scenario(probe):
@@ -955,6 +957,207 @@ def run_clip_scenario(probe):
     remove_scratch_assets(asset_root)
 
 
+def machine_payload(machine):
+    return {key: machine[key] for key in ("machine", "rig", "entry", "params", "states", "any")}
+
+
+def run_fsm_scenario(probe):
+    scratch = SCRATCH_PREFABS[0]
+    scratch_ref = f"fsm/{SCRATCH_MACHINE}.voxf"
+    ok, state = tool(probe, "editor_state")
+    asset_root = pathlib.Path(state["asset_root"])
+    remove_scratch_assets(asset_root)
+    tool(probe, "prefab_close", {"discard_unsaved": True})
+
+    ok, text = tool(probe, "fsm_get")
+    probe.check("fsm_get says when no machine is open", not ok and "no state machine is open" in text, str(text))
+
+    ok, text = tool(probe, "fsm_get", {"machine": "no_such_machine"})
+    probe.check("fsm_get names the machine files for an unknown one", not ok and "fsm/humanoid_action.voxf" in text, str(text))
+
+    ok, action = tool(probe, "fsm_get", {"machine": "humanoid_action"})
+    states = {state["name"]: state for state in action.get("states", [])} if ok else {}
+    probe.check(
+        "fsm_get reads a machine from its file",
+        ok and action.get("machine") == "fsm/humanoid_action.voxf" and action.get("entry") == "none" and action.get("layer") is None
+        and action.get("params") == [{"name": "attack", "type": "trigger"}],
+        str(action),
+    )
+    probe.check(
+        "a state carries its clip, rate and fades",
+        states.get("sword_attack", {}).get("clip") == "animations/a_sword_attack.voxa" and states["sword_attack"].get("playback") == "once"
+        and states["sword_attack"].get("rate") == 2 and states["sword_attack"].get("fade_in") == 0.25 and states["none"].get("clip") is None,
+        str(states.get("sword_attack")),
+    )
+    probe.check(
+        "transitions carry triggers, blends and waits",
+        states.get("none", {}).get("transitions") == [{"to": "sword_attack", "on": "attack", "blend": 0.15}]
+        and states.get("sword_attack", {}).get("transitions") == [{"to": "none", "wait_end": True, "wait_blend": True}],
+        str(states.get("none")),
+    )
+
+    ok, text = tool(probe, "fsm_create", {"name": SCRATCH_MACHINE})
+    probe.check("fsm_create refuses without a prefab", not ok and "no prefab is open" in text, str(text))
+
+    tool(probe, "prefab_open", {"name": "p_humanoid"})
+
+    ok, locomotion = tool(probe, "fsm_get", {"machine": "fsm/humanoid_locomotion.voxf"})
+    idle = next((state for state in locomotion.get("states", []) if state["name"] == "idle"), {}) if ok else {}
+    probe.check(
+        "fsm_get types parameter values",
+        ok and locomotion.get("layer") == 0
+        and {"name": "grounded", "type": "bool", "value": True} in locomotion.get("params", [])
+        and {"name": "jump_count", "type": "int", "value": 0} in locomotion.get("params", []),
+        str(locomotion.get("params")),
+    )
+    probe.check(
+        "conditions read as parameter, operator and value",
+        idle.get("transitions", [{}])[0] == {"to": "walk", "when": [{"param": "speed", "op": ">", "value": 0}], "blend": 0.15}
+        and {"param": "grounded", "op": "==", "value": False} in idle["transitions"][1].get("when", []),
+        str(idle.get("transitions")),
+    )
+
+    ok, same = tool(probe, "fsm_set", machine_payload(locomotion))
+    probe.check(
+        "what fsm_get returns can be sent back unchanged",
+        ok and same.get("unsaved") is False and machine_payload(same) == machine_payload(locomotion),
+        str(same)[:400],
+    )
+    ok, state = tool(probe, "editor_state")
+    probe.check(
+        "fsm_set opens the machine in the editor",
+        ok and state.get("context") == "machine" and state.get("machine") == "fsm/humanoid_locomotion.voxf",
+        str(state.get("context_stack")),
+    )
+
+    tool(probe, "prefab_save_as", {"name": scratch})
+
+    ok, made = tool(probe, "fsm_create", {"name": SCRATCH_MACHINE})
+    machine_file = asset_root / "fsm" / f"{SCRATCH_MACHINE}.voxf"
+    probe.check(
+        "fsm_create makes a machine and attaches it as the next layer",
+        ok and made.get("machine") == scratch_ref and made.get("layer") == 2 and made.get("rig") == "humanoid"
+        and made.get("entry") == "idle" and machine_file.is_file(),
+        str(made),
+    )
+
+    ok, text = tool(probe, "fsm_create", {"name": SCRATCH_MACHINE})
+    probe.check("fsm_create refuses an existing file", not ok and "already exists" in text, str(text))
+
+    wanted = {
+        "machine": SCRATCH_MACHINE,
+        "entry": "idle",
+        "params": [
+            {"name": "speed", "type": "float", "value": 0.5},
+            {"name": "go", "type": "trigger"},
+            {"name": "armed", "type": "bool", "value": True},
+        ],
+        "states": [
+            {
+                "name": "idle",
+                "clip": "animations/a_idle.voxa",
+                "transitions": [
+                    {"to": "walk", "when": [{"param": "speed", "op": ">", "value": 0.5}], "blend": 0.2},
+                    {"to": "walk", "on": "go"},
+                ],
+            },
+            {
+                "name": "walk",
+                "clip": "animations/a_walk.voxa",
+                "rate": 1.5,
+                "fade_in": {"duration": 0.3, "interp": "ease_in"},
+                "transitions": [{"to": "idle", "when": [{"param": "armed", "op": "==", "value": False}], "wait_end": True}],
+            },
+        ],
+        "any": [{"to": "idle", "on": "go", "blend": {"duration": 0.1, "interp": "cubic_bezier", "tangent_in": 0.2, "tangent_out": 0.8}}],
+    }
+    ok, built = tool(probe, "fsm_set", wanted)
+    walk = next((state for state in built.get("states", []) if state["name"] == "walk"), {}) if ok else {}
+    probe.check(
+        "fsm_set replaces the machine",
+        ok and built.get("unsaved") is True and built.get("rig") == "humanoid" and built.get("params") == wanted["params"]
+        and len(built.get("states", [])) == 2 and built.get("any") == wanted["any"],
+        str(built)[:600],
+    )
+    probe.check(
+        "defaults are filled in and shaped fades are kept",
+        walk.get("playback") == "loop" and walk.get("rate") == 1.5 and walk.get("fade_in") == {"duration": 0.3, "interp": "ease_in"}
+        and walk.get("transitions") == wanted["states"][1]["transitions"],
+        str(walk),
+    )
+
+    def refused(change, needle, label):
+        broken = json.loads(json.dumps(wanted))
+        change(broken)
+        refused_ok, refused_text = tool(probe, "fsm_set", broken)
+        probe.check(label, not refused_ok and needle in refused_text, str(refused_text))
+
+    refused(lambda m: m.update(entry="nope"), "the entry 'nope' is not a state", "an entry that is not a state is refused")
+    refused(lambda m: m["states"][0]["transitions"][0].update(to="run"), "the target 'run' is not a state", "a transition to a missing state is refused")
+    refused(lambda m: m["states"][0]["transitions"][1].update(on="jump"), "'jump' is not a trigger parameter", "an undeclared trigger is refused")
+    refused(
+        lambda m: m["states"][0]["transitions"][0]["when"][0].update(param="stamina"),
+        "which is not a value parameter",
+        "a condition on an undeclared parameter is refused",
+    )
+    refused(lambda m: m["states"][1].update(clip="animations/no_such.voxa"), "there is no clip file", "a clip that is not a file is refused")
+    refused(lambda m: m["states"][0]["transitions"][0]["when"][0].update(op="~="), "expected one of ==", "an unknown operator is refused")
+    refused(lambda m: m["states"].append({"name": "idle"}), "the state 'idle' is declared 2 times", "a state declared twice is refused")
+    refused(lambda m: m["states"][0].update(speed=2), "unknown field 'speed'", "an unknown field of a state is refused")
+    refused(lambda m: m.update(rig="quadruped"), "the prefab has the rig 'humanoid'", "a rig that differs from the prefab's is refused")
+    refused(lambda m: m.update(machine="humanoid_x"), "is not a state machine of this prefab", "a machine the prefab does not run is refused")
+
+    ok, after_refusals = tool(probe, "fsm_get")
+    probe.check("refused machines change nothing", ok and machine_payload(after_refusals) == machine_payload(built), str(after_refusals)[:300])
+
+    tool(probe, "undo")
+    ok, undone = tool(probe, "fsm_get")
+    probe.check("undo takes back the whole replacement", ok and [state["name"] for state in undone.get("states", [])] == ["idle"], str(undone)[:300])
+    tool(probe, "redo")
+
+    ok, text = tool(probe, "fsm_set", machine_payload(locomotion))
+    probe.check("another machine cannot be edited over unsaved changes", not ok and "fsm_save" in text and scratch_ref in text, str(text))
+
+    ok, text = tool(probe, "prefab_set_machines", {"machines": ["humanoid_locomotion", "humanoid_action"]})
+    probe.check("a machine with unsaved changes cannot be detached", not ok and "would be detached" in text, str(text))
+
+    ok, text = tool(probe, "prefab_close")
+    probe.check("prefab_close names the unsaved machine", not ok and f"the state machine {scratch_ref}" in text, str(text))
+
+    ok, saved = tool(probe, "fsm_save")
+    probe.check(
+        "fsm_save writes the machine",
+        ok and saved.get("saved") == scratch_ref and saved.get("unsaved") is False and "state walk" in machine_file.read_text(encoding="utf-8"),
+        str(saved),
+    )
+
+    ok, text = tool(probe, "prefab_set_machines", {"machines": ["humanoid_locomotion", "no_such"]})
+    probe.check("prefab_set_machines refuses a file that is not there", not ok and "machines[1]" in text, str(text))
+
+    ok, text = tool(probe, "prefab_set_machines", {"machines": ["humanoid_action", "humanoid_action"]})
+    probe.check("prefab_set_machines refuses a machine given twice", not ok and "given twice" in text, str(text))
+
+    ok, reordered = tool(probe, "prefab_set_machines", {"machines": [SCRATCH_MACHINE, "fsm/humanoid_locomotion.voxf"]})
+    probe.check(
+        "prefab_set_machines sets the layers in order",
+        ok and reordered.get("machines") == [scratch_ref, "fsm/humanoid_locomotion.voxf"],
+        str(reordered),
+    )
+    ok, prefab = tool(probe, "prefab_get")
+    probe.check("prefab_get shows the machines of the prefab", ok and prefab.get("machines") == reordered.get("machines"), str(prefab.get("machines")))
+
+    ok, in_memory = tool(probe, "fsm_get", {"machine": SCRATCH_MACHINE})
+    tool(probe, "prefab_close", {"discard_unsaved": True})
+    ok, from_disk = tool(probe, "fsm_get", {"machine": SCRATCH_MACHINE})
+    probe.check(
+        "the saved machine reads back the same from disk",
+        ok and close_to(machine_payload(from_disk), machine_payload(in_memory)),
+        json.dumps(from_disk)[:500],
+    )
+
+    remove_scratch_assets(asset_root)
+
+
 def main():
     port = DEFAULT_PORT
     with_scenario = False
@@ -977,6 +1180,7 @@ def main():
             run_volume_scenario(probe)
             run_view_scenario(probe)
             run_clip_scenario(probe)
+            run_fsm_scenario(probe)
     except OSError as error:
         print(f"FAIL cannot reach Sculptor on {DEFAULT_HOST}:{port} -- {error}")
         print("     start it with: sculptor --mcp")

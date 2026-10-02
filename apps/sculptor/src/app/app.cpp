@@ -30,7 +30,7 @@ app::app(
     , clip_service_(eng, state_, op_manager_)
     , playback_service_(eng, state_)
     , keyframe_service_(eng, state_, op_manager_)
-    , fsm_service_(eng, state_, model_library_)
+    , fsm_service_(eng, state_, model_library_, op_manager_, clip_service_)
     , clipboard_service_(eng, state_, op_manager_)
     , node_service_(eng, state_, model_library_, op_manager_, clip_service_)
     , volume_service_(eng, state_, op_manager_, file_service_, clip_service_)
@@ -126,6 +126,7 @@ auto app::start_mcp_(
             .nodes      = &node_service_,
             .volumes    = &volume_service_,
             .clips      = &clip_service_,
+            .machines   = &fsm_service_,
         }
     );
     state_.mcp = mcp_server_->status();

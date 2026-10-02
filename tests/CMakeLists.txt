@@ -61,6 +61,7 @@ add_executable(asset_tests
     asset/animation_fsm.test.cpp
     asset/animation_edit.test.cpp
     asset/voxf_format.test.cpp
+    asset/voxf_problems.test.cpp
     asset/asset_ref.test.cpp
     asset/model_library.test.cpp
     asset/serial.test.cpp
@@ -70,6 +71,10 @@ target_link_libraries(asset_tests PRIVATE
     vw_core
     vw_asset
     Catch2::Catch2WithMain
+)
+
+target_compile_definitions(asset_tests PRIVATE
+    VW_ASSET_DIR="${CMAKE_SOURCE_DIR}/assets"
 )
 
 target_compile_features(asset_tests PRIVATE cxx_std_23)

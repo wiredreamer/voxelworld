@@ -1086,6 +1086,7 @@ export namespace vw::sculptor {
 struct set_fsm_params {
     asset::voxf_data before;
     asset::voxf_data after;
+    asset::asset_ref machine;
 };
 
 class set_fsm_operation final : public base_operation {
@@ -1096,6 +1097,8 @@ public:
     auto undo() -> void override;
 
 private:
+    [[nodiscard]] auto edits_open_machine_() const -> bool;
+
     app_state* state_;
     set_fsm_params params_;
 };

@@ -16,9 +16,14 @@ constexpr log::log_category fsm_service_lc{"fsm_service"};
 }  // namespace
 
 fsm_service::fsm_service(
-    engine_type& eng, app_state& state, asset::model_library& library
+    engine_type& eng, app_state& state, asset::model_library& library,
+    operation_manager& op_manager, clip_service& clips
 )
-    : engine_(&eng), state_(&state), library_(&library) {}
+    : engine_(&eng)
+    , state_(&state)
+    , library_(&library)
+    , op_manager_(&op_manager)
+    , clips_(&clips) {}
 
 auto fsm_service::machines() const -> std::vector<asset::asset_ref> {
     const auto it = state_->scene.name_to_entity.find(state_->scene.root_name);

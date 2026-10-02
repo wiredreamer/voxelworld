@@ -246,7 +246,10 @@ class fsm_service final {
 public:
     using engine_type = gfx::engine;
 
-    fsm_service(engine_type& eng, app_state& state, asset::model_library& library);
+    fsm_service(
+        engine_type& eng, app_state& state, asset::model_library& library,
+        operation_manager& op_manager, clip_service& clips
+    );
 
     auto enter(std::size_t layer) -> bool;
 
@@ -257,10 +260,30 @@ public:
 
     [[nodiscard]] auto machines() const -> std::vector<asset::asset_ref>;
 
+    using outcome = std::expected<void, std::string>;
+
+    [[nodiscard]] static auto machine_ref(std::string_view name) -> asset::asset_ref;
+    [[nodiscard]] auto machine_files() const -> std::vector<std::string>;
+    [[nodiscard]] auto layer_of(const asset::asset_ref& machine) const
+        -> std::optional<std::size_t>;
+
+    [[nodiscard]] auto read(const asset::asset_ref& machine) const
+        -> std::expected<asset::voxf_data, std::string>;
+    auto replace(const asset::asset_ref& machine, asset::voxf_data data) -> outcome;
+    auto save_open() -> outcome;
+    auto create_machine(std::string_view name, bool attach)
+        -> std::expected<asset::asset_ref, std::string>;
+    auto set_machines(std::vector<asset::asset_ref> wanted) -> outcome;
+
 private:
+    [[nodiscard]] auto root_() const -> std::expected<ecs::entity, std::string>;
+    [[nodiscard]] auto rig_of_prefab_() const -> std::string;
+
     engine_type* engine_;
     app_state* state_;
     asset::model_library* library_;
+    operation_manager* op_manager_;
+    clip_service* clips_;
 };
 
 }  // namespace vw::sculptor
