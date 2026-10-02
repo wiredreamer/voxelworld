@@ -86,8 +86,12 @@ auto breadcrumb_bar::label_of_(
     }
 
     if (ctx.kind == edit_kind::fsm) {
-        return state_->fsm.is_open() ? std::string{state_->fsm.source.stem()} + ".voxf"
-                                     : std::string{"machine"};
+        if (!state_->fsm.is_open()) {
+            return std::string{"machine"};
+        }
+        return std::format(
+            "{}.voxf{}", state_->fsm.source.stem(), state_->fsm.has_unsaved_changes ? "*" : ""
+        );
     }
 
     if (ctx.kind == edit_kind::paste) {

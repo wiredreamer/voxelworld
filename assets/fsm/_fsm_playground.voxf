@@ -32,6 +32,7 @@ state attack
 	fade_in 0.25
 	fade_out 0.35
 	to idle
+		blend 0.4
 		wait end
 		wait blend
 any

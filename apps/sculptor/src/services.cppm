@@ -299,6 +299,7 @@ struct machine_run_status {
     std::vector<machine_layer_status> layers;
     std::vector<machine_parameter> parameters;
     std::vector<std::string> triggers;
+    std::string note;
 };
 
 struct machine_input {
@@ -342,14 +343,27 @@ public:
     auto run() -> outcome;
     auto stop() -> void;
     auto drive(const machine_input& input) -> outcome;
+    auto sync_run() -> void;
     [[nodiscard]] auto run_status() const -> machine_run_status;
 
+    [[nodiscard]] auto clip_choices() const -> std::vector<std::string>;
+
 private:
+    struct run_snapshot {
+        std::vector<std::string> states;
+        std::vector<std::pair<std::string, float32>> values;
+    };
+
     [[nodiscard]] auto root_() const -> std::expected<ecs::entity, std::string>;
     [[nodiscard]] auto rig_of_prefab_() const -> std::string;
 
+    [[nodiscard]] auto snapshot_() const -> run_snapshot;
+    auto start_(const run_snapshot* kept) -> outcome;
+
     std::vector<asset::asset_ref> running_refs_;
     std::vector<asset::voxf_param> running_params_;
+    asset::voxf_data running_document_;
+    std::string run_note_;
 
     engine_type* engine_;
     app_state* state_;

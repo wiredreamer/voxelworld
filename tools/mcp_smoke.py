@@ -1743,6 +1743,30 @@ def run_machine_scenario(probe):
         str(jumped),
     )
 
+    tool(probe, "fsm_drive", {"set": {"grounded": True, "jump_count": 0, "speed": 1.0}})
+    ok, locomotion = tool(probe, "fsm_get", {"machine": "humanoid_locomotion"})
+    edited = json.loads(json.dumps(machine_payload(locomotion)))
+    next(state for state in edited["states"] if state["name"] == "walk")["rate"] = 0.5
+    ok, changed = tool(probe, "fsm_set", edited)
+    time.sleep(0.2)
+    ok_status, live = tool(probe, "fsm_status")
+    probe.check(
+        "fsm_set reaches machines that are running and keeps their state and parameters",
+        ok and changed.get("unsaved") is True and ok_status and live.get("running") is True
+        and live["layers"][0].get("state") == "walk" and live["parameters"].get("speed") == 1.0,
+        str(live),
+    )
+    tool(probe, "undo")
+    time.sleep(0.2)
+    ok_status, live = tool(probe, "fsm_status")
+    ok_machine, back = tool(probe, "fsm_get", {"machine": "humanoid_locomotion"})
+    probe.check(
+        "undo of the edit reaches them too",
+        ok_status and live.get("running") is True and live["layers"][0].get("state") == "walk"
+        and ok_machine and machine_payload(back) == machine_payload(locomotion),
+        str(live),
+    )
+
     ok, text = tool(probe, "fsm_drive", {"set": {"stamina": 1}})
     probe.check("fsm_drive names the parameters for an unknown one", not ok and "speed, grounded, jump_count" in text, str(text))
     ok, text = tool(probe, "fsm_drive", {"fire": ["speed"]})

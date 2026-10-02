@@ -585,12 +585,16 @@ constexpr uint32 ticks_to_settle = 3;
         triggers.emplace_back(trigger);
     }
 
-    return json::object{
+    json::object described{
         {"running", status.running},
         {"layers", std::move(layers)},
         {"parameters", std::move(parameters)},
         {"triggers", std::move(triggers)},
     };
+    if (!status.note.empty()) {
+        described.set("note", status.note);
+    }
+    return described;
 }
 
 }  // namespace
@@ -658,9 +662,11 @@ auto append_fsm_tools(std::vector<tool>& tools, const editor_bindings& bindings)
         .description =
             "Start the state machines of the open prefab, as the game runs them: machine i "
             "drives animation layer i, each from its entry state with its parameters at their "
-            "defaults. The machine open in the editor runs with its unsaved changes. Drive them "
-            "with fsm_drive, read them with fsm_status. Any edit of the prefab, a clip or a "
-            "machine stops them and puts the rest pose back; so does fsm_stop.",
+            "defaults. The machine open in the editor runs with its unsaved changes, and "
+            "fsm_set applies to machines already running: they restart in the state they were "
+            "in, with their parameters. Drive them with fsm_drive, read them with fsm_status. "
+            "Any edit of the prefab or of a clip stops them and puts the rest pose back; so "
+            "does fsm_stop.",
         .input_schema = no_arguments,
         .run          = when_idle(
             bindings,

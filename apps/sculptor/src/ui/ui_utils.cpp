@@ -16,7 +16,8 @@ import vw.gfx;
 namespace vw::sculptor {
 namespace {
 
-constexpr float32 panel_margin = 10.f;
+constexpr float32 panel_margin          = 10.f;
+constexpr float32 smallest_panel_height = 120.f;
 
 auto slot_offset(app_state& state, panel_slot slot) -> float32& {
     switch (slot) {
@@ -31,7 +32,8 @@ auto slot_offset(app_state& state, panel_slot slot) -> float32& {
 }  // namespace
 
 auto begin_panel(
-    app_state& state, panel_slot slot, std::string_view title, bool* open, bool title_bar
+    app_state& state, panel_slot slot, std::string_view title, bool* open, bool title_bar,
+    float32 fixed_width
 ) -> void {
     const ImGuiViewport* viewport = ImGui::GetMainViewport();
     const float32 offset          = slot_offset(state, slot);
@@ -83,6 +85,17 @@ auto begin_panel(
         flags |= ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoBringToFrontOnFocus;
     } else {
         flags |= ImGuiWindowFlags_AlwaysAutoResize;
+
+        if (slot == panel_slot::left || slot == panel_slot::right) {
+            const float32 room = viewport->WorkSize.y - offset - panel_margin * 2.f;
+            ImGui::SetNextWindowSizeConstraints(
+                ImVec2{fixed_width, 0.f},
+                ImVec2{
+                    fixed_width > 0.f ? fixed_width : viewport->WorkSize.x,
+                    std::max(room, smallest_panel_height)
+                }
+            );
+        }
     }
 
     ImGui::Begin(title.data(), open, flags);

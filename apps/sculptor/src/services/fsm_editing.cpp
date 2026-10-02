@@ -185,19 +185,24 @@ auto fsm_service::replace(const asset::asset_ref& machine, asset::voxf_data data
         ));
     }
 
+    const bool was_running  = state_->anim.machines_running;
+    const run_snapshot kept = was_running ? snapshot_() : run_snapshot{};
+
     leave_edit_contexts(*state_, *clips_);
     if (!enter(*layer)) {
         return refuse(std::format("the state machine '{}' could not be opened", machine.str()));
     }
 
-    if (state_->fsm.data == data) {
-        return {};
+    if (state_->fsm.data != data) {
+        op_manager_->execute(std::make_unique<set_fsm_operation>(
+            *state_,
+            set_fsm_params{.before = state_->fsm.data, .after = std::move(data), .machine = machine}
+        ));
     }
 
-    op_manager_->execute(std::make_unique<set_fsm_operation>(
-        *state_,
-        set_fsm_params{.before = state_->fsm.data, .after = std::move(data), .machine = machine}
-    ));
+    if (was_running) {
+        static_cast<void>(start_(&kept));
+    }
     return {};
 }
 
@@ -301,7 +306,56 @@ auto fsm_service::set_machines(std::vector<asset::asset_ref> wanted) -> outcome 
     return {};
 }
 
+auto fsm_service::clip_choices() const -> std::vector<std::string> {
+    namespace fs = std::filesystem;
+
+    std::vector<std::string> choices;
+
+    std::error_code ec;
+    for (const auto& entry : fs::directory_iterator(app_state::clip_dir(), ec)) {
+        if (entry.is_regular_file() && entry.path().extension() == ".voxa") {
+            choices.push_back(
+                std::format("{}/{}", asset::dirs::animations, entry.path().filename().string())
+            );
+        }
+    }
+    std::ranges::sort(choices);
+    return choices;
+}
+
 auto fsm_service::run() -> outcome {
+    return start_(nullptr);
+}
+
+auto fsm_service::snapshot_() const -> run_snapshot {
+    const machine_run_status status = run_status();
+
+    run_snapshot kept;
+    for (const machine_layer_status& layer : status.layers) {
+        kept.states.push_back(layer.state);
+    }
+    for (const machine_parameter& parameter : status.parameters) {
+        kept.values.emplace_back(parameter.name, parameter.value);
+    }
+    return kept;
+}
+
+auto fsm_service::sync_run() -> void {
+    if (!state_->anim.machines_running || !state_->ctx.in_fsm() ||
+        state_->fsm.data == running_document_) {
+        return;
+    }
+
+    const run_snapshot kept = snapshot_();
+    if (const auto restarted = start_(&kept); !restarted) {
+        running_document_ = state_->fsm.data;
+        run_note_         = std::format(
+            "{}; the last version that could run is still running", restarted.error()
+        );
+    }
+}
+
+auto fsm_service::start_(const run_snapshot* kept) -> outcome {
     if (const auto root = root_(); !root) {
         return refuse(root.error());
     }
@@ -345,6 +399,13 @@ auto fsm_service::run() -> outcome {
         asset::animation_fsm runnable = asset::build_fsm(
             *data, [this](const asset::asset_ref& clip) { return clips_->clip_for_machine(clip); }
         );
+
+        const std::size_t layer = built.size();
+        if (kept != nullptr && layer < kept->states.size() &&
+            std::ranges::contains(data->states, kept->states[layer], &asset::voxf_state::name)) {
+            runnable.set_entry_state(kept->states[layer]);
+        }
+
         built.push_back(machine_to_run{.machine = std::move(runnable), .data = std::move(*data)});
     }
 
@@ -364,8 +425,22 @@ auto fsm_service::run() -> outcome {
         return started;
     }
 
-    running_refs_   = attached;
-    running_params_ = std::move(declared);
+    running_refs_     = attached;
+    running_params_   = std::move(declared);
+    running_document_ = state_->fsm.data;
+    run_note_.clear();
+
+    if (kept != nullptr) {
+        const auto root   = root_();
+        const auto runner = engine_->get_world().system<ecs::animation_fsm_system>().modify(*root);
+
+        for (const auto& [name, value] : kept->values) {
+            const auto still = std::ranges::find(running_params_, name, &asset::voxf_param::name);
+            if (still != running_params_.end() && still->type != asset::voxf_param_type::trigger) {
+                runner.set_parameter(name, value);
+            }
+        }
+    }
     return {};
 }
 
@@ -437,6 +512,7 @@ auto fsm_service::run_status() const -> machine_run_status {
         .layers     = {},
         .parameters = {},
         .triggers   = {},
+        .note       = run_note_,
     };
     if (!status.running) {
         return status;

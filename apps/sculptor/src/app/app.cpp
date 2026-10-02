@@ -158,6 +158,9 @@ auto app::update(
     if (state_.anim.machines_running && !state_.ctx.in_fsm()) {
         clip_service_.stop_machines();
     }
+    if (state_.anim.machines_running && !ImGui::IsAnyItemActive()) {
+        fsm_service_.sync_run();
+    }
 
     file_service_.collect_dirty_models();
     prune_contexts_();
@@ -231,7 +234,9 @@ auto app::render(
 
     handle_animation_actions_();
 
-    tools_[active_tool_]->render(delta_time);
+    if (state_.ctx.allows_tool(active_tool_)) {
+        tools_[active_tool_]->render(delta_time);
+    }
 
     if (state_.file.filename != prev_filename_ ||
         state_.file.has_unsaved_changes != prev_unsaved_state_ ||
@@ -330,7 +335,9 @@ auto app::handle_key_press(
         run_command_(*cmd);
     }
 
-    tools_[active_tool_]->on_key_press(ev);
+    if (state_.ctx.allows_tool(active_tool_)) {
+        tools_[active_tool_]->on_key_press(ev);
+    }
 }
 
 auto app::run_command_(
@@ -364,6 +371,10 @@ auto app::run_command_(
         case command::file_save:
             if (state_.ctx.in_clip() && !state_.anim.selected_clip_name.empty()) {
                 state_.ui.need_save_clip = true;
+            } else if (state_.ctx.in_fsm() && state_.fsm.is_open()) {
+                if (const auto saved = fsm_service_.save_open(); !saved) {
+                    log::error("{}", saved.error());
+                }
             } else {
                 static_cast<void>(file_service_.save());
             }
@@ -444,7 +455,7 @@ auto app::handle_mouse_move(
         return;
     }
 
-    if (!camera_movement_enabled_) {
+    if (!camera_movement_enabled_ && state_.ctx.allows_tool(active_tool_)) {
         tools_[active_tool_]->on_mouse_move(ev);
     }
 }
@@ -470,7 +481,7 @@ auto app::handle_mouse_press(
         io.MousePos = ImVec2(-FLT_MAX, -FLT_MAX);
     }
 
-    if (!camera_movement_enabled_) {
+    if (!camera_movement_enabled_ && state_.ctx.allows_tool(active_tool_)) {
         tools_[active_tool_]->on_mouse_press(ev);
     }
 }
@@ -491,7 +502,7 @@ auto app::handle_mouse_release(
         io.ConfigFlags &= ~(ImGuiConfigFlags_NoMouse | ImGuiConfigFlags_NoKeyboard);
     }
 
-    if (!camera_movement_enabled_) {
+    if (!camera_movement_enabled_ && state_.ctx.allows_tool(active_tool_)) {
         tools_[active_tool_]->on_mouse_release(ev);
     }
 }

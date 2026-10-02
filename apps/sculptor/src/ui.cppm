@@ -191,7 +191,7 @@ enum class panel_slot : uint8 {
 
 auto begin_panel(
     app_state& state, panel_slot slot, std::string_view title, bool* open = nullptr,
-    bool title_bar = true
+    bool title_bar = true, float32 fixed_width = 0.f
 ) -> void;
 
 auto end_panel(app_state& state, panel_slot slot) -> void;
@@ -1070,6 +1070,7 @@ public:
 private:
     auto render_header_() -> void;
     auto render_run_() -> void;
+    auto render_run_window_() -> void;
     auto render_params_() -> void;
     auto render_states_() -> void;
     auto render_state_(std::size_t index) -> void;
@@ -1081,6 +1082,10 @@ private:
     auto render_incoming_(const std::string& state_name) -> void;
 
     auto state_combo_(const char* label, std::string& target) -> bool;
+    auto choice_combo_(
+        const char* label, std::string& chosen, const std::vector<std::string>& choices
+    ) -> bool;
+    auto value_field_(const char* id, asset::voxf_param_type type, float32& value) -> bool;
 
     auto begin_edit_() -> void;
     auto commit_edit_() -> void;
