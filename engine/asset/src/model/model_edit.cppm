@@ -182,4 +182,19 @@ enum class fill_scope : uint8 { every_cell, solid_only };
 [[nodiscard]] auto reoriented(const voxel_clip& source, const voxel_orientation& how)
     -> voxel_clip;
 
+struct voxel_edit {
+    vec3i position;
+    voxel value;
+};
+
+[[nodiscard]] auto contains(vec3i size, vec3i position) -> bool;
+
+[[nodiscard]] auto edited(
+    const model& source, std::span<const voxel_edit> edits, model_registry& registry
+) -> std::shared_ptr<model>;
+
+[[nodiscard]] auto resized(
+    const model& source, vec3i grown_at_min, vec3i grown_at_max, model_registry& registry
+) -> std::shared_ptr<model>;
+
 }  // namespace vw::asset

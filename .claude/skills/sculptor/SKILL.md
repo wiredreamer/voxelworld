@@ -12,7 +12,7 @@ description: Редактор вокселей Sculptor — apps/sculptor, мо�
 | `:state` | `state.cppm` | `app/app_state.cpp` | `app_state`: документ, контекст правки, сцена, кисть, анимация; `enum class tools`, `panels` |
 | `:shortcuts` | `shortcuts.cppm` | `shortcuts/shortcuts.cpp` | `enum class command`, таблица `shortcuts`, `tool_of`, `command_for_tool` |
 | `:operations` | `operations.cppm` | `operations/*.cpp` | `base_operation`, `composite_operation`, `operation_manager`, все операции |
-| `:services` | `services.cppm` | `services/*.cpp` | `file_service`, `node_service`, `clip_service`, `clipboard_service`, `keyframe_service`, `playback_service`, `fsm_service` |
+| `:services` | `services.cppm` | `services/*.cpp` | `file_service`, `node_service`, `volume_service`, `clip_service`, `clipboard_service`, `keyframe_service`, `playback_service`, `fsm_service` |
 | `:tools` | `tools.cppm` | `tools/*.cpp` | `base_tool`, инструменты, `gizmo` |
 | `:ui` | `ui.cppm` | `ui/*.cpp` | панели, модальные окна, `component_drawer` |
 | `:mcp` | `mcp.cppm` | `mcp/*.cpp` | `mcp_server`: слушатель HTTP, диспетчер JSON-RPC, инструменты агента |
@@ -74,7 +74,8 @@ Schema и `run`, который получает аргументы объект
   `std::expected<void, std::string>` и сам собирает операции; инструмент только
   переводит JSON в `node_spec` и `component_changes` и отдаёт текст ошибки.
 - Инструменты разложены по файлам: `editor_tools.cpp` — состояние, списки,
-  undo; `prefab_tools.cpp` — префаб; `node_tools.cpp` — узлы и компоненты. Новая группа — новый файл с функцией
+  undo; `prefab_tools.cpp` — префаб; `node_tools.cpp` — узлы и компоненты;
+  `volume_tools.cpp` — воксели. Новая группа — новый файл с функцией
   `append_<группа>_tools`, объявленной в `mcp.cppm` вне `export`.
 
 После правки в `mcp/` прогони `python tools/mcp_smoke.py --scenario` по
@@ -143,6 +144,29 @@ Schema и `run`, который получает аргументы объект
 - **Перед правкой сервис возвращает контекст префаба** (`require_document_`).
   Из клипа — только через `clip_service::exit_animation_mode`: он возвращает
   позы покоя, без этого трансформ узла записался бы позой клипа.
+
+## Объёмы: `volume_service`
+
+Программная правка вокселей идёт через `volume_service`
+(`services/volume_service.cpp`): `write`, `resize`, `trim`, `reorient`,
+`set_pivot`, `rename`. Он проверяет узел, наличие объёма и границы, входит в
+контекст объёма узла и исполняет одну операцию.
+
+- **Пачка правок — `asset::edited`.** `edit_voxels_operation` держит список
+  `asset::voxel_edit` и строит новый объём, как все операции формы: прежний
+  объём остаётся в операции для undo, новый раздаётся держателям через
+  `replace_volume`. Поштучные `add/paint/remove_voxel_operation` для пачки не
+  годятся: N записей в историю и правка общего объёма на месте.
+- **Размер меняет `asset::resized`** (`resize_volume_operation`): рост у нижней
+  грани сдвигает воксели и pivot, отрицательная величина срезает. Операция
+  сбрасывает `state.volume.selection` сама: размер может остаться прежним при
+  сдвинутом содержимом, и `clipboard_service::sync` этого не заметил бы.
+- **Границы проверяет сервис, а не движок.** `model::set_voxel` пишет мимо
+  страниц без проверки; `asset::edited` правки за пределами молча отбрасывает,
+  поэтому отказ с координатой и размером формирует `volume_service::write`.
+- **`max_volume_side` (256)** — предел стороны для объёма, созданного или
+  изменённого программно. Это защита от опечатки, а не измеренный предел
+  мешера.
 
 ## Новая операция (undo/redo)
 

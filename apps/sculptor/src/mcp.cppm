@@ -19,6 +19,7 @@ struct mcp_bindings {
     operation_manager* operations = nullptr;
     file_service* files           = nullptr;
     node_service* nodes           = nullptr;
+    volume_service* volumes       = nullptr;
 };
 
 class mcp_server final {
@@ -102,6 +103,7 @@ using tool_body = std::function<tool_outcome(const json::value& arguments)>;
 
 auto append_prefab_tools(std::vector<mcp_tool>& tools, const mcp_bindings& bindings) -> void;
 auto append_node_tools(std::vector<mcp_tool>& tools, const mcp_bindings& bindings) -> void;
+auto append_volume_tools(std::vector<mcp_tool>& tools, const mcp_bindings& bindings) -> void;
 
 [[nodiscard]] auto describe_node(const mcp_bindings& bindings, std::string_view name)
     -> json::value;

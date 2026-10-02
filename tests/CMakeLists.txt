@@ -57,6 +57,7 @@ add_executable(asset_tests
     asset/model_trim.test.cpp
     asset/model_reorient.test.cpp
     asset/model_clip.test.cpp
+    asset/model_rewrite.test.cpp
     asset/animation_fsm.test.cpp
     asset/voxf_format.test.cpp
     asset/asset_ref.test.cpp

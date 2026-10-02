@@ -55,14 +55,31 @@ node_service::node_service(
       op_manager_(&op_manager),
       clips_(&clips) {}
 
-auto node_service::names() const -> std::vector<std::string> {
+auto list_node_names(const app_state& state) -> std::vector<std::string> {
     std::vector<std::string> listed;
-    listed.reserve(state_->scene.name_to_entity.size());
-    for (const auto& name : state_->scene.name_to_entity | std::views::keys) {
+    listed.reserve(state.scene.name_to_entity.size());
+    for (const auto& name : state.scene.name_to_entity | std::views::keys) {
         listed.push_back(name);
     }
     std::ranges::sort(listed);
     return listed;
+}
+
+auto leave_edit_contexts(app_state& state, clip_service& clips) -> void {
+    const bool inside_clip = std::ranges::any_of(state.ctx.stack, [](const edit_context& ctx) {
+        return ctx.kind == edit_kind::clip;
+    });
+
+    if (inside_clip) {
+        clips.exit_animation_mode();
+        state.ui.show_timeline = false;
+        return;
+    }
+    state.ctx.leave_to(0);
+}
+
+auto node_service::names() const -> std::vector<std::string> {
+    return list_node_names(*state_);
 }
 
 auto node_service::require_document_() -> outcome {
@@ -73,15 +90,7 @@ auto node_service::require_document_() -> outcome {
         return refuse("a paste is being placed; confirm or cancel it in the editor");
     }
 
-    const bool inside_clip = std::ranges::any_of(state_->ctx.stack, [](const edit_context& ctx) {
-        return ctx.kind == edit_kind::clip;
-    });
-    if (inside_clip) {
-        clips_->exit_animation_mode();
-        state_->ui.show_timeline = false;
-    } else {
-        state_->ctx.leave_to(0);
-    }
+    leave_edit_contexts(*state_, *clips_);
     return {};
 }
 

@@ -1,6 +1,6 @@
 # MCP в Sculptor — план
 
-Версия 1.1 от 2026-10-02. Статус: этапы 0–2 сделаны, дальше этап 3.
+Версия 1.1 от 2026-10-02. Статус: этапы 0–3 сделаны, дальше этап 4.
 
 Цель: Claude Code подключается к запущенному Sculptor и правит префабы,
 воксельные объёмы, анимации и стейт-машины. Нужно для ускорения производства
@@ -137,7 +137,7 @@ Claude Code ──HTTP POST /mcp──► сетевой поток (127.0.0.1)
 | Редактор | `editor_state`, `undo`, `redo`, `assets_list`, `palette_list` |
 | Префаб | `prefab_new`, `prefab_open`, `prefab_save`, `prefab_save_as`, `prefab_close`, `prefab_get` |
 | Узлы | `node_create`, `node_delete`, `node_move`, `node_set_transform`, `node_set_components`, `prefab_set_rig` |
-| Объём | `volume_get`, `volume_write`, `volume_erase`, `volume_reshape`, `volume_set_pivot`, `volume_rename` |
+| Объём | `volume_get`, `volume_write`, `volume_reshape`, `volume_set_pivot`, `volume_rename` |
 | Клип | `clip_create`, `clip_open`, `clip_get`, `clip_set_keys`, `clip_remove_keys`, `clip_remove_track`, `clip_save`, `clip_close`, `clip_pose_at` |
 | Машина | `fsm_create`, `fsm_get`, `fsm_set`, `fsm_save`, `prefab_set_machines` |
 | Вид | `view_set`, `view_screenshot` |
@@ -150,10 +150,12 @@ Claude Code ──HTTP POST /mcp──► сетевой поток (127.0.0.1)
   точки мебели и соединения.
 - `volume_get` отдаёт размер, pivot, занятый бокс и срезы по Y текстом с
   легендой вокселей.
-- `volume_write` принимает боксы, список вокселей и срезы; собирает
-  `asset::voxel_clip` и исполняет одну `paste_voxels_operation`. Объём
-  расширяется сам. Ответ возвращает новый размер и смещение координат.
-- `volume_reshape` — обрезка, поворот, отражение, явный размер.
+- `volume_write` принимает боксы, список вокселей и срезы и исполняет одну
+  `edit_voxels_operation`. Запись за пределы объёма — отказ: расширение в
+  минус сдвигает координаты, и агент рисовал бы дальше по устаревшим.
+- `volume_reshape` — обрезка, поворот, отражение, явный размер; ответ
+  возвращает смещение координат. Отдельного `volume_erase` нет: стирает
+  `volume_write` с вокселем `air`.
 - `clip_pose_at` ставит позу клипа на момент времени, чтобы её можно было снять
   снимком.
 - `fsm_set` заменяет документ целиком: `set_fsm_operation` уже так устроена.
@@ -170,7 +172,7 @@ Claude Code ──HTTP POST /mcp──► сетевой поток (127.0.0.1)
 | 0c | Каркас — **сделан** | Описание — `docs/mcp.md`. Сокет и сетевой поток, разбор HTTP, JSON-RPC (`initialize`, `tools/list`, `tools/call`), очередь, слив в `update`, `editor_state`, `.mcp.json`, индикатор в меню. Проверка сборки на MSVC, clang + MS STL, clang + libc++ | M |
 | 1 | Документ — **сделан** | `file_service::create/open` с ошибками, `forget` и очистка реестра клипов при открытии, закрытие стартовой модалки, политика несохранённого параметром; инструменты префаба и чтения | M |
 | 2 | Структура — **сделан** | Слой валидации перед `execute`, сборка узла из `create_entity_modal`, таблица «тег → операция», удаление поддерева; инструменты узлов | L |
-| 3 | Объёмы | Упаковка пачки в `voxel_clip`, расширение до бокса, чтение срезами, проверка границ и каталога вокселей | L |
+| 3 | Объёмы — **сделан** | Сделано иначе, чем задумано: пачка идёт через `asset::edited`, а не через вставку, и объём сам не растёт (см. `docs/mcp.md#объёмы`). Упаковка пачки в `voxel_clip`, расширение до бокса, чтение срезами, проверка границ и каталога вокселей | L |
 | 4 | Зрение | `eTransferSrc` на swapchain, копирование кадра, кадр без ImGui, кодирование PNG, камера на узел | M |
 | 5 | Анимации | `clip_service::create`, явное имя клипа в `keyframe_service`, применение позы вне таймлайна, эйлеры → кватернион функциями движка | L |
 | 6 | Машины | Чистые функции и валидация `voxf_data` в `vw.asset` с тестами, вход, сохранение, список машин | S |

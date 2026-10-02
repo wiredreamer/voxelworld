@@ -69,6 +69,7 @@ target_sources(${PROJECT_NAME}
         src/services/clipboard_service.cpp
         src/services/file_service.cpp
         src/services/node_service.cpp
+        src/services/volume_service.cpp
         src/services/fsm_service.cpp
         src/services/keyframe_service.cpp
         src/services/playback_service.cpp
@@ -128,6 +129,7 @@ if (VW_SCULPTOR_MCP)
         src/mcp/prefab_tools.cpp
         src/mcp/protocol.cpp
         src/mcp/server.cpp
+        src/mcp/volume_tools.cpp
     )
 else()
     target_sources(${PROJECT_NAME} PRIVATE src/mcp/server_disabled.cpp)

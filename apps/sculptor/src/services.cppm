@@ -367,3 +367,42 @@ private:
 };
 
 }  // namespace vw::sculptor
+
+export namespace vw::sculptor {
+
+[[nodiscard]] auto list_node_names(const app_state& state) -> std::vector<std::string>;
+
+auto leave_edit_contexts(app_state& state, clip_service& clips) -> void;
+
+class volume_service final {
+public:
+    using engine_type = gfx::engine;
+    using outcome     = std::expected<void, std::string>;
+    using volume      = std::shared_ptr<asset::model>;
+
+    volume_service(
+        engine_type& eng, app_state& state, operation_manager& op_manager, file_service& files,
+        clip_service& clips
+    );
+
+    [[nodiscard]] auto find(std::string_view node) const -> std::expected<volume, std::string>;
+    [[nodiscard]] auto holders(const volume& held) const -> std::vector<std::string>;
+
+    auto write(std::string_view node, std::vector<asset::voxel_edit> edits) -> outcome;
+    auto resize(std::string_view node, vec3i grown_at_min, vec3i grown_at_max) -> outcome;
+    auto trim(std::string_view node) -> outcome;
+    auto reorient(std::string_view node, const asset::voxel_orientation& how) -> outcome;
+    auto set_pivot(std::string_view node, const vec3f& pivot) -> outcome;
+    auto rename(std::string_view node, std::string_view stem, bool overwrite) -> outcome;
+
+private:
+    [[nodiscard]] auto enter_(std::string_view node) -> std::expected<volume, std::string>;
+
+    engine_type* engine_;
+    app_state* state_;
+    operation_manager* op_manager_;
+    file_service* files_;
+    clip_service* clips_;
+};
+
+}  // namespace vw::sculptor

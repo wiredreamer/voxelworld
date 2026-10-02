@@ -442,4 +442,87 @@ auto reoriented(
     return result;
 }
 
+auto contains(
+    vec3i size, vec3i position
+) -> bool {
+    return position.x >= 0 && position.x < size.x && position.y >= 0 && position.y < size.y &&
+           position.z >= 0 && position.z < size.z;
+}
+
+auto edited(
+    const model& source, std::span<const voxel_edit> edits, model_registry& registry
+) -> std::shared_ptr<model> {
+    const auto size = source.size();
+    auto result     = registry.create_unnamed(size);
+
+    {
+        model_writer writer{*result};
+
+        vec3i at;
+        for (at.x = 0; at.x < size.x; ++at.x) {
+            for (at.y = 0; at.y < size.y; ++at.y) {
+                for (at.z = 0; at.z < size.z; ++at.z) {
+                    const auto cell = source.get_voxel(at);
+                    if (!cell.is_empty()) {
+                        writer.set(at, cell);
+                    }
+                }
+            }
+        }
+
+        for (const voxel_edit& edit : edits) {
+            if (contains(size, edit.position)) {
+                writer.set(edit.position, edit.value);
+            }
+        }
+    }
+
+    result->set_pivot(source.pivot());
+
+    return result;
+}
+
+auto resized(
+    const model& source, vec3i grown_at_min, vec3i grown_at_max, model_registry& registry
+) -> std::shared_ptr<model> {
+    const auto old_size = source.size();
+    const vec3i size{
+        old_size.x + grown_at_min.x + grown_at_max.x,
+        old_size.y + grown_at_min.y + grown_at_max.y,
+        old_size.z + grown_at_min.z + grown_at_max.z,
+    };
+    if (size.x < 1 || size.y < 1 || size.z < 1) {
+        return nullptr;
+    }
+
+    auto result = registry.create_unnamed(size);
+
+    {
+        model_writer writer{*result};
+
+        vec3i at;
+        for (at.x = 0; at.x < size.x; ++at.x) {
+            for (at.y = 0; at.y < size.y; ++at.y) {
+                for (at.z = 0; at.z < size.z; ++at.z) {
+                    const vec3i from{
+                        at.x - grown_at_min.x, at.y - grown_at_min.y, at.z - grown_at_min.z
+                    };
+                    if (!contains(old_size, from)) {
+                        continue;
+                    }
+
+                    const auto cell = source.get_voxel(from);
+                    if (!cell.is_empty()) {
+                        writer.set(at, cell);
+                    }
+                }
+            }
+        }
+    }
+
+    result->set_pivot(source.pivot() + to_float(grown_at_min));
+
+    return result;
+}
+
 }  // namespace vw::asset

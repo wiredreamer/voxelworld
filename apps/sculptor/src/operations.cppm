@@ -1204,3 +1204,50 @@ private:
 };
 
 }  // namespace vw::sculptor
+
+export namespace vw::sculptor {
+
+struct edit_voxels_params {
+    std::string name;
+    std::vector<asset::voxel_edit> edits;
+};
+
+class edit_voxels_operation final : public base_operation {
+public:
+    using engine_type = gfx::engine;
+
+    edit_voxels_operation(engine_type& eng, app_state& st, edit_voxels_params params);
+
+    auto execute() -> void override;
+    auto undo() -> void override;
+
+private:
+    engine_type* engine_;
+    app_state* state_;
+    edit_voxels_params params_;
+    std::shared_ptr<asset::model> previous_;
+};
+
+struct resize_volume_params {
+    std::string name;
+    vec3i grown_at_min;
+    vec3i grown_at_max;
+};
+
+class resize_volume_operation final : public base_operation {
+public:
+    using engine_type = gfx::engine;
+
+    resize_volume_operation(engine_type& eng, app_state& st, const resize_volume_params& params);
+
+    auto execute() -> void override;
+    auto undo() -> void override;
+
+private:
+    engine_type* engine_;
+    app_state* state_;
+    resize_volume_params params_;
+    std::shared_ptr<asset::model> previous_;
+};
+
+}  // namespace vw::sculptor

@@ -121,4 +121,63 @@ auto paste_voxels_operation::undo() -> void {
     put_volume(*engine_, *state_, params_.name, previous_);
 }
 
+edit_voxels_operation::edit_voxels_operation(
+    engine_type& eng, app_state& st, edit_voxels_params params
+)
+    : engine_(&eng), state_(&st), params_(std::move(params)) {}
+
+auto edit_voxels_operation::execute() -> void {
+    const auto model = volume_of(*engine_, *state_, params_.name);
+    if (!model) {
+        return;
+    }
+
+    auto& model_reg = engine_->get_world().resource<asset::model_registry>();
+
+    previous_ = model;
+    put_volume(*engine_, *state_, params_.name, asset::edited(*model, params_.edits, model_reg));
+}
+
+auto edit_voxels_operation::undo() -> void {
+    if (!previous_) {
+        return;
+    }
+
+    put_volume(*engine_, *state_, params_.name, previous_);
+}
+
+resize_volume_operation::resize_volume_operation(
+    engine_type& eng, app_state& st, const resize_volume_params& params
+)
+    : engine_(&eng), state_(&st), params_(params) {}
+
+auto resize_volume_operation::execute() -> void {
+    previous_.reset();
+
+    const auto model = volume_of(*engine_, *state_, params_.name);
+    if (!model) {
+        return;
+    }
+
+    auto& model_reg = engine_->get_world().resource<asset::model_registry>();
+
+    auto next = asset::resized(*model, params_.grown_at_min, params_.grown_at_max, model_reg);
+    if (!next) {
+        return;
+    }
+
+    previous_ = model;
+    put_volume(*engine_, *state_, params_.name, std::move(next));
+    state_->volume.selection.reset();
+}
+
+auto resize_volume_operation::undo() -> void {
+    if (!previous_) {
+        return;
+    }
+
+    put_volume(*engine_, *state_, params_.name, previous_);
+    state_->volume.selection.reset();
+}
+
 }  // namespace vw::sculptor

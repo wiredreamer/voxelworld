@@ -75,6 +75,7 @@ private:
     fsm_service fsm_service_;
     clipboard_service clipboard_service_;
     node_service node_service_;
+    volume_service volume_service_;
 
     tools active_tool_ = tools::add_voxel;
     std::unordered_map<tools, std::unique_ptr<base_tool>> tools_;

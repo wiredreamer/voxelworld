@@ -502,6 +502,185 @@ def run_node_scenario(probe):
     remove_scratch_assets(asset_root)
 
 
+def run_volume_scenario(probe):
+    scratch = SCRATCH_PREFABS[0]
+    ok, state = tool(probe, "editor_state")
+    asset_root = pathlib.Path(state["asset_root"])
+    remove_scratch_assets(asset_root)
+    tool(probe, "prefab_close", {"discard_unsaved": True})
+
+    tool(probe, "prefab_new", {"name": scratch})
+    tool(probe, "node_create", {"name": "root"})
+    tool(probe, "node_create", {"name": "box", "parent": "root", "volume": {"size": [4, 3, 2]}})
+
+    ok, text = tool(probe, "volume_get", {"node": "root"})
+    probe.check("volume_get refuses a node without a volume", not ok and "has no volume" in text, str(text))
+
+    ok, empty = tool(probe, "volume_get", {"node": "box"})
+    probe.check(
+        "volume_get describes an empty volume",
+        ok and empty.get("size") == [4, 3, 2] and empty.get("pivot") == [2, 1.5, 1] and empty.get("occupied") is None
+        and empty.get("voxel_count") == 0 and empty.get("layers") is None,
+        str(empty),
+    )
+
+    ok, floor = tool(probe, "volume_write", {"node": "box", "boxes": [{"min": [0, 0, 0], "max": [3, 0, 1], "voxel": "gray_5"}]})
+    probe.check("volume_write fills a box", ok and floor.get("voxel_count") == 8 and floor.get("cells_written") == 8, str(floor))
+
+    ok, state = tool(probe, "editor_state")
+    probe.check(
+        "volume_write opens the volume in the editor",
+        ok and state.get("context") == "volume" and state.get("context_stack") == [{"kind": "volume", "node": "box"}],
+        str(state.get("context_stack")),
+    )
+
+    ok, dotted = tool(probe, "volume_write", {"node": "box", "points": [{"voxel": "red_2", "at": [[1, 1, 0], [2, 1, 0]]}]})
+    probe.check("volume_write sets points", ok and dotted.get("voxel_count") == 10, str(dotted))
+
+    ok, read = tool(probe, "volume_get", {"node": "box"})
+    layers = read.get("layers", {}) if ok else {}
+    probe.check("volume_get bounds the occupied voxels", ok and read.get("occupied") == {"min": [0, 0, 0], "max": [3, 1, 1]}, str(read.get("occupied")))
+    probe.check("the legend puts the most common voxel first", layers.get("legend") == {"a": "gray_5", "b": "red_2"}, str(layers.get("legend")))
+    probe.check(
+        "layers are slices of y, rows of z, characters of x",
+        layers.get("origin") == [0, 0, 0] and layers.get("slices") == [["aaaa", "aaaa"], [".bb.", "...."]],
+        str(layers.get("slices")),
+    )
+
+    ok, drawn = tool(
+        probe,
+        "volume_write",
+        {"node": "box", "layers": {"origin": [0, 2, 0], "legend": {"x": "white"}, "slices": [["x..x", "...."]]}},
+    )
+    probe.check("volume_write draws layers", ok and drawn.get("voxel_count") == 12, str(drawn))
+
+    ok, top = tool(probe, "volume_get", {"node": "box", "min": [0, 2, 0], "max": [3, 2, 1]})
+    probe.check(
+        "volume_get returns the region asked for",
+        ok and top.get("layers", {}).get("origin") == [0, 2, 0] and top["layers"].get("slices") == [["a..a", "...."]]
+        and top["layers"].get("legend") == {"a": "white"},
+        str(top.get("layers")),
+    )
+
+    ok, back = tool(probe, "volume_write", {"node": "box", "layers": read["layers"]})
+    ok, again = tool(probe, "volume_get", {"node": "box", "min": [0, 0, 0], "max": [3, 1, 1]})
+    probe.check("what volume_get returns can be written back", ok and again.get("layers") == read["layers"], str(again.get("layers")))
+
+    ok, text = tool(probe, "volume_write", {"node": "box", "layers": {"legend": {}, "slices": [["...."]], "air": "keep"}})
+    probe.check("air kept writes nothing", not ok and "nothing to write" in text, str(text))
+
+    ok, erased = tool(probe, "volume_write", {"node": "box", "layers": {"legend": {"g": "gray_5"}, "slices": [[".ggg"]]}})
+    probe.check("air erases by default", ok and erased.get("voxel_count") == 11, str(erased))
+
+    ok, text = tool(probe, "volume_write", {"node": "box", "points": [{"voxel": "white", "at": [[4, 0, 0]]}]})
+    probe.check("a position outside the volume is refused", not ok and "outside the volume" in text and "volume_reshape" in text, str(text))
+
+    ok, text = tool(probe, "volume_write", {"node": "box", "points": [{"voxel": "no_such", "at": [[0, 0, 0]]}]})
+    probe.check("an unknown voxel is refused", not ok and "no voxel named 'no_such'" in text, str(text))
+
+    ok, text = tool(probe, "volume_write", {"node": "box", "layers": {"legend": {"a": "white"}, "slices": [["ab"]]}})
+    probe.check("a character missing from the legend is refused", not ok and "not in the legend" in text, str(text))
+
+    ok, text = tool(probe, "volume_write", {"node": "box", "boxes": [{"min": [2, 0, 0], "max": [1, 0, 0], "voxel": "white"}]})
+    probe.check("a box turned inside out is refused", not ok and "min must not exceed max" in text, str(text))
+
+    ok, text = tool(probe, "volume_write", {"node": "box"})
+    probe.check("volume_write wants something to write", not ok and "at least one" in text, str(text))
+
+    ok, same = tool(probe, "volume_get", {"node": "box"})
+    probe.check("a refused write changes nothing", ok and same.get("voxel_count") == 11, str(same.get("voxel_count")))
+
+    tool(probe, "undo")
+    ok, undone = tool(probe, "volume_get", {"node": "box"})
+    probe.check("undo takes back one write", ok and undone.get("voxel_count") == 12, str(undone.get("voxel_count")))
+    tool(probe, "redo")
+
+    ok, grown = tool(probe, "volume_reshape", {"node": "box", "resize": {"min": [1, 0, 0], "max": [0, 1, 0]}})
+    probe.check(
+        "resize grows the volume and reports the shift",
+        ok and grown.get("size") == [5, 4, 2] and grown.get("shift") == [1, 0, 0] and grown.get("pivot") == [3, 1.5, 1]
+        and grown.get("voxel_count") == 11,
+        str(grown),
+    )
+    probe.check("the voxels moved by the shift", grown.get("occupied") == {"min": [1, 0, 0], "max": [4, 2, 1]}, str(grown.get("occupied")))
+
+    ok, text = tool(probe, "volume_reshape", {"node": "box", "resize": {"min": [-9, 0, 0]}})
+    probe.check("resize refuses a side below one", not ok and "within 1.." in text, str(text))
+
+    ok, trimmed = tool(probe, "volume_reshape", {"node": "box", "trim": True})
+    probe.check(
+        "trim cuts the volume to its voxels",
+        ok and trimmed.get("size") == [4, 3, 2] and trimmed.get("shift") == [-1, 0, 0] and trimmed.get("voxel_count") == 11,
+        str(trimmed),
+    )
+
+    ok, turned = tool(probe, "volume_reshape", {"node": "box", "rotate": {"axis": "y", "quarter_turns": 1}})
+    probe.check("rotate swaps the sides", ok and turned.get("size") == [2, 3, 4] and turned.get("voxel_count") == 11 and "note" in turned, str(turned))
+
+    ok, flipped = tool(probe, "volume_reshape", {"node": "box", "mirror": "x"})
+    probe.check("mirror keeps the size and the voxels", ok and flipped.get("size") == [2, 3, 4] and flipped.get("voxel_count") == 11, str(flipped))
+
+    ok, text = tool(probe, "volume_reshape", {"node": "box", "trim": True, "mirror": "x"})
+    probe.check("volume_reshape takes one action", not ok and "exactly one" in text, str(text))
+
+    ok, moved = tool(probe, "volume_set_pivot", {"node": "box", "pivot": [0, 0.5, 0]})
+    probe.check("volume_set_pivot moves the pivot", ok and moved.get("pivot") == [0, 0.5, 0], str(moved))
+
+    tool(probe, "node_set_transform", {"name": "box", "position": [0, 1, 0]})
+    ok, state = tool(probe, "editor_state")
+    probe.check("a node tool returns the editor to the prefab", ok and state.get("context") == "prefab", str(state.get("context_stack")))
+
+    ok, text = tool(probe, "volume_rename", {"node": "box", "name": "crate"})
+    probe.check("a volume without a file cannot be renamed", not ok and "save the prefab first" in text, str(text))
+
+    tool(probe, "prefab_save")
+    ok, twin = tool(probe, "node_create", {"name": "twin", "parent": "root", "volume": {"ref": f"models/{scratch}/box.voxm"}})
+    ok, shared = tool(probe, "volume_get", {"node": "box"})
+    probe.check("volume_get names the nodes that share the volume", ok and shared.get("shared_with") == ["twin"], str(shared.get("shared_with")))
+
+    tool(probe, "volume_write", {"node": "twin", "points": [{"voxel": "air", "at": [[0, 0, 0], [0, 0, 1], [1, 0, 0], [1, 0, 1]]}]})
+    ok, of_box = tool(probe, "volume_get", {"node": "box"})
+    ok, of_twin = tool(probe, "volume_get", {"node": "twin"})
+    probe.check(
+        "a write through one node shows on the other",
+        of_box.get("voxel_count") == of_twin.get("voxel_count") and of_box.get("layers") == of_twin.get("layers") and of_box.get("voxel_count") < 11,
+        f"{of_box.get('voxel_count')} {of_twin.get('voxel_count')}",
+    )
+
+    ok, text = tool(probe, "volume_rename", {"node": "box", "name": "a/b"})
+    probe.check("volume_rename refuses a path", not ok and "cannot name a volume file" in text, str(text))
+
+    ok, renamed = tool(probe, "volume_rename", {"node": "box", "name": "crate"})
+    models = asset_root / "models" / scratch
+    probe.check(
+        "volume_rename moves the file and both nodes follow",
+        ok and renamed.get("ref") == f"models/{scratch}/crate.voxm" and (models / "crate.voxm").is_file()
+        and not (models / "box.voxm").exists() and renamed.get("shared_with") == ["twin"],
+        str(renamed),
+    )
+
+    ok, in_memory = tool(probe, "volume_get", {"node": "twin"})
+    tool(probe, "prefab_save")
+    tool(probe, "prefab_close")
+    tool(probe, "prefab_open", {"name": scratch})
+    ok, from_disk = tool(probe, "volume_get", {"node": "twin"})
+    probe.check("the saved volume reads back the same from disk", ok and close_to(from_disk, in_memory), json.dumps(from_disk))
+
+    tool(probe, "node_create", {"name": "slab", "parent": "root", "volume": {"size": [64, 16, 64]}})
+    tool(probe, "volume_write", {"node": "slab", "boxes": [{"min": [0, 0, 0], "max": [63, 15, 63], "voxel": 40}]})
+    ok, big = tool(probe, "volume_get", {"node": "slab"})
+    probe.check(
+        "a region too large for one answer is cut with a hint",
+        ok and big.get("voxel_count") == 64 * 16 * 64 and "layers" not in big and "min and max" in big.get("truncated", ""),
+        str({key: value for key, value in big.items() if key != "layers"}),
+    )
+    ok, part = tool(probe, "volume_get", {"node": "slab", "min": [0, 0, 0], "max": [7, 0, 0]})
+    probe.check("and a part of it is returned", ok and part.get("layers", {}).get("slices") == [["aaaaaaaa"]], str(part.get("layers")))
+
+    tool(probe, "prefab_close", {"discard_unsaved": True})
+    remove_scratch_assets(asset_root)
+
+
 def main():
     port = DEFAULT_PORT
     with_scenario = False
@@ -521,6 +700,7 @@ def main():
         if with_scenario:
             run_prefab_scenario(probe)
             run_node_scenario(probe)
+            run_volume_scenario(probe)
     except OSError as error:
         print(f"FAIL cannot reach Sculptor on {DEFAULT_HOST}:{port} -- {error}")
         print("     start it with: sculptor --mcp")
