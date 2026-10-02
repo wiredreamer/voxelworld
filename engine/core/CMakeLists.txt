@@ -24,6 +24,7 @@ target_sources(vw_core
             src/voxels/face_direction.cppm
             src/log/log.cppm
             src/json/json.cppm
+            src/input/input.cppm
     PRIVATE
         src/utils/latency.cpp
         src/utils/jobs.cpp
