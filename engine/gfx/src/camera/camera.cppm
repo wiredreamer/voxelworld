@@ -27,6 +27,7 @@ struct player_input_state {
 
 export namespace vw::gfx {
 
+enum class projection_kind : uint8 { perspective, orthographic };
 
 class camera {
 public:
@@ -39,6 +40,21 @@ public:
     auto set_aspect_ratio(float aspect) -> void;
 
     auto set_far(float32 far) -> void;
+
+    auto set_perspective() -> void;
+    auto set_orthographic(float32 view_height) -> void;
+
+    [[nodiscard]] auto get_projection_kind() const -> projection_kind;
+    [[nodiscard]] auto is_orthographic() const -> bool;
+    [[nodiscard]] auto get_orthographic_height() const -> float32;
+
+    [[nodiscard]] auto view_height_at(float32 view_depth) const -> float32;
+    [[nodiscard]] auto view_depth_showing(float32 view_height) const -> float32;
+    [[nodiscard]] auto apparent_distance(const vec3f& point) const -> float32;
+    [[nodiscard]] auto direction_to(const vec3f& point) const -> vec3f;
+    [[nodiscard]] auto culling_eye() const -> vec4f;
+    [[nodiscard]] auto frustum_corners(float32 near_depth, float32 far_depth) const
+        -> std::array<vec3f, 8>;
 
     [[nodiscard]] auto get_near() const -> float;
     [[nodiscard]] auto get_far() const -> float;
@@ -58,6 +74,8 @@ public:
     auto move_forward(float distance) -> void;
     auto move_right(float distance) -> void;
     auto move_up(float distance) -> void;
+    auto move_closer(float distance) -> void;
+    auto turn_about_view_centre(float delta_pitch, float delta_yaw) -> void;
     auto rotate(float delta_pitch, float delta_yaw) -> void;
 
     auto get_forward() const -> vec3f;
@@ -78,6 +96,9 @@ private:
     vec3f position_;
     float pitch_, yaw_;
     float fov_, aspect_, near_, far_;
+
+    projection_kind projection_kind_ = projection_kind::perspective;
+    float32 orthographic_height_     = 1.0f;
 
     mutable vec3f forward_, right_, up_;
     mutable bool vectors_dirty_;

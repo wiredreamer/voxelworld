@@ -42,6 +42,15 @@ enum class command : uint8 {
     enter_animation,
     toggle_timeline,
 
+    view_toggle_projection,
+    view_from_plus_z,
+    view_from_minus_z,
+    view_from_plus_x,
+    view_from_minus_x,
+    view_from_plus_y,
+    view_from_minus_y,
+    view_from_iso,
+
     play_pause,
     step_back,
     step_forward,
@@ -125,6 +134,39 @@ inline constexpr std::array shortcuts{
     },
     shortcut{
         plat::keyboard::keys::T, mod_alt, command::toggle_timeline, "View", "Alt+T", "Timeline"
+    },
+
+    shortcut{
+        plat::keyboard::keys::NUM_5, mod_none, command::view_toggle_projection, "View", "Num 5",
+        "Perspective / orthographic"
+    },
+    shortcut{
+        plat::keyboard::keys::NUM_1, mod_none, command::view_from_plus_z, "View", "Num 1",
+        "From +Z, the front"
+    },
+    shortcut{
+        plat::keyboard::keys::NUM_1, mod_ctrl, command::view_from_minus_z, "View", "Ctrl+Num 1",
+        "From -Z, the back"
+    },
+    shortcut{
+        plat::keyboard::keys::NUM_3, mod_none, command::view_from_plus_x, "View", "Num 3",
+        "From +X"
+    },
+    shortcut{
+        plat::keyboard::keys::NUM_3, mod_ctrl, command::view_from_minus_x, "View", "Ctrl+Num 3",
+        "From -X"
+    },
+    shortcut{
+        plat::keyboard::keys::NUM_7, mod_none, command::view_from_plus_y, "View", "Num 7",
+        "From +Y, the top"
+    },
+    shortcut{
+        plat::keyboard::keys::NUM_7, mod_ctrl, command::view_from_minus_y, "View", "Ctrl+Num 7",
+        "From -Y, the bottom"
+    },
+    shortcut{
+        plat::keyboard::keys::NUM_0, mod_none, command::view_from_iso, "View", "Num 0",
+        "From a corner"
     },
 
     shortcut{

@@ -597,7 +597,7 @@ public:
 
     menu_bar(
         engine_type& eng, app_state& state, operation_manager& op_manager,
-        file_service& file_svc, clipboard_service& clipboard_svc
+        file_service& file_svc, clipboard_service& clipboard_svc, view_service& view_svc
     );
 
     auto render(float delta_time) const -> void;
@@ -605,6 +605,7 @@ public:
 private:
     auto render_edit_menu_() const -> void;
     auto render_volume_menu_() const -> void;
+    auto render_camera_menu_() const -> void;
     auto render_mcp_status_() const -> void;
 
     engine_type* engine_;
@@ -612,6 +613,7 @@ private:
     operation_manager* op_manager_;
     file_service* file_service_;
     clipboard_service* clipboard_service_;
+    view_service* view_service_;
 };
 
 }  // namespace vw::sculptor

@@ -449,6 +449,19 @@ auto orthographic_matrix(
     return matrix;
 }
 
+auto orthographic_matrix_reversed(
+    float width, float height, float near, float far
+) -> mat4f {
+    mat4f matrix = identity_matrix();
+
+    matrix[0, 0] = 2.0f / width;
+    matrix[1, 1] = -2.0f / height;
+    matrix[2, 2] = 1.0f / (far - near);
+    matrix[2, 3] = far / (far - near);
+
+    return matrix;
+}
+
 auto look_at_matrix(
     const vec3f& eye, const vec3f& target
 ) -> mat4f {

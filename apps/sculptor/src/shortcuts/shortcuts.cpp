@@ -31,9 +31,33 @@ auto match(
     return it->cmd;
 }
 
+namespace {
+
+auto moves_the_camera(
+    command cmd
+) -> bool {
+    switch (cmd) {
+        case command::view_toggle_projection:
+        case command::view_from_plus_z:
+        case command::view_from_minus_z:
+        case command::view_from_plus_x:
+        case command::view_from_minus_x:
+        case command::view_from_plus_y:
+        case command::view_from_minus_y:
+        case command::view_from_iso: return true;
+        default: return false;
+    }
+}
+
+}  // namespace
+
 auto is_available(
     command cmd, const app_state& state
 ) -> bool {
+    if (moves_the_camera(cmd)) {
+        return true;
+    }
+
     if (state.ctx.in_paste()) {
         return cmd == command::confirm || cmd == command::cancel;
     }

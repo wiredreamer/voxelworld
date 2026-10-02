@@ -68,8 +68,12 @@ auto frustum::approximately_equal(
 namespace {
 
 auto projected_span(
-    float32 x_min, float32 x_max, float32 depth_min, float32 depth_max
+    const cluster_grid& grid, float32 x_min, float32 x_max, float32 depth_min, float32 depth_max
 ) -> std::pair<float32, float32> {
+    if (grid.orthographic) {
+        return {x_min, x_max};
+    }
+
     const float32 near_min = x_min / depth_min;
     const float32 far_min  = x_min / depth_max;
     const float32 near_max = x_max / depth_min;
@@ -177,11 +181,11 @@ auto scatter_slice(
     const float32 y_far  = shape.end_a.y + (t_far * along_y);
 
     const auto [x_min, x_max] = projected_span(
-        std::min(x_near, x_far) - radius, std::max(x_near, x_far) + radius, depth_min,
+        grid, std::min(x_near, x_far) - radius, std::max(x_near, x_far) + radius, depth_min,
         depth_max
     );
     const auto [y_min, y_max] = projected_span(
-        std::min(y_near, y_far) - radius, std::max(y_near, y_far) + radius, depth_min,
+        grid, std::min(y_near, y_far) - radius, std::max(y_near, y_far) + radius, depth_min,
         depth_max
     );
 

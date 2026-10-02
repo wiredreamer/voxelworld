@@ -84,6 +84,10 @@ testbed_app::testbed_app(
 
     camera.set_far(fog.far_distance);
 
+    if (const float32 view_height = args.real("--orthographic", 0.0f); view_height > 0.0f) {
+        camera.set_orthographic(view_height);
+    }
+
     camera.set_rotation(0.0f, 0.0f);
 
     scene_ = make_scene(*this);

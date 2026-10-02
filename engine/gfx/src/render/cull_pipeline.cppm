@@ -60,7 +60,7 @@ public:
         uint32 frame_index,
         const vw::spatial::frustum& view_frustum,
         std::span<const vw::spatial::frustum> shadow_frustums,
-        const vec3f& eye
+        const vec4f& eye
     ) -> void;
 
     auto dispatch(

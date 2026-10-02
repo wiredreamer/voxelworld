@@ -652,6 +652,40 @@ TEST_CASE("math orthographic_matrix", "[math][mat4]") {
     REQUIRE(o[1, 1] == Approx(1.0f));
 }
 
+TEST_CASE("math orthographic_matrix_reversed", "[math][mat4]") {
+    constexpr float near = 0.1f;
+    constexpr float far  = 100.0f;
+
+    auto o = math::orthographic_matrix_reversed(8.0f, 4.0f, near, far);
+
+    auto projected = [&o](const vec3f& in_view) {
+        return o * vec4f{in_view.x, in_view.y, in_view.z, 1.0f};
+    };
+
+    SECTION("near maps to one and far to zero") {
+        REQUIRE(projected({0.0f, 0.0f, -near}).z == Approx(1.0f).margin(1e-4f));
+        REQUIRE(projected({0.0f, 0.0f, -far}).z == Approx(0.0f).margin(1e-4f));
+    }
+
+    SECTION("depth falls evenly with distance") {
+        const float middle = -(near + far) * 0.5f;
+        REQUIRE(projected({0.0f, 0.0f, middle}).z == Approx(0.5f).margin(1e-4f));
+    }
+
+    SECTION("nothing is divided by depth") {
+        REQUIRE(projected({1.0f, 1.0f, -1.0f}).w == Approx(1.0f));
+        REQUIRE(projected({1.0f, 1.0f, -90.0f}).w == Approx(1.0f));
+        REQUIRE(projected({1.0f, 1.0f, -1.0f}).x == Approx(projected({1.0f, 1.0f, -90.0f}).x));
+    }
+
+    SECTION("the width and the height span the frame, the height upside down") {
+        REQUIRE(projected({4.0f, 0.0f, -1.0f}).x == Approx(1.0f));
+        REQUIRE(projected({-4.0f, 0.0f, -1.0f}).x == Approx(-1.0f));
+        REQUIRE(projected({0.0f, 2.0f, -1.0f}).y == Approx(-1.0f));
+        REQUIRE(projected({0.0f, -2.0f, -1.0f}).y == Approx(1.0f));
+    }
+}
+
 TEST_CASE("math look_at_matrix", "[math][mat4]") {
     SECTION("two-arg overload") {
         auto m = math::look_at_matrix(vec3f{0.0f, 0.0f, 5.0f}, vec3f{0.0f, 0.0f, 0.0f});

@@ -23,6 +23,7 @@ struct editor_bindings {
     volume_service* volumes       = nullptr;
     clip_service* clips           = nullptr;
     fsm_service* machines         = nullptr;
+    view_service* views           = nullptr;
 };
 
 class server final {

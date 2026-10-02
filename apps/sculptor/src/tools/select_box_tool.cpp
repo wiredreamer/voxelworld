@@ -109,7 +109,7 @@ auto select_box_tool::grip_of_(
     face_grip grip;
     grip.outward         = step * (1.0F / step_length);
     grip.world_per_voxel = step_length;
-    grip.half            = math::length(face_world - engine_->get_camera().get_position()) *
+    grip.half            = engine_->get_camera().apparent_distance(face_world) *
                            handle_half_of_view_distance;
     grip.center          = face_world + (grip.outward * (grip.half * handle_gap_in_halves));
 

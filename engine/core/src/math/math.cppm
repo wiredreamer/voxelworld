@@ -159,6 +159,7 @@ auto perspective_matrix(float fov, float aspect, float near, float far) -> mat4f
 
 auto perspective_matrix_reversed(float fov, float aspect, float near, float far) -> mat4f;
 auto orthographic_matrix(float left, float right, float bottom, float top, float near, float far) -> mat4f;
+auto orthographic_matrix_reversed(float width, float height, float near, float far) -> mat4f;
 auto look_at_matrix(const vec3f& eye, const vec3f& target) -> mat4f;
 auto look_at_matrix(const vec3f& eye, const vec3f& target, const vec3f& up) -> mat4f;
 

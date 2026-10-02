@@ -271,11 +271,7 @@ auto shadow_map::update(
 
     const float shadow_dist = shadow_far - cam_near;
 
-    auto cam_proj =
-        math::perspective_matrix(camera.get_fov(), camera.get_aspect_ratio(), cam_near, shadow_far);
-    auto cam_view   = camera.get_view_matrix();
-    auto inv_result = math::inverse_matrix(cam_proj * cam_view);
-    auto inv_cam    = inv_result.value_or(math::identity_matrix());
+    const std::array<vec3f, 8> shadowed_corners = camera.frustum_corners(cam_near, shadow_far);
 
     std::array<std::array<vec3f, 8>, cascade_count> cascade_corners{};
     std::array<vec3f, cascade_count> centers{};
@@ -285,23 +281,7 @@ auto shadow_map::update(
     for (uint32 cascade_index = 0; cascade_index < cascade_count; ++cascade_index) {
         const float cascade_split = cascade_splits_[cascade_index];
 
-        std::array frustum_corners = {
-            vec3f{-1.0f, 1.0f, 0.0f},
-            vec3f{1.0f, 1.0f, 0.0f},
-            vec3f{1.0f, -1.0f, 0.0f},
-            vec3f{-1.0f, -1.0f, 0.0f},
-            vec3f{-1.0f, 1.0f, 1.0f},
-            vec3f{1.0f, 1.0f, 1.0f},
-            vec3f{1.0f, -1.0f, 1.0f},
-            vec3f{-1.0f, -1.0f, 1.0f},
-        };
-
-        for (auto& corner : frustum_corners) {
-            auto corner_homogeneous = vec4f{corner.x, corner.y, corner.z, 1.0f};
-            auto corner_world       = inv_cam * corner_homogeneous;
-            corner_world            = corner_world * (1.f / corner_world.w);
-            corner                  = vec3f{corner_world.x, corner_world.y, corner_world.z};
-        }
+        std::array<vec3f, 8> frustum_corners = shadowed_corners;
 
         for (int i = 0; i < 4; ++i) {
             vec3 dist              = frustum_corners[i + 4] - frustum_corners[i];

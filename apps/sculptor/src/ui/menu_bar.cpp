@@ -24,13 +24,47 @@ namespace vw::sculptor {
 
 menu_bar::menu_bar(
     engine_type& eng, app_state& state, operation_manager& op_manager,
-    file_service& file_svc, clipboard_service& clipboard_svc
+    file_service& file_svc, clipboard_service& clipboard_svc, view_service& view_svc
 )
     : engine_(&eng)
     , state_(&state)
     , op_manager_(&op_manager)
     , file_service_(&file_svc)
-    , clipboard_service_(&clipboard_svc) {}
+    , clipboard_service_(&clipboard_svc)
+    , view_service_(&view_svc) {}
+
+auto menu_bar::render_camera_menu_() const -> void {
+    const bool flat = engine_->get_camera().is_orthographic();
+
+    if (ImGui::MenuItem("Perspective", "Num 5", !flat)) {
+        view_service_->set_projection(gfx::projection_kind::perspective);
+    }
+    if (ImGui::MenuItem("Orthographic", "Num 5", flat)) {
+        view_service_->set_projection(gfx::projection_kind::orthographic);
+    }
+
+    ImGui::Separator();
+
+    struct side_item {
+        const char* title;
+        const char* keys;
+        view_side side;
+    };
+    constexpr std::array sides{
+        side_item{"From +Z, the front", "Num 1", view_side::plus_z},
+        side_item{"From -Z, the back", "Ctrl+Num 1", view_side::minus_z},
+        side_item{"From +X", "Num 3", view_side::plus_x},
+        side_item{"From -X", "Ctrl+Num 3", view_side::minus_x},
+        side_item{"From +Y, the top", "Num 7", view_side::plus_y},
+        side_item{"From -Y, the bottom", "Ctrl+Num 7", view_side::minus_y},
+        side_item{"From a corner", "Num 0", view_side::iso},
+    };
+    for (const side_item& item : sides) {
+        if (ImGui::MenuItem(item.title, item.keys)) {
+            view_service_->look_from(item.side);
+        }
+    }
+}
 
 auto menu_bar::render_edit_menu_() const -> void {
     if (ImGui::MenuItem("Undo", "Ctrl+Z", false, !op_manager_->is_undo_empty())) {
@@ -265,6 +299,8 @@ auto menu_bar::render(
         if (ImGui::MenuItem("Animation Timeline", "Alt+T", state_->ui.show_timeline)) {
             state_->ui.show_timeline ^= true;
         }
+        ImGui::Separator();
+        render_camera_menu_();
         ImGui::EndMenu();
     }
 

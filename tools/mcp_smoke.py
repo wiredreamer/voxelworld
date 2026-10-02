@@ -739,7 +739,55 @@ def run_view_scenario(probe):
     ok, text = tool(probe, "view_set", {"from": "north"})
     probe.check("view_set refuses an unknown side", not ok and "arguments.from" in text, str(text))
 
-    tool(probe, "view_set", {"node": "cube", "from": "iso"})
+    ok, flat = tool(probe, "view_set", {"node": "cube", "from": "-z", "projection": "orthographic"})
+    probe.check(
+        "an orthographic view fits the node by its height in voxels",
+        ok and flat.get("projection") == "orthographic" and close_to(flat.get("voxels_high"), 4.2, 1e-2)
+        and flat.get("voxels_wide", 0) > flat.get("voxels_high", 0) and "distance" not in flat
+        and close_to(flat.get("position", [0, 0])[:2], flat.get("target", [1, 1])[:2], 1e-3),
+        str(flat),
+    )
+
+    ok, kept = tool(probe, "view_set", {"node": "cube", "from": "+y"})
+    probe.check(
+        "the projection stays until it is set again, and the top view looks straight down",
+        ok and kept.get("projection") == "orthographic" and kept.get("pitch_degrees") == -90
+        and close_to(kept.get("voxels_high"), 4.2, 1e-2),
+        str(kept),
+    )
+
+    ok, tall = tool(probe, "view_set", {"node": "cube", "from": "-z", "height": 16})
+    probe.check("an orthographic view takes its height", ok and close_to(tall.get("voxels_high"), 16), str(tall))
+
+    ok, text = tool(probe, "view_set", {"node": "cube", "distance": 20})
+    probe.check("an orthographic view refuses a distance", not ok and "has no distance" in text, str(text))
+    ok, text = tool(probe, "view_set", {"node": "cube", "projection": "perspective", "height": 16})
+    probe.check("a perspective view refuses a height", not ok and "framed by 'distance'" in text, str(text))
+    ok, text = tool(probe, "view_set", {"node": "cube", "projection": "flat"})
+    probe.check("view_set refuses an unknown projection", not ok and "arguments.projection" in text, str(text))
+
+    if window_visible:
+        tool(probe, "view_set", {"node": "cube", "from": "-z", "projection": "orthographic", "height": 8})
+        flat_picture, info = picture(probe, {"max_size": 256})
+        probe.check(
+            "an orthographic picture says how many pixels a voxel takes",
+            flat_picture is not None and close_to(info.get("pixels_per_voxel"), info.get("height", 0) / 8, 1e-2),
+            str(info),
+        )
+        tool(probe, "view_set", {"node": "cube", "from": "-z", "projection": "perspective"})
+        deep_picture, info = picture(probe, {"max_size": 256})
+        probe.check(
+            "a perspective picture differs and names no pixel size",
+            deep_picture is not None and deep_picture != flat_picture and "pixels_per_voxel" not in info,
+            str(info),
+        )
+
+    ok, back = tool(probe, "view_set", {"node": "cube", "from": "iso", "projection": "perspective"})
+    probe.check(
+        "view_set goes back to perspective",
+        ok and back.get("projection") == "perspective" and back.get("distance", 0) > 0 and "voxels_high" not in back,
+        str(back),
+    )
 
     if not window_visible:
         data, text = picture(probe)

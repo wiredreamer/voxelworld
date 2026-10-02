@@ -31,6 +31,8 @@ layout(set = 0, binding = 0) uniform CullParams {
     uint shape_count;
     uint cluster_count;
     uint list;
+
+    uint orthographic;
 } params;
 
 const uint cull_list_sources = 0u;
@@ -71,6 +73,10 @@ const float far_away = 3.4028235e38;
 const ivec4 no_tiles = ivec4(1, 1, 0, 0);
 
 vec2 projected_span(float x_min, float x_max, float depth_min, float depth_max) {
+    if (params.orthographic != 0u) {
+        return vec2(x_min, x_max);
+    }
+
     float near_min = x_min / depth_min;
     float far_min  = x_min / depth_max;
     float near_max = x_max / depth_min;

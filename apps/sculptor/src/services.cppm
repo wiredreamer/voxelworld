@@ -473,3 +473,54 @@ private:
 };
 
 }  // namespace vw::sculptor
+
+export namespace vw::sculptor {
+
+enum class view_side : uint8 { iso, plus_x, minus_x, plus_y, minus_y, plus_z, minus_z };
+
+struct view_direction {
+    float32 yaw_degrees   = 0.0F;
+    float32 pitch_degrees = 0.0F;
+};
+
+[[nodiscard]] auto direction_of(view_side side) -> view_direction;
+
+struct view_request {
+    std::optional<std::string> node;
+    view_direction direction;
+    std::optional<gfx::projection_kind> projection;
+    std::optional<float32> distance;
+    std::optional<float32> height;
+};
+
+struct view_report {
+    std::string looking_at;
+    vec3f target;
+    float32 distance = 0.0F;
+    float32 height   = 0.0F;
+    float32 width    = 0.0F;
+    gfx::projection_kind projection = gfx::projection_kind::perspective;
+};
+
+class view_service final {
+public:
+    using engine_type = gfx::engine;
+
+    view_service(engine_type& eng, app_state& state);
+
+    auto look(const view_request& request) -> std::expected<view_report, std::string>;
+    auto look_from(view_side side) -> void;
+
+    auto set_projection(gfx::projection_kind kind) -> void;
+    auto toggle_projection() -> void;
+
+    [[nodiscard]] auto report() const -> view_report;
+
+private:
+    [[nodiscard]] auto framed_depth_() const -> float32;
+
+    engine_type* engine_;
+    app_state* state_;
+};
+
+}  // namespace vw::sculptor

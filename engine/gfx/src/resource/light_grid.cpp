@@ -350,6 +350,7 @@ auto light_grid::write_params_(
         .shape_count   = sphere_count,
         .cluster_count = cluster_count_,
         .list          = kind,
+        .orthographic  = grid_.orthographic ? 1U : 0U,
     };
 
     std::memcpy(ubo.view, view.cptr(), sizeof(mat4f));

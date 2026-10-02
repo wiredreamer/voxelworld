@@ -299,6 +299,7 @@ auto renderer::get_cluster_grid(
         .far_depth     = std::max(far_depth, camera.get_near() * 2.0f),
         .proj_x        = projection[0, 0],
         .proj_y        = projection[1, 1],
+        .orthographic  = camera.is_orthographic(),
     };
 }
 
@@ -511,7 +512,7 @@ auto renderer::render(
                        : std::span<const vw::spatial::frustum>{};
 
         cull_pipeline_->update_frustums(
-            current_frame_, view_frustum, cull_cascades, camera.get_position());
+            current_frame_, view_frustum, cull_cascades, camera.culling_eye());
 
         cull_pipeline_->dispatch(
             command_buffers_[current_frame_],

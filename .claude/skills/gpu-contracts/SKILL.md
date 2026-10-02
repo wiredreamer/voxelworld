@@ -158,7 +158,7 @@ std430 нет диагностики на расхождение: ошибки �
 `offset_of(face)` и таблицы `per_face` мешера; порядок квадов и
 `mesh::face_counts`; команда на грань `instance * 6 + face` в
 `write_draw_command_`; `NORMALS` в `voxel.vert`; ось грани `normal_id >> 1` в
-`unpackMax`; `faces_away` в `cull.comp` (0 → `eye.x <= bmin.x`, …);
+`unpackMax`; `faces_away` в `cull.comp` (0 → `eye.x <= bmin.x * eye.w`, …);
 `face_normal` в `mesher.test.cpp`.
 
 - **Сторож:** нет.
@@ -180,6 +180,10 @@ std430 нет диагностики на расхождение: ошибки �
   - `AABB.min_point.w` — флаг «оси модели совпадают с мировыми»
     (`is_axis_aligned` в `combined_buffer.cpp`). `faces_away` применяется только
     при нём и только в проходе 0. `max_point.w` не читается.
+  - `eye` — однородная точка, её пишет `camera::culling_eye`: `w = 1` — положение
+    глаза (перспектива), `w = 0` — направление на камеру (ортогональная
+    проекция). `faces_away` умножает грань коробки на `eye.w`; убрать умножение
+    — и ортогональный вид потеряет грани по одну сторону от начала координат.
   - Проход 0 — камера, проход `1 + каскад` — тень. Выход пишется в
     `pass * instance_count * 6 + slot`, счёт — в `counts[pass]`;
     `render_shadow_pass` читает команды со смещения
@@ -225,7 +229,7 @@ std430 нет диагностики на расхождение: ошибки �
   `cull_list_sources`.
 - **Сторож:** `static_assert` на смещения и размер у всех трёх структур:
   `light_cull_ubo` (`z_scale` 64, `near_depth` 80, `screen_width` 96, `cap` 112,
-  `list` 124, `sizeof == 128`), `point_light_data` (`position` 0, `color` 16,
+  `list` 124, `orthographic` 128, `sizeof == 144`), `point_light_data` (`position` 0, `color` 16,
   `intensity` 32, `range` 36, `sizeof == 48`) и `blob_data` (`position_radius`
   0, `params` 16, `cull_a` 32, `cull_b` 48, `sizeof == 64`). Сдвиг только в
   шейдере не ловит ничто: позицию, `range` и `cull_*` косвенно сверяет
@@ -249,6 +253,12 @@ std430 нет диагностики на расхождение: ошибки �
   `clusters` кадрового uniform (`update_uniform_buffer`) и в одноимённые поля
   `light_cull_ubo` (`write_params_`); `slice_of` ↔ `clusterOf`, `z_range_of` ↔
   `slab_near`/`slab_far` в `light_cull.comp`.
+- **Проекция размаха:** `projected_span` в `spatial.cpp` и в `light_cull.comp`
+  — четыре деления на глубину, а при `cluster_grid::orthographic`
+  (`params.orthographic`) размах возвращается как есть. Флаг пишет
+  `renderer::get_cluster_grid` из `camera::is_orthographic`. Ветка только в
+  одной из сторон — и списки расходятся с эталоном на всей сетке; ловит
+  `--verify-lights=N --orthographic=ВЫСОТА`.
 - **Глубина вида положительна перед камерой:** `viewDepth = -(view * p).z` в
   `voxel.vert`, `to_view_depth` в `light_cull.comp` и в `light_grid::dispatch`.
 - **Список кластера** — `indices[cluster * cap + n]`. `cap` пишется дважды:

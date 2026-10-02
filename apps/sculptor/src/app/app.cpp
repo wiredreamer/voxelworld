@@ -34,8 +34,9 @@ app::app(
     , clipboard_service_(eng, state_, op_manager_)
     , node_service_(eng, state_, model_library_, op_manager_, clip_service_)
     , volume_service_(eng, state_, op_manager_, file_service_, clip_service_)
+    , view_service_(eng, state_)
 
-    , menu_bar_(eng, state_, op_manager_, file_service_, clipboard_service_)
+    , menu_bar_(eng, state_, op_manager_, file_service_, clipboard_service_, view_service_)
     , breadcrumb_bar_(eng, state_, clip_service_)
     , tool_panel_(state_)
     , selection_panel_(state_, clipboard_service_)
@@ -127,6 +128,7 @@ auto app::start_mcp_(
             .volumes    = &volume_service_,
             .clips      = &clip_service_,
             .machines   = &fsm_service_,
+            .views      = &view_service_,
         }
     );
     state_.mcp = mcp_server_->status();
@@ -368,6 +370,15 @@ auto app::run_command_(
         case command::toggle_sockets: state_.ui.show_sockets ^= true; break;
         case command::enter_animation: state_.ui.need_enter_animation = true; break;
         case command::toggle_timeline: state_.ui.show_timeline ^= true; break;
+
+        case command::view_toggle_projection: view_service_.toggle_projection(); break;
+        case command::view_from_plus_z: view_service_.look_from(view_side::plus_z); break;
+        case command::view_from_minus_z: view_service_.look_from(view_side::minus_z); break;
+        case command::view_from_plus_x: view_service_.look_from(view_side::plus_x); break;
+        case command::view_from_minus_x: view_service_.look_from(view_side::minus_x); break;
+        case command::view_from_plus_y: view_service_.look_from(view_side::plus_y); break;
+        case command::view_from_minus_y: view_service_.look_from(view_side::minus_y); break;
+        case command::view_from_iso: view_service_.look_from(view_side::iso); break;
 
         case command::play_pause: state_.anim.need_toggle_playback = true; break;
         case command::step_back: state_.anim.need_step_backward = true; break;

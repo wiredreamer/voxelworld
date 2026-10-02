@@ -93,7 +93,11 @@ auto free_camera_controller::handle_mouse_moved_(
         const float yaw_delta   = static_cast<float>(delta_x) * mouse_sensitivity_;
         const float pitch_delta = -static_cast<float>(delta_y) * mouse_sensitivity_;
 
-        camera_->rotate(pitch_delta, yaw_delta);
+        if (camera_->is_orthographic()) {
+            camera_->turn_about_view_centre(pitch_delta, yaw_delta);
+        } else {
+            camera_->rotate(pitch_delta, yaw_delta);
+        }
     }
 }
 
@@ -107,10 +111,10 @@ auto free_camera_controller::update_camera_movement_(
     const float move_speed = camera_speed_ * delta_time;
 
     if (window_->is_key_pressed(keyboard::keys::W)) {
-        camera_->move_forward(move_speed);
+        camera_->move_closer(move_speed);
     }
     if (window_->is_key_pressed(keyboard::keys::S)) {
-        camera_->move_forward(-move_speed);
+        camera_->move_closer(-move_speed);
     }
 
     if (window_->is_key_pressed(keyboard::keys::A)) {
@@ -120,13 +124,14 @@ auto free_camera_controller::update_camera_movement_(
         camera_->move_right(move_speed);
     }
 
+    const vec3f lift =
+        camera_->is_orthographic() ? camera_->get_up() : vec3f{0.0f, 1.0f, 0.0f};
+
     if (window_->is_key_pressed(keyboard::keys::SPACE)) {
-        constexpr vec3f world_up(0.0f, 1.0f, 0.0f);
-        camera_->set_position(camera_->get_position() + world_up * move_speed);
+        camera_->set_position(camera_->get_position() + lift * move_speed);
     }
     if (window_->is_key_pressed(keyboard::keys::LEFT_SHIFT)) {
-        constexpr vec3f world_up(0.0f, 1.0f, 0.0f);
-        camera_->set_position(camera_->get_position() - world_up * move_speed);
+        camera_->set_position(camera_->get_position() - lift * move_speed);
     }
 }
 

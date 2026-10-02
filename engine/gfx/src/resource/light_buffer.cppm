@@ -133,6 +133,8 @@ struct light_cull_ubo {
     alignas(4) uint32 shape_count   = 0;
     alignas(4) uint32 cluster_count = 0;
     alignas(4) cull_list list       = cull_list::sources;
+
+    alignas(4) uint32 orthographic = 0;
 };
 
 static_assert(offsetof(light_cull_ubo, z_scale) == 64);
@@ -140,7 +142,8 @@ static_assert(offsetof(light_cull_ubo, near_depth) == 80);
 static_assert(offsetof(light_cull_ubo, screen_width) == 96);
 static_assert(offsetof(light_cull_ubo, cap) == 112);
 static_assert(offsetof(light_cull_ubo, list) == 124);
-static_assert(sizeof(light_cull_ubo) == 128);
+static_assert(offsetof(light_cull_ubo, orthographic) == 128);
+static_assert(sizeof(light_cull_ubo) == 144);
 
 class blob_buffer {
 public:

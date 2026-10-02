@@ -120,7 +120,9 @@ private:
     auto process_destroyed_(world_type& world) -> void;
     auto update_meshes_(world_type& world, const vec3f& camera_pos, mesh_pool& pool) -> void;
     auto update_transforms_(world_type& world) -> void;
-    auto update_chunk_visibility_(world_type& world, const vec3f& camera_pos) -> void;
+    auto update_chunk_visibility_(
+        world_type& world, const vec3f& camera_pos, bool sight_starts_at_a_point
+    ) -> void;
     auto hide_marked_() -> void;
     auto evict_uploaded_(world_type& world, mesh_pool& pool) -> void;
 

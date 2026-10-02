@@ -28,14 +28,33 @@ auto bench_grid() -> cluster_grid {
     };
 }
 
+auto flat_grid() -> cluster_grid {
+    constexpr float32 view_height = 64.0F;
+    constexpr float32 view_width  = view_height * (1280.0F / 720.0F);
+
+    return cluster_grid{
+        .screen_width  = 1280,
+        .screen_height = 720,
+        .tile_size     = 32,
+        .slices        = 24,
+        .near_depth    = 0.1F,
+        .far_depth     = 4096.0F,
+        .proj_x        = 2.0F / view_width,
+        .proj_y        = -2.0F / view_height,
+        .orthographic  = true,
+    };
+}
+
 auto cluster_of(const cluster_grid& grid, const view_depth_point& point) -> std::optional<uint32> {
     if (point.depth < grid.near_depth || point.depth > grid.far_depth) {
         return std::nullopt;
     }
 
-    const float32 pixel_x = (((grid.proj_x * point.x / point.depth) * 0.5F) + 0.5F) *
+    const float32 divisor = grid.orthographic ? 1.0F : point.depth;
+
+    const float32 pixel_x = (((grid.proj_x * point.x / divisor) * 0.5F) + 0.5F) *
                             static_cast<float32>(grid.screen_width);
-    const float32 pixel_y = (((grid.proj_y * point.y / point.depth) * 0.5F) + 0.5F) *
+    const float32 pixel_y = (((grid.proj_y * point.y / divisor) * 0.5F) + 0.5F) *
                             static_cast<float32>(grid.screen_height);
 
     if (pixel_x < 0.0F || pixel_x >= static_cast<float32>(grid.screen_width) ||
@@ -191,6 +210,87 @@ TEST_CASE("a source is listed in every cluster it can light", "[cluster]") {
 
     REQUIRE(checked > 10000);
     REQUIRE(missed == 0);
+}
+
+TEST_CASE("a source is listed in every cluster it can light without perspective", "[cluster]") {
+    const cluster_grid grid = flat_grid();
+
+    cluster_lights clusters{grid, 8};
+    std::mt19937 rng{20261002};
+    std::uniform_real_distribution<float32> across{-70.0F, 70.0F};
+    std::uniform_real_distribution<float32> log_depth{std::log(0.5F), std::log(2000.0F)};
+    std::uniform_real_distribution<float32> reach{0.5F, 30.0F};
+    std::uniform_real_distribution<float32> offset{-1.0F, 1.0F};
+
+    uint32 checked = 0;
+    uint32 missed  = 0;
+
+    for (int32 light_n = 0; light_n < 160; ++light_n) {
+        const view_sphere light{
+            .center = view_depth_point{
+                .x     = across(rng),
+                .y     = across(rng) * 0.6F,
+                .depth = std::exp(log_depth(rng)),
+            },
+            .radius = reach(rng),
+        };
+
+        clusters.clear();
+        clusters.add(0, light);
+
+        for (int32 sample = 0; sample < 768; ++sample) {
+            const view_depth_point point{
+                .x     = light.center.x + (offset(rng) * light.radius),
+                .y     = light.center.y + (offset(rng) * light.radius),
+                .depth = light.center.depth + (offset(rng) * light.radius),
+            };
+
+            if (!reaches(light, point)) {
+                continue;
+            }
+
+            const auto cluster = cluster_of(grid, point);
+            if (!cluster) {
+                continue;
+            }
+
+            ++checked;
+
+            const auto listed = clusters.lights_of(*cluster);
+            if (std::ranges::find(listed, 0U) == listed.end()) {
+                ++missed;
+            }
+        }
+    }
+
+    REQUIRE(checked > 10000);
+    REQUIRE(missed == 0);
+}
+
+TEST_CASE("without perspective a source covers the same tiles at any depth", "[cluster]") {
+    const cluster_grid grid = flat_grid();
+
+    const auto tiles_at = [&grid](float32 depth) {
+        const view_sphere light{.center = {10.0F, -5.0F, depth}, .radius = 4.0F};
+        return spatial::scatter_slice(grid, light, grid.slice_of(depth));
+    };
+
+    const spatial::tile_rect near_tiles = tiles_at(8.0F);
+    const spatial::tile_rect far_tiles  = tiles_at(900.0F);
+
+    REQUIRE_FALSE(near_tiles.is_empty());
+    CHECK(near_tiles.min_x == far_tiles.min_x);
+    CHECK(near_tiles.max_x == far_tiles.max_x);
+    CHECK(near_tiles.min_y == far_tiles.min_y);
+    CHECK(near_tiles.max_y == far_tiles.max_y);
+
+    const cluster_grid angled  = bench_grid();
+    const view_sphere close_by{.center = {1.0F, 0.0F, 8.0F}, .radius = 4.0F};
+    const view_sphere far_off{.center = {1.0F, 0.0F, 900.0F}, .radius = 4.0F};
+
+    const auto wide   = spatial::scatter_slice(angled, close_by, angled.slice_of(8.0F));
+    const auto narrow = spatial::scatter_slice(angled, far_off, angled.slice_of(900.0F));
+    CHECK((wide.max_x - wide.min_x) > (narrow.max_x - narrow.min_x));
 }
 
 TEST_CASE("a source behind the camera reaches nothing", "[cluster]") {

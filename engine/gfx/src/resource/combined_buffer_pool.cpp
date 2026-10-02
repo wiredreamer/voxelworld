@@ -70,7 +70,7 @@ auto combined_buffer_pool::update(
     });
 
     stats_.chunk_cull.walk_ms = measure_ms([&] {
-        update_chunk_visibility_(world, camera.get_position());
+        update_chunk_visibility_(world, camera.get_position(), !camera.is_orthographic());
     });
 
     stats_.timing.staging_flush_ms = measure_ms([&] {
@@ -393,7 +393,7 @@ auto combined_buffer_pool::hide_marked_() -> void {
 }
 
 auto combined_buffer_pool::update_chunk_visibility_(
-    world_type& world, const vec3f& camera_pos
+    world_type& world, const vec3f& camera_pos, bool sight_starts_at_a_point
 ) -> void {
     visibility_flags_.resize(buffers_.size());
     for (std::size_t i = 0; i < buffers_.size(); ++i) {
@@ -405,7 +405,7 @@ auto combined_buffer_pool::update_chunk_visibility_(
     stats_.chunk_cull = chunk_cull_stats{};
 
     auto* grid = world.system<ecs::world_grid_system>().grid();
-    if (!chunk_cull_enabled_ || grid == nullptr) {
+    if (!chunk_cull_enabled_ || grid == nullptr || !sight_starts_at_a_point) {
         for (std::size_t i = 0; i < buffers_.size(); ++i) {
             buffers_[i]->write_visibility(visibility_flags_[i]);
         }

@@ -141,6 +141,8 @@ struct cluster_grid {
     float32 proj_x = 1.0F;
     float32 proj_y = -1.0F;
 
+    bool orthographic = false;
+
     [[nodiscard]] auto operator==(const cluster_grid&) const -> bool = default;
 
     [[nodiscard]] auto tiles_x() const -> uint32 {

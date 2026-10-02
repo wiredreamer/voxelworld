@@ -56,14 +56,14 @@ bool frustum_test(uint pass, vec3 bmin, vec3 bmax) {
 }
 
 bool faces_away(uint dir, vec3 bmin, vec3 bmax) {
-    vec3 eye = frustum_data.eye.xyz;
+    vec4 eye = frustum_data.eye;
     switch (dir) {
-        case 0u: return eye.x <= bmin.x;
-        case 1u: return eye.x >= bmax.x;
-        case 2u: return eye.y <= bmin.y;
-        case 3u: return eye.y >= bmax.y;
-        case 4u: return eye.z <= bmin.z;
-        default: return eye.z >= bmax.z;
+        case 0u: return eye.x <= bmin.x * eye.w;
+        case 1u: return eye.x >= bmax.x * eye.w;
+        case 2u: return eye.y <= bmin.y * eye.w;
+        case 3u: return eye.y >= bmax.y * eye.w;
+        case 4u: return eye.z <= bmin.z * eye.w;
+        default: return eye.z >= bmax.z * eye.w;
     }
 }
 

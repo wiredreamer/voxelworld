@@ -153,13 +153,13 @@ auto cull_pipeline::update_frustums(
     uint32 frame_index,
     const vw::spatial::frustum& view_frustum,
     std::span<const vw::spatial::frustum> shadow_frustums,
-    const vec3f& eye
+    const vec4f& eye
 ) -> void {
     cull_frustum_ubo ubo{};
     ubo.pass_count =
         std::min(combined_buffer::cull_pass_count,
                  1 + static_cast<uint32>(shadow_frustums.size()));
-    ubo.eye        = vec4f{eye.x, eye.y, eye.z, 1.0f};
+    ubo.eye        = eye;
 
     for (uint32 i = 0; i < 6; i++) {
         const auto& p = view_frustum.planes[i];

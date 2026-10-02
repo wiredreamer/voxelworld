@@ -256,7 +256,7 @@ auto gizmo::build_frame_(
     }
 
     const auto& camera = engine_->get_camera();
-    fr.scale = math::length(pivot - camera.get_position()) * screen_height_fraction;
+    fr.scale = camera.apparent_distance(pivot) * screen_height_fraction;
 
     return fr;
 }
@@ -271,7 +271,7 @@ auto gizmo::plane_faces_camera_(
     const frame& fr, gizmo_handle plane
 ) const -> bool {
     const auto& normal = fr.axes[plane_axes_of(plane).normal];
-    const auto view    = math::normalize(fr.pivot - engine_->get_camera().get_position());
+    const auto view    = engine_->get_camera().direction_to(fr.pivot);
     return std::abs(math::dot(normal, view)) > plane_min_facing;
 }
 

@@ -20,10 +20,6 @@ constexpr uint32 settle_ticks       = 3;
 constexpr uint32 longest_mesh_wait  = 240;
 constexpr uint32 longest_frame_wait = 120;
 
-constexpr float32 fit_margin        = 1.05F;
-constexpr float32 steepest_pitch    = 89.0F;
-constexpr float32 smallest_distance = 2.0F;
-
 constexpr std::string_view minimised_reason =
     "the editor window is minimised and draws nothing; restore it to take a screenshot";
 
@@ -34,7 +30,9 @@ constexpr std::string_view set_schema = R"({
         "from": {"enum": ["iso", "+x", "-x", "+y", "-y", "+z", "-z"], "description": "The side the camera stands on, looking back at the target: '+y' is from above, 'iso' is from +x +y +z. Default 'iso'."},
         "yaw_degrees": {"type": "number", "description": "Heading of the view direction, overrides 'from': 0 looks along +z, 90 along +x."},
         "pitch_degrees": {"type": "number", "description": "Tilt of the view direction, overrides 'from': negative looks down."},
-        "distance": {"type": "number", "description": "Distance from the target in voxels. By default the target fills the view."}
+        "projection": {"enum": ["perspective", "orthographic"], "description": "How the view is projected; stays as it is when omitted. 'orthographic' draws without foreshortening: with a named side every voxel is a square of the same size, which is the view to compare with the layer text of volume_get."},
+        "distance": {"type": "number", "description": "Perspective only: distance from the target in voxels. By default the target fills the view."},
+        "height": {"type": "number", "description": "Orthographic only: how many voxels the picture spans from top to bottom. By default the target fills the view."}
     },
     "additionalProperties": false
 })";
@@ -49,131 +47,50 @@ constexpr std::string_view screenshot_schema = R"({
     "additionalProperties": false
 })";
 
-struct world_box {
-    vec3f low{
-        std::numeric_limits<float32>::max(), std::numeric_limits<float32>::max(),
-        std::numeric_limits<float32>::max()
-    };
-    vec3f high{
-        std::numeric_limits<float32>::lowest(), std::numeric_limits<float32>::lowest(),
-        std::numeric_limits<float32>::lowest()
-    };
-    bool filled = false;
+constexpr std::array<std::pair<std::string_view, view_side>, 7> side_names{{
+    {"iso", view_side::iso},
+    {"+x", view_side::plus_x},
+    {"-x", view_side::minus_x},
+    {"+y", view_side::plus_y},
+    {"-y", view_side::minus_y},
+    {"+z", view_side::plus_z},
+    {"-z", view_side::minus_z},
+}};
 
-    auto include(const vec3f& point) -> void {
-        low    = vec3f{std::min(low.x, point.x), std::min(low.y, point.y), std::min(low.z, point.z)};
-        high   = vec3f{std::max(high.x, point.x), std::max(high.y, point.y), std::max(high.z, point.z)};
-        filled = true;
-    }
+constexpr std::array<std::pair<std::string_view, gfx::projection_kind>, 2> projection_names{{
+    {"perspective", gfx::projection_kind::perspective},
+    {"orthographic", gfx::projection_kind::orthographic},
+}};
 
-    [[nodiscard]] auto centre() const -> vec3f {
-        return vec3f{(low.x + high.x) / 2.0F, (low.y + high.y) / 2.0F, (low.z + high.z) / 2.0F};
-    }
-
-    [[nodiscard]] auto radius() const -> float32 {
-        return math::length(vec3f{high.x - low.x, high.y - low.y, high.z - low.z}) / 2.0F;
-    }
-};
-
-auto include_volume(ecs::world& world, ecs::entity ent, world_box& box) -> void {
-    if (!world.has<ecs::model_component>(ent) || !world.has<ecs::transform_component>(ent)) {
-        return;
-    }
-
-    const auto& model_comp = world.get<ecs::model_component>(ent);
-    if (!model_comp.has_model() || !model_comp.is_visible()) {
-        return;
-    }
-
-    const asset::model& model = *model_comp.get_model();
-    const vec3i size          = model.size();
-
-    const asset::voxel_bounds whole{.min = {}, .max = {size.x - 1, size.y - 1, size.z - 1}};
-    const asset::voxel_bounds solid = asset::occupied_bounds(model).value_or(whole);
-
-    const mat4f placement =
-        ecs::model_matrix(world.get<ecs::transform_component>(ent), model_comp);
-
-    for (const int32 x : {solid.min.x, solid.max.x + 1}) {
-        for (const int32 y : {solid.min.y, solid.max.y + 1}) {
-            for (const int32 z : {solid.min.z, solid.max.z + 1}) {
-                box.include(
-                    placement *
-                    vec3f{static_cast<float32>(x), static_cast<float32>(y), static_cast<float32>(z)}
-                );
-            }
-        }
-    }
+[[nodiscard]] auto name_of(gfx::projection_kind kind) -> std::string_view {
+    return kind == gfx::projection_kind::orthographic ? "orthographic" : "perspective";
 }
 
-[[nodiscard]] auto box_of_subtree(ecs::world& world, ecs::entity top) -> world_box {
-    world_box box;
+[[nodiscard]] auto describe_camera(const editor_bindings& bindings) -> json::object {
+    const auto& camera     = bindings.engine->get_camera();
+    const view_report seen = bindings.views->report();
 
-    std::vector<ecs::entity> found{top};
-    for (std::size_t at = 0; at < found.size(); ++at) {
-        const ecs::entity ent = found[at];
-        include_volume(world, ent, box);
-
-        if (world.has<ecs::hierarchy_component>(ent)) {
-            const std::vector<ecs::entity> children =
-                world.get<ecs::hierarchy_component>(ent).get_children();
-            found.insert(found.end(), children.begin(), children.end());
-        }
-    }
-
-    if (!box.filled) {
-        const vec3f origin = world.get<ecs::transform_component>(top).get_world_matrix() * vec3f{};
-        box.include(vec3f{origin.x - 1.0F, origin.y - 1.0F, origin.z - 1.0F});
-        box.include(vec3f{origin.x + 1.0F, origin.y + 1.0F, origin.z + 1.0F});
-    }
-    return box;
-}
-
-struct view_direction {
-    float32 yaw_degrees   = 0.0F;
-    float32 pitch_degrees = 0.0F;
-};
-
-[[nodiscard]] auto direction_from(std::string_view side) -> std::optional<view_direction> {
-    if (side == "iso") {
-        return view_direction{.yaw_degrees = -135.0F, .pitch_degrees = -30.0F};
-    }
-    if (side == "+x") {
-        return view_direction{.yaw_degrees = -90.0F, .pitch_degrees = 0.0F};
-    }
-    if (side == "-x") {
-        return view_direction{.yaw_degrees = 90.0F, .pitch_degrees = 0.0F};
-    }
-    if (side == "+z") {
-        return view_direction{.yaw_degrees = 180.0F, .pitch_degrees = 0.0F};
-    }
-    if (side == "-z") {
-        return view_direction{.yaw_degrees = 0.0F, .pitch_degrees = 0.0F};
-    }
-    if (side == "+y") {
-        return view_direction{.yaw_degrees = 180.0F, .pitch_degrees = -steepest_pitch};
-    }
-    if (side == "-y") {
-        return view_direction{.yaw_degrees = 180.0F, .pitch_degrees = steepest_pitch};
-    }
-    return std::nullopt;
-}
-
-[[nodiscard]] auto describe_camera(const gfx::camera& camera) -> json::object {
-    return json::object{
+    json::object described{
+        {"projection", name_of(seen.projection)},
         {"position", json_of(camera.get_position())},
         {"yaw_degrees", json_of(camera.get_yaw())},
         {"pitch_degrees", json_of(camera.get_pitch())},
     };
+    if (camera.is_orthographic()) {
+        described.set("voxels_high", json_of(seen.height));
+        described.set("voxels_wide", json_of(seen.width));
+    }
+    return described;
 }
 
 [[nodiscard]] auto set_view(const editor_bindings& bindings, const json::value& arguments)
     -> tool_outcome {
     argument_reader in{arguments};
-    in.allow({"node", "from", "yaw_degrees", "pitch_degrees", "distance"});
+    in.allow({"node", "from", "yaw_degrees", "pitch_degrees", "distance", "projection", "height"});
 
-    const auto node = in.optional_text("node");
-    const auto side = in.optional_text("from").value_or(std::string{"iso"});
+    const auto node       = in.optional_text("node");
+    const auto side       = in.optional_text("from").value_or(std::string{"iso"});
+    const auto projection = in.optional_text("projection");
 
     const auto number = [&in](std::string_view key) -> std::optional<float32> {
         if (!in.has(key) || in.is_null(key)) {
@@ -190,57 +107,54 @@ struct view_direction {
     const auto yaw      = number("yaw_degrees");
     const auto pitch    = number("pitch_degrees");
     const auto distance = number("distance");
+    const auto height   = number("height");
     if (in.failed()) {
         return tool_failure(in.error());
     }
 
-    auto direction = direction_from(side);
-    if (!direction) {
+    const auto named_side = std::ranges::find(side_names, side, [](const auto& entry) {
+        return entry.first;
+    });
+    if (named_side == side_names.end()) {
         return tool_failure(std::format(
             "arguments.from: expected iso, +x, -x, +y, -y, +z or -z, found '{}'", side
         ));
     }
-    if (distance && *distance <= 0.0F) {
-        return tool_failure("arguments.distance: must be above zero");
+
+    view_request request{
+        .node       = node,
+        .direction  = direction_of(named_side->second),
+        .projection = std::nullopt,
+        .distance   = distance,
+        .height     = height,
+    };
+    request.direction.yaw_degrees   = yaw.value_or(request.direction.yaw_degrees);
+    request.direction.pitch_degrees = pitch.value_or(request.direction.pitch_degrees);
+
+    if (projection) {
+        const auto named = std::ranges::find(projection_names, *projection, [](const auto& entry) {
+            return entry.first;
+        });
+        if (named == projection_names.end()) {
+            return tool_failure(std::format(
+                "arguments.projection: expected perspective or orthographic, found '{}'",
+                *projection
+            ));
+        }
+        request.projection = named->second;
     }
 
-    const auto& scene       = bindings.state->scene;
-    const std::string focus = node.value_or(scene.root_name);
-    const auto found        = scene.name_to_entity.find(focus);
-    if (found == scene.name_to_entity.end()) {
-        if (!node) {
-            return tool_failure("there is nothing to look at: no prefab with nodes is open");
-        }
-        std::string listed;
-        for (const std::string& name : list_node_names(*bindings.state)) {
-            listed += listed.empty() ? name : std::format(", {}", name);
-        }
-        return tool_failure(std::format("there is no node '{}'; the nodes are: {}", focus, listed));
+    const auto seen = bindings.views->look(request);
+    if (!seen) {
+        return tool_failure(seen.error());
     }
 
-    direction->yaw_degrees   = yaw.value_or(direction->yaw_degrees);
-    direction->pitch_degrees =
-        std::clamp(pitch.value_or(direction->pitch_degrees), -steepest_pitch, steepest_pitch);
-
-    auto& camera = bindings.engine->get_camera();
-    const world_box box = box_of_subtree(bindings.engine->get_world(), found->second);
-
-    const float32 half_view = math::radians(camera.get_fov()) / 2.0F;
-    const float32 fitted    = (box.radius() / std::sin(half_view)) * fit_margin;
-    const float32 away      = distance.value_or(std::max(fitted, smallest_distance));
-
-    camera.set_rotation(direction->pitch_degrees, direction->yaw_degrees);
-
-    const vec3f forward = camera.get_forward();
-    const vec3f centre  = box.centre();
-    camera.set_position(
-        vec3f{centre.x - forward.x * away, centre.y - forward.y * away, centre.z - forward.z * away}
-    );
-
-    json::object described = describe_camera(camera);
-    described.set("looking_at", focus);
-    described.set("target", json_of(centre));
-    described.set("distance", json_of(away));
+    json::object described = describe_camera(bindings);
+    described.set("looking_at", seen->looking_at);
+    described.set("target", json_of(seen->target));
+    if (seen->projection == gfx::projection_kind::perspective) {
+        described.set("distance", json_of(seen->distance));
+    }
     return tool_success(described);
 }
 
@@ -314,9 +228,15 @@ struct shot_progress {
             return tool_failure("the picture could not be encoded");
         }
 
-        json::object described = describe_camera(bindings.engine->get_camera());
+        json::object described = describe_camera(bindings);
         described.set("width", picture.width);
         described.set("height", picture.height);
+        if (bindings.engine->get_camera().is_orthographic()) {
+            const float32 voxels_high = bindings.views->report().height;
+            described.set(
+                "pixels_per_voxel", json_of(static_cast<float32>(picture.height) / voxels_high)
+            );
+        }
 
         tool_outcome shot = tool_success(described);
         shot.image = tool_image{.media_type = "image/png", .bytes = std::move(*encoded)};
@@ -332,10 +252,11 @@ auto append_view_tools(std::vector<tool>& tools, const editor_bindings& bindings
         .name = "view_set",
         .description =
             "Point the editor's camera at a node or at the whole prefab, from a named side or "
-            "by yaw and pitch, far enough for the target to fill the view. y is up and a "
-            "character faces +z. Seen from '-z' x grows to the right, as in the layer text of "
-            "volume_get; seen from '+z', the front, the picture is mirrored and x = 0 is on the "
-            "right. Use it before view_screenshot.",
+            "by yaw and pitch, framed so that the target fills the view, in perspective or "
+            "orthographic projection. y is up and a character faces +z. Seen from '-z' x grows "
+            "to the right, as in the layer text of volume_get; seen from '+z', the front, the "
+            "picture is mirrored and x = 0 is on the right. The camera is shared with the user "
+            "and keeps the projection until it is set again. Use it before view_screenshot.",
         .input_schema = set_schema,
         .run          = when_idle(
             bindings,

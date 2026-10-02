@@ -7,6 +7,13 @@ import vw.world;
 import vw.platform;
 
 namespace vw::gfx {
+
+namespace {
+
+constexpr float32 smallest_orthographic_height = 1.0e-3f;
+
+}  // namespace
+
 camera::camera(
     float fov, float aspect, float near, float far
 )
@@ -59,6 +66,97 @@ auto camera::set_far(
     far_                     = far;
     projection_matrix_dirty_ = true;
     frustum_dirty_           = true;
+}
+
+auto camera::set_perspective() -> void {
+    projection_kind_         = projection_kind::perspective;
+    projection_matrix_dirty_ = true;
+    frustum_dirty_           = true;
+}
+
+auto camera::set_orthographic(
+    float32 view_height
+) -> void {
+    projection_kind_         = projection_kind::orthographic;
+    orthographic_height_     = std::max(view_height, smallest_orthographic_height);
+    projection_matrix_dirty_ = true;
+    frustum_dirty_           = true;
+}
+
+auto camera::get_projection_kind() const -> projection_kind {
+    return projection_kind_;
+}
+
+auto camera::is_orthographic() const -> bool {
+    return projection_kind_ == projection_kind::orthographic;
+}
+
+auto camera::get_orthographic_height() const -> float32 {
+    return orthographic_height_;
+}
+
+auto camera::view_height_at(
+    float32 view_depth
+) const -> float32 {
+    if (is_orthographic()) {
+        return orthographic_height_;
+    }
+    return 2.0f * view_depth * std::tan(math::radians(fov_ * 0.5f));
+}
+
+auto camera::view_depth_showing(
+    float32 view_height
+) const -> float32 {
+    return view_height / (2.0f * std::tan(math::radians(fov_ * 0.5f)));
+}
+
+auto camera::apparent_distance(
+    const vec3f& point
+) const -> float32 {
+    if (is_orthographic()) {
+        return view_depth_showing(orthographic_height_);
+    }
+    return math::length(point - position_);
+}
+
+auto camera::direction_to(
+    const vec3f& point
+) const -> vec3f {
+    if (is_orthographic()) {
+        return get_forward();
+    }
+    return math::normalize(point - position_);
+}
+
+auto camera::culling_eye() const -> vec4f {
+    if (is_orthographic()) {
+        const vec3f forward = get_forward();
+        return vec4f{-forward.x, -forward.y, -forward.z, 0.0f};
+    }
+    return vec4f{position_.x, position_.y, position_.z, 1.0f};
+}
+
+auto camera::frustum_corners(
+    float32 near_depth, float32 far_depth
+) const -> std::array<vec3f, 8> {
+    const vec3f forward = get_forward();
+    const vec3f right   = get_right();
+    const vec3f up      = get_up();
+
+    std::array<vec3f, 8> corners{};
+
+    std::size_t filled = 0;
+    for (const float32 depth : {near_depth, far_depth}) {
+        const float32 half_height = view_height_at(depth) * 0.5f;
+        const float32 half_width  = half_height * aspect_;
+        const vec3f centre        = position_ + forward * depth;
+
+        corners[filled++] = centre - right * half_width + up * half_height;
+        corners[filled++] = centre + right * half_width + up * half_height;
+        corners[filled++] = centre + right * half_width - up * half_height;
+        corners[filled++] = centre - right * half_width - up * half_height;
+    }
+    return corners;
 }
 
 auto camera::get_near() const -> float {
@@ -140,6 +238,28 @@ auto camera::move_up(
     frustum_dirty_     = true;
 }
 
+auto camera::move_closer(
+    float distance
+) -> void {
+    if (!is_orthographic()) {
+        move_forward(distance);
+        return;
+    }
+
+    const float32 shown_from = view_depth_showing(orthographic_height_) - distance;
+    set_orthographic(2.0f * shown_from * std::tan(math::radians(fov_ * 0.5f)));
+}
+
+auto camera::turn_about_view_centre(
+    float delta_pitch, float delta_yaw
+) -> void {
+    const float32 away = apparent_distance(position_);
+    const vec3f centre = position_ + get_forward() * away;
+
+    rotate(delta_pitch, delta_yaw);
+    set_position(centre - get_forward() * away);
+}
+
 auto camera::rotate(
     float delta_pitch, float delta_yaw
 ) -> void {
@@ -183,7 +303,7 @@ auto camera::update_vectors() const -> void {
     forward_.z = std::cos(yaw_rad) * std::cos(pitch_rad);
 
     forward_ = math::normalize(forward_);
-    right_   = math::normalize(math::cross(vec3f(0.0f, 1.0f, 0.0f), forward_));
+    right_   = vec3f{std::cos(yaw_rad), 0.0f, -std::sin(yaw_rad)};
     up_      = math::normalize(math::cross(forward_, right_));
 
     vectors_dirty_ = false;
@@ -200,7 +320,11 @@ auto camera::update_view_matrix() const -> void {
 }
 
 auto camera::update_projection_matrix() const -> void {
-    projection_matrix_       = math::perspective_matrix_reversed(fov_, aspect_, near_, far_);
+    projection_matrix_ = is_orthographic()
+        ? math::orthographic_matrix_reversed(
+              orthographic_height_ * aspect_, orthographic_height_, near_, far_
+          )
+        : math::perspective_matrix_reversed(fov_, aspect_, near_, far_);
     projection_matrix_dirty_ = false;
 }
 
@@ -236,6 +360,17 @@ auto camera::screen_to_world_ray(
         static_cast<float32>(mouse_pos.x) / static_cast<float32>(window_size.x) * 2.0f - 1.0f;
     const float32 ndc_y =
         static_cast<float32>(mouse_pos.y) / static_cast<float32>(window_size.y) * 2.0f - 1.0f;
+
+    if (is_orthographic()) {
+        const float32 half_height = orthographic_height_ * 0.5f;
+        const float32 half_width  = half_height * aspect_;
+
+        const vec3f forward = get_forward();
+        const vec3f on_near = position_ + forward * near_ + get_right() * (ndc_x * half_width) -
+            get_up() * (ndc_y * half_height);
+
+        return vw::spatial::ray{on_near, on_near + forward * (far_ - near_)};
+    }
 
     const mat4f view_proj     = get_view_projection_matrix();
     const auto inv_result     = math::inverse_matrix(view_proj);
