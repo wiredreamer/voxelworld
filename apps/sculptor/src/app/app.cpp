@@ -47,8 +47,8 @@ app::app(
     , timeline_panel_(eng, state_, op_manager_, clip_service_, keyframe_service_)
     , fsm_panel_(state_, op_manager_, fsm_service_)
     , startup_modal_(eng, state_)
-    , new_file_modal_(eng, state_, op_manager_)
-    , open_file_modal_(eng, state_, model_library_, op_manager_)
+    , new_file_modal_(state_, file_service_)
+    , open_file_modal_(state_, file_service_)
     , save_as_modal_(eng, state_, file_service_)
     , unsaved_changes_modal_(state_, file_service_)
     , rename_model_modal_(eng, state_, file_service_)
@@ -115,7 +115,13 @@ auto app::start_mcp_(
     uint16 port
 ) -> void {
     mcp_server_ = std::make_unique<mcp_server>(
-        port, mcp_bindings{.engine = &get_engine(), .state = &state_}
+        port,
+        mcp_bindings{
+            .engine     = &get_engine(),
+            .state      = &state_,
+            .operations = &op_manager_,
+            .files      = &file_service_,
+        }
     );
     state_.mcp = mcp_server_->status();
 

@@ -15,9 +15,9 @@ import vw.gfx;
 namespace vw::sculptor {
 
 new_file_modal::new_file_modal(
-    engine_type& eng, app_state& st, operation_manager& op_manager
+    app_state& st, file_service& file_svc
 )
-    : engine_(&eng), state_(&st), op_manager_(&op_manager) {}
+    : state_(&st), file_service_(&file_svc) {}
 
 auto new_file_modal::render(
     float
@@ -93,35 +93,23 @@ auto new_file_modal::render_create_form() -> void {
 }
 
 auto new_file_modal::create_file_() -> bool {
-    namespace fs = std::filesystem;
-
-    fs::path filepath(app_state::prefab_dir() / filename_);
-    if (filepath.extension() != ".vox") {
-        filepath.replace_extension("vox");
+    const auto created = file_service_->create(filename_, has_overwrite_confirmation_);
+    if (created.has_value()) {
+        return true;
     }
 
-    if (!has_overwrite_confirmation_ && fs::exists(filepath)) {
-        need_overwrite_confirmation_ = true;
-        return false;
+    switch (created.error()) {
+        case prefab_error::already_exists:
+            need_overwrite_confirmation_ = true;
+            break;
+        case prefab_error::invalid_name:
+            error_ = "The name cannot be used for a prefab.";
+            break;
+        default:
+            error_ = "Failed to create prefab.";
+            break;
     }
-
-    auto file = std::ofstream(filepath, std::ios::trunc);
-    if (!file.is_open()) {
-        error_ = "Failed to create prefab.";
-        return false;
-    }
-
-    file << std::format("# Vox File Version {}\n", asset::vox_file_version);
-    file.close();
-
-    state_->reset(engine_->get_world());
-    op_manager_->clear();
-
-    state_->ui.need_startup_modal = false;
-
-    state_->file.filename = filepath.filename().string();
-
-    return true;
+    return false;
 }
 
 }  // namespace vw::sculptor

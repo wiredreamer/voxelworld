@@ -56,6 +56,11 @@ export namespace vw::sculptor {
 
 enum class rename_model_error : uint8 { invalid_name, name_in_use, file_exists, write_failed };
 
+enum class prefab_error : uint8 { invalid_name, already_exists, not_found, read_failed, write_failed };
+
+[[nodiscard]] auto prefab_filename(std::string_view name) -> std::optional<std::string>;
+[[nodiscard]] auto list_prefabs() -> std::vector<std::string>;
+
 class file_service final {
 public:
     using engine_type = gfx::engine;
@@ -64,6 +69,9 @@ public:
         engine_type& eng, app_state& state, asset::model_library& library,
         operation_manager& op_manager
     );
+
+    auto create(std::string_view name, bool overwrite) -> std::expected<void, prefab_error>;
+    auto open(std::string_view name) -> std::expected<void, prefab_error>;
 
     auto save() -> bool;
     auto save_as(std::string_view filename) -> bool;
@@ -78,6 +86,7 @@ private:
     using model_moves = std::unordered_map<asset::asset_ref, asset::asset_ref>;
 
     auto write_(const asset::asset_ref& prefab_ref) -> bool;
+    auto reset_document_() -> void;
 
     [[nodiscard]] auto is_model_referenced_(const asset::asset_ref& ref) const -> bool;
     [[nodiscard]] auto write_model_copy_(const asset::asset_ref& from, const asset::asset_ref& to)

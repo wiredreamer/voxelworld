@@ -14,16 +14,121 @@ namespace vw::sculptor {
 namespace {
 constexpr log::log_category lc_file{"file_service"};
 
+constexpr std::string_view prefab_extension  = ".vox";
+constexpr std::string_view forbidden_in_stem = "/\\:*?\"<>|";
+
 auto make_prefab_ref(std::string_view filename) -> asset::asset_ref {
     return asset::asset_ref{std::format("{}/{}", asset::dirs::prefabs, filename)};
 }
 }  // namespace
+
+auto prefab_filename(
+    std::string_view name
+) -> std::optional<std::string> {
+    std::string_view stem = name;
+    if (stem.ends_with(prefab_extension)) {
+        stem.remove_suffix(prefab_extension.size());
+    }
+
+    const bool has_edge_space = stem.starts_with(' ') || stem.ends_with(' ');
+    if (stem.empty() || stem == "." || stem == ".." || has_edge_space ||
+        stem.find_first_of(forbidden_in_stem) != std::string_view::npos) {
+        return std::nullopt;
+    }
+
+    return std::format("{}{}", stem, prefab_extension);
+}
+
+auto list_prefabs() -> std::vector<std::string> {
+    namespace fs = std::filesystem;
+
+    std::vector<std::string> filenames;
+
+    std::error_code ec;
+    for (const auto& entry : fs::directory_iterator(app_state::prefab_dir(), ec)) {
+        if (entry.is_regular_file() && entry.path().extension() == prefab_extension) {
+            filenames.emplace_back(entry.path().filename().string());
+        }
+    }
+
+    std::ranges::sort(filenames);
+    return filenames;
+}
 
 file_service::file_service(
     engine_type& eng, app_state& state, asset::model_library& library,
     operation_manager& op_manager
 )
     : engine_(&eng), state_(&state), library_(&library), op_manager_(&op_manager) {}
+
+auto file_service::create(
+    std::string_view name, bool overwrite
+) -> std::expected<void, prefab_error> {
+    namespace fs = std::filesystem;
+
+    const auto filename = prefab_filename(name);
+    if (!filename) {
+        return std::unexpected(prefab_error::invalid_name);
+    }
+
+    const fs::path filepath = app_state::prefab_dir() / *filename;
+
+    std::error_code ec;
+    if (!overwrite && fs::exists(filepath, ec)) {
+        return std::unexpected(prefab_error::already_exists);
+    }
+
+    std::ofstream file(filepath, std::ios::trunc);
+    if (!file.is_open()) {
+        return std::unexpected(prefab_error::write_failed);
+    }
+    file << std::format("# Vox File Version {}\n", asset::vox_file_version);
+    file.close();
+
+    reset_document_();
+
+    state_->ui.need_startup_modal = false;
+    state_->file.filename         = *filename;
+    return {};
+}
+
+auto file_service::open(
+    std::string_view name
+) -> std::expected<void, prefab_error> {
+    namespace fs = std::filesystem;
+
+    const auto filename = prefab_filename(name);
+    if (!filename) {
+        return std::unexpected(prefab_error::invalid_name);
+    }
+
+    const fs::path filepath = app_state::prefab_dir() / *filename;
+
+    std::error_code ec;
+    if (!fs::is_regular_file(filepath, ec)) {
+        return std::unexpected(prefab_error::not_found);
+    }
+
+    asset::vox_parser_plain parser;
+    const auto prefab = parser.parse(filepath);
+    if (!prefab.has_value()) {
+        return std::unexpected(prefab_error::read_failed);
+    }
+
+    reset_document_();
+
+    ecs::vox_deserializer deserializer{engine_->get_world(), parser, *library_};
+    auto loaded = deserializer.instantiate(*prefab, {});
+
+    state_->ui.need_startup_modal = false;
+    state_->file.filename         = *filename;
+    state_->scene.root_name       = loaded.root_name;
+    state_->scene.selected_name   = loaded.root_name;
+    state_->scene.name_to_entity  = std::move(loaded.name_to_entity);
+    state_->scene.entity_to_name  = std::move(loaded.entity_to_name);
+    state_->scene.entities        = std::move(loaded.entities);
+    return {};
+}
 
 auto file_service::save() -> bool {
     if (state_->file.filename.empty()) {
@@ -66,6 +171,10 @@ auto file_service::save_as(
 }
 
 auto file_service::close() -> void {
+    reset_document_();
+}
+
+auto file_service::reset_document_() -> void {
     auto& world = engine_->get_world();
 
     for (const auto ent : state_->scene.name_to_entity | std::views::values) {
@@ -82,6 +191,8 @@ auto file_service::close() -> void {
 
     state_->reset(world);
     op_manager_->clear();
+
+    world.resource<asset::animation_clip_registry>().clear();
 }
 
 auto file_service::rename_model(

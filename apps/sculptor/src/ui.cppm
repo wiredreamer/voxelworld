@@ -589,7 +589,7 @@ class new_file_modal final {
 public:
     using engine_type = gfx::engine;
 
-    new_file_modal(engine_type& eng, app_state& st, operation_manager& op_manager);
+    new_file_modal(app_state& st, file_service& file_svc);
 
     auto render(float delta_time) -> void;
 
@@ -599,9 +599,8 @@ private:
 
     auto create_file_() -> bool;
 
-    engine_type* engine_;
     app_state* state_;
-    operation_manager* op_manager_;
+    file_service* file_service_;
 
     std::string filename_;
     std::string error_;
@@ -618,21 +617,15 @@ class open_file_modal final {
 public:
     using engine_type = gfx::engine;
 
-    open_file_modal(
-        engine_type& eng, app_state& st, asset::model_library& library,
-        operation_manager& op_manager
-    );
+    open_file_modal(app_state& st, file_service& file_svc);
 
     auto render(float delta_time) -> void;
 
 private:
-    auto load_existing_filenames_() -> void;
     auto open_file_() -> bool;
 
-    engine_type* engine_;
     app_state* state_;
-    asset::model_library* library_;
-    operation_manager* op_manager_;
+    file_service* file_service_;
 
     std::string filename_;
     std::string error_;

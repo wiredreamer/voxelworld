@@ -50,6 +50,7 @@ struct ui_state {
     float32 right_offset  = 0.f;
 
     bool need_startup_modal   = true;
+    bool startup_modal_open   = false;
     bool need_new_file_modal  = false;
     bool need_open_file_modal = false;
     bool need_save_as_modal   = false;

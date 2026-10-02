@@ -1,6 +1,10 @@
 import http.client
 import json
+import pathlib
+import shutil
 import sys
+
+SCRATCH_PREFABS = ("_mcp_smoke", "_mcp_smoke_copy")
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 17800
@@ -149,18 +153,157 @@ def run(probe):
     probe.check("a 200 KB request is read whole", status == 200 and (reply or {}).get("id") == 7, str(status))
 
 
+def tool(probe, name, arguments=None):
+    _, reply, _ = probe.call("tools/call", {"name": name, "arguments": arguments or {}})
+    result = (reply or {}).get("result", {})
+    content = result.get("content", [])
+    text = content[0].get("text", "") if content else json.dumps(reply)
+    if result.get("isError") is False:
+        return True, json.loads(text)
+    return False, text
+
+
+def remove_scratch_assets(asset_root):
+    for name in SCRATCH_PREFABS:
+        (asset_root / "prefabs" / f"{name}.vox").unlink(missing_ok=True)
+        shutil.rmtree(asset_root / "models" / name, ignore_errors=True)
+
+
+def run_prefab_scenario(probe):
+    ok, state = tool(probe, "editor_state")
+    probe.check("the startup dialog does not make the editor busy", ok and state.get("busy") is None, str(state))
+    asset_root = pathlib.Path(state["asset_root"])
+    remove_scratch_assets(asset_root)
+
+    ok, _ = tool(probe, "prefab_close", {"discard_unsaved": True})
+
+    ok, assets = tool(probe, "assets_list")
+    probe.check("assets_list has the humanoid prefab", ok and "p_humanoid.vox" in assets.get("prefabs", []), str(assets))
+    probe.check(
+        "assets_list has its volumes, clips and machines",
+        ok
+        and "models/p_humanoid/m_head.voxm" in assets.get("volumes", [])
+        and "animations/a_idle.voxa" in assets.get("clips", [])
+        and "fsm/humanoid_locomotion.voxf" in assets.get("machines", []),
+        str(assets),
+    )
+
+    ok, palette = tool(probe, "palette_list")
+    names = {voxel["name"]: voxel for voxel in palette.get("voxels", [])} if ok else {}
+    probe.check("palette_list has more than sixty voxels", len(names) > 60, str(len(names)))
+    probe.check("palette_list gives white as #rrggbb", names.get("white", {}).get("color", "").startswith("#"), str(names.get("white")))
+    probe.check("palette_list marks glowing voxels", "glow" in names.get("glow_blue", {}), str(names.get("glow_blue")))
+
+    ok, text = tool(probe, "prefab_get")
+    probe.check("prefab_get refuses when nothing is open", not ok and "no prefab is open" in text, str(text))
+
+    ok, text = tool(probe, "prefab_open", {"name": "no_such_prefab"})
+    probe.check("prefab_open names the prefabs it does have", not ok and "p_humanoid.vox" in text, str(text))
+
+    ok, text = tool(probe, "prefab_open", {"name": 5})
+    probe.check("prefab_open names the field of a wrong type", not ok and "arguments.name" in text, str(text))
+
+    ok, summary = tool(probe, "prefab_open", {"name": "p_humanoid"})
+    probe.check("prefab_open opens the humanoid", ok and summary.get("node_count") == 7, str(summary))
+
+    ok, state = tool(probe, "editor_state")
+    probe.check(
+        "editor_state names the open prefab and is idle",
+        ok and state.get("prefab") == "p_humanoid.vox" and state.get("busy") is None and state.get("can_undo") is False,
+        str(state),
+    )
+
+    ok, prefab = tool(probe, "prefab_get")
+    nodes = {node["name"]: node for node in prefab.get("nodes", [])} if ok else {}
+    head = nodes.get("head", {})
+    probe.check("prefab_get lists seven nodes under the root", len(nodes) == 7 and prefab.get("root_node") == "root", str(list(nodes)))
+    probe.check("prefab_get gives the rig and two machines", prefab.get("rig") == "humanoid" and len(prefab.get("machines", [])) == 2, str(prefab.get("machines")))
+    probe.check(
+        "prefab_get places the head",
+        head.get("parent") == "root" and head.get("position") == [0, 9.5, 0] and head.get("scale") == [1, 1, 1],
+        str(head),
+    )
+    probe.check(
+        "prefab_get describes the volume of the head",
+        head.get("volume", {}).get("ref") == "models/p_humanoid/m_head.voxm" and len(head.get("volume", {}).get("size", [])) == 3,
+        str(head.get("volume")),
+    )
+    probe.check(
+        "prefab_get keeps other components as tags",
+        any(tag.get("name") == "anim_target" for tag in head.get("tags", [])),
+        str(head.get("tags")),
+    )
+    print(f"     head: {json.dumps(head, ensure_ascii=False)}")
+
+    ok, text = tool(probe, "undo")
+    probe.check("undo refuses with an empty history", not ok and "nothing to undo" in text, str(text))
+    ok, text = tool(probe, "redo")
+    probe.check("redo refuses with an empty history", not ok and "nothing to redo" in text, str(text))
+
+    ok, text = tool(probe, "prefab_new", {"name": "sub/dir"})
+    probe.check("prefab_new refuses a path", not ok and "cannot name a prefab" in text, str(text))
+
+    ok, summary = tool(probe, "prefab_new", {"name": SCRATCH_PREFABS[0]})
+    created = asset_root / "prefabs" / f"{SCRATCH_PREFABS[0]}.vox"
+    probe.check("prefab_new creates and opens an empty prefab", ok and summary.get("node_count") == 0 and created.is_file(), str(summary))
+
+    ok, text = tool(probe, "prefab_new", {"name": SCRATCH_PREFABS[0]})
+    probe.check("prefab_new refuses an existing file", not ok and "overwrite: true" in text, str(text))
+
+    ok, summary = tool(probe, "prefab_new", {"name": f"{SCRATCH_PREFABS[0]}.vox", "overwrite": True})
+    probe.check("prefab_new overwrites when told to", ok and summary.get("prefab") == f"{SCRATCH_PREFABS[0]}.vox", str(summary))
+
+    ok, text = tool(probe, "prefab_save")
+    probe.check("prefab_save refuses a prefab without nodes", not ok and "root node" in text, str(text))
+
+    ok, summary = tool(probe, "prefab_close")
+    probe.check("prefab_close leaves the editor empty", ok and summary.get("prefab") is None, str(summary))
+
+    ok, text = tool(probe, "prefab_close")
+    probe.check("prefab_close refuses when nothing is open", not ok and "no prefab is open" in text, str(text))
+
+    ok, _ = tool(probe, "prefab_open", {"name": "p_humanoid.vox"})
+    ok, summary = tool(probe, "prefab_save_as", {"name": SCRATCH_PREFABS[1]})
+    copied_volumes = sorted(path.name for path in (asset_root / "models" / SCRATCH_PREFABS[1]).glob("*.voxm"))
+    probe.check("prefab_save_as switches to the copy", ok and summary.get("prefab") == f"{SCRATCH_PREFABS[1]}.vox", str(summary))
+    probe.check("prefab_save_as carries six volumes into its own folder", len(copied_volumes) == 6, str(copied_volumes))
+
+    ok, prefab = tool(probe, "prefab_get")
+    refs = [node.get("volume", {}).get("ref", "") for node in prefab.get("nodes", []) if "volume" in node] if ok else []
+    probe.check(
+        "the copy points at its own volumes",
+        len(refs) == 6 and all(ref.startswith(f"models/{SCRATCH_PREFABS[1]}/") for ref in refs),
+        str(refs),
+    )
+
+    ok, text = tool(probe, "prefab_save_as", {"name": "p_humanoid"})
+    probe.check("prefab_save_as refuses an existing file", not ok and "overwrite: true" in text, str(text))
+
+    ok, summary = tool(probe, "prefab_save")
+    probe.check("prefab_save writes the open prefab", ok and summary.get("unsaved") is False, str(summary))
+
+    tool(probe, "prefab_close", {"discard_unsaved": True})
+    remove_scratch_assets(asset_root)
+
+
 def main():
     port = DEFAULT_PORT
+    with_scenario = False
     for argument in sys.argv[1:]:
         if argument.startswith("--port="):
             port = int(argument.split("=", 1)[1])
+        elif argument == "--scenario":
+            with_scenario = True
         else:
-            print("usage: python tools/mcp_smoke.py [--port=N]")
+            print("usage: python tools/mcp_smoke.py [--port=N] [--scenario]")
+            print("  --scenario  also drive the prefab tools; closes whatever the editor has open")
             return 2
 
     probe = Probe(DEFAULT_HOST, port)
     try:
         run(probe)
+        if with_scenario:
+            run_prefab_scenario(probe)
     except OSError as error:
         print(f"FAIL cannot reach Sculptor on {DEFAULT_HOST}:{port} -- {error}")
         print("     start it with: sculptor --mcp")

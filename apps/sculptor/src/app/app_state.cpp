@@ -72,9 +72,12 @@ auto app_state::reset(
 
     auto kept_clipboard = std::move(clipboard);
     auto kept_mcp       = std::move(mcp);
-    *this               = app_state{};
-    clipboard           = std::move(kept_clipboard);
-    mcp                 = std::move(kept_mcp);
+    const bool kept_startup_modal_open = ui.startup_modal_open;
+
+    *this                 = app_state{};
+    clipboard             = std::move(kept_clipboard);
+    mcp                   = std::move(kept_mcp);
+    ui.startup_modal_open = kept_startup_modal_open;
 }
 
 auto animation_state::has_unsaved_clip(

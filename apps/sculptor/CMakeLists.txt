@@ -122,6 +122,7 @@ if (VW_SCULPTOR_MCP)
     target_sources(${PROJECT_NAME} PRIVATE
         src/mcp/editor_tools.cpp
         src/mcp/http_listener.cpp
+        src/mcp/prefab_tools.cpp
         src/mcp/protocol.cpp
         src/mcp/server.cpp
     )

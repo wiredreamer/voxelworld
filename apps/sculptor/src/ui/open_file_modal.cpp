@@ -16,10 +16,9 @@ import vw.gfx;
 namespace vw::sculptor {
 
 open_file_modal::open_file_modal(
-    engine_type& eng, app_state& st, asset::model_library& library,
-    operation_manager& op_manager
+    app_state& st, file_service& file_svc
 )
-    : engine_(&eng), state_(&st), library_(&library), op_manager_(&op_manager) {}
+    : state_(&st), file_service_(&file_svc) {}
 
 auto open_file_modal::render(
     float
@@ -29,13 +28,19 @@ auto open_file_modal::render(
         state_->ui.need_open_file_modal = false;
 
         filename_.clear();
-        load_existing_filenames_();
+        error_.clear();
+        existing_filenames_ = list_prefabs();
     }
 
     constexpr ImGuiWindowFlags dialog_flags =  //
         ImGuiWindowFlags_AlwaysAutoResize |    //
         ImGuiWindowFlags_NoMove;
     if (ImGui::BeginPopupModal("Open Prefab", nullptr, dialog_flags)) {
+        if (!error_.empty()) {
+            ImGui::TextColored(ImVec4{1.0f, 0.0f, 0.0f, 1.0f}, "%s", error_.c_str());
+            ImGui::Spacing();
+        }
+
         ImGui::Text("Existing Prefabs:");
         ImGui::Spacing();
 
@@ -81,47 +86,13 @@ auto open_file_modal::render(
     }
 }
 
-auto open_file_modal::load_existing_filenames_() -> void {
-    existing_filenames_.clear();
-
-    namespace fs = std::filesystem;
-    const fs::path prefab_dir_path = app_state::prefab_dir();
-    if (!fs::exists(prefab_dir_path)) {
-        log::critical("Prefab directory does not exist: {}", prefab_dir_path.string());
-    }
-    for (const auto& entry : fs::directory_iterator(prefab_dir_path)) {
-        if (entry.is_regular_file() && entry.path().extension() == ".vox") {
-            existing_filenames_.emplace_back(entry.path().filename().string());
-        }
-    }
-}
-
 auto open_file_modal::open_file_() -> bool {
-    namespace fs = std::filesystem;
-
-    asset::vox_parser_plain parser;
-    ecs::vox_deserializer deserializer{engine_->get_world(), parser, *library_};
-
-    const fs::path filepath = app_state::prefab_dir() / fs::path{filename_};
-    auto result = deserializer.deserialize(filepath);
-    if (!result.has_value()) {
-        error_ = std::format("Failed to open prefab: {}", filepath.string());
-        return false;
+    if (file_service_->open(filename_).has_value()) {
+        return true;
     }
 
-    state_->reset(engine_->get_world());
-    op_manager_->clear();
-
-    state_->ui.need_startup_modal = false;
-
-    state_->file.filename        = filename_;
-    state_->scene.root_name      = result->root_name;
-    state_->scene.selected_name  = result->root_name;
-    state_->scene.name_to_entity = std::move(result->name_to_entity);
-    state_->scene.entity_to_name = std::move(result->entity_to_name);
-    state_->scene.entities       = std::move(result->entities);
-
-    return true;
+    error_ = std::format("Failed to open prefab: {}", filename_);
+    return false;
 }
 
 }  // namespace vw::sculptor

@@ -3,16 +3,21 @@ export module vw.sculptor:mcp;
 import std;
 
 import vw.core;
+import vw.asset;
 import vw.gfx;
 import :state;
+import :operations;
+import :services;
 
 export namespace vw::sculptor {
 
 inline constexpr uint16 default_mcp_port = 17800;
 
 struct mcp_bindings {
-    gfx::engine* engine = nullptr;
-    app_state* state    = nullptr;
+    gfx::engine* engine           = nullptr;
+    app_state* state              = nullptr;
+    operation_manager* operations = nullptr;
+    file_service* files           = nullptr;
 };
 
 class mcp_server final {
@@ -90,7 +95,19 @@ struct mcp_tool {
     std::function<tool_outcome(const json::value& arguments)> run;
 };
 
+using tool_body = std::function<tool_outcome(const json::value& arguments)>;
+
 [[nodiscard]] auto make_editor_tools(const mcp_bindings& bindings) -> std::vector<mcp_tool>;
+
+auto append_prefab_tools(std::vector<mcp_tool>& tools, const mcp_bindings& bindings) -> void;
+
+[[nodiscard]] auto editor_busy_reason(const app_state& state) -> std::string_view;
+[[nodiscard]] auto when_idle(const mcp_bindings& bindings, tool_body body) -> tool_body;
+
+[[nodiscard]] auto json_of(float32 number) -> json::value;
+[[nodiscard]] auto json_of(const vec3f& vector) -> json::value;
+[[nodiscard]] auto json_of(const vec3i& vector) -> json::value;
+[[nodiscard]] auto json_or_null(std::string_view text) -> json::value;
 
 class mcp_dispatcher final {
 public:
