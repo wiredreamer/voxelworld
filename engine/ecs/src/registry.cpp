@@ -102,6 +102,16 @@ auto registry::notify_changed(uint32 component_id, entity e) -> void {
     ensure_id_slot_(component_id);
     changed_sets_[component_id].insert(e);
 
+    const auto& read = changed_reads_[component_id];
+    if (read.tick == change_tick_ && change_actor_ != no_change_actor &&
+        read.reader != change_actor_) [[unlikely]] {
+        const late_change late{
+            .component_id = component_id, .reader = read.reader, .writer = change_actor_};
+        if (!std::ranges::contains(late_changes_, late)) {
+            late_changes_.push_back(late);
+        }
+    }
+
     for (uint32 dep : change_deps_[component_id]) {
         const auto* pool = try_pool(dep);
         if (pool != nullptr && pool->has(e)) {
@@ -117,7 +127,25 @@ auto registry::request_change(uint32 component_id, entity e) -> void {
 
 auto registry::changed_set(uint32 component_id) -> const std::vector<entity>& {
     ensure_id_slot_(component_id);
+
+    auto& read = changed_reads_[component_id];
+    if (change_actor_ != no_change_actor && read.tick != change_tick_) {
+        read = {.tick = change_tick_, .reader = change_actor_};
+    }
+
     return changed_sets_[component_id].view();
+}
+
+auto registry::open_change_tick() -> void {
+    ++change_tick_;
+}
+
+auto registry::set_change_actor(uint32 actor) -> void {
+    change_actor_ = actor;
+}
+
+auto registry::late_changes() const -> std::span<const late_change> {
+    return late_changes_;
 }
 
 auto registry::requested_set(uint32 component_id) -> const std::vector<entity>& {
@@ -154,6 +182,7 @@ auto registry::ensure_id_slot_(uint32 component_id) -> void {
         change_deps_.resize(needed);
         request_sets_.resize(needed);
         changed_sets_.resize(needed);
+        changed_reads_.resize(needed);
     }
 }
 

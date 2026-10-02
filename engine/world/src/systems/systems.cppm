@@ -1,6 +1,7 @@
 export module vw.world:systems;
 
 export import :systems.hooks;
+export import :systems.extension;
 export import :systems.hierarchy;
 export import :systems.transform;
 export import :systems.model;

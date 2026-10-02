@@ -178,14 +178,68 @@ public:
         registry_.for_each<Cs...>(std::forward<Fn>(fn));
     }
 
+    template <typename S, typename... Args>
+        requires extension_system<S> && (!detail::tuple_has<S, world_systems>) &&
+                 std::constructible_from<S, world&, Args...>
+    auto add_system(
+        tick_stage stage, Args&&... args
+    ) -> S& {
+        auto owned = std::make_unique<S>(*this, std::forward<Args>(args)...);
+        S& added   = *owned;
+
+        install_extension_(
+            system_id_of<S>(), stage,
+            detail::extension_slot{
+                .instance = owned.get(),
+                .update =
+                    +[](void* self, float32 dt) { static_cast<S*>(self)->update(dt); },
+                .shutdown = shutdown_thunk_<S>(),
+                .destroy  = +[](void* self) { delete static_cast<S*>(self); },
+                .name     = S::system_name,
+            }
+        );
+        static_cast<void>(owned.release());
+
+        if constexpr (has_observed_components<S>) {
+            observe_(added, typename S::observed_components{});
+        }
+        return added;
+    }
+
     template <typename S>
     [[nodiscard]] auto system() -> S& {
-        return std::get<S>(systems_);
+        if constexpr (detail::tuple_has<S, world_systems>) {
+            return std::get<S>(systems_);
+        } else {
+            return *static_cast<S*>(extension_instance_(system_id_of<S>()));
+        }
     }
 
     template <typename S>
     [[nodiscard]] auto system() const -> const S& {
-        return std::get<S>(systems_);
+        if constexpr (detail::tuple_has<S, world_systems>) {
+            return std::get<S>(systems_);
+        } else {
+            return *static_cast<const S*>(extension_instance_(system_id_of<S>()));
+        }
+    }
+
+    template <typename S>
+    [[nodiscard]] auto try_system() -> S* {
+        if constexpr (detail::tuple_has<S, world_systems>) {
+            return std::addressof(std::get<S>(systems_));
+        } else {
+            return static_cast<S*>(extension_instance_(system_id_of<S>()));
+        }
+    }
+
+    template <typename S>
+    [[nodiscard]] auto try_system() const -> const S* {
+        if constexpr (detail::tuple_has<S, world_systems>) {
+            return std::addressof(std::get<S>(systems_));
+        } else {
+            return static_cast<const S*>(extension_instance_(system_id_of<S>()));
+        }
     }
 
     template <typename R>
@@ -208,8 +262,85 @@ public:
     [[nodiscard]] auto destroyed() const -> const std::vector<entity>&;
 
     [[nodiscard]] auto get_update_stats() const -> const world_update_stats&;
+    [[nodiscard]] auto get_extension_timings() const -> std::span<const extension_timing>;
 
 private:
+    template <typename S>
+    [[nodiscard]] static auto shutdown_thunk_() -> void (*)(void*) {
+        if constexpr (has_shutdown<S>) {
+            return +[](void* self) { static_cast<S*>(self)->shutdown(); };
+        } else {
+            return nullptr;
+        }
+    }
+
+    template <typename S, typename... Cs>
+    auto observe_(
+        S& observer, component_list<Cs...>
+    ) -> void {
+        (observe_component_<S, Cs>(observer), ...);
+    }
+
+    template <typename S, typename C>
+    auto observe_component_(
+        S& observer
+    ) -> void {
+        static_assert(
+            has_on_add<S, C> || has_on_remove<S, C>,
+            "an observed component needs on_add<C> or on_remove<C> in the system"
+        );
+
+        if constexpr (has_on_add<S, C>) {
+            add_extension_hook_(
+                extension_add_hooks_, component_id_of<C>(),
+                detail::component_hook{
+                    .system = std::addressof(observer),
+                    .invoke = +[](void* self, entity ent) {
+                        static_cast<S*>(self)->template on_add<C>(ent);
+                    },
+                }
+            );
+        }
+        if constexpr (has_on_remove<S, C>) {
+            add_extension_hook_(
+                extension_remove_hooks_, component_id_of<C>(),
+                detail::component_hook{
+                    .system = std::addressof(observer),
+                    .invoke = +[](void* self, entity ent) {
+                        static_cast<S*>(self)->template on_remove<C>(ent);
+                    },
+                }
+            );
+        }
+    }
+
+    [[nodiscard]] auto extension_instance_(
+        uint32 system_id
+    ) const -> void* {
+        return system_id < extensions_.size() ? extensions_[system_id].instance : nullptr;
+    }
+
+    static auto invoke_extension_hooks_(
+        const detail::component_hook_table& hooks, uint32 component_id, entity ent
+    ) -> void {
+        if (component_id >= hooks.size()) {
+            return;
+        }
+        for (const auto& hook : hooks[component_id]) {
+            hook.invoke(hook.system, ent);
+        }
+    }
+
+    auto install_extension_(
+        uint32 system_id, tick_stage stage, const detail::extension_slot& slot
+    ) -> void;
+    auto add_extension_hook_(
+        detail::component_hook_table& hooks, uint32 component_id, detail::component_hook hook
+    ) -> void;
+    auto run_stage_(tick_stage stage, float32 delta_time, std::size_t& timing_index) -> void;
+    auto report_late_changes_() -> void;
+    [[nodiscard]] auto change_actor_name_(uint32 actor) const -> std::string_view;
+
     template <typename T>
     auto add_component_(
         entity ent, T&& value = {}
@@ -222,12 +353,14 @@ private:
             [&](auto&... systems) { (detail::invoke_on_add<C>(systems, ent), ...); },
             systems_
         );
+        invoke_extension_hooks_(extension_add_hooks_, component_id_of<C>(), ent);
     }
 
     template <typename T>
     auto remove_component_(
         entity ent
     ) noexcept -> void {
+        invoke_extension_hooks_(extension_remove_hooks_, component_id_of<T>(), ent);
         std::apply(
             [&](auto&... systems) { (detail::invoke_on_remove<T>(systems, ent), ...); },
             systems_
@@ -250,12 +383,18 @@ private:
             },
             systems_
         );
+        for (auto ent : entities) {
+            invoke_extension_hooks_(extension_add_hooks_, component_id_of<T>(), ent);
+        }
     }
 
     template <typename T>
     auto batch_remove_component_(
         const std::vector<entity>& entities
     ) noexcept -> void {
+        for (auto ent : entities) {
+            invoke_extension_hooks_(extension_remove_hooks_, component_id_of<T>(), ent);
+        }
         std::apply(
             [&](auto&... systems) {
                 for (auto ent : entities) {
@@ -288,5 +427,13 @@ private:
     resources resources_;
     systems systems_;
     std::vector<void (*)(world&, entity)> remove_hooks_;
+
+    std::vector<detail::extension_slot> extensions_;
+    std::vector<uint32> extension_order_;
+    std::array<std::vector<uint32>, tick_stage_count> stage_order_;
+    std::vector<extension_timing> extension_timings_;
+    detail::component_hook_table extension_add_hooks_;
+    detail::component_hook_table extension_remove_hooks_;
+    std::size_t reported_late_changes_ = 0;
 };
 }  // namespace vw::ecs

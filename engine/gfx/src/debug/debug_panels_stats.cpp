@@ -19,6 +19,17 @@ auto debug_window::render_systems_panel() -> void {
     metric_row("world update", update.total_ms);
     ImGui::Separator();
 
+    const auto extensions     = world.get_extension_timings();
+    const auto extension_rows = [&](ecs::tick_stage stage) {
+        for (const auto& timing : extensions) {
+            if (timing.stage == stage) {
+                metric_row(timing.name.data(), timing.ms);
+            }
+        }
+    };
+
+    extension_rows(ecs::tick_stage::before_engine);
+
     for (std::size_t i = 0; i < ecs::world_system_count; ++i) {
         const auto name = ecs::world_system_names[i];
         metric_row(name.data(), update.ms[i]);
@@ -53,6 +64,8 @@ auto debug_window::render_systems_panel() -> void {
             ImGui::Unindent();
         }
     }
+
+    extension_rows(ecs::tick_stage::after_engine);
 
     ImGui::Spacing();
     if (ImGui::Button("reset##systems")) {

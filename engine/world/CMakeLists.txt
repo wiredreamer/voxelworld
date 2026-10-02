@@ -35,6 +35,7 @@ target_sources(vw_world
             src/grid/world_grid.cppm
             src/systems/systems.cppm
             src/systems/hooks.cppm
+            src/systems/extension.cppm
             src/systems/hierarchy_system.cppm
             src/systems/transform_system.cppm
             src/systems/model_system.cppm

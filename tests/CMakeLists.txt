@@ -124,6 +124,7 @@ catch_discover_tests(ecs_tests)
 
 add_executable(world_tests
     world/headless.test.cpp
+    world/extension.test.cpp
     world/hierarchy.test.cpp
     world/column_staging.test.cpp
     world/surface.test.cpp

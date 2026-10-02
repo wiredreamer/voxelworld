@@ -211,6 +211,70 @@ TEST_CASE("registry propagates a change only to entities holding the dependent",
     REQUIRE(reg.requested<velocity_component>().empty());
 }
 
+TEST_CASE("registry reports a change written after another actor read the set", "[registry]") {
+    registry reg;
+    auto e = reg.create();
+    reg.add<position_component>(e);
+
+    constexpr uint32 reader = 3;
+    constexpr uint32 writer = 5;
+
+    reg.open_change_tick();
+    reg.set_change_actor(reader);
+    REQUIRE(reg.changed<position_component>().empty());
+
+    reg.set_change_actor(writer);
+    reg.notify_changed<position_component>(e);
+    reg.notify_changed<position_component>(e);
+    reg.set_change_actor(no_change_actor);
+
+    const auto late = reg.late_changes();
+    REQUIRE(late.size() == 1);
+    REQUIRE(late.front().component_id == component_id_of<position_component>());
+    REQUIRE(late.front().reader == reader);
+    REQUIRE(late.front().writer == writer);
+}
+
+TEST_CASE("registry accepts a change order that puts the writer first", "[registry]") {
+    registry reg;
+    auto e = reg.create();
+    reg.add<position_component>(e);
+
+    reg.open_change_tick();
+    reg.set_change_actor(1);
+    reg.notify_changed<position_component>(e);
+    reg.set_change_actor(2);
+    REQUIRE(reg.changed<position_component>().size() == 1);
+    reg.set_change_actor(no_change_actor);
+
+    reg.clear_changed();
+    reg.open_change_tick();
+    reg.set_change_actor(1);
+    reg.notify_changed<position_component>(e);
+    reg.set_change_actor(2);
+    REQUIRE(reg.changed<position_component>().size() == 1);
+    reg.set_change_actor(no_change_actor);
+
+    REQUIRE(reg.late_changes().empty());
+}
+
+TEST_CASE("registry ignores reads and writes made outside of an actor", "[registry]") {
+    registry reg;
+    auto e = reg.create();
+    reg.add<position_component>(e);
+
+    reg.open_change_tick();
+    REQUIRE(reg.changed<position_component>().empty());
+    reg.notify_changed<position_component>(e);
+
+    reg.set_change_actor(4);
+    REQUIRE(reg.changed<position_component>().size() == 1);
+    reg.notify_changed<position_component>(e);
+    reg.set_change_actor(no_change_actor);
+
+    REQUIRE(reg.late_changes().empty());
+}
+
 TEST_CASE("registry accepts a component registered without its type", "[registry]") {
     registry reg;
 

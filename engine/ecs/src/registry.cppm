@@ -48,6 +48,17 @@ auto component_id_of() -> uint32 {
 template <typename... Cs>
 class component_view;
 
+inline constexpr uint32 no_change_actor = std::numeric_limits<uint32>::max();
+
+// см. docs/ENGINE.md#сторож-порядка-чтения
+struct late_change {
+    uint32 component_id = 0;
+    uint32 reader       = no_change_actor;
+    uint32 writer       = no_change_actor;
+
+    [[nodiscard]] auto operator==(const late_change&) const -> bool = default;
+};
+
 class registry final {
 public:
     [[nodiscard]] auto create() -> entity;
@@ -76,6 +87,10 @@ public:
     [[nodiscard]] auto requested_set(uint32 component_id) -> const std::vector<entity>&;
     auto clear_requested(uint32 component_id) -> void;
     auto clear_changed() -> void;
+
+    auto open_change_tick() -> void;
+    auto set_change_actor(uint32 actor) -> void;
+    [[nodiscard]] auto late_changes() const -> std::span<const late_change>;
 
     template <typename T>
     auto pool_of() -> component_pool<T>& {
@@ -211,12 +226,21 @@ private:
     auto ensure_id_slot_(uint32 component_id) -> void;
     auto pool_slot_(uint32 component_id) -> std::unique_ptr<pool_base>&;
 
+    struct change_read {
+        uint64 tick   = 0;
+        uint32 reader = no_change_actor;
+    };
+
     entity_pool entity_pool_;
     std::vector<std::unique_ptr<pool_base>> pools_;
     std::vector<std::vector<uint32>> change_deps_;
     std::vector<detail::change_set> request_sets_;
     std::vector<detail::change_set> changed_sets_;
+    std::vector<change_read> changed_reads_;
+    std::vector<late_change> late_changes_;
     std::vector<entity> destroyed_set_;
+    uint64 change_tick_  = 1;
+    uint32 change_actor_ = no_change_actor;
 };
 
 template <typename... Cs>
