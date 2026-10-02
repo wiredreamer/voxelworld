@@ -56,6 +56,7 @@ public:
 private:
     auto handle_key_press(plat::keyboard::keys key) -> void;
     auto load_assets() -> void;
+    auto load_input_bindings_() -> void;
     auto forward_input_() -> void;
     auto set_mouse_captured_(bool captured) -> void;
     [[nodiscard]] auto is_player_placed_() const -> bool;

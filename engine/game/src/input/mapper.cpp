@@ -13,11 +13,19 @@ auto default_input_bindings() -> input_bindings {
             {
                 {keys::SPACE, input_action::jump},
                 {keys::LEFT_SHIFT, input_action::sprint},
+                {keys::LEFT_CONTROL, input_action::dodge},
+                {keys::Q, input_action::ability_1},
+                {keys::E, input_action::ability_2},
+                {keys::R, input_action::ability_3},
+                {keys::F, input_action::interact},
+                {keys::TAB, input_action::inventory},
+                {keys::C, input_action::compass},
                 {keys::KEY_1, input_action::toggle_weapon},
             },
         .button_actions =
             {
                 {mouse::buttons::LEFT, input_action::attack},
+                {mouse::buttons::RIGHT, input_action::block},
             },
         .key_moves =
             {
@@ -37,32 +45,45 @@ input_mapper::input_mapper(
     , look_yaw_degrees_{settings.initial_look_yaw_degrees}
     , look_pitch_degrees_{settings.initial_look_pitch_degrees} {}
 
+auto input_mapper::held_actions_() const -> input_action_mask {
+    input_action_mask held = 0;
+
+    for (const auto& binding : bindings_.key_actions) {
+        if (keys_down_[std::to_underlying(binding.key)]) {
+            held |= action_bit(binding.action);
+        }
+    }
+    for (const auto& binding : bindings_.button_actions) {
+        if (buttons_down_[std::to_underlying(binding.button)]) {
+            held |= action_bit(binding.action);
+        }
+    }
+    return held;
+}
+
+auto input_mapper::note_edges_(
+    input_action_mask before
+) -> void {
+    const input_action_mask after = held_actions_();
+
+    pressed_ |= after & ~before;
+    released_ |= before & ~after;
+}
+
 auto input_mapper::key(
     keyboard::keys key, bool down
 ) -> void {
-    auto& state = keys_down_[std::to_underlying(key)];
-    if (down && !state) {
-        for (const auto& binding : bindings_.key_actions) {
-            if (binding.key == key) {
-                pressed_ |= action_bit(binding.action);
-            }
-        }
-    }
-    state = down;
+    const input_action_mask before = held_actions_();
+    keys_down_[std::to_underlying(key)] = down;
+    note_edges_(before);
 }
 
 auto input_mapper::button(
     mouse::buttons button, bool down
 ) -> void {
-    auto& state = buttons_down_[std::to_underlying(button)];
-    if (down && !state) {
-        for (const auto& binding : bindings_.button_actions) {
-            if (binding.button == button) {
-                pressed_ |= action_bit(binding.action);
-            }
-        }
-    }
-    state = down;
+    const input_action_mask before = held_actions_();
+    buttons_down_[std::to_underlying(button)] = down;
+    note_edges_(before);
 }
 
 auto input_mapper::cursor_at(
@@ -95,9 +116,13 @@ auto input_mapper::scroll(
 }
 
 auto input_mapper::release_all() -> void {
+    const input_action_mask before = held_actions_();
+
     keys_down_.fill(false);
     buttons_down_.fill(false);
+
     pressed_ = 0;
+    released_ |= before;
 }
 
 auto input_mapper::take_frame() -> input_frame {
@@ -105,19 +130,10 @@ auto input_mapper::take_frame() -> input_frame {
         .look_yaw_degrees   = look_yaw_degrees_,
         .look_pitch_degrees = look_pitch_degrees_,
         .zoom_delta         = zoom_delta_,
+        .held               = held_actions_(),
         .pressed            = pressed_,
+        .released           = released_,
     };
-
-    for (const auto& binding : bindings_.key_actions) {
-        if (keys_down_[std::to_underlying(binding.key)]) {
-            frame.held |= action_bit(binding.action);
-        }
-    }
-    for (const auto& binding : bindings_.button_actions) {
-        if (buttons_down_[std::to_underlying(binding.button)]) {
-            frame.held |= action_bit(binding.action);
-        }
-    }
 
     for (const auto& binding : bindings_.key_moves) {
         if (!keys_down_[std::to_underlying(binding.key)]) {
@@ -148,13 +164,21 @@ auto input_mapper::take_frame() -> input_frame {
     }
 
     pressed_    = 0;
+    released_   = 0;
     zoom_delta_ = 0.0f;
 
     return frame;
 }
 
-auto input_mapper::bindings() -> input_bindings& {
+auto input_mapper::bindings() const -> const input_bindings& {
     return bindings_;
+}
+
+auto input_mapper::set_bindings(
+    input_bindings bindings
+) -> void {
+    release_all();
+    bindings_ = std::move(bindings);
 }
 
 auto input_mapper::settings() -> input_settings& {

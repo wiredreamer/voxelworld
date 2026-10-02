@@ -1,0 +1,22 @@
+{
+  "actions": {
+    "jump": ["space"],
+    "sprint": ["left_shift"],
+    "attack": ["mouse_left"],
+    "block": ["mouse_right"],
+    "dodge": ["left_control"],
+    "ability_1": ["q"],
+    "ability_2": ["e"],
+    "ability_3": ["r"],
+    "interact": ["f"],
+    "inventory": ["tab"],
+    "compass": ["c"],
+    "toggle_weapon": ["1"]
+  },
+  "move": {
+    "forward": ["w"],
+    "back": ["s"],
+    "left": ["a"],
+    "right": ["d"]
+  }
+}

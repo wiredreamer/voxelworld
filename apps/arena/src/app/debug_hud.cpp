@@ -14,6 +14,62 @@ import vw.platform;
 import vw.gfx;
 
 namespace vw::arena {
+namespace {
+
+auto bound_inputs(const game::input_bindings& bindings, game::input_action action) -> std::string {
+    std::string out;
+    const auto append = [&out](std::string_view name) {
+        if (!out.empty()) {
+            out += ", ";
+        }
+        out += name;
+    };
+
+    for (const auto& binding : bindings.key_actions) {
+        if (binding.action == action) {
+            append(keyboard::key_name(binding.key));
+        }
+    }
+    for (const auto& binding : bindings.button_actions) {
+        if (binding.action == action) {
+            append(mouse::button_name(binding.button));
+        }
+    }
+    return out;
+}
+
+auto render_input_state(ecs::world& world, ecs::entity player) -> void {
+    const auto* input = world.try_get<game::player_input_component>(player);
+    if (input == nullptr) {
+        return;
+    }
+
+    const auto& frame    = input->get_frame();
+    const auto& bindings = world.system<game::input_system>().mapper().bindings();
+
+    ImGui::Text("Input:");
+    ImGui::Text("  move %+.2f %+.2f", frame.move_forward, frame.move_right);
+    ImGui::Text("  look yaw %.1f pitch %.1f", frame.look_yaw_degrees, frame.look_pitch_degrees);
+
+    for (std::size_t i = 0; i < game::input_action_count; ++i) {
+        const auto action = static_cast<game::input_action>(i);
+        const auto name   = game::input_action_name(action);
+        const auto keys   = bound_inputs(bindings, action);
+
+        if (frame.is_held(action)) {
+            ImGui::Text(
+                "  %-14.*s %-14s held %.2f s", static_cast<int>(name.size()), name.data(),
+                keys.c_str(), input->hold_seconds(action)
+            );
+        } else {
+            ImGui::TextDisabled(
+                "  %-14.*s %-14s", static_cast<int>(name.size()), name.data(), keys.c_str()
+            );
+        }
+    }
+}
+
+}  // namespace
 
 auto render_debug_hud(
     const gfx::engine& engine,
@@ -35,20 +91,18 @@ auto render_debug_hud(
         ImGuiWindowFlags_NoFocusOnAppearing;
 
     ImGui::Begin("Arena", nullptr, window_flags);
-    ImGui::Text("Controls:");
-    ImGui::Text("WASD - move");
-    ImGui::Text("SPACE - jump");
-    ImGui::Text("1 - toggle sword");
-    ImGui::Text("LMB - sword attack");
-    ImGui::Text("F - test impulse");
     ImGui::Text("Mouse - rotate camera");
     ImGui::Text("Scroll - zoom");
     ImGui::Text("F1 - toggle cursor");
     ImGui::Text("F2 - toggle colliders");
+    ImGui::Text("F3 - test impulse");
     ImGui::Text("ESC - exit");
     ImGui::Separator();
 
     auto& world = engine.get_world();
+
+    render_input_state(world, player);
+    ImGui::Separator();
 
     if (!world.system<game::surface_placement_system>().is_waiting(player)) {
         const auto player_ent = player;

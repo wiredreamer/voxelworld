@@ -34,6 +34,7 @@ add_executable(core_tests
     core/build_info.test.cpp
     core/json.test.cpp
     core/json_suite.test.cpp
+    core/input.test.cpp
 )
 
 target_compile_definitions(core_tests PRIVATE
@@ -161,6 +162,7 @@ catch_discover_tests(world_tests)
 add_executable(game_tests
     game/surface_placement.test.cpp
     game/input.test.cpp
+    game/input_bindings.test.cpp
     game/player.test.cpp
 )
 

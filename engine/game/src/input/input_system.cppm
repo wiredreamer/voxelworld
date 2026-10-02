@@ -7,6 +7,7 @@ import vw.ecs;
 import vw.world;
 import :input.mapper;
 
+// см. docs/ENGINE.md#удержание
 export namespace vw::game {
 
 class input_system;
@@ -16,10 +17,18 @@ struct player_input_component final {
         return frame_;
     }
 
+    [[nodiscard]] auto hold_seconds(input_action action) const -> float32 {
+        return hold_seconds_[std::to_underlying(action)];
+    }
+
 private:
     friend class input_system;
 
     input_frame frame_;
+    input_frame incoming_;
+    bool has_incoming_ = false;
+
+    std::array<float32, input_action_count> hold_seconds_{};
 };
 
 class input_system final {

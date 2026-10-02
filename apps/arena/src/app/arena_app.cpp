@@ -40,6 +40,7 @@ arena_app::arena_app(
     auto& world = get_engine().get_world();
     game::install_systems(world, assets_);
 
+    load_input_bindings_();
     forward_input_();
     set_mouse_captured_(true);
 
@@ -72,6 +73,20 @@ arena_app::arena_app(
     fog.color         = {0.4f, 0.6f, 0.9f};
     fog.near_distance = 0.6f * draw_reach;
     fog.far_distance  = 0.9f * draw_reach;
+}
+
+auto arena_app::load_input_bindings_() -> void {
+    constexpr log::log_category lc{"arena"};
+
+    auto bindings = game::load_input_bindings("assets/data/input_bindings.json");
+    if (!bindings) {
+        log::warn(lc, "input layout not loaded, built-in keys are used: {}", bindings.error());
+        return;
+    }
+
+    get_engine().get_world().system<game::input_system>().mapper().set_bindings(
+        std::move(*bindings)
+    );
 }
 
 auto arena_app::forward_input_() -> void {
@@ -166,7 +181,7 @@ auto arena_app::handle_key_press(
         case plat::keyboard::keys::ESCAPE:
             get_engine().shutdown();
             break;
-        case plat::keyboard::keys::F:
+        case plat::keyboard::keys::F3:
             if (is_player_placed_()) {
                 get_engine()
                     .get_world()

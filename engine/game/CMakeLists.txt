@@ -6,12 +6,14 @@ target_sources(vw_game
             src/game.cppm
             src/input/input.cppm
             src/input/mapper.cppm
+            src/input/bindings_file.cppm
             src/input/input_system.cppm
             src/player/player_control.cppm
             src/spawn/surface_placement.cppm
     PRIVATE
         src/game.cpp
         src/input/mapper.cpp
+        src/input/bindings_file.cpp
         src/input/input_system.cpp
         src/player/player_control.cpp
         src/spawn/surface_placement.cpp

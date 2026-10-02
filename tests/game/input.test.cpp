@@ -60,6 +60,52 @@ TEST_CASE("a tap between two frames is not lost", "[game][input]") {
     REQUIRE_FALSE(mapper.take_frame().was_pressed(game::input_action::attack));
 }
 
+TEST_CASE("letting a key go is reported once", "[game][input]") {
+    game::input_mapper mapper;
+
+    mapper.key(keys::SPACE, true);
+    REQUIRE_FALSE(mapper.take_frame().was_released(game::input_action::jump));
+
+    mapper.key(keys::SPACE, false);
+    REQUIRE(mapper.take_frame().was_released(game::input_action::jump));
+    REQUIRE_FALSE(mapper.take_frame().was_released(game::input_action::jump));
+}
+
+TEST_CASE("a tap carries both its press and its release", "[game][input]") {
+    game::input_mapper mapper;
+
+    mapper.key(keys::Q, true);
+    mapper.key(keys::Q, false);
+
+    const auto frame = mapper.take_frame();
+    REQUIRE(frame.was_pressed(game::input_action::ability_1));
+    REQUIRE(frame.was_released(game::input_action::ability_1));
+    REQUIRE_FALSE(frame.is_held(game::input_action::ability_1));
+}
+
+TEST_CASE("an action on two keys ends when the last of them is let go", "[game][input]") {
+    auto bindings = game::default_input_bindings();
+    bindings.key_actions.push_back({keys::ENTER, game::input_action::jump});
+    game::input_mapper mapper{std::move(bindings)};
+
+    mapper.key(keys::SPACE, true);
+    static_cast<void>(mapper.take_frame());
+
+    mapper.key(keys::ENTER, true);
+    auto frame = mapper.take_frame();
+    REQUIRE_FALSE(frame.was_pressed(game::input_action::jump));
+
+    mapper.key(keys::SPACE, false);
+    frame = mapper.take_frame();
+    REQUIRE(frame.is_held(game::input_action::jump));
+    REQUIRE_FALSE(frame.was_released(game::input_action::jump));
+
+    mapper.key(keys::ENTER, false);
+    frame = mapper.take_frame();
+    REQUIRE_FALSE(frame.is_held(game::input_action::jump));
+    REQUIRE(frame.was_released(game::input_action::jump));
+}
+
 TEST_CASE("a repeated key down does not press the action again", "[game][input]") {
     game::input_mapper mapper;
 
@@ -159,6 +205,7 @@ TEST_CASE("released input holds nothing", "[game][input]") {
     REQUIRE(frame.move_forward == 0.0F);
     REQUIRE(frame.held == 0);
     REQUIRE(frame.pressed == 0);
+    REQUIRE(frame.was_released(game::input_action::jump));
 }
 
 TEST_CASE("the look vectors follow the yaw", "[game][input]") {
@@ -189,6 +236,79 @@ TEST_CASE("the local frame reaches the controlled entity each tick", "[game][inp
     g.world.update(0.016F);
 
     REQUIRE(g.world.get<game::player_input_component>(ent).get_frame().move_forward == 0.0F);
+}
+
+TEST_CASE("the length of a hold is counted while it lasts and kept for the release", "[game][input]") {
+    game_world g;
+    auto& input = g.world.system<game::input_system>();
+
+    const auto ent = g.world.create().get_entity();
+    input.control_locally(ent);
+
+    const auto held_for = [&] {
+        return g.world.get<game::player_input_component>(ent).hold_seconds(
+            game::input_action::block
+        );
+    };
+
+    input.mapper().button(mouse::buttons::RIGHT, true);
+    g.world.update(0.25F);
+    REQUIRE(held_for() == 0.0F);
+
+    g.world.update(0.25F);
+    REQUIRE(held_for() == Catch::Approx(0.25F));
+
+    g.world.update(0.5F);
+    REQUIRE(held_for() == Catch::Approx(0.75F));
+
+    input.mapper().button(mouse::buttons::RIGHT, false);
+    g.world.update(0.25F);
+    REQUIRE(g.world.get<game::player_input_component>(ent).get_frame().was_released(
+        game::input_action::block
+    ));
+    REQUIRE(held_for() == Catch::Approx(0.75F));
+
+    g.world.update(0.25F);
+    REQUIRE(held_for() == 0.0F);
+}
+
+TEST_CASE("a tap has no length", "[game][input]") {
+    game_world g;
+    auto& input = g.world.system<game::input_system>();
+
+    const auto ent = g.world.create().get_entity();
+    input.control_locally(ent);
+
+    input.mapper().key(keys::Q, true);
+    input.mapper().key(keys::Q, false);
+    g.world.update(0.25F);
+
+    const auto& state = g.world.get<game::player_input_component>(ent);
+    REQUIRE(state.get_frame().was_released(game::input_action::ability_1));
+    REQUIRE(state.hold_seconds(game::input_action::ability_1) == 0.0F);
+}
+
+TEST_CASE("a frame that is not renewed keeps what is held and drops its edges", "[game][input]") {
+    game_world g;
+    auto& input = g.world.system<game::input_system>();
+
+    const auto remote = g.world.create().with<game::player_input_component>().get_entity();
+
+    game::input_frame frame;
+    frame.move_forward = 1.0F;
+    frame.held         = game::action_bit(game::input_action::block);
+    frame.pressed      = game::action_bit(game::input_action::block);
+    input.submit(remote, frame);
+
+    g.world.update(0.25F);
+    const auto& state = g.world.get<game::player_input_component>(remote);
+    REQUIRE(state.get_frame().was_pressed(game::input_action::block));
+
+    g.world.update(0.25F);
+    REQUIRE_FALSE(state.get_frame().was_pressed(game::input_action::block));
+    REQUIRE(state.get_frame().is_held(game::input_action::block));
+    REQUIRE(state.get_frame().move_forward == 1.0F);
+    REQUIRE(state.hold_seconds(game::input_action::block) == Catch::Approx(0.25F));
 }
 
 TEST_CASE("a submitted frame drives an entity that is not local", "[game][input]") {
