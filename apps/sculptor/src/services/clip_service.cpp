@@ -141,10 +141,86 @@ auto clip_service::close_clip(
     op_manager_->execute(std::move(op));
 }
 
+auto clip_service::clip_for_machine(
+    const asset::asset_ref& clip
+) -> std::shared_ptr<asset::animation_clip> {
+    auto& registry = engine_->get_world().resource<asset::animation_clip_registry>();
+    if (auto open = registry.get(clip.stem())) {
+        return open;
+    }
+
+    if (const auto cached = machine_clips_.find(clip); cached != machine_clips_.end()) {
+        return cached->second;
+    }
+
+    namespace fs = std::filesystem;
+
+    asset::voxa_deserializer deserializer;
+    const auto loaded = deserializer.deserialize(fs::path{app_state::asset_root_name} / clip.str());
+    if (!loaded) {
+        return nullptr;
+    }
+
+    machine_clips_[clip] = *loaded;
+    return *loaded;
+}
+
+auto clip_service::run_machines(
+    std::vector<machine_to_run> machines
+) -> outcome {
+    const auto root_it = state_->scene.name_to_entity.find(state_->scene.root_name);
+    if (root_it == state_->scene.name_to_entity.end()) {
+        return std::unexpected(std::string{"the prefab has no nodes yet"});
+    }
+    const ecs::entity root = root_it->second;
+
+    stop_machines();
+    save_transforms();
+    stop_all_layers();
+
+    auto& world = engine_->get_world();
+    if (!world.has<ecs::animation_player_component>(root)) {
+        world.modify(root).with<ecs::animation_player_component>();
+    }
+    if (world.has<ecs::animation_fsm_component>(root)) {
+        world.modify(root).without<ecs::animation_fsm_component>();
+    }
+    world.modify(root).with<ecs::animation_fsm_component>();
+
+    const auto runner = world.system<ecs::animation_fsm_system>().modify(root);
+    for (std::size_t layer = 0; layer < machines.size(); ++layer) {
+        runner.declare_parameters(machines[layer].data);
+        runner.add_machine(layer, std::move(machines[layer].machine));
+    }
+
+    state_->anim.machines_running = true;
+    return {};
+}
+
+auto clip_service::stop_machines() -> void {
+    if (!state_->anim.machines_running) {
+        return;
+    }
+    state_->anim.machines_running = false;
+    machine_clips_.clear();
+
+    const auto root = state_->scene.name_to_entity.find(state_->scene.root_name);
+    if (root != state_->scene.name_to_entity.end()) {
+        auto& world = engine_->get_world();
+        if (world.has<ecs::animation_fsm_component>(root->second)) {
+            world.modify(root->second).without<ecs::animation_fsm_component>();
+        }
+    }
+
+    stop_all_layers();
+    restore_transforms();
+}
+
 auto clip_service::enter_animation_mode() -> void {
     if (state_->ctx.in_clip()) {
         return;
     }
+    stop_machines();
 
     save_transforms();
 

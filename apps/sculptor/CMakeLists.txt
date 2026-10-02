@@ -77,6 +77,7 @@ target_sources(${PROJECT_NAME}
         src/services/volume_service.cpp
         src/services/view_service.cpp
         src/services/preview_service.cpp
+        src/services/asset_service.cpp
         src/services/fsm_service.cpp
         src/services/fsm_editing.cpp
         src/services/keyframe_service.cpp

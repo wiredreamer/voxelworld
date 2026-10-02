@@ -404,16 +404,6 @@ auto read_point(
     return tool_success(describe_node(bindings, name));
 }
 
-[[nodiscard]] auto current_placement(const editor_bindings& bindings, std::string_view name)
-    -> transform {
-    const auto& scene = bindings.state->scene;
-    const auto found  = scene.name_to_entity.find(std::string{name});
-    if (found == scene.name_to_entity.end()) {
-        return {};
-    }
-    return bindings.engine->get_world().get<ecs::transform_component>(found->second).get_transform();
-}
-
 }  // namespace
 
 auto describe_node(const editor_bindings& bindings, std::string_view name) -> json::value {
@@ -727,13 +717,20 @@ auto append_node_tools(std::vector<tool>& tools, const editor_bindings& bindings
                 argument_reader in{arguments};
                 in.allow({"name", "position", "rotation_degrees", "scale"});
                 const std::string name = in.text("name");
-                const transform placement =
-                    read_placement(in, current_placement(bindings, name));
                 if (in.failed()) {
                     return tool_failure(in.error());
                 }
                 if (!in.has("position") && !in.has("rotation_degrees") && !in.has("scale")) {
                     return tool_failure("give at least one of position, rotation_degrees and scale");
+                }
+
+                const auto at_rest = bindings.nodes->rest_placement(name);
+                if (!at_rest) {
+                    return tool_failure(at_rest.error());
+                }
+                const transform placement = read_placement(in, *at_rest);
+                if (in.failed()) {
+                    return tool_failure(in.error());
                 }
 
                 return answer(bindings, bindings.nodes->set_transform(name, placement), name);

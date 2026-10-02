@@ -26,6 +26,11 @@ struct clip_playback {
     std::optional<float32> speed;
 };
 
+struct machine_to_run {
+    asset::animation_fsm machine;
+    asset::voxf_data data;
+};
+
 struct clip_playback_status {
     asset::animation_state state   = asset::animation_state::stopped;
     float32 time                   = 0.0F;
@@ -75,6 +80,11 @@ public:
     auto stop(std::string_view name) -> outcome;
     [[nodiscard]] auto playback(std::string_view name) const -> clip_playback_status;
 
+    [[nodiscard]] auto clip_for_machine(const asset::asset_ref& clip)
+        -> std::shared_ptr<asset::animation_clip>;
+    auto run_machines(std::vector<machine_to_run> machines) -> outcome;
+    auto stop_machines() -> void;
+
 private:
     struct clip_layer {
         ecs::entity root;
@@ -88,6 +98,8 @@ private:
     engine_type* engine_;
     app_state* state_;
     operation_manager* op_manager_;
+
+    std::unordered_map<asset::asset_ref, std::shared_ptr<asset::animation_clip>> machine_clips_;
 };
 
 }  // namespace vw::sculptor
@@ -268,6 +280,32 @@ private:
 
 export namespace vw::sculptor {
 
+struct machine_parameter {
+    std::string name;
+    asset::voxf_param_type type = asset::voxf_param_type::real;
+    float32 value               = 0.0F;
+};
+
+struct machine_layer_status {
+    asset::asset_ref machine;
+    std::string state;
+    std::string clip;
+    asset::animation_state playback = asset::animation_state::stopped;
+    float32 time                    = 0.0F;
+};
+
+struct machine_run_status {
+    bool running = false;
+    std::vector<machine_layer_status> layers;
+    std::vector<machine_parameter> parameters;
+    std::vector<std::string> triggers;
+};
+
+struct machine_input {
+    std::vector<std::pair<std::string, float32>> values;
+    std::vector<std::string> triggers;
+};
+
 class fsm_service final {
 public:
     using engine_type = gfx::engine;
@@ -301,9 +339,17 @@ public:
         -> std::expected<asset::asset_ref, std::string>;
     auto set_machines(std::vector<asset::asset_ref> wanted) -> outcome;
 
+    auto run() -> outcome;
+    auto stop() -> void;
+    auto drive(const machine_input& input) -> outcome;
+    [[nodiscard]] auto run_status() const -> machine_run_status;
+
 private:
     [[nodiscard]] auto root_() const -> std::expected<ecs::entity, std::string>;
     [[nodiscard]] auto rig_of_prefab_() const -> std::string;
+
+    std::vector<asset::asset_ref> running_refs_;
+    std::vector<asset::voxf_param> running_params_;
 
     engine_type* engine_;
     app_state* state_;
@@ -390,6 +436,8 @@ public:
     auto duplicate(const duplicate_spec& spec) -> outcome;
     auto reparent(std::string_view name, std::string_view parent, std::optional<std::size_t> index)
         -> outcome;
+    [[nodiscard]] auto rest_placement(std::string_view name)
+        -> std::expected<transform, std::string>;
     auto set_transform(std::string_view name, const transform& placement) -> outcome;
     auto set_components(std::string_view name, const component_changes& changes) -> outcome;
     auto set_rig(std::string_view rig) -> outcome;
@@ -465,7 +513,10 @@ public:
     [[nodiscard]] auto find(std::string_view node) const -> std::expected<volume, std::string>;
     [[nodiscard]] auto holders(const volume& held) const -> std::vector<std::string>;
 
-    auto write(std::string_view node, std::vector<asset::voxel_edit> edits) -> outcome;
+    auto write(
+        std::string_view node, std::vector<asset::voxel_edit> edits,
+        std::optional<asset::voxel_axis> symmetry = std::nullopt
+    ) -> outcome;
     auto resize(std::string_view node, vec3i grown_at_min, vec3i grown_at_max) -> outcome;
     auto trim(std::string_view node) -> outcome;
     auto reorient(std::string_view node, const asset::voxel_orientation& how) -> outcome;
@@ -561,6 +612,33 @@ private:
     engine_type* engine_;
     app_state* state_;
     asset::model_library* library_;
+};
+
+}  // namespace vw::sculptor
+
+export namespace vw::sculptor {
+
+enum class asset_kind : uint8 { prefab, clip, machine };
+
+class asset_service final {
+public:
+    using engine_type = gfx::engine;
+
+    asset_service(engine_type& eng, app_state& state);
+
+    auto remove(asset_kind kind, std::string_view name)
+        -> std::expected<std::vector<std::string>, std::string>;
+
+private:
+    auto remove_prefab_(std::string_view name)
+        -> std::expected<std::vector<std::string>, std::string>;
+    auto remove_clip_(std::string_view name)
+        -> std::expected<std::vector<std::string>, std::string>;
+    auto remove_machine_(std::string_view name)
+        -> std::expected<std::vector<std::string>, std::string>;
+
+    engine_type* engine_;
+    app_state* state_;
 };
 
 }  // namespace vw::sculptor

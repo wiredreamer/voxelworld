@@ -34,4 +34,6 @@ enum class png_error : uint8 {
 
 [[nodiscard]] auto shrunk_to_fit(const image_rgba& image, uint32 longest_side) -> image_rgba;
 
+[[nodiscard]] auto tiled(std::span<const image_rgba> tiles, uint32 columns) -> image_rgba;
+
 }  // namespace vw::gfx

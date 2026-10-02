@@ -34,8 +34,24 @@ constexpr std::string_view write_schema = R"({
     "type": "object",
     "properties": {
         "node": {"type": "string", "description": "Name of the node whose volume to write."},
+        "recolor": {
+            "description": "Voxels to repaint, applied before everything else and in order: every voxel of one kind becomes another, the shape stays. Each entry reads the volume as it stands before the call.",
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "from": {"description": "Voxel to replace: a name from palette_list or its index.", "type": ["string", "integer"]},
+                    "to": {"description": "Voxel it becomes: a name, an index, or 'air' to remove it.", "type": ["string", "integer", "null"]},
+                    "min": {"type": "array", "items": {"type": "integer"}, "minItems": 3, "maxItems": 3, "description": "Low corner of the region to repaint. Default the whole volume."},
+                    "max": {"type": "array", "items": {"type": "integer"}, "minItems": 3, "maxItems": 3, "description": "High corner of the region, inclusive. Default the whole volume."}
+                },
+                "required": ["from", "to"],
+                "additionalProperties": false
+            }
+        },
+        "symmetry": {"enum": ["x", "y", "z"], "description": "Write every cell twice: where it is given and at its mirror image across the plane through the pivot that this axis is normal to. Both halves of a symmetric part are drawn by drawing one."},
         "boxes": {
-            "description": "Solid boxes, applied first and in order. Corners are inclusive.",
+            "description": "Solid boxes, applied after recolor and in order. Corners are inclusive.",
             "type": "array",
             "items": {
                 "type": "object",
@@ -380,6 +396,57 @@ public:
         }
     }
 
+    auto add_recolors(const json::cursor& recolors, const asset::model& painted) -> void {
+        const auto entries = recolors.elements();
+        if (!entries) {
+            fail_(json::describe(entries.error()));
+            return;
+        }
+
+        for (const json::cursor& entry : *entries) {
+            argument_reader fields{entry};
+            fields.allow({"from", "to", "min", "max"});
+
+            const vec3i low  = fields.optional_vec3i("min").value_or(vec3i{});
+            const vec3i high = fields.optional_vec3i("max").value_or(
+                vec3i{size_.x - 1, size_.y - 1, size_.z - 1}
+            );
+            const auto from = read_voxel(*registry_, entry["from"]);
+            const auto to   = read_voxel(*registry_, entry["to"]);
+            if (fields.failed() || !from || !to) {
+                fail_(fields.failed() ? fields.error() : !from ? from.error() : to.error());
+                return;
+            }
+            if (from->is_empty()) {
+                fail_(std::format(
+                    "{}: air cannot be repainted; fill it with boxes", entry["from"].path()
+                ));
+                return;
+            }
+            for (const vec3i corner : {low, high}) {
+                if (!asset::contains(size_, corner)) {
+                    fail_(outside(entry, corner, size_));
+                    return;
+                }
+            }
+
+            vec3i at;
+            for (at.x = low.x; at.x <= high.x; ++at.x) {
+                for (at.y = low.y; at.y <= high.y; ++at.y) {
+                    for (at.z = low.z; at.z <= high.z; ++at.z) {
+                        if (painted.get_voxel(at) != *from) {
+                            continue;
+                        }
+                        if (!reserve_(1)) {
+                            return;
+                        }
+                        edits_.push_back(asset::voxel_edit{.position = at, .value = *to});
+                    }
+                }
+            }
+        }
+    }
+
     auto add_points(const json::cursor& points) -> void {
         const auto groups = points.elements();
         if (!groups) {
@@ -625,13 +692,24 @@ private:
 [[nodiscard]] auto write_volume(const editor_bindings& bindings, const json::value& arguments)
     -> tool_outcome {
     argument_reader in{arguments};
-    in.allow({"node", "boxes", "points", "layers"});
-    const std::string node = in.text("node");
+    in.allow({"node", "recolor", "symmetry", "boxes", "points", "layers"});
+    const std::string node    = in.text("node");
+    const auto symmetry_named = in.optional_text("symmetry");
     if (in.failed()) {
         return tool_failure(in.error());
     }
-    if (!in.has("boxes") && !in.has("points") && !in.has("layers")) {
-        return tool_failure("give at least one of boxes, points and layers");
+    if (!in.has("recolor") && !in.has("boxes") && !in.has("points") && !in.has("layers")) {
+        return tool_failure("give at least one of recolor, boxes, points and layers");
+    }
+
+    std::optional<asset::voxel_axis> symmetry;
+    if (symmetry_named) {
+        symmetry = axis_of(*symmetry_named);
+        if (!symmetry) {
+            return tool_failure(std::format(
+                "arguments.symmetry: expected x, y or z, found '{}'", *symmetry_named
+            ));
+        }
     }
 
     const auto held = bindings.volumes->find(node);
@@ -640,7 +718,10 @@ private:
     }
 
     edit_collector collected{bindings.engine->get_voxel_registry(), (*held)->size()};
-    if (in.has("boxes")) {
+    if (in.has("recolor")) {
+        collected.add_recolors(in.at("recolor"), **held);
+    }
+    if (in.has("boxes") && !collected.failed()) {
         collected.add_boxes(in.at("boxes"));
     }
     if (in.has("points") && !collected.failed()) {
@@ -653,9 +734,16 @@ private:
         return tool_failure(collected.error());
     }
 
-    auto edits               = collected.take();
-    const std::size_t cells  = edits.size();
-    const auto written       = bindings.volumes->write(node, std::move(edits));
+    auto edits = collected.take();
+    if (edits.empty() && in.has("recolor")) {
+        json::object described = describe_volume(bindings, node);
+        described.set("cells_written", 0);
+        described.set("note", "nothing matched: no voxel of the kinds named in 'recolor' is there");
+        return tool_success(described);
+    }
+
+    const std::size_t cells = edits.size() * (symmetry ? 2 : 1);
+    const auto written      = bindings.volumes->write(node, std::move(edits), symmetry);
     if (!written) {
         return tool_failure(written.error());
     }
@@ -766,8 +854,9 @@ auto append_volume_tools(std::vector<tool>& tools, const editor_bindings& bindin
     tools.push_back(tool{
         .name = "volume_write",
         .description =
-            "Set voxels of a node's volume as one undo step: boxes first, then points, then "
-            "layers, each overriding what came before. Every position must lie inside the "
+            "Set voxels of a node's volume as one undo step: recolor first, then boxes, then "
+            "points, then layers, each overriding what came before. 'symmetry' draws the mirror "
+            "image along with what is given. Every position must lie inside the "
             "volume; grow it with volume_reshape first if it does not. A volume shared by "
             "several nodes changes for all of them. Opens the volume in the editor.",
         .input_schema = write_schema,

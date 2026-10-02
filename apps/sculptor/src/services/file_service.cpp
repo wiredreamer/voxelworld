@@ -484,7 +484,10 @@ auto file_service::assign_missing_refs_(
             continue;
         }
 
-        const auto ref = asset::default_model_ref(prefab_ref, name);
+        auto ref = asset::default_model_ref(prefab_ref, name);
+        for (uint32 attempt = 2; is_model_referenced_(ref); ++attempt) {
+            ref = asset::default_model_ref(prefab_ref, std::format("{}_{}", name, attempt));
+        }
         model_sys.modify(ent).set_source(ref);
         library_->adopt(ref, model_comp.get_model());
 

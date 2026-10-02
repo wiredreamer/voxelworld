@@ -529,6 +529,70 @@ template <typename T, std::size_t N>
     return json::object{{"machines", std::move(attached)}};
 }
 
+constexpr std::string_view drive_schema = R"({
+    "type": "object",
+    "properties": {
+        "set": {"type": "object", "description": "Values of parameters by name: a number for float and int, true or false for bool.", "additionalProperties": {"type": ["number", "boolean"]}},
+        "fire": {"type": "array", "items": {"type": "string"}, "description": "Triggers to fire once."}
+    },
+    "additionalProperties": false
+})";
+
+constexpr uint32 ticks_to_settle = 3;
+
+[[nodiscard]] auto describe_run(const editor_bindings& bindings) -> json::object {
+    const machine_run_status status = bindings.machines->run_status();
+
+    json::array layers;
+    for (std::size_t index = 0; index < status.layers.size(); ++index) {
+        const machine_layer_status& layer = status.layers[index];
+
+        std::string_view playback = "stopped";
+        if (layer.playback == asset::animation_state::playing) {
+            playback = "playing";
+        } else if (layer.playback == asset::animation_state::paused) {
+            playback = "paused";
+        }
+
+        layers.emplace_back(json::object{
+            {"layer", index},
+            {"machine", std::string{layer.machine.stem()}},
+            {"state", layer.state},
+            {"clip", json_or_null(layer.clip)},
+            {"playback", playback},
+            {"time", json_of(layer.time)},
+        });
+    }
+
+    json::object parameters;
+    for (const machine_parameter& parameter : status.parameters) {
+        switch (parameter.type) {
+            case asset::voxf_param_type::boolean:
+                parameters.set(parameter.name, parameter.value != 0.0F);
+                break;
+            case asset::voxf_param_type::integer:
+                parameters.set(parameter.name, static_cast<int64>(std::lround(parameter.value)));
+                break;
+            case asset::voxf_param_type::real:
+            case asset::voxf_param_type::trigger:
+                parameters.set(parameter.name, json_of(parameter.value));
+                break;
+        }
+    }
+
+    json::array triggers;
+    for (const std::string& trigger : status.triggers) {
+        triggers.emplace_back(trigger);
+    }
+
+    return json::object{
+        {"running", status.running},
+        {"layers", std::move(layers)},
+        {"parameters", std::move(parameters)},
+        {"triggers", std::move(triggers)},
+    };
+}
+
 }  // namespace
 
 auto append_fsm_tools(std::vector<tool>& tools, const editor_bindings& bindings) -> void {
@@ -585,6 +649,111 @@ auto append_fsm_tools(std::vector<tool>& tools, const editor_bindings& bindings)
                     return tool_failure(replaced.error());
                 }
                 return answer_with_machine(bindings, machine);
+            }
+        ),
+    });
+
+    tools.push_back(tool{
+        .name = "fsm_run",
+        .description =
+            "Start the state machines of the open prefab, as the game runs them: machine i "
+            "drives animation layer i, each from its entry state with its parameters at their "
+            "defaults. The machine open in the editor runs with its unsaved changes. Drive them "
+            "with fsm_drive, read them with fsm_status. Any edit of the prefab, a clip or a "
+            "machine stops them and puts the rest pose back; so does fsm_stop.",
+        .input_schema = no_arguments,
+        .run          = when_idle(
+            bindings,
+            [bindings](const json::value&) -> tool_outcome {
+                const auto started = bindings.machines->run();
+                if (!started) {
+                    return tool_failure(started.error());
+                }
+                return tool_success(describe_run(bindings));
+            }
+        ),
+    });
+
+    tools.push_back(tool{
+        .name = "fsm_drive",
+        .description =
+            "Set parameters of the running machines and fire their triggers, then report where "
+            "each machine is a few ticks later. A trigger lives for one tick. The game sets "
+            "'speed' and 'grounded' itself; here nothing does, so set them to play the part.",
+        .input_schema = drive_schema,
+        .run          = when_idle(
+            bindings,
+            [bindings](const json::value& arguments) -> tool_outcome {
+                argument_reader in{arguments};
+                in.allow({"set", "fire"});
+
+                machine_input input;
+                if (in.has("set")) {
+                    const auto fields = in.at("set").fields();
+                    if (!fields) {
+                        in.fail(json::describe(fields.error()));
+                    } else {
+                        for (const auto& [name, given] : *fields) {
+                            const json::value* value = given.get();
+                            if (const auto flag = value->as_bool()) {
+                                input.values.emplace_back(std::string{name}, *flag ? 1.0F : 0.0F);
+                            } else if (const auto number = value->as_number()) {
+                                input.values.emplace_back(
+                                    std::string{name}, static_cast<float32>(*number)
+                                );
+                            } else {
+                                in.fail(std::format("{}: expected a number or a boolean", given.path()));
+                            }
+                        }
+                    }
+                }
+                if (in.has("fire")) {
+                    input.triggers = in.text_list("fire");
+                }
+                if (in.failed()) {
+                    return tool_failure(in.error());
+                }
+                if (input.values.empty() && input.triggers.empty()) {
+                    return tool_failure("give at least one of set and fire");
+                }
+
+                const auto driven = bindings.machines->drive(input);
+                if (!driven) {
+                    return tool_failure(driven.error());
+                }
+
+                auto ticks = std::make_shared<uint32>(0);
+
+                tool_outcome waiting;
+                waiting.later = [bindings, ticks]() -> std::optional<tool_outcome> {
+                    if (++*ticks <= ticks_to_settle) {
+                        return std::nullopt;
+                    }
+                    return tool_success(describe_run(bindings));
+                };
+                return waiting;
+            }
+        ),
+    });
+
+    tools.push_back(tool{
+        .name         = "fsm_status",
+        .description  = "Where the running machines are: the state, clip and time of each layer and the value of each parameter.",
+        .input_schema = no_arguments,
+        .run          = [bindings](const json::value&) -> tool_outcome {
+            return tool_success(describe_run(bindings));
+        },
+    });
+
+    tools.push_back(tool{
+        .name         = "fsm_stop",
+        .description  = "Stop the running machines and put the prefab back into its rest pose.",
+        .input_schema = no_arguments,
+        .run          = when_idle(
+            bindings,
+            [bindings](const json::value&) -> tool_outcome {
+                bindings.machines->stop();
+                return tool_success(describe_run(bindings));
             }
         ),
     });

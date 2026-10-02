@@ -94,13 +94,41 @@ auto volume_service::enter_(std::string_view node) -> std::expected<volume, std:
     return held;
 }
 
-auto volume_service::write(std::string_view node, std::vector<asset::voxel_edit> edits) -> outcome {
+auto volume_service::write(
+    std::string_view node, std::vector<asset::voxel_edit> edits,
+    std::optional<asset::voxel_axis> symmetry
+) -> outcome {
     const auto held = enter_(node);
     if (!held) {
         return refuse(held.error());
     }
     if (edits.empty()) {
         return refuse("there is nothing to write");
+    }
+
+    if (symmetry) {
+        const auto axis          = static_cast<std::size_t>(*symmetry);
+        const vec3f pivot        = (*held)->pivot();
+        const float32 doubled    = pivot[axis] * 2.0F;
+        const float32 on_a_cell  = std::round(doubled);
+        if (std::abs(doubled - on_a_cell) > 1.0e-3F) {
+            return refuse(std::format(
+                "symmetry: the pivot of '{}' is at {} along that axis; a mirror plane must lie on "
+                "a cell boundary or through the middle of a cell, so set the pivot to a multiple "
+                "of 0.5 with volume_set_pivot",
+                node, pivot[axis]
+            ));
+        }
+
+        const auto last = static_cast<int32>(on_a_cell) - 1;
+
+        const std::size_t given = edits.size();
+        edits.reserve(given * 2);
+        for (std::size_t index = 0; index < given; ++index) {
+            asset::voxel_edit across = edits[index];
+            across.position[axis]    = last - across.position[axis];
+            edits.push_back(across);
+        }
     }
 
     const vec3i size = (*held)->size();

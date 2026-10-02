@@ -310,6 +310,8 @@ struct animation_state {
     std::unordered_map<std::string, transform> saved_transforms;
     bool has_saved_transforms = false;
 
+    bool machines_running = false;
+
     [[nodiscard]] auto has_unsaved_clip(const std::string& name) const -> bool;
     [[nodiscard]] auto has_any_unsaved_clip() const -> bool;
     [[nodiscard]] auto get_layer_for_clip(const std::string& name) const -> std::size_t;

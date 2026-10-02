@@ -109,6 +109,7 @@ auto fsm_panel::render(
     begin_panel(*state_, panel_slot::right, "State Machine");
 
     render_header_();
+    render_run_();
     render_params_();
     render_states_();
 
@@ -147,6 +148,93 @@ auto fsm_panel::render_header_() -> void {
     field_label("Entry");
     if (state_combo_("##fsm_entry", data.entry_state)) {
         commit_edit_();
+    }
+}
+
+auto fsm_panel::render_run_() -> void {
+    ImGui::SeparatorText("Run");
+
+    const machine_run_status status = service_->run_status();
+
+    if (!status.running) {
+        if (ImGui::Button("Run")) {
+            const auto started = service_->run();
+            run_error_         = started ? std::string{} : started.error();
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("every machine of the prefab, from its entry state");
+
+        if (!run_error_.empty()) {
+            ImGui::TextWrapped("%s", run_error_.c_str());
+        }
+        return;
+    }
+
+    if (ImGui::Button("Stop")) {
+        service_->stop();
+        return;
+    }
+
+    for (std::size_t index = 0; index < status.layers.size(); ++index) {
+        const machine_layer_status& layer = status.layers[index];
+        ImGui::Text(
+            "layer %d  %s: %s", static_cast<int32>(index),
+            std::string{layer.machine.stem()}.c_str(), layer.state.c_str()
+        );
+        if (!layer.clip.empty()) {
+            ImGui::SameLine();
+            ImGui::TextDisabled("%s  %.2f s", layer.clip.c_str(), layer.time);
+        }
+    }
+
+    machine_input input;
+
+    for (const machine_parameter& parameter : status.parameters) {
+        ImGui::PushID(parameter.name.c_str());
+        field_label(parameter.name.c_str());
+
+        switch (parameter.type) {
+            case asset::voxf_param_type::boolean: {
+                bool flag = parameter.value != 0.0F;
+                if (ImGui::Checkbox("##value", &flag)) {
+                    input.values.emplace_back(parameter.name, flag ? 1.0F : 0.0F);
+                }
+                break;
+            }
+            case asset::voxf_param_type::integer: {
+                auto whole = static_cast<int32>(std::lround(parameter.value));
+                if (ImGui::InputInt("##value", &whole)) {
+                    input.values.emplace_back(parameter.name, static_cast<float32>(whole));
+                }
+                break;
+            }
+            case asset::voxf_param_type::real:
+            case asset::voxf_param_type::trigger: {
+                float32 value = parameter.value;
+                if (ImGui::DragFloat("##value", &value, 0.01f)) {
+                    input.values.emplace_back(parameter.name, value);
+                }
+                break;
+            }
+        }
+
+        ImGui::PopID();
+    }
+
+    for (const std::string& trigger : status.triggers) {
+        if (ImGui::Button(trigger.c_str())) {
+            input.triggers.push_back(trigger);
+        }
+        ImGui::SameLine();
+    }
+    ImGui::NewLine();
+
+    if (!input.values.empty() || !input.triggers.empty()) {
+        const auto driven = service_->drive(input);
+        run_error_        = driven ? std::string{} : driven.error();
+    }
+    if (!run_error_.empty()) {
+        ImGui::TextWrapped("%s", run_error_.c_str());
     }
 }
 

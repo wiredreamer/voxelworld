@@ -134,3 +134,59 @@ TEST_CASE("a shrunk flat image stays flat", "[image]") {
         }
     }
 }
+
+TEST_CASE("tiles are laid out in rows, each in its own cell", "[image]") {
+    const std::array tiles{
+        flat_image(2, 3, {255, 0, 0, 255}),
+        flat_image(2, 3, {0, 255, 0, 255}),
+        flat_image(2, 3, {0, 0, 255, 255}),
+    };
+
+    const gfx::image_rgba sheet = gfx::tiled(tiles, 2);
+
+    REQUIRE(sheet.width == 4);
+    REQUIRE(sheet.height == 6);
+    REQUIRE(sheet.is_consistent());
+
+    CHECK(texel_at(sheet, 0, 0) == std::array<uint8, 4>{255, 0, 0, 255});
+    CHECK(texel_at(sheet, 1, 2) == std::array<uint8, 4>{255, 0, 0, 255});
+    CHECK(texel_at(sheet, 2, 0) == std::array<uint8, 4>{0, 255, 0, 255});
+    CHECK(texel_at(sheet, 3, 2) == std::array<uint8, 4>{0, 255, 0, 255});
+    CHECK(texel_at(sheet, 0, 3) == std::array<uint8, 4>{0, 0, 255, 255});
+    CHECK(texel_at(sheet, 1, 5) == std::array<uint8, 4>{0, 0, 255, 255});
+    CHECK(texel_at(sheet, 2, 3) == std::array<uint8, 4>{0, 0, 0, 0});
+}
+
+TEST_CASE("fewer tiles than columns make one short row", "[image]") {
+    const std::array tiles{flat_image(3, 2, {9, 9, 9, 255}), flat_image(3, 2, {7, 7, 7, 255})};
+
+    const gfx::image_rgba sheet = gfx::tiled(tiles, 6);
+
+    CHECK(sheet.width == 6);
+    CHECK(sheet.height == 2);
+    CHECK(texel_at(sheet, 5, 1) == std::array<uint8, 4>{7, 7, 7, 255});
+}
+
+TEST_CASE("a smaller tile sits in the corner of a cell sized for the largest", "[image]") {
+    const std::array tiles{flat_image(4, 4, {1, 1, 1, 255}), flat_image(2, 1, {200, 200, 200, 255})};
+
+    const gfx::image_rgba sheet = gfx::tiled(tiles, 2);
+
+    REQUIRE(sheet.width == 8);
+    REQUIRE(sheet.height == 4);
+    CHECK(texel_at(sheet, 4, 0) == std::array<uint8, 4>{200, 200, 200, 255});
+    CHECK(texel_at(sheet, 5, 0) == std::array<uint8, 4>{200, 200, 200, 255});
+    CHECK(texel_at(sheet, 6, 0) == std::array<uint8, 4>{0, 0, 0, 0});
+    CHECK(texel_at(sheet, 4, 1) == std::array<uint8, 4>{0, 0, 0, 0});
+}
+
+TEST_CASE("nothing to tile gives an empty image", "[image]") {
+    CHECK(gfx::tiled(std::span<const gfx::image_rgba>{}, 3).empty());
+
+    const std::array tiles{flat_image(2, 2, {1, 2, 3, 255})};
+    CHECK(gfx::tiled(tiles, 0).empty());
+
+    gfx::image_rgba broken{.width = 4, .height = 4, .pixels = {1, 2, 3}};
+    const std::array with_broken{flat_image(2, 2, {1, 2, 3, 255}), broken};
+    CHECK(gfx::tiled(with_broken, 2).empty());
+}

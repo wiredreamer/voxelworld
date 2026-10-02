@@ -36,6 +36,7 @@ app::app(
     , volume_service_(eng, state_, op_manager_, file_service_, clip_service_)
     , view_service_(eng, state_)
     , preview_service_(eng, state_, model_library_)
+    , asset_service_(eng, state_)
 
     , menu_bar_(eng, state_, op_manager_, file_service_, clipboard_service_, view_service_)
     , breadcrumb_bar_(eng, state_, clip_service_)
@@ -131,6 +132,7 @@ auto app::start_mcp_(
             .machines   = &fsm_service_,
             .views      = &view_service_,
             .previews   = &preview_service_,
+            .assets     = &asset_service_,
         }
     );
     state_.mcp = mcp_server_->status();
@@ -151,6 +153,10 @@ auto app::update(
     if (mcp_server_) {
         mcp_server_->poll();
         state_.mcp = mcp_server_->status();
+    }
+
+    if (state_.anim.machines_running && !state_.ctx.in_fsm()) {
+        clip_service_.stop_machines();
     }
 
     file_service_.collect_dirty_models();

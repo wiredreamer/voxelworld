@@ -113,6 +113,40 @@ constexpr std::string_view retarget_schema = R"({
     "additionalProperties": false
 })";
 
+constexpr std::string_view filmstrip_schema = R"({
+    "type": "object",
+    "properties": {
+        "clip": {"type": "string", "description": "Name of an open clip. Defaults to the clip selected in the editor."},
+        "times": {"type": "array", "items": {"type": "number", "minimum": 0}, "minItems": 1, "maxItems": 12, "description": "Moments to show, in seconds. Default: 'frames' moments spread evenly over the clip."},
+        "frames": {"type": "integer", "minimum": 2, "maximum": 12, "description": "How many evenly spread moments to show when 'times' is not given. Default 6."},
+        "max_size": {"type": "integer", "minimum": 64, "maximum": 1024, "description": "Longest side of one frame in pixels. Default 320."}
+    },
+    "additionalProperties": false
+})";
+
+constexpr uint32 default_strip_frames = 6;
+constexpr uint32 most_strip_frames    = 12;
+constexpr uint32 default_frame_side   = 320;
+constexpr uint32 smallest_frame_side  = 64;
+constexpr uint32 largest_frame_side   = 1024;
+constexpr uint32 frames_in_a_row      = 4;
+constexpr uint32 pose_settle_ticks    = 3;
+constexpr uint32 longest_frame_wait   = 120;
+
+constexpr std::string_view minimised_reason =
+    "the editor window is minimised and draws nothing; restore it to take pictures";
+
+struct strip_progress {
+    std::string clip_name;
+    std::vector<float32> times;
+    std::vector<gfx::image_rgba> frames;
+    uint32 frame_side    = default_frame_side;
+    uint32 ticks_waited  = 0;
+    uint32 frames_waited = 0;
+    bool posed           = false;
+    bool requested       = false;
+};
+
 constexpr std::string_view play_schema = R"({
     "type": "object",
     "properties": {
@@ -690,6 +724,166 @@ auto append_clip_tools(std::vector<tool>& tools, const editor_bindings& bindings
 
                 const auto clip = bindings.clips->find(clip_name);
                 return tool_success(describe_clip(bindings, **clip, true));
+            }
+        ),
+    });
+
+    tools.push_back(tool{
+        .name = "clip_filmstrip",
+        .description =
+            "Take pictures of the prefab at several moments of an open clip and return them as "
+            "one image, moments left to right and top to bottom, four to a row. One call "
+            "instead of clip_pose_at and view_screenshot for each moment. The view is the one "
+            "view_set left; the clip stays posed at the last moment. Needs the window visible.",
+        .input_schema = filmstrip_schema,
+        .run          = when_idle(
+            bindings,
+            [bindings](const json::value& arguments) -> tool_outcome {
+                argument_reader in{arguments};
+                in.allow({"clip", "times", "frames", "max_size"});
+                const std::string clip_name = clip_name_of(bindings, in);
+                const auto frame_count =
+                    in.optional_index("frames").value_or(default_strip_frames);
+                const auto side = in.optional_index("max_size").value_or(default_frame_side);
+
+                std::vector<float32> times;
+                if (in.has("times")) {
+                    const auto given = in.at("times").elements();
+                    if (!given) {
+                        in.fail(json::describe(given.error()));
+                    } else {
+                        for (const json::cursor& entry : *given) {
+                            const auto time = entry.number();
+                            if (!time) {
+                                in.fail(json::describe(time.error()));
+                                break;
+                            }
+                            times.push_back(static_cast<float32>(*time));
+                        }
+                    }
+                }
+                if (in.failed()) {
+                    return tool_failure(in.error());
+                }
+
+                const auto clip = bindings.clips->find(clip_name);
+                if (!clip) {
+                    return tool_failure(clip.error());
+                }
+                if (side < smallest_frame_side || side > largest_frame_side) {
+                    return tool_failure(std::format(
+                        "arguments.max_size: must be {}..{}, got {}", smallest_frame_side,
+                        largest_frame_side, side
+                    ));
+                }
+
+                if (times.empty()) {
+                    if (frame_count < 2 || frame_count > most_strip_frames) {
+                        return tool_failure(std::format(
+                            "arguments.frames: must be 2..{}, got {}", most_strip_frames, frame_count
+                        ));
+                    }
+                    const float32 duration = (*clip)->get_duration();
+                    for (std::size_t index = 0; index < frame_count; ++index) {
+                        times.push_back(
+                            duration * static_cast<float32>(index) /
+                            static_cast<float32>(frame_count - 1)
+                        );
+                    }
+                }
+                if (times.size() > most_strip_frames) {
+                    return tool_failure(std::format(
+                        "arguments.times: at most {} moments, got {}", most_strip_frames,
+                        times.size()
+                    ));
+                }
+                if (!bindings.engine->get_renderer().has_drawable_surface()) {
+                    return tool_failure(std::string{minimised_reason});
+                }
+
+                auto progress        = std::make_shared<strip_progress>();
+                progress->clip_name  = (*clip)->get_name();
+                progress->times      = std::move(times);
+                progress->frame_side = static_cast<uint32>(side);
+
+                tool_outcome waiting;
+                waiting.later = [bindings, progress]() -> std::optional<tool_outcome> {
+                    auto& renderer = bindings.engine->get_renderer();
+                    if (!renderer.has_drawable_surface()) {
+                        return tool_failure(std::string{minimised_reason});
+                    }
+
+                    const std::size_t at = progress->frames.size();
+
+                    if (!progress->posed) {
+                        const auto posed =
+                            bindings.clips->show_pose(progress->clip_name, progress->times[at]);
+                        if (!posed) {
+                            return tool_failure(posed.error());
+                        }
+                        progress->posed        = true;
+                        progress->ticks_waited = 0;
+                        return std::nullopt;
+                    }
+
+                    if (!progress->requested) {
+                        if (++progress->ticks_waited <= pose_settle_ticks) {
+                            return std::nullopt;
+                        }
+                        if (!renderer.request_capture(gfx::frame_capture_request{
+                                .with_interface = false, .with_overlays = false
+                            })) {
+                            return tool_failure(
+                                "this display cannot be captured: its surface format is not "
+                                "supported"
+                            );
+                        }
+                        progress->requested     = true;
+                        progress->frames_waited = 0;
+                        return std::nullopt;
+                    }
+
+                    const auto frame = renderer.take_capture();
+                    if (!frame) {
+                        if (++progress->frames_waited > longest_frame_wait) {
+                            return tool_failure("a frame was not captured in time; try again");
+                        }
+                        return std::nullopt;
+                    }
+
+                    progress->frames.push_back(gfx::shrunk_to_fit(*frame, progress->frame_side));
+                    progress->posed     = false;
+                    progress->requested = false;
+
+                    if (progress->frames.size() < progress->times.size()) {
+                        return std::nullopt;
+                    }
+
+                    const gfx::image_rgba sheet = gfx::tiled(progress->frames, frames_in_a_row);
+                    auto encoded                = gfx::encode_png(sheet);
+                    if (!encoded) {
+                        return tool_failure("the picture could not be encoded");
+                    }
+
+                    json::array moments;
+                    for (const float32 time : progress->times) {
+                        moments.emplace_back(json_of(time));
+                    }
+
+                    tool_outcome strip = tool_success(json::object{
+                        {"clip", progress->clip_name},
+                        {"times", std::move(moments)},
+                        {"columns", std::min<std::size_t>(frames_in_a_row, progress->frames.size())},
+                        {"frame_width", progress->frames.front().width},
+                        {"frame_height", progress->frames.front().height},
+                        {"width", sheet.width},
+                        {"height", sheet.height},
+                    });
+                    strip.image =
+                        tool_image{.media_type = "image/png", .bytes = std::move(*encoded)};
+                    return strip;
+                };
+                return waiting;
             }
         ),
     });

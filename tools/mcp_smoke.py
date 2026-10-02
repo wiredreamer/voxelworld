@@ -1551,6 +1551,316 @@ def run_copy_scenario(probe):
     remove_scratch_assets(asset_root)
 
 
+def layers_of(probe, node):
+    ok, volume = tool(probe, "volume_get", {"node": node})
+    return (volume.get("layers") or {}) if ok else {}
+
+
+def run_paint_scenario(probe):
+    scratch = SCRATCH_PREFABS[0]
+    ok, state = tool(probe, "editor_state")
+    asset_root = pathlib.Path(state["asset_root"])
+    window_visible = state.get("window_visible")
+    remove_scratch_assets(asset_root)
+    tool(probe, "prefab_close", {"discard_unsaved": True})
+
+    tool(probe, "prefab_new", {"name": scratch})
+    tool(probe, "node_create", {"name": "root"})
+    tool(probe, "node_create", {"name": "plate", "parent": "root", "volume": {"size": [6, 2, 2]}})
+
+    ok, drawn = tool(probe, "volume_write", {"node": "plate", "symmetry": "x", "boxes": [{"min": [0, 0, 0], "max": [1, 0, 0], "voxel": "red_3"}]})
+    probe.check(
+        "symmetry draws the mirror image across the pivot",
+        ok and drawn.get("cells_written") == 4 and drawn.get("voxel_count") == 4
+        and layers_of(probe, "plate").get("slices") == [["aa..aa"]],
+        f"{drawn.get('cells_written')} {layers_of(probe, 'plate')}",
+    )
+    tool(probe, "undo")
+    ok, empty = tool(probe, "volume_get", {"node": "plate"})
+    probe.check("both halves are one undo step", ok and empty.get("voxel_count") == 0, str(empty.get("voxel_count")))
+    tool(probe, "redo")
+
+    ok, painted = tool(probe, "volume_write", {"node": "plate", "recolor": [{"from": "red_3", "to": "blue_3", "min": [0, 0, 0], "max": [2, 1, 1]}]})
+    layers = layers_of(probe, "plate")
+    probe.check(
+        "recolor repaints one kind of voxel inside a region and keeps the shape",
+        ok and painted.get("cells_written") == 2 and painted.get("voxel_count") == 4
+        and sorted(layers.get("legend", {}).values()) == ["blue_3", "red_3"] and len(set(layers.get("slices", [[""]])[0][0])) == 3,
+        f"{painted.get('cells_written')} {layers}",
+    )
+    ok, whole = tool(probe, "volume_write", {"node": "plate", "recolor": [{"from": "red_3", "to": "blue_3"}]})
+    probe.check(
+        "recolor without a region repaints the whole volume",
+        ok and whole.get("cells_written") == 2 and list(layers_of(probe, "plate").get("legend", {}).values()) == ["blue_3"],
+        str(layers_of(probe, "plate")),
+    )
+    ok, nothing = tool(probe, "volume_write", {"node": "plate", "recolor": [{"from": "green_3", "to": "red_3"}]})
+    probe.check("recolor of a voxel that is not there says so", ok and nothing.get("cells_written") == 0 and "nothing matched" in nothing.get("note", ""), str(nothing.get("note")))
+    ok, text = tool(probe, "volume_write", {"node": "plate", "recolor": [{"from": "air", "to": "red_3"}]})
+    probe.check("recolor refuses air", not ok and "air cannot be repainted" in text, str(text))
+    ok, text = tool(probe, "volume_write", {"node": "plate", "symmetry": "w", "boxes": [{"min": [0, 0, 0], "max": [0, 0, 0], "voxel": "red_3"}]})
+    probe.check("symmetry refuses an unknown axis", not ok and "arguments.symmetry" in text, str(text))
+
+    tool(probe, "volume_set_pivot", {"node": "plate", "pivot": [2.3, 1, 1]})
+    ok, text = tool(probe, "volume_write", {"node": "plate", "symmetry": "x", "boxes": [{"min": [0, 0, 0], "max": [0, 0, 0], "voxel": "red_3"}]})
+    probe.check("symmetry refuses a pivot between cell boundaries", not ok and "multiple of 0.5" in text, str(text))
+    tool(probe, "volume_set_pivot", {"node": "plate", "pivot": [2, 1, 1]})
+    ok, text = tool(probe, "volume_write", {"node": "plate", "symmetry": "x", "boxes": [{"min": [5, 0, 0], "max": [5, 0, 0], "voxel": "red_3"}]})
+    probe.check("symmetry refuses a mirror image outside the volume", not ok and "outside the volume" in text, str(text))
+    tool(probe, "volume_set_pivot", {"node": "plate", "pivot": [2.5, 1, 1]})
+    ok, odd = tool(probe, "volume_write", {"node": "plate", "symmetry": "x", "boxes": [{"min": [0, 1, 0], "max": [0, 1, 0], "voxel": "red_3"}]})
+    probe.check(
+        "a pivot in the middle of a cell mirrors about that cell",
+        ok and odd.get("cells_written") == 2 and layers_of(probe, "plate").get("slices", [[], [""]])[1][0].startswith("b...b"),
+        str(layers_of(probe, "plate")),
+    )
+
+    tool(probe, "prefab_save")
+    tool(probe, "node_rename", {"name": "plate", "new_name": "dish"})
+    tool(probe, "node_create", {"name": "plate", "parent": "root", "volume": {"size": [2, 2, 2]}})
+    tool(probe, "volume_write", {"node": "plate", "boxes": [{"min": [0, 0, 0], "max": [0, 0, 0], "voxel": "white"}]})
+    ok, saved = tool(probe, "prefab_save")
+    named = nodes_of(probe)
+    models = asset_root / "models" / scratch
+    probe.check(
+        "a new volume does not take the file name another node already holds",
+        ok and named.get("dish", {}).get("volume", {}).get("ref", "").endswith("/plate.voxm")
+        and named.get("plate", {}).get("volume", {}).get("ref", "").endswith("/plate_2.voxm")
+        and (models / "plate.voxm").is_file() and (models / "plate_2.voxm").is_file(),
+        f"{named.get('dish', {}).get('volume')} {named.get('plate', {}).get('volume')}",
+    )
+    tool(probe, "prefab_close")
+    tool(probe, "prefab_open", {"name": scratch})
+    ok, dish = tool(probe, "volume_get", {"node": "dish"})
+    ok_plate, plate = tool(probe, "volume_get", {"node": "plate"})
+    probe.check(
+        "and both volumes read back as they were",
+        ok and ok_plate and dish.get("size") == [6, 2, 2] and dish.get("voxel_count") == 6 and plate.get("size") == [2, 2, 2] and plate.get("voxel_count") == 1,
+        f"{dish.get('size')} {dish.get('voxel_count')} {plate.get('size')} {plate.get('voxel_count')}",
+    )
+
+    tool(probe, "prefab_close", {"discard_unsaved": True})
+    remove_scratch_assets(asset_root)
+
+    tool(probe, "prefab_open", {"name": "p_humanoid"})
+    tool(probe, "clip_open", {"name": "a_sword_attack"})
+    tool(probe, "view_set", {"from": "iso", "projection": "perspective"})
+
+    ok, text = tool(probe, "clip_filmstrip", {"frames": 40})
+    probe.check("clip_filmstrip refuses too many frames", not ok and "arguments.frames" in text, str(text))
+    ok, text = tool(probe, "clip_filmstrip", {"max_size": 10})
+    probe.check("clip_filmstrip refuses a frame size out of range", not ok and "arguments.max_size" in text, str(text))
+    ok, text = tool(probe, "clip_filmstrip", {"clip": "nope"})
+    probe.check("clip_filmstrip refuses a clip that is not open", not ok and "is not open" in text, str(text))
+
+    _, reply, _ = probe.call("tools/call", {"name": "clip_filmstrip", "arguments": {"frames": 5, "max_size": 128}})
+    result = (reply or {}).get("result", {})
+    content = result.get("content", [])
+    if not window_visible:
+        probe.check(
+            "clip_filmstrip says a minimised editor draws nothing",
+            result.get("isError") is True and "minimised" in content[0].get("text", ""),
+            str(content)[:300],
+        )
+    else:
+        image = next((entry for entry in content if entry.get("type") == "image"), None)
+        info = json.loads(next((entry["text"] for entry in content if entry.get("type") == "text"), "{}"))
+        data = base64.b64decode(image["data"]) if image else b""
+        width, height = png_size(data) if data else (0, 0)
+        probe.check(
+            "clip_filmstrip returns one picture with a cell per moment",
+            result.get("isError") is False and len(info.get("times", [])) == 5 and info.get("columns") == 4
+            and width == info.get("frame_width", 0) * 4 and height == info.get("frame_height", 0) * 2
+            and max(info.get("frame_width", 0), info.get("frame_height", 0)) == 128,
+            f"{width}x{height} {info}",
+        )
+        ok, clip = tool(probe, "clip_get")
+        probe.check(
+            "and leaves the clip posed at the last moment",
+            ok and close_to(clip["playback"]["time"], info["times"][-1]) and clip["playback"]["state"] != "playing",
+            str(clip.get("playback")),
+        )
+
+    tool(probe, "clip_close", {"clip": "a_sword_attack", "discard_unsaved": True})
+    tool(probe, "prefab_close", {"discard_unsaved": True})
+
+
+def run_machine_scenario(probe):
+    tool(probe, "prefab_close", {"discard_unsaved": True})
+
+    ok, text = tool(probe, "fsm_run")
+    probe.check("fsm_run refuses with no prefab open", not ok and "no prefab is open" in text, str(text))
+    ok, idle = tool(probe, "fsm_status")
+    probe.check("fsm_status says nothing is running", ok and idle == {"running": False, "layers": [], "parameters": {}, "triggers": []}, str(idle))
+
+    tool(probe, "prefab_open", {"name": "p_humanoid"})
+    rest = nodes_of(probe)
+
+    ok, text = tool(probe, "fsm_drive", {"set": {"speed": 1}})
+    probe.check("fsm_drive refuses when nothing runs", not ok and "start them with fsm_run" in text, str(text))
+
+    ok, started = tool(probe, "fsm_run")
+    layers = started.get("layers", []) if ok else []
+    probe.check(
+        "fsm_run starts every machine of the prefab at its entry state",
+        ok and started.get("running") is True and [layer.get("machine") for layer in layers] == ["humanoid_locomotion", "humanoid_action"]
+        and [layer.get("state") for layer in layers] == ["idle", "none"]
+        and started.get("parameters") == {"speed": 0.0, "grounded": True, "jump_count": 0},
+        str(started),
+    )
+    ok, state = tool(probe, "editor_state")
+    probe.check("running puts the editor into the machine", ok and state.get("context") == "machine", str(state.get("context")))
+
+    time.sleep(0.3)
+    ok, playing = tool(probe, "fsm_status")
+    probe.check(
+        "the entry state plays its clip",
+        ok and playing["layers"][0].get("clip") == "a_idle" and playing["layers"][0].get("playback") == "playing" and playing["layers"][0].get("time", 0) > 0,
+        str(playing.get("layers")),
+    )
+
+    ok, walking = tool(probe, "fsm_drive", {"set": {"speed": 1.0}})
+    probe.check(
+        "a parameter takes the machine to another state",
+        ok and walking["layers"][0].get("state") == "walk" and walking["layers"][0].get("clip") == "a_walk" and walking["parameters"].get("speed") == 1.0,
+        str(walking),
+    )
+    ok, struck = tool(probe, "fsm_drive", {"fire": ["attack"]})
+    probe.check(
+        "a trigger moves the machine of another layer and leaves the first alone",
+        ok and struck["layers"][1].get("state") == "sword_attack" and struck["layers"][0].get("state") == "walk",
+        str(struck.get("layers")),
+    )
+    probe.check("a running machine moves the nodes", nodes_of(probe) != rest, "the nodes are where they rest")
+
+    time.sleep(1.5)
+    ok, done = tool(probe, "fsm_status")
+    probe.check("a state that waits for its clip leaves when the clip ends", ok and done["layers"][1].get("state") == "none", str(done.get("layers")))
+    ok, jumped = tool(probe, "fsm_drive", {"set": {"grounded": False, "jump_count": 1}})
+    probe.check(
+        "bool and int parameters are set by their kind",
+        ok and jumped["parameters"].get("grounded") is False and jumped["parameters"].get("jump_count") == 1 and jumped["layers"][0].get("state") == "jump_right",
+        str(jumped),
+    )
+
+    ok, text = tool(probe, "fsm_drive", {"set": {"stamina": 1}})
+    probe.check("fsm_drive names the parameters for an unknown one", not ok and "speed, grounded, jump_count" in text, str(text))
+    ok, text = tool(probe, "fsm_drive", {"fire": ["speed"]})
+    probe.check("fsm_drive refuses to fire a value", not ok and "they are: attack" in text, str(text))
+    ok, text = tool(probe, "fsm_drive", {"set": {"grounded": 0.5}})
+    probe.check("fsm_drive refuses a number for a bool", not ok and "give true or false" in text, str(text))
+    ok, text = tool(probe, "fsm_drive", {"set": {"jump_count": 0.5}})
+    probe.check("fsm_drive refuses a fraction for an int", not ok and "is an int" in text, str(text))
+    ok, text = tool(probe, "fsm_drive", {})
+    probe.check("fsm_drive asks for something to do", not ok and "at least one of set and fire" in text, str(text))
+
+    ok, stopped = tool(probe, "fsm_stop")
+    ok_state, state = tool(probe, "editor_state")
+    probe.check(
+        "fsm_stop puts the rest pose back and changes nothing in the prefab",
+        ok and stopped.get("running") is False and close_to(nodes_of(probe), rest) and ok_state and state.get("unsaved", {}).get("prefab") is False,
+        str(state.get("unsaved")),
+    )
+
+    tool(probe, "fsm_run")
+    time.sleep(0.3)
+    ok, moved = tool(probe, "node_set_transform", {"name": "head", "scale": [1, 1, 1]})
+    ok_status, status = tool(probe, "fsm_status")
+    probe.check(
+        "an edit stops the machines and is made from the rest pose",
+        ok and ok_status and status.get("running") is False and close_to(moved.get("position"), rest["head"]["position"]),
+        f"{moved.get('position')} {status.get('running')}",
+    )
+    tool(probe, "undo")
+
+    tool(probe, "clip_open", {"name": "a_idle"})
+    tool(probe, "clip_pose_at", {"time": 1.2})
+    ok, moved = tool(probe, "node_set_transform", {"name": "head", "scale": [1, 1, 1]})
+    probe.check(
+        "an edit made over a clip pose is made from the rest pose too",
+        ok and close_to(moved.get("position"), rest["head"]["position"]),
+        str(moved.get("position")),
+    )
+    tool(probe, "undo")
+
+    tool(probe, "fsm_run")
+    ok, opened = tool(probe, "clip_open", {"name": "a_walk"})
+    ok_status, status = tool(probe, "fsm_status")
+    probe.check("opening a clip stops the machines", ok and ok_status and status.get("running") is False, str(status))
+
+    tool(probe, "clip_close", {"clip": "a_walk", "discard_unsaved": True})
+    tool(probe, "clip_close", {"clip": "a_idle", "discard_unsaved": True})
+    tool(probe, "prefab_close", {"discard_unsaved": True})
+
+
+def run_delete_scenario(probe):
+    scratch, copy = SCRATCH_PREFABS
+    ok, state = tool(probe, "editor_state")
+    asset_root = pathlib.Path(state["asset_root"])
+    remove_scratch_assets(asset_root)
+    tool(probe, "prefab_close", {"discard_unsaved": True})
+
+    tool(probe, "prefab_new", {"name": scratch})
+    tool(probe, "node_create", {"name": "root", "anim_target": True})
+    tool(probe, "node_create", {"name": "box", "parent": "root", "volume": {"size": [2, 2, 2]}})
+    tool(probe, "prefab_set_rig", {"rig": "smoke"})
+    tool(probe, "prefab_save")
+    tool(probe, "clip_create", {"name": SCRATCH_CLIP})
+    tool(probe, "clip_set_keys", {"keys": [{"target": "root", "time": 0, "position": [0, 0, 0]}, {"target": "root", "time": 1, "position": [0, 1, 0]}]})
+    tool(probe, "clip_save")
+    tool(probe, "fsm_create", {"name": SCRATCH_MACHINE})
+    ok, machine = tool(probe, "fsm_get", {"machine": SCRATCH_MACHINE})
+    probe.check("the machine to delete reads", ok, str(machine))
+    if not ok:
+        return
+    machine = machine_payload(machine)
+    machine["states"][0]["clip"] = f"animations/{SCRATCH_CLIP}.voxa"
+    tool(probe, "fsm_set", machine)
+    tool(probe, "fsm_save")
+    tool(probe, "prefab_save")
+
+    prefab_file = asset_root / "prefabs" / f"{scratch}.vox"
+    volume_dir = asset_root / "models" / scratch
+    clip_file = asset_root / "animations" / f"{SCRATCH_CLIP}.voxa"
+    machine_file = asset_root / "fsm" / f"{SCRATCH_MACHINE}.voxf"
+    probe.check("the assets to delete are on disk", prefab_file.is_file() and (volume_dir / "box.voxm").is_file() and clip_file.is_file() and machine_file.is_file(), str(sorted(path.name for path in volume_dir.glob("*"))))
+
+    ok, text = tool(probe, "asset_delete", {"kind": "prefab", "name": scratch})
+    probe.check("asset_delete refuses the open prefab", not ok and "is open; close it first" in text and prefab_file.is_file(), str(text))
+    ok, text = tool(probe, "asset_delete", {"kind": "clip", "name": SCRATCH_CLIP})
+    probe.check("asset_delete refuses an open clip", not ok and "is open" in text and clip_file.is_file(), str(text))
+    ok, text = tool(probe, "asset_delete", {"kind": "machine", "name": SCRATCH_MACHINE})
+    probe.check("asset_delete refuses a machine the open prefab runs", not ok and "the open prefab runs" in text and machine_file.is_file(), str(text))
+    ok, text = tool(probe, "asset_delete", {"kind": "prefab", "name": "no_such_prefab"})
+    probe.check("asset_delete refuses a file that is not there", not ok and "there is no prefab" in text, str(text))
+    ok, text = tool(probe, "asset_delete", {"kind": "folder", "name": "x"})
+    probe.check("asset_delete refuses an unknown kind", not ok and "arguments.kind" in text, str(text))
+    ok, text = tool(probe, "asset_delete", {"kind": "clip", "name": "../prefabs/p_humanoid"})
+    probe.check("asset_delete refuses a name that leaves its folder", not ok and "cannot name a clip file" in text, str(text))
+
+    tool(probe, "clip_close", {"discard_unsaved": True})
+    tool(probe, "prefab_close", {"discard_unsaved": True})
+
+    ok, text = tool(probe, "asset_delete", {"kind": "clip", "name": SCRATCH_CLIP})
+    probe.check("asset_delete refuses a clip a machine plays", not ok and f"{SCRATCH_MACHINE}.voxf" in text and clip_file.is_file(), str(text))
+    ok, text = tool(probe, "asset_delete", {"kind": "machine", "name": SCRATCH_MACHINE})
+    probe.check("asset_delete refuses a machine a prefab runs", not ok and f"{scratch}.vox" in text and machine_file.is_file(), str(text))
+
+    ok, gone = tool(probe, "asset_delete", {"kind": "prefab", "name": f"{scratch}.vox"})
+    probe.check(
+        "asset_delete removes a prefab with its volumes",
+        ok and not prefab_file.exists() and not volume_dir.exists()
+        and gone.get("deleted") == [f"models/{scratch}/box.voxm", f"prefabs/{scratch}.vox"],
+        str(gone),
+    )
+    ok, gone = tool(probe, "asset_delete", {"kind": "machine", "name": SCRATCH_MACHINE})
+    probe.check("then the machine nothing runs any more", ok and not machine_file.exists(), str(gone))
+    ok, gone = tool(probe, "asset_delete", {"kind": "clip", "name": SCRATCH_CLIP})
+    probe.check("then the clip nothing plays any more", ok and not clip_file.exists(), str(gone))
+
+    remove_scratch_assets(asset_root)
+
+
 def main():
     port = DEFAULT_PORT
     with_scenario = False
@@ -1576,6 +1886,9 @@ def main():
             run_fsm_scenario(probe)
             run_rename_scenario(probe)
             run_copy_scenario(probe)
+            run_paint_scenario(probe)
+            run_machine_scenario(probe)
+            run_delete_scenario(probe)
     except OSError as error:
         print(f"FAIL cannot reach Sculptor on {DEFAULT_HOST}:{port} -- {error}")
         print("     start it with: sculptor --mcp")

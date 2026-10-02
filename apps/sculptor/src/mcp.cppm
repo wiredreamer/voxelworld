@@ -25,6 +25,7 @@ struct editor_bindings {
     fsm_service* machines         = nullptr;
     view_service* views           = nullptr;
     preview_service* previews     = nullptr;
+    asset_service* assets         = nullptr;
 };
 
 class server final {

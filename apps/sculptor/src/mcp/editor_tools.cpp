@@ -14,6 +14,16 @@ namespace vw::sculptor::mcp {
 
 namespace {
 
+constexpr std::string_view delete_schema = R"({
+    "type": "object",
+    "properties": {
+        "kind": {"enum": ["prefab", "clip", "machine"], "description": "What the file is."},
+        "name": {"type": "string", "description": "File name in its folder, with or without the extension."}
+    },
+    "required": ["kind", "name"],
+    "additionalProperties": false
+})";
+
 constexpr std::string_view no_arguments =
     R"({"type": "object", "properties": {}, "additionalProperties": false})";
 
@@ -276,6 +286,50 @@ auto make_editor_tools(const editor_bindings& bindings) -> std::vector<tool> {
             "machines (.voxf).",
         .input_schema = no_arguments,
         .run          = [](const json::value&) -> tool_outcome { return tool_success(list_assets()); },
+    });
+
+    tools.push_back(tool{
+        .name = "asset_delete",
+        .description =
+            "Delete an asset file from disk: a prefab together with the folder of its volumes, "
+            "an animation clip, or a state machine. It cannot be undone from the editor; only "
+            "version control brings a file back. Refused while the asset is open or while "
+            "another asset names it, and the answer says which.",
+        .input_schema = delete_schema,
+        .run          = when_idle(
+            bindings,
+            [bindings](const json::value& arguments) -> tool_outcome {
+                argument_reader in{arguments};
+                in.allow({"kind", "name"});
+                const std::string kind = in.text("kind");
+                const std::string name = in.text("name");
+                if (in.failed()) {
+                    return tool_failure(in.error());
+                }
+
+                asset_kind wanted = asset_kind::prefab;
+                if (kind == "clip") {
+                    wanted = asset_kind::clip;
+                } else if (kind == "machine") {
+                    wanted = asset_kind::machine;
+                } else if (kind != "prefab") {
+                    return tool_failure(std::format(
+                        "arguments.kind: expected prefab, clip or machine, found '{}'", kind
+                    ));
+                }
+
+                const auto removed = bindings.assets->remove(wanted, name);
+                if (!removed) {
+                    return tool_failure(removed.error());
+                }
+
+                json::array files;
+                for (const std::string& file : *removed) {
+                    files.emplace_back(file);
+                }
+                return tool_success(json::object{{"deleted", std::move(files)}});
+            }
+        ),
     });
 
     tools.push_back(tool{

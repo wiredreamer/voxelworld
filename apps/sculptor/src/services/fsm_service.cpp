@@ -86,6 +86,8 @@ auto fsm_service::save() -> bool {
 }
 
 auto fsm_service::leave() -> void {
+    clips_->stop_machines();
+
     if (state_->ctx.in_fsm()) {
         state_->ctx.leave_to(state_->ctx.stack.size() - 1);
     }

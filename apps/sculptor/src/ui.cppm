@@ -1069,6 +1069,7 @@ public:
 
 private:
     auto render_header_() -> void;
+    auto render_run_() -> void;
     auto render_params_() -> void;
     auto render_states_() -> void;
     auto render_state_(std::size_t index) -> void;
@@ -1090,6 +1091,8 @@ private:
 
     asset::voxf_data before_;
     bool editing_ = false;
+
+    std::string run_error_;
 };
 
 }  // namespace vw::sculptor

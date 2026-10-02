@@ -45,6 +45,51 @@ auto encode_png(const image_rgba& image) -> std::expected<std::vector<uint8>, pn
     return encoded;
 }
 
+auto tiled(std::span<const image_rgba> tiles, uint32 columns) -> image_rgba {
+    if (tiles.empty() || columns == 0) {
+        return {};
+    }
+
+    uint32 cell_width  = 0;
+    uint32 cell_height = 0;
+    for (const image_rgba& tile : tiles) {
+        if (!tile.is_consistent()) {
+            return {};
+        }
+        cell_width  = std::max(cell_width, tile.width);
+        cell_height = std::max(cell_height, tile.height);
+    }
+
+    const auto count = static_cast<uint32>(tiles.size());
+    const uint32 across = std::min(columns, count);
+    const uint32 down   = (count + across - 1) / across;
+
+    image_rgba sheet{
+        .width  = cell_width * across,
+        .height = cell_height * down,
+        .pixels = {},
+    };
+    sheet.pixels.assign(
+        static_cast<std::size_t>(sheet.width) * sheet.height * image_rgba::channels, uint8{0}
+    );
+
+    for (uint32 index = 0; index < count; ++index) {
+        const image_rgba& tile = tiles[index];
+        const uint32 left      = (index % across) * cell_width;
+        const uint32 top       = (index / across) * cell_height;
+
+        const std::size_t row_bytes = static_cast<std::size_t>(tile.width) * image_rgba::channels;
+        for (uint32 y = 0; y < tile.height; ++y) {
+            const std::size_t from = static_cast<std::size_t>(y) * row_bytes;
+            const std::size_t to =
+                (static_cast<std::size_t>(top + y) * sheet.width + left) * image_rgba::channels;
+            std::copy_n(tile.pixels.begin() + static_cast<std::ptrdiff_t>(from), row_bytes,
+                        sheet.pixels.begin() + static_cast<std::ptrdiff_t>(to));
+        }
+    }
+    return sheet;
+}
+
 auto shrunk_to_fit(const image_rgba& image, uint32 longest_side) -> image_rgba {
     const uint32 longest = std::max(image.width, image.height);
     if (image.empty() || !image.is_consistent() || longest_side == 0 || longest <= longest_side) {

@@ -301,4 +301,188 @@ auto fsm_service::set_machines(std::vector<asset::asset_ref> wanted) -> outcome 
     return {};
 }
 
+auto fsm_service::run() -> outcome {
+    if (const auto root = root_(); !root) {
+        return refuse(root.error());
+    }
+
+    const std::vector<asset::asset_ref> attached = machines();
+    if (attached.empty()) {
+        return refuse(
+            "the prefab runs no state machines; attach one with prefab_set_machines or fsm_create"
+        );
+    }
+
+    std::vector<machine_to_run> built;
+    std::vector<asset::voxf_param> declared;
+
+    for (const asset::asset_ref& machine : attached) {
+        auto data = read(machine);
+        if (!data) {
+            return refuse(data.error());
+        }
+        if (const auto problems = asset::find_problems(*data); !problems.empty()) {
+            return refuse(std::format(
+                "the state machine '{}' cannot run: {}", machine.stem(), problems.front()
+            ));
+        }
+
+        for (const asset::voxf_state& state : data->states) {
+            if (!state.clip.empty() && clips_->clip_for_machine(state.clip) == nullptr) {
+                return refuse(std::format(
+                    "the state '{}' of '{}' plays '{}', which does not load", state.name,
+                    machine.stem(), state.clip.str()
+                ));
+            }
+        }
+
+        for (const asset::voxf_param& param : data->params) {
+            if (!std::ranges::contains(declared, param.name, &asset::voxf_param::name)) {
+                declared.push_back(param);
+            }
+        }
+
+        asset::animation_fsm runnable = asset::build_fsm(
+            *data, [this](const asset::asset_ref& clip) { return clips_->clip_for_machine(clip); }
+        );
+        built.push_back(machine_to_run{.machine = std::move(runnable), .data = std::move(*data)});
+    }
+
+    if (!state_->ctx.in_fsm()) {
+        const std::size_t layer =
+            state_->fsm.is_open() ? layer_of(state_->fsm.source).value_or(0) : 0;
+
+        leave_edit_contexts(*state_, *clips_);
+        if (!enter(layer)) {
+            return refuse(std::format(
+                "the state machine '{}' could not be opened", attached[layer].stem()
+            ));
+        }
+    }
+
+    if (auto started = clips_->run_machines(std::move(built)); !started) {
+        return started;
+    }
+
+    running_refs_   = attached;
+    running_params_ = std::move(declared);
+    return {};
+}
+
+auto fsm_service::stop() -> void {
+    clips_->stop_machines();
+}
+
+auto fsm_service::drive(const machine_input& input) -> outcome {
+    if (!state_->anim.machines_running) {
+        return refuse("no state machine is running; start them with fsm_run");
+    }
+    const auto root = root_();
+    if (!root) {
+        return refuse(root.error());
+    }
+
+    const auto declared = [this](std::string_view name) -> const asset::voxf_param* {
+        const auto found = std::ranges::find(running_params_, name, &asset::voxf_param::name);
+        return found == running_params_.end() ? nullptr : &*found;
+    };
+    const auto listed = [this](bool triggers) {
+        std::vector<std::string> names;
+        for (const asset::voxf_param& param : running_params_) {
+            if ((param.type == asset::voxf_param_type::trigger) == triggers) {
+                names.push_back(param.name);
+            }
+        }
+        return joined(names);
+    };
+
+    for (const auto& [name, value] : input.values) {
+        const asset::voxf_param* param = declared(name);
+        if (param == nullptr || param->type == asset::voxf_param_type::trigger) {
+            return refuse(std::format(
+                "set: '{}' is not a value parameter of the running machines; they are: {}", name,
+                listed(false)
+            ));
+        }
+        if (param->type == asset::voxf_param_type::boolean && value != 0.0F && value != 1.0F) {
+            return refuse(std::format("set: '{}' is a bool, give true or false", name));
+        }
+        if (param->type == asset::voxf_param_type::integer && value != std::round(value)) {
+            return refuse(std::format("set: '{}' is an int, got {}", name, value));
+        }
+    }
+    for (const std::string& name : input.triggers) {
+        const asset::voxf_param* param = declared(name);
+        if (param == nullptr || param->type != asset::voxf_param_type::trigger) {
+            return refuse(std::format(
+                "fire: '{}' is not a trigger of the running machines; they are: {}", name,
+                listed(true)
+            ));
+        }
+    }
+
+    const auto runner = engine_->get_world().system<ecs::animation_fsm_system>().modify(*root);
+    for (const auto& [name, value] : input.values) {
+        runner.set_parameter(name, value);
+    }
+    for (const std::string& name : input.triggers) {
+        runner.fire_trigger(name);
+    }
+    return {};
+}
+
+auto fsm_service::run_status() const -> machine_run_status {
+    machine_run_status status{
+        .running    = state_->anim.machines_running,
+        .layers     = {},
+        .parameters = {},
+        .triggers   = {},
+    };
+    if (!status.running) {
+        return status;
+    }
+
+    const auto root = state_->scene.name_to_entity.find(state_->scene.root_name);
+    if (root == state_->scene.name_to_entity.end()) {
+        return status;
+    }
+
+    auto& world = engine_->get_world();
+    if (!world.has<ecs::animation_fsm_component>(root->second) ||
+        !world.has<ecs::animation_player_component>(root->second)) {
+        return status;
+    }
+
+    const auto& running = world.get<ecs::animation_fsm_component>(root->second);
+    const auto& player  = world.get<ecs::animation_player_component>(root->second);
+
+    for (std::size_t layer = 0; layer < running.machine_count(); ++layer) {
+        machine_layer_status described{
+            .machine  = layer < running_refs_.size() ? running_refs_[layer] : asset::asset_ref{},
+            .state    = running.get_machine(layer).get_current_state(),
+            .clip     = {},
+            .playback = asset::animation_state::stopped,
+            .time     = 0.0F,
+        };
+        if (player.has_layer(layer)) {
+            const asset::animation_layer& played = player.get_layer(layer);
+            described.clip     = played.clip ? played.clip->get_name() : std::string{};
+            described.playback = played.state;
+            described.time     = played.time;
+        }
+        status.layers.push_back(std::move(described));
+    }
+
+    for (const asset::voxf_param& param : running_params_) {
+        if (param.type == asset::voxf_param_type::trigger) {
+            status.triggers.push_back(param.name);
+            continue;
+        }
+        status.parameters.push_back(machine_parameter{
+            .name = param.name, .type = param.type, .value = running.get_board().get(param.name)
+        });
+    }
+    return status;
+}
+
 }  // namespace vw::sculptor

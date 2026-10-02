@@ -82,6 +82,8 @@ auto node_rename_problem(const app_state& state, std::string_view name, std::str
 }
 
 auto leave_edit_contexts(app_state& state, clip_service& clips) -> void {
+    clips.stop_machines();
+
     const bool inside_clip = std::ranges::any_of(state.ctx.stack, [](const edit_context& ctx) {
         return ctx.kind == edit_kind::clip;
     });
@@ -378,6 +380,19 @@ auto node_service::reparent(
         }
     ));
     return {};
+}
+
+auto node_service::rest_placement(std::string_view name)
+    -> std::expected<transform, std::string> {
+    if (auto ready = require_document_(); !ready) {
+        return refuse(ready.error());
+    }
+
+    const auto node = find_(name);
+    if (!node) {
+        return refuse(node.error());
+    }
+    return engine_->get_world().get<ecs::transform_component>(*node).get_transform();
 }
 
 auto node_service::set_transform(std::string_view name, const transform& placement) -> outcome {

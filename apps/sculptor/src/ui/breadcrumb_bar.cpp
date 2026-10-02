@@ -66,6 +66,8 @@ auto breadcrumb_bar::leave_to_(
         drops_clip = drops_clip || stack[i].kind == edit_kind::clip;
     }
 
+    clip_service_->stop_machines();
+
     if (drops_clip) {
         clip_service_->exit_animation_mode();
         state_->ui.show_timeline = false;
