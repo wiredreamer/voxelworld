@@ -190,7 +190,7 @@ def run_prefab_scenario(probe):
         "assets_list has its volumes, clips and machines",
         ok
         and "models/p_humanoid/m_head.voxm" in assets.get("volumes", [])
-        and "animations/a_idle.voxa" in assets.get("clips", [])
+        and "animations/a_humanoid_idle.voxa" in assets.get("clips", [])
         and "fsm/humanoid_locomotion.voxf" in assets.get("machines", []),
         str(assets),
     )
@@ -850,9 +850,9 @@ def run_clip_scenario(probe):
     probe.check("clip_get says when no clip is open", not ok and "no clip is open" in text, str(text))
 
     ok, text = tool(probe, "clip_open", {"name": "no_such_clip"})
-    probe.check("clip_open names the clip files for an unknown one", not ok and "a_idle" in text, str(text))
+    probe.check("clip_open names the clip files for an unknown one", not ok and "a_humanoid_idle" in text, str(text))
 
-    ok, idle = tool(probe, "clip_open", {"name": "a_idle"})
+    ok, idle = tool(probe, "clip_open", {"name": "a_humanoid_idle"})
     probe.check(
         "clip_open opens and selects a clip",
         ok and idle.get("rig") == "humanoid" and idle.get("selected") is True and idle.get("unsaved") is False,
@@ -862,7 +862,7 @@ def run_clip_scenario(probe):
     ok, state = tool(probe, "editor_state")
     probe.check(
         "clip_open brings the editor into the clip",
-        ok and state.get("context") == "clip" and state.get("clip") == "a_idle" and state.get("open_clips") == ["a_idle"],
+        ok and state.get("context") == "clip" and state.get("clip") == "a_humanoid_idle" and state.get("open_clips") == ["a_humanoid_idle"],
         str(state),
     )
 
@@ -871,7 +871,7 @@ def run_clip_scenario(probe):
     probe.check(
         "clip_get lists the keys of a target in the order of time",
         head_keys is not None and head_keys[0].get("time") == 0 and head_keys[0].get("position") == [0, 9.5, 0]
-        and [key["time"] for key in head_keys] == sorted(key["time"] for key in head_keys) and idle.get("duration") == 2,
+        and [key["time"] for key in head_keys] == sorted(key["time"] for key in head_keys) and close_to(idle.get("duration"), 4.8),
         str(head_keys),
     )
 
@@ -885,7 +885,7 @@ def run_clip_scenario(probe):
     ok, text = tool(probe, "clip_create", {"name": SCRATCH_CLIP})
     probe.check("clip_create refuses a clip that is open", not ok and "already open" in text, str(text))
 
-    ok, text = tool(probe, "clip_create", {"name": "a_walk"})
+    ok, text = tool(probe, "clip_create", {"name": "a_humanoid_walk_f"})
     probe.check("clip_create refuses an existing file", not ok and "overwrite: true" in text, str(text))
 
     ok, keyed = tool(
@@ -965,7 +965,7 @@ def run_clip_scenario(probe):
 
     ok, in_memory = tool(probe, "clip_get")
     ok, closed = tool(probe, "clip_close")
-    probe.check("clip_close closes the clip", ok and closed.get("open_clips") == ["a_idle"], str(closed))
+    probe.check("clip_close closes the clip", ok and closed.get("open_clips") == ["a_humanoid_idle"], str(closed))
 
     ok, state = tool(probe, "editor_state")
     probe.check(
@@ -990,7 +990,7 @@ def run_clip_scenario(probe):
     ok, closed = tool(probe, "clip_close", {"discard_unsaved": True})
     probe.check("clip_close drops them when told to", ok, str(closed))
 
-    tool(probe, "clip_open", {"name": "a_idle"})
+    tool(probe, "clip_open", {"name": "a_humanoid_idle"})
     tool(probe, "clip_pose_at", {"time": 1.2})
     posed_head = head_position(probe)
     ok, _ = tool(probe, "node_set_transform", {"name": "body", "scale": [1, 1, 1]})
@@ -1001,14 +1001,14 @@ def run_clip_scenario(probe):
         f"{state.get('context')} posed {posed_head} now {head_position(probe)}",
     )
 
-    tool(probe, "clip_close", {"clip": "a_idle", "discard_unsaved": True})
+    tool(probe, "clip_close", {"clip": "a_humanoid_idle", "discard_unsaved": True})
     run_playback_checks(probe)
     tool(probe, "prefab_close", {"discard_unsaved": True})
     remove_scratch_assets(asset_root)
 
 
 def run_playback_checks(probe):
-    ok, opened = tool(probe, "clip_open", {"name": "a_walk"})
+    ok, opened = tool(probe, "clip_open", {"name": "a_humanoid_walk_f"})
     probe.check(
         "an opened clip is not playing",
         ok and opened.get("playback", {}).get("state") == "stopped",
@@ -1066,7 +1066,7 @@ def run_playback_checks(probe):
     ok, text = tool(probe, "clip_play", {"clip": "nope"})
     probe.check("clip_play refuses a clip that is not open", not ok and "is not open" in text, str(text))
 
-    tool(probe, "clip_close", {"clip": "a_walk", "discard_unsaved": True})
+    tool(probe, "clip_close", {"clip": "a_humanoid_walk_f", "discard_unsaved": True})
 
 
 def machine_payload(machine):
@@ -1167,7 +1167,7 @@ def run_fsm_scenario(probe):
         "states": [
             {
                 "name": "idle",
-                "clip": "animations/a_idle.voxa",
+                "clip": "animations/a_humanoid_idle.voxa",
                 "transitions": [
                     {"to": "walk", "when": [{"param": "speed", "op": ">", "value": 0.5}], "blend": 0.2},
                     {"to": "walk", "on": "go"},
@@ -1175,7 +1175,7 @@ def run_fsm_scenario(probe):
             },
             {
                 "name": "walk",
-                "clip": "animations/a_walk.voxa",
+                "clip": "animations/a_humanoid_walk_f.voxa",
                 "rate": 1.5,
                 "fade_in": {"duration": 0.3, "interp": "ease_in"},
                 "transitions": [{"to": "idle", "when": [{"param": "armed", "op": "==", "value": False}], "wait_end": True}],
@@ -1333,7 +1333,7 @@ def run_rename_scenario(probe):
     )
     tool(probe, "undo")
 
-    tool(probe, "clip_open", {"name": "a_idle"})
+    tool(probe, "clip_open", {"name": "a_humanoid_idle"})
     ok, clip = tool(probe, "clip_get")
     head_keys = keys_of(clip, "head") if ok else None
 
@@ -1344,14 +1344,14 @@ def run_rename_scenario(probe):
         str(changed),
     )
 
-    ok, text = tool(probe, "clip_retarget", {"clip": "a_idle", "from": "neck", "to": "skull"})
+    ok, text = tool(probe, "clip_retarget", {"clip": "a_humanoid_idle", "from": "neck", "to": "skull"})
     probe.check("clip_retarget refuses a track the clip does not have", not ok and "has no track for 'neck'" in text, str(text))
-    ok, text = tool(probe, "clip_retarget", {"clip": "a_idle", "from": "head", "to": "crown"})
+    ok, text = tool(probe, "clip_retarget", {"clip": "a_humanoid_idle", "from": "head", "to": "crown"})
     probe.check("clip_retarget refuses a target the prefab does not have", not ok and "is not an animation target" in text, str(text))
-    ok, text = tool(probe, "clip_retarget", {"clip": "a_idle", "from": "head", "to": "body"})
+    ok, text = tool(probe, "clip_retarget", {"clip": "a_humanoid_idle", "from": "head", "to": "body"})
     probe.check("clip_retarget refuses a target that already has a track", not ok and "already has a track" in text, str(text))
 
-    ok, moved = tool(probe, "clip_retarget", {"clip": "a_idle", "from": "head", "to": "skull"})
+    ok, moved = tool(probe, "clip_retarget", {"clip": "a_humanoid_idle", "from": "head", "to": "skull"})
     probe.check(
         "clip_retarget moves the keys to the new target",
         ok and keys_of(moved, "head") is None and close_to(keys_of(moved, "skull"), head_keys)
@@ -1360,14 +1360,14 @@ def run_rename_scenario(probe):
     )
 
     tool(probe, "undo")
-    ok, back = tool(probe, "clip_get", {"clip": "a_idle"})
+    ok, back = tool(probe, "clip_get", {"clip": "a_humanoid_idle"})
     probe.check(
         "undo puts the keys back under the old target",
         ok and keys_of(back, "skull") is None and close_to(keys_of(back, "head"), head_keys),
         json.dumps(back)[:400],
     )
 
-    tool(probe, "clip_close", {"clip": "a_idle", "discard_unsaved": True})
+    tool(probe, "clip_close", {"clip": "a_humanoid_idle", "discard_unsaved": True})
     tool(probe, "prefab_close", {"discard_unsaved": True})
 
 
@@ -1715,14 +1715,14 @@ def run_machine_scenario(probe):
     ok, playing = tool(probe, "fsm_status")
     probe.check(
         "the entry state plays its clip",
-        ok and playing["layers"][0].get("clip") == "a_idle" and playing["layers"][0].get("playback") == "playing" and playing["layers"][0].get("time", 0) > 0,
+        ok and playing["layers"][0].get("clip") == "a_humanoid_idle" and playing["layers"][0].get("playback") == "playing" and playing["layers"][0].get("time", 0) > 0,
         str(playing.get("layers")),
     )
 
     ok, walking = tool(probe, "fsm_drive", {"set": {"speed": 1.0}})
     probe.check(
         "a parameter takes the machine to another state",
-        ok and walking["layers"][0].get("state") == "walk" and walking["layers"][0].get("clip") == "a_walk" and walking["parameters"].get("speed") == 1.0,
+        ok and walking["layers"][0].get("state") == "walk" and walking["layers"][0].get("clip") == "a_humanoid_walk_f" and walking["parameters"].get("speed") == 1.0,
         str(walking),
     )
     ok, struck = tool(probe, "fsm_drive", {"fire": ["attack"]})
@@ -1797,7 +1797,7 @@ def run_machine_scenario(probe):
     )
     tool(probe, "undo")
 
-    tool(probe, "clip_open", {"name": "a_idle"})
+    tool(probe, "clip_open", {"name": "a_humanoid_idle"})
     tool(probe, "clip_pose_at", {"time": 1.2})
     ok, moved = tool(probe, "node_set_transform", {"name": "head", "scale": [1, 1, 1]})
     probe.check(
@@ -1808,12 +1808,12 @@ def run_machine_scenario(probe):
     tool(probe, "undo")
 
     tool(probe, "fsm_run")
-    ok, opened = tool(probe, "clip_open", {"name": "a_walk"})
+    ok, opened = tool(probe, "clip_open", {"name": "a_humanoid_walk_f"})
     ok_status, status = tool(probe, "fsm_status")
     probe.check("opening a clip stops the machines", ok and ok_status and status.get("running") is False, str(status))
 
-    tool(probe, "clip_close", {"clip": "a_walk", "discard_unsaved": True})
-    tool(probe, "clip_close", {"clip": "a_idle", "discard_unsaved": True})
+    tool(probe, "clip_close", {"clip": "a_humanoid_walk_f", "discard_unsaved": True})
+    tool(probe, "clip_close", {"clip": "a_humanoid_idle", "discard_unsaved": True})
     tool(probe, "prefab_close", {"discard_unsaved": True})
 
 
