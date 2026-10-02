@@ -12,7 +12,7 @@ import vw.gfx;
 namespace vw::sculptor {
 namespace {
 
-constexpr float32 same_instant_tolerance_seconds = 1e-3f;
+constexpr float32 same_instant_tolerance_seconds = asset::same_instant_seconds;
 
 constexpr std::array pose_properties{
     asset::animation_property::position,

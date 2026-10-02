@@ -87,6 +87,11 @@ constexpr std::string_view no_arguments =
         unsaved_clips.emplace_back(clip_name);
     }
 
+    json::array open_clips;
+    for (std::string& clip_name : bindings.clips->open_clips()) {
+        open_clips.emplace_back(std::move(clip_name));
+    }
+
     return json::object{
         {"prefab", json_or_null(state.file.filename)},
         {"asset_root", app_state::asset_root_name},
@@ -98,6 +103,7 @@ constexpr std::string_view no_arguments =
         {"context_stack", std::move(contexts)},
         {"tool", name_of(state.tool.selected_tool)},
         {"clip", json_or_null(state.anim.selected_clip_name)},
+        {"open_clips", std::move(open_clips)},
         {"machine", state.fsm.is_open() ? json::value{state.fsm.source.str()} : json::value{}},
         {"unsaved",
          json::object{
@@ -323,6 +329,7 @@ auto make_editor_tools(const mcp_bindings& bindings) -> std::vector<mcp_tool> {
     append_node_tools(tools, bindings);
     append_volume_tools(tools, bindings);
     append_view_tools(tools, bindings);
+    append_clip_tools(tools, bindings);
 
     return tools;
 }

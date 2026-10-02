@@ -44,7 +44,23 @@ public:
     auto stop_layer_for_clip(const std::string& clip_name) -> void;
     auto stop_all_layers() -> void;
 
+    using outcome = std::expected<void, std::string>;
+
+    [[nodiscard]] auto open_clips() const -> std::vector<std::string>;
+    [[nodiscard]] auto find(std::string_view name) const
+        -> std::expected<std::shared_ptr<asset::animation_clip>, std::string>;
+
+    auto create(std::string_view name, bool overwrite) -> outcome;
+    auto open(std::string_view name, bool ignore_rig) -> outcome;
+    auto select(std::string_view name) -> outcome;
+    auto save(std::string_view name) -> outcome;
+    auto close(std::string_view name, bool discard_unsaved) -> outcome;
+    auto set_tracks(std::string_view name, std::vector<asset::animation_track> tracks) -> outcome;
+    auto show_pose(std::string_view name, float32 time) -> outcome;
+
 private:
+    [[nodiscard]] auto root_() const -> std::expected<ecs::entity, std::string>;
+
     engine_type* engine_;
     app_state* state_;
     operation_manager* op_manager_;

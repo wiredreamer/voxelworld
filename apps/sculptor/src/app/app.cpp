@@ -125,6 +125,7 @@ auto app::start_mcp_(
             .files      = &file_service_,
             .nodes      = &node_service_,
             .volumes    = &volume_service_,
+            .clips      = &clip_service_,
         }
     );
     state_.mcp = mcp_server_->status();

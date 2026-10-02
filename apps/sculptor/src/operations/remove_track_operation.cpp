@@ -29,7 +29,8 @@ auto remove_track_operation::execute() -> void {
     }
 
     clip->remove_track(params_.track_name);
-    state_->anim.need_apply_pose = true;
+    state_->anim.need_apply_pose                  = true;
+    state_->anim.unsaved_clips[params_.clip_name] = true;
 
     if (state_->anim.selected_track_name == params_.track_name) {
         state_->anim.selected_track_name.clear();
@@ -45,7 +46,8 @@ auto remove_track_operation::undo() -> void {
         return;
     }
     clip->add_track(*saved_track_);
-    state_->anim.need_apply_pose = true;
+    state_->anim.need_apply_pose                  = true;
+    state_->anim.unsaved_clips[params_.clip_name] = true;
 }
 
 }  // namespace vw::sculptor

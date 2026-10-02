@@ -1,6 +1,6 @@
 # MCP в Sculptor — план
 
-Версия 1.1 от 2026-10-02. Статус: этапы 0–4 сделаны, дальше этап 5.
+Версия 1.1 от 2026-10-02. Статус: этапы 0–5 сделаны, дальше этап 6.
 
 Цель: Claude Code подключается к запущенному Sculptor и правит префабы,
 воксельные объёмы, анимации и стейт-машины. Нужно для ускорения производства
@@ -138,7 +138,7 @@ Claude Code ──HTTP POST /mcp──► сетевой поток (127.0.0.1)
 | Префаб | `prefab_new`, `prefab_open`, `prefab_save`, `prefab_save_as`, `prefab_close`, `prefab_get` |
 | Узлы | `node_create`, `node_delete`, `node_move`, `node_set_transform`, `node_set_components`, `prefab_set_rig` |
 | Объём | `volume_get`, `volume_write`, `volume_reshape`, `volume_set_pivot`, `volume_rename` |
-| Клип | `clip_create`, `clip_open`, `clip_get`, `clip_set_keys`, `clip_remove_keys`, `clip_remove_track`, `clip_save`, `clip_close`, `clip_pose_at` |
+| Клип | `clip_create`, `clip_open`, `clip_get`, `clip_set_keys`, `clip_remove_keys`, `clip_save`, `clip_close`, `clip_pose_at` |
 | Машина | `fsm_create`, `fsm_get`, `fsm_set`, `fsm_save`, `prefab_set_machines` |
 | Вид | `view_set`, `view_screenshot` |
 
@@ -174,7 +174,7 @@ Claude Code ──HTTP POST /mcp──► сетевой поток (127.0.0.1)
 | 2 | Структура — **сделан** | Слой валидации перед `execute`, сборка узла из `create_entity_modal`, таблица «тег → операция», удаление поддерева; инструменты узлов | L |
 | 3 | Объёмы — **сделан** | Сделано иначе, чем задумано: пачка идёт через `asset::edited`, а не через вставку, и объём сам не растёт (см. `docs/mcp.md#объёмы`). Упаковка пачки в `voxel_clip`, расширение до бокса, чтение срезами, проверка границ и каталога вокселей | L |
 | 4 | Зрение — **сделан** | Описание — `docs/mcp.md#вид` и `docs/ENGINE.md#снятие-кадра`. `eTransferSrc` на swapchain, копирование кадра, кадр без ImGui, кодирование PNG, камера на узел | M |
-| 5 | Анимации | `clip_service::create`, явное имя клипа в `keyframe_service`, применение позы вне таймлайна, эйлеры → кватернион функциями движка | L |
+| 5 | Анимации — **сделан** | Описание — `docs/mcp.md#клипы`. Отдельного `clip_remove_track` нет: трек уходит, когда `clip_remove_keys` убирает его последний ключ. `clip_service::create`, явное имя клипа в `keyframe_service`, применение позы вне таймлайна, эйлеры → кватернион функциями движка | L |
 | 6 | Машины | Чистые функции и валидация `voxf_data` в `vw.asset` с тестами, вход, сохранение, список машин | S |
 | 7 | Закрепление | `docs/mcp.md`, навык агента с соглашениями контента, дымовой скрипт в `tools/` | S |
 
@@ -199,8 +199,9 @@ Claude Code ──HTTP POST /mcp──► сетевой поток (127.0.0.1)
 - `fsm_service::create` перезаписывает существующий файл; вход в другую машину
   затирает несохранённые правки.
 - Ctrl+S в контексте машины сохраняет префаб, а не машину.
-- `remove_track_operation` не помечает клип несохранённым;
-  `add_track_operation::undo` не снимает добавленный target-компонент.
+- ~~`remove_track_operation` не помечает клип несохранённым.~~ Исправлено на
+  этапе 5.
+- `add_track_operation::undo` не снимает добавленный target-компонент.
 - ~~Снятие `structure_component` правит мир без операции и undo.~~ Исправлено
   на этапе 2: `remove_structure_operation`.
 

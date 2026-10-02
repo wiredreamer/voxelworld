@@ -1251,3 +1251,30 @@ private:
 };
 
 }  // namespace vw::sculptor
+
+export namespace vw::sculptor {
+
+struct set_clip_tracks_params {
+    std::string clip_name;
+    std::vector<asset::animation_track> tracks;
+};
+
+class set_clip_tracks_operation final : public base_operation {
+public:
+    using engine_type = gfx::engine;
+
+    set_clip_tracks_operation(engine_type& eng, app_state& st, set_clip_tracks_params params);
+
+    auto execute() -> void override;
+    auto undo() -> void override;
+
+private:
+    auto apply_(const std::vector<asset::animation_track>& tracks) -> void;
+
+    engine_type* engine_;
+    app_state* state_;
+    set_clip_tracks_params params_;
+    std::vector<asset::animation_track> previous_;
+};
+
+}  // namespace vw::sculptor

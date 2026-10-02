@@ -18,6 +18,7 @@ target_sources(vw_asset
             src/anim/animation_keyframe.cppm
             src/anim/animation_channel.cppm
             src/anim/animation_clip.cppm
+            src/anim/animation_edit.cppm
             src/anim/animation_fsm.cppm
             src/serial/serial.cppm
             src/serial/version.cppm
@@ -34,6 +35,7 @@ target_sources(vw_asset
         src/model/model_edit.cpp
         src/model/chunk_volume.cpp
         src/anim/anim.cpp
+        src/anim/animation_edit.cpp
         src/serial/serial.cpp
         src/serial/voxm.cpp
         src/serial/voxf.cpp

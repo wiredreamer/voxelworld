@@ -7,6 +7,7 @@ import struct
 import sys
 
 SCRATCH_PREFABS = ("_mcp_smoke", "_mcp_smoke_copy")
+SCRATCH_CLIP = "_mcp_smoke_clip"
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 17800
@@ -169,6 +170,7 @@ def remove_scratch_assets(asset_root):
     for name in SCRATCH_PREFABS:
         (asset_root / "prefabs" / f"{name}.vox").unlink(missing_ok=True)
         shutil.rmtree(asset_root / "models" / name, ignore_errors=True)
+    (asset_root / "animations" / f"{SCRATCH_CLIP}.voxa").unlink(missing_ok=True)
 
 
 def run_prefab_scenario(probe):
@@ -774,6 +776,185 @@ def run_view_scenario(probe):
     remove_scratch_assets(asset_root)
 
 
+def head_position(probe):
+    return nodes_of(probe).get("head", {}).get("position")
+
+
+def keys_of(clip, target):
+    return next((track["keys"] for track in clip.get("tracks", []) if track["target"] == target), None)
+
+
+def run_clip_scenario(probe):
+    ok, state = tool(probe, "editor_state")
+    asset_root = pathlib.Path(state["asset_root"])
+    remove_scratch_assets(asset_root)
+    tool(probe, "prefab_close", {"discard_unsaved": True})
+
+    ok, text = tool(probe, "clip_create", {"name": SCRATCH_CLIP})
+    probe.check("clip_create refuses without a prefab", not ok and "no prefab is open" in text, str(text))
+
+    tool(probe, "prefab_open", {"name": "p_humanoid"})
+
+    ok, text = tool(probe, "clip_get")
+    probe.check("clip_get says when no clip is open", not ok and "no clip is open" in text, str(text))
+
+    ok, text = tool(probe, "clip_open", {"name": "no_such_clip"})
+    probe.check("clip_open names the clip files for an unknown one", not ok and "a_idle" in text, str(text))
+
+    ok, idle = tool(probe, "clip_open", {"name": "a_idle"})
+    probe.check(
+        "clip_open opens and selects a clip",
+        ok and idle.get("rig") == "humanoid" and idle.get("selected") is True and idle.get("unsaved") is False,
+        str(idle),
+    )
+
+    ok, state = tool(probe, "editor_state")
+    probe.check(
+        "clip_open brings the editor into the clip",
+        ok and state.get("context") == "clip" and state.get("clip") == "a_idle" and state.get("open_clips") == ["a_idle"],
+        str(state),
+    )
+
+    ok, idle = tool(probe, "clip_get")
+    head_keys = keys_of(idle, "head") if ok else None
+    probe.check(
+        "clip_get lists the keys of a target in the order of time",
+        head_keys is not None and head_keys[0].get("time") == 0 and head_keys[0].get("position") == [0, 9.5, 0]
+        and [key["time"] for key in head_keys] == sorted(key["time"] for key in head_keys) and idle.get("duration") == 2,
+        str(head_keys),
+    )
+
+    ok, fresh = tool(probe, "clip_create", {"name": SCRATCH_CLIP})
+    probe.check(
+        "clip_create makes an empty clip with the rig of the prefab",
+        ok and fresh.get("rig") == "humanoid" and fresh.get("key_count") == 0 and fresh.get("selected") is True,
+        str(fresh),
+    )
+
+    ok, text = tool(probe, "clip_create", {"name": SCRATCH_CLIP})
+    probe.check("clip_create refuses a clip that is open", not ok and "already open" in text, str(text))
+
+    ok, text = tool(probe, "clip_create", {"name": "a_walk"})
+    probe.check("clip_create refuses an existing file", not ok and "overwrite: true" in text, str(text))
+
+    ok, keyed = tool(
+        probe,
+        "clip_set_keys",
+        {
+            "keys": [
+                {"target": "head", "time": 1, "position": [0, 12, 0], "rotation_degrees": [0, 45, 0], "interp": "ease_in_out"},
+                {"target": "head", "time": 0, "position": [0, 9.5, 0]},
+                {"target": "body", "time": 0.5, "scale": [1, 1.2, 1]},
+            ]
+        },
+    )
+    probe.check(
+        "clip_set_keys puts keys and makes tracks",
+        ok and keyed.get("key_count") == 4 and keyed.get("track_count") == 2 and keyed.get("duration") == 1 and keyed.get("unsaved") is True,
+        str(keyed),
+    )
+
+    ok, clip = tool(probe, "clip_get", {"clip": SCRATCH_CLIP})
+    head_keys = keys_of(clip, "head") if ok else None
+    probe.check(
+        "the keys read back as they were put",
+        head_keys is not None and len(head_keys) == 2 and head_keys[0] == {"time": 0, "position": [0, 9.5, 0]}
+        and head_keys[1].get("position") == [0, 12, 0] and close_to(head_keys[1].get("rotation_degrees"), [0, 45, 0])
+        and head_keys[1].get("interp") == "ease_in_out",
+        str(head_keys),
+    )
+
+    ok, replaced = tool(probe, "clip_set_keys", {"keys": [{"target": "head", "time": 1.0003, "position": [0, 13, 0]}]})
+    probe.check("a key at a taken instant replaces the one there", ok and replaced.get("key_count") == 4, str(replaced))
+
+    ok, text = tool(probe, "clip_set_keys", {"keys": [{"target": "tail", "time": 0, "position": [0, 0, 0]}]})
+    probe.check("a target the prefab lacks is refused with the targets", not ok and "not an animation target" in text and "hand_left" in text, str(text))
+
+    ok, text = tool(probe, "clip_set_keys", {"keys": [{"target": "head", "time": 0}]})
+    probe.check("a key without a value is refused", not ok and "at least one of position" in text, str(text))
+
+    ok, text = tool(probe, "clip_set_keys", {"keys": [{"target": "head", "time": -1, "position": [0, 0, 0]}]})
+    probe.check("a negative time is refused", not ok and "must not be negative" in text, str(text))
+
+    ok, text = tool(probe, "clip_set_keys", {"keys": [{"target": "head", "time": 0, "position": [0, 0, 0], "interp": "bouncy"}]})
+    probe.check("an unknown interpolation is refused", not ok and "cubic_bezier" in text, str(text))
+
+    ok, after_refusals = tool(probe, "clip_get")
+    probe.check("refused keys change nothing", ok and after_refusals.get("key_count") == 4, str(after_refusals.get("key_count")))
+
+    ok, posed = tool(probe, "clip_pose_at", {"time": 1})
+    probe.check("clip_pose_at poses the prefab at a time", ok and close_to(head_position(probe), [0, 13, 0], 0.01), str(head_position(probe)))
+    tool(probe, "clip_pose_at", {"time": 0.5})
+    probe.check("the pose between two keys lies between them", close_to(head_position(probe), [0, 11.25, 0], 0.05), str(head_position(probe)))
+
+    tool(probe, "undo")
+    tool(probe, "clip_pose_at", {"time": 1})
+    probe.check("undo takes back the last keys", close_to(head_position(probe), [0, 12, 0]), str(head_position(probe)))
+    tool(probe, "redo")
+
+    ok, removed = tool(probe, "clip_remove_keys", {"target": "head", "property": "rotation"})
+    probe.check("clip_remove_keys removes the keys of one property", ok and removed.get("keys_removed") == 1 and removed.get("key_count") == 3, str(removed))
+
+    ok, text = tool(probe, "clip_remove_keys", {"target": "head", "from": 5, "to": 6})
+    probe.check("removing where there are no keys is refused", not ok and "no keys in that span" in text, str(text))
+
+    ok, text = tool(probe, "clip_remove_keys", {"target": "foot_left"})
+    probe.check("removing from a track that is not there names the tracks", not ok and "body, head" in text.replace("head, body", "body, head"), str(text))
+
+    ok, removed = tool(probe, "clip_remove_keys", {"target": "body"})
+    probe.check("removing every key removes the track", ok and removed.get("track_count") == 1 and removed.get("key_count") == 2, str(removed))
+
+    ok, saved = tool(probe, "clip_save")
+    clip_file = asset_root / "animations" / f"{SCRATCH_CLIP}.voxa"
+    probe.check(
+        "clip_save writes the clip with its rig",
+        ok and saved.get("unsaved") is False and clip_file.is_file() and "rig humanoid" in clip_file.read_text(encoding="utf-8"),
+        str(saved),
+    )
+
+    ok, in_memory = tool(probe, "clip_get")
+    ok, closed = tool(probe, "clip_close")
+    probe.check("clip_close closes the clip", ok and closed.get("open_clips") == ["a_idle"], str(closed))
+
+    ok, state = tool(probe, "editor_state")
+    probe.check(
+        "closing the selected clip returns to the prefab and its rest pose",
+        ok and state.get("context") == "prefab" and close_to(head_position(probe), [0, 9.5, 0]),
+        f"{state.get('context')} {head_position(probe)}",
+    )
+
+    tool(probe, "clip_open", {"name": SCRATCH_CLIP})
+    ok, from_disk = tool(probe, "clip_get")
+    probe.check(
+        "the saved clip reads back the same from disk",
+        ok and close_to(from_disk.get("tracks"), in_memory.get("tracks")) and from_disk.get("rig") == "humanoid",
+        json.dumps(from_disk.get("tracks")),
+    )
+
+    tool(probe, "clip_set_keys", {"keys": [{"target": "head", "time": 2, "position": [0, 9.5, 0]}]})
+    ok, text = tool(probe, "clip_close")
+    probe.check("clip_close refuses over unsaved keys", not ok and "discard_unsaved" in text, str(text))
+    ok, text = tool(probe, "prefab_close")
+    probe.check("prefab_close names the unsaved clip", not ok and f"the clip {SCRATCH_CLIP}" in text, str(text))
+    ok, closed = tool(probe, "clip_close", {"discard_unsaved": True})
+    probe.check("clip_close drops them when told to", ok, str(closed))
+
+    tool(probe, "clip_open", {"name": "a_idle"})
+    tool(probe, "clip_pose_at", {"time": 1.2})
+    posed_head = head_position(probe)
+    ok, _ = tool(probe, "node_set_transform", {"name": "body", "scale": [1, 1, 1]})
+    ok, state = tool(probe, "editor_state")
+    probe.check(
+        "a node tool leaves the clip and restores the rest pose first",
+        ok and state.get("context") == "prefab" and not close_to(posed_head, [0, 9.5, 0]) and close_to(head_position(probe), [0, 9.5, 0]),
+        f"{state.get('context')} posed {posed_head} now {head_position(probe)}",
+    )
+
+    tool(probe, "clip_close", {"clip": "a_idle", "discard_unsaved": True})
+    tool(probe, "prefab_close", {"discard_unsaved": True})
+    remove_scratch_assets(asset_root)
+
+
 def main():
     port = DEFAULT_PORT
     with_scenario = False
@@ -795,6 +976,7 @@ def main():
             run_node_scenario(probe)
             run_volume_scenario(probe)
             run_view_scenario(probe)
+            run_clip_scenario(probe)
     except OSError as error:
         print(f"FAIL cannot reach Sculptor on {DEFAULT_HOST}:{port} -- {error}")
         print("     start it with: sculptor --mcp")

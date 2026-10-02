@@ -52,6 +52,7 @@ target_sources(${PROJECT_NAME}
         src/operations/remove_track_operation.cpp
         src/operations/remove_voxel_operation.cpp
         src/operations/set_socket_transform_operation.cpp
+        src/operations/set_clip_tracks_operation.cpp
         src/operations/set_pivot_operation.cpp
         src/operations/set_rig_operation.cpp
         src/operations/add_variant_slot_operation.cpp
@@ -66,6 +67,7 @@ target_sources(${PROJECT_NAME}
         src/operations/replace_volume.cpp
         src/operations/clip_operations.cpp
         src/services/clip_service.cpp
+        src/services/clip_editing.cpp
         src/services/clipboard_service.cpp
         src/services/file_service.cpp
         src/services/node_service.cpp
@@ -125,6 +127,7 @@ if (VW_SCULPTOR_MCP)
         src/mcp/editor_tools.cpp
         src/mcp/http_listener.cpp
         src/mcp/arguments.cpp
+        src/mcp/clip_tools.cpp
         src/mcp/node_tools.cpp
         src/mcp/prefab_tools.cpp
         src/mcp/protocol.cpp
