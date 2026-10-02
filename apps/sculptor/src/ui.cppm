@@ -778,8 +778,7 @@ public:
     using engine_type = gfx::engine;
 
     socket_panel(
-        engine_type& eng, app_state& st, operation_manager& op_manager,
-        asset::model_library& library
+        engine_type& eng, app_state& st, operation_manager& op_manager, preview_service& previews
     );
 
     auto render(float delta_time) -> void;
@@ -799,7 +798,7 @@ private:
     engine_type* engine_;
     app_state* state_;
     operation_manager* op_manager_;
-    asset::model_library* library_;
+    preview_service* previews_;
 
     std::string new_socket_name_;
     std::string add_socket_error_;

@@ -826,6 +826,35 @@ auto append_volume_tools(std::vector<tool>& tools, const editor_bindings& bindin
     });
 
     tools.push_back(tool{
+        .name = "volume_fork",
+        .description =
+            "Give a node a volume of its own when it shares one with other nodes: the node gets "
+            "a copy under a new file name and the others keep the old volume. As one undo step; "
+            "the file is written when the prefab is saved. Edits of a shared volume show in "
+            "every node that holds it, so fork before changing one of them alone.",
+        .input_schema = rename_schema,
+        .run          = when_idle(
+            bindings,
+            [bindings](const json::value& arguments) -> tool_outcome {
+                argument_reader in{arguments};
+                in.allow({"node", "name", "overwrite"});
+                const std::string node = in.text("node");
+                const std::string name = in.text("name");
+                const bool overwrite   = in.flag_or("overwrite", false);
+                if (in.failed()) {
+                    return tool_failure(in.error());
+                }
+
+                const auto forked = bindings.volumes->fork(node, name, overwrite);
+                if (!forked) {
+                    return tool_failure(forked.error());
+                }
+                return tool_success(describe_volume(bindings, node));
+            }
+        ),
+    });
+
+    tools.push_back(tool{
         .name = "volume_rename",
         .description =
             "Rename the file of a node's volume inside the folder of the prefab. Writes the "

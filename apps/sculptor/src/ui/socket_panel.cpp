@@ -16,10 +16,9 @@ import vw.gfx;
 namespace vw::sculptor {
 
 socket_panel::socket_panel(
-    engine_type& eng, app_state& st, operation_manager& op_manager,
-    asset::model_library& library
+    engine_type& eng, app_state& st, operation_manager& op_manager, preview_service& previews
 )
-    : engine_(&eng), state_(&st), op_manager_(&op_manager), library_(&library) {}
+    : engine_(&eng), state_(&st), op_manager_(&op_manager), previews_(&previews) {}
 
 auto socket_panel::render(
     float
@@ -325,55 +324,7 @@ auto socket_panel::render_preview_file_list_() -> void {
 auto socket_panel::load_preview_(
     const std::string& socket_name, const std::string& filename
 ) const -> void {
-    const auto pkey = socket_state::socket_preview_key(state_->scene.selected_name, socket_name);
-    unload_preview_(pkey);
-
-    namespace fs = std::filesystem;
-
-    asset::vox_parser_plain parser;
-    ecs::vox_deserializer deserializer{engine_->get_world(), parser, *library_};
-    const fs::path filepath = app_state::prefab_dir() / fs::path{filename};
-
-    const ecs::vox_deserializer::options opts{
-        .skip_tags = {"socket", "anim_target"},
-    };
-
-    auto result = deserializer.deserialize(filepath, opts);
-    if (!result.has_value()) {
-        return;
-    }
-
-    const auto parent_ent   = state_->scene.name_to_entity[state_->scene.selected_name];
-    auto& world             = engine_->get_world();
-    const auto& socket_comp = world.get<ecs::socket_component>(parent_ent);
-    const auto* sp          = socket_comp.find(socket_name);
-    if (!sp) {
-        return;
-    }
-
-    auto& variants = world.system<ecs::variant_system>();
-    for (const auto ent : result->entities) {
-        variants.mark_content(ent, parent_ent);
-    }
-
-    socket_state::socket_preview preview;
-    preview.filename          = filename;
-    preview.preview_root_name = result->root_name;
-    preview.entities          = std::move(result->entities);
-
-    if (result->name_to_entity.contains(result->root_name)) {
-        const auto preview_root = result->name_to_entity[result->root_name];
-        auto& transform_sys = world.system<ecs::transform_system>();
-        transform_sys.modify(preview_root)
-            .set_position(sp->position)
-            .set_rotation(sp->rotation)
-            .set_scale(sp->scale);
-
-        auto& hierarchy_sys = world.system<ecs::hierarchy_system>();
-        hierarchy_sys.modify(preview_root).set_parent(parent_ent);
-    }
-
-    state_->sockets.socket_previews[pkey] = std::move(preview);
+    static_cast<void>(previews_->show(state_->scene.selected_name, socket_name, filename));
 }
 
 auto socket_panel::unload_preview_(

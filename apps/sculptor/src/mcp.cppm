@@ -24,6 +24,7 @@ struct editor_bindings {
     clip_service* clips           = nullptr;
     fsm_service* machines         = nullptr;
     view_service* views           = nullptr;
+    preview_service* previews     = nullptr;
 };
 
 class server final {

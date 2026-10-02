@@ -39,6 +39,8 @@ target_sources(${PROJECT_NAME}
         src/operations/create_clip_operation.cpp
         src/operations/create_entity_operation.cpp
         src/operations/delete_entity_operation.cpp
+        src/operations/duplicate_entity_operation.cpp
+        src/operations/fork_volume_operation.cpp
         src/operations/rename_entity_operation.cpp
         src/operations/expand_model_operation.cpp
         src/operations/modify_keyframe_operation.cpp
@@ -74,6 +76,7 @@ target_sources(${PROJECT_NAME}
         src/services/node_service.cpp
         src/services/volume_service.cpp
         src/services/view_service.cpp
+        src/services/preview_service.cpp
         src/services/fsm_service.cpp
         src/services/fsm_editing.cpp
         src/services/keyframe_service.cpp

@@ -35,6 +35,7 @@ app::app(
     , node_service_(eng, state_, model_library_, op_manager_, clip_service_)
     , volume_service_(eng, state_, op_manager_, file_service_, clip_service_)
     , view_service_(eng, state_)
+    , preview_service_(eng, state_, model_library_)
 
     , menu_bar_(eng, state_, op_manager_, file_service_, clipboard_service_, view_service_)
     , breadcrumb_bar_(eng, state_, clip_service_)
@@ -44,7 +45,7 @@ app::app(
     , gizmo_panel_(state_)
     , voxel_palette_panel_(eng, state_)
     , entity_properties_panel_(eng, state_, op_manager_, model_library_)
-    , socket_panel_(eng, state_, op_manager_, model_library_)
+    , socket_panel_(eng, state_, op_manager_, preview_service_)
     , keyframe_properties_panel_(eng, state_, op_manager_, keyframe_service_)
     , entity_tree_panel_(eng, state_, op_manager_, model_library_)
     , timeline_panel_(eng, state_, op_manager_, clip_service_, keyframe_service_)
@@ -129,6 +130,7 @@ auto app::start_mcp_(
             .clips      = &clip_service_,
             .machines   = &fsm_service_,
             .views      = &view_service_,
+            .previews   = &preview_service_,
         }
     );
     state_.mcp = mcp_server_->status();

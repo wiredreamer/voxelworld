@@ -835,6 +835,75 @@ private:
 
 export namespace vw::sculptor {
 
+struct duplicate_entity_params {
+    std::string name;
+    std::string parent_name;
+    std::unordered_map<std::string, std::string> names;
+    std::optional<asset::voxel_axis> mirror;
+};
+
+class duplicate_entity_operation final : public base_operation {
+public:
+    using engine_type = gfx::engine;
+
+    duplicate_entity_operation(
+        engine_type& engine, app_state& state, asset::model_library& library,
+        const duplicate_entity_params& params
+    );
+
+    auto execute() -> void override;
+    auto undo() -> void override;
+
+private:
+    struct copied_node {
+        std::string name;
+        transform placement;
+        std::shared_ptr<asset::model> volume;
+        std::vector<ecs::socket_point> sockets;
+    };
+
+    engine_type* engine_;
+    app_state* state_;
+    asset::model_library* library_;
+    duplicate_entity_params params_;
+
+    std::vector<std::string> made_names_;
+    std::string selected_before_;
+};
+
+}  // namespace vw::sculptor
+
+export namespace vw::sculptor {
+
+struct fork_volume_params {
+    std::string name;
+    asset::asset_ref source;
+};
+
+class fork_volume_operation final : public base_operation {
+public:
+    using engine_type = gfx::engine;
+
+    fork_volume_operation(engine_type& eng, app_state& st, const fork_volume_params& params);
+
+    auto execute() -> void override;
+    auto undo() -> void override;
+
+private:
+    auto put_(std::shared_ptr<asset::model> volume, const asset::asset_ref& source) const -> void;
+
+    engine_type* engine_;
+    app_state* state_;
+    fork_volume_params params_;
+
+    std::shared_ptr<asset::model> shared_before_;
+    asset::asset_ref source_before_;
+};
+
+}  // namespace vw::sculptor
+
+export namespace vw::sculptor {
+
 struct rename_entity_params {
     std::string name;
     std::string new_name;

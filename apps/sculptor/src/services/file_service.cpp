@@ -258,6 +258,30 @@ auto file_service::rename_model(
     return {};
 }
 
+auto file_service::free_model_ref(
+    std::string_view stem, bool overwrite
+) const -> std::expected<asset::asset_ref, rename_model_error> {
+    if (state_->file.filename.empty()) {
+        return std::unexpected(rename_model_error::write_failed);
+    }
+
+    const auto prefab_ref = make_prefab_ref(state_->file.filename);
+    const auto wanted =
+        asset::renamed_model_ref(asset::default_model_ref(prefab_ref, "volume"), stem);
+    if (!wanted.has_value()) {
+        return std::unexpected(rename_model_error::invalid_name);
+    }
+    if (is_model_referenced_(*wanted)) {
+        return std::unexpected(rename_model_error::name_in_use);
+    }
+
+    std::error_code ec;
+    if (!overwrite && std::filesystem::exists(library_->path_of(*wanted), ec)) {
+        return std::unexpected(rename_model_error::file_exists);
+    }
+    return *wanted;
+}
+
 auto file_service::is_model_referenced_(
     const asset::asset_ref& ref
 ) const -> bool {

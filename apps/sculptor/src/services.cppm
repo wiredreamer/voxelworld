@@ -119,6 +119,8 @@ public:
 
     auto rename_model(const asset::asset_ref& ref, std::string_view stem, bool overwrite)
         -> std::expected<void, rename_model_error>;
+    [[nodiscard]] auto free_model_ref(std::string_view stem, bool overwrite) const
+        -> std::expected<asset::asset_ref, rename_model_error>;
 
     auto collect_dirty_models() -> void;
 
@@ -361,6 +363,13 @@ struct node_spec {
     component_changes components;
 };
 
+struct duplicate_spec {
+    std::string name;
+    std::optional<std::string> parent;
+    std::unordered_map<std::string, std::string> names;
+    std::optional<asset::voxel_axis> mirror;
+};
+
 inline constexpr int32 max_volume_side = 256;
 
 class node_service final {
@@ -378,6 +387,7 @@ public:
     auto create(const node_spec& spec) -> outcome;
     auto remove(std::string_view name) -> outcome;
     auto rename(std::string_view name, std::string_view new_name) -> outcome;
+    auto duplicate(const duplicate_spec& spec) -> outcome;
     auto reparent(std::string_view name, std::string_view parent, std::optional<std::size_t> index)
         -> outcome;
     auto set_transform(std::string_view name, const transform& placement) -> outcome;
@@ -461,6 +471,7 @@ public:
     auto reorient(std::string_view node, const asset::voxel_orientation& how) -> outcome;
     auto set_pivot(std::string_view node, const vec3f& pivot) -> outcome;
     auto rename(std::string_view node, std::string_view stem, bool overwrite) -> outcome;
+    auto fork(std::string_view node, std::string_view stem, bool overwrite) -> outcome;
 
 private:
     [[nodiscard]] auto enter_(std::string_view node) -> std::expected<volume, std::string>;
@@ -514,6 +525,9 @@ public:
     auto set_projection(gfx::projection_kind kind) -> void;
     auto toggle_projection() -> void;
 
+    auto set_hidden(const std::vector<std::string>& nodes) -> std::expected<void, std::string>;
+    [[nodiscard]] auto hidden() const -> std::vector<std::string>;
+
     [[nodiscard]] auto report() const -> view_report;
 
 private:
@@ -521,6 +535,32 @@ private:
 
     engine_type* engine_;
     app_state* state_;
+};
+
+}  // namespace vw::sculptor
+
+export namespace vw::sculptor {
+
+class preview_service final {
+public:
+    using engine_type = gfx::engine;
+    using outcome     = std::expected<void, std::string>;
+
+    preview_service(engine_type& eng, app_state& state, asset::model_library& library);
+
+    auto show(std::string_view node, std::string_view socket, std::string_view prefab) -> outcome;
+    auto hide(std::string_view node, std::string_view socket) -> outcome;
+
+    [[nodiscard]] auto shown_in(std::string_view node, std::string_view socket) const
+        -> std::optional<std::string>;
+
+private:
+    [[nodiscard]] auto socket_of_(std::string_view node, std::string_view socket) const
+        -> std::expected<ecs::entity, std::string>;
+
+    engine_type* engine_;
+    app_state* state_;
+    asset::model_library* library_;
 };
 
 }  // namespace vw::sculptor

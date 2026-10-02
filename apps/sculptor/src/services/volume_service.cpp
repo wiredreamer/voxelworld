@@ -205,6 +205,51 @@ auto volume_service::set_pivot(std::string_view node, const vec3f& pivot) -> out
     return {};
 }
 
+auto volume_service::fork(std::string_view node, std::string_view stem, bool overwrite)
+    -> outcome {
+    const auto held = enter_(node);
+    if (!held) {
+        return refuse(held.error());
+    }
+
+    std::vector<std::string> sharing = holders(*held);
+    std::erase(sharing, node);
+    if (sharing.empty()) {
+        return refuse(std::format(
+            "the volume of '{}' is held by this node alone, there is nothing to split; "
+            "volume_rename renames its file",
+            node
+        ));
+    }
+
+    const auto own = files_->free_model_ref(stem, overwrite);
+    if (!own) {
+        switch (own.error()) {
+            case rename_model_error::invalid_name:
+                return refuse(std::format(
+                    "'{}' cannot name a volume file: use a plain name without separators or dots",
+                    stem
+                ));
+            case rename_model_error::name_in_use:
+                return refuse(std::format(
+                    "another node or variant of this prefab already uses a volume named '{}'", stem
+                ));
+            case rename_model_error::file_exists:
+                return refuse(std::format(
+                    "a volume file named '{}' already exists; pass overwrite: true to replace it",
+                    stem
+                ));
+            case rename_model_error::write_failed:
+                return refuse("the prefab has no file yet; save it first");
+        }
+    }
+
+    op_manager_->execute(std::make_unique<fork_volume_operation>(
+        *engine_, *state_, fork_volume_params{.name = std::string{node}, .source = *own}
+    ));
+    return {};
+}
+
 auto volume_service::rename(std::string_view node, std::string_view stem, bool overwrite)
     -> outcome {
     const auto held = enter_(node);

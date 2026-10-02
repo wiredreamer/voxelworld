@@ -158,6 +158,26 @@ constexpr std::array<std::pair<std::string_view, gfx::projection_kind>, 2> proje
     return tool_success(described);
 }
 
+constexpr std::string_view hide_schema = R"({
+    "type": "object",
+    "properties": {
+        "nodes": {"type": "array", "items": {"type": "string"}, "description": "Every node to hide, each with the nodes under it. The list replaces the current one; [] shows everything."}
+    },
+    "required": ["nodes"],
+    "additionalProperties": false
+})";
+
+constexpr std::string_view preview_schema = R"({
+    "type": "object",
+    "properties": {
+        "node": {"type": "string", "description": "Name of the node that has the socket."},
+        "socket": {"type": "string", "description": "Name of the socket."},
+        "prefab": {"type": ["string", "null"], "description": "Prefab to show in the socket, a file of the prefabs folder with or without .vox; null takes the preview away."}
+    },
+    "required": ["node", "socket", "prefab"],
+    "additionalProperties": false
+})";
+
 struct shot_progress {
     uint32 ticks_waited  = 0;
     uint32 frames_waited = 0;
@@ -262,6 +282,67 @@ auto append_view_tools(std::vector<tool>& tools, const editor_bindings& bindings
             bindings,
             [bindings](const json::value& arguments) -> tool_outcome {
                 return set_view(bindings, arguments);
+            }
+        ),
+    });
+
+    tools.push_back(tool{
+        .name = "view_hide",
+        .description =
+            "Hide nodes in the viewport, to look at what they cover. It changes what is drawn, "
+            "not the prefab: nothing is saved and there is nothing to undo. The user sees it "
+            "too, so show everything again with an empty list when done.",
+        .input_schema = hide_schema,
+        .run          = when_idle(
+            bindings,
+            [bindings](const json::value& arguments) -> tool_outcome {
+                argument_reader in{arguments};
+                in.allow({"nodes"});
+                const std::vector<std::string> nodes = in.text_list("nodes");
+                if (in.failed()) {
+                    return tool_failure(in.error());
+                }
+
+                const auto hidden = bindings.views->set_hidden(nodes);
+                if (!hidden) {
+                    return tool_failure(hidden.error());
+                }
+
+                json::array listed;
+                for (const std::string& name : bindings.views->hidden()) {
+                    listed.emplace_back(name);
+                }
+                return tool_success(json::object{{"hidden", std::move(listed)}});
+            }
+        ),
+    });
+
+    tools.push_back(tool{
+        .name = "socket_preview",
+        .description =
+            "Show another prefab in a socket of a node, the way the game attaches it: a sword "
+            "in a hand, a hat on a head. It is a preview for looking and for placing the "
+            "socket, not part of the prefab: nothing is saved and there is nothing to undo. "
+            "The preview follows the socket when node_set_components moves it.",
+        .input_schema = preview_schema,
+        .run          = when_idle(
+            bindings,
+            [bindings](const json::value& arguments) -> tool_outcome {
+                argument_reader in{arguments};
+                in.allow({"node", "socket", "prefab"});
+                const std::string node   = in.text("node");
+                const std::string socket = in.text("socket");
+                const auto prefab        = in.optional_text("prefab");
+                if (in.failed()) {
+                    return tool_failure(in.error());
+                }
+
+                const auto done = prefab ? bindings.previews->show(node, socket, *prefab)
+                                         : bindings.previews->hide(node, socket);
+                if (!done) {
+                    return tool_failure(done.error());
+                }
+                return tool_success(describe_node(bindings, node));
             }
         ),
     });

@@ -77,6 +77,7 @@ private:
     node_service node_service_;
     volume_service volume_service_;
     view_service view_service_;
+    preview_service preview_service_;
 
     tools active_tool_ = tools::add_voxel;
     std::unordered_map<tools, std::unique_ptr<base_tool>> tools_;

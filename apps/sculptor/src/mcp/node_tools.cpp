@@ -77,6 +77,22 @@ constexpr std::string_view node_name_only_schema = R"({
     "additionalProperties": false
 })";
 
+constexpr std::string_view duplicate_schema = R"({
+    "type": "object",
+    "properties": {
+        "name": {"type": "string", "description": "Name of the node to copy, with every node under it."},
+        "names": {
+            "type": "object",
+            "description": "The name of each copy: one entry per copied node, the node's name as the key. A lone node needs one entry.",
+            "additionalProperties": {"type": "string"}
+        },
+        "parent": {"type": "string", "description": "Parent of the copy. Defaults to the parent of the node copied."},
+        "mirror": {"enum": ["x", "y", "z"], "description": "Mirror the copy across the plane through the parent's origin that this axis is normal to: positions, rotations, sockets and the voxels themselves. 'x' makes a left hand of a right one."}
+    },
+    "required": ["name", "names"],
+    "additionalProperties": false
+})";
+
 constexpr std::string_view rename_schema = R"({
     "type": "object",
     "properties": {
@@ -438,15 +454,23 @@ auto describe_node(const editor_bindings& bindings, std::string_view name) -> js
         node.set("anim_target", world.get<ecs::animation_target_component>(ent).get_name());
     }
 
+    if (scene.hidden_nodes.contains(std::string{name})) {
+        node.set("hidden", true);
+    }
+
     if (world.has<ecs::socket_component>(ent)) {
         json::array sockets;
         for (const ecs::socket_point& point : world.get<ecs::socket_component>(ent).get_sockets()) {
-            sockets.emplace_back(json::object{
+            json::object socket{
                 {"name", point.name},
                 {"position", json_of(point.position)},
                 {"rotation_degrees", json_of(degrees_of(point.rotation))},
                 {"scale", json_of(point.scale)},
-            });
+            };
+            if (const auto preview = bindings.previews->shown_in(name, point.name)) {
+                socket.set("preview", *preview);
+            }
+            sockets.emplace_back(std::move(socket));
         }
         node.set("sockets", std::move(sockets));
     }
@@ -536,6 +560,75 @@ auto append_node_tools(std::vector<tool>& tools, const editor_bindings& bindings
                 }
 
                 return answer(bindings, bindings.nodes->create(spec), spec.name);
+            }
+        ),
+    });
+
+    tools.push_back(tool{
+        .name = "node_duplicate",
+        .description =
+            "Copy a node with every node under it, as one undo step. Each copy gets a volume of "
+            "its own, not shared with the original, whose file is named after the copy when the "
+            "prefab is saved. A copied animation target takes the name of its new node. With "
+            "'mirror' the copy is the mirror image: build one side of a character and mirror it "
+            "to get the other. Clips are not copied or retargeted.",
+        .input_schema = duplicate_schema,
+        .run          = when_idle(
+            bindings,
+            [bindings](const json::value& arguments) -> tool_outcome {
+                argument_reader in{arguments};
+                in.allow({"name", "names", "parent", "mirror"});
+
+                duplicate_spec spec{
+                    .name   = in.text("name"),
+                    .parent = in.optional_text("parent"),
+                    .names  = {},
+                    .mirror = std::nullopt,
+                };
+
+                const auto names = in.at("names").fields();
+                if (!names) {
+                    in.fail(json::describe(names.error()));
+                } else {
+                    for (const auto& [from, to] : *names) {
+                        const auto text = to.string();
+                        if (!text) {
+                            in.fail(json::describe(text.error()));
+                            break;
+                        }
+                        spec.names.emplace(std::string{from}, std::string{*text});
+                    }
+                }
+
+                if (const auto mirror = in.optional_text("mirror")) {
+                    if (*mirror == "x") {
+                        spec.mirror = asset::voxel_axis::x;
+                    } else if (*mirror == "y") {
+                        spec.mirror = asset::voxel_axis::y;
+                    } else if (*mirror == "z") {
+                        spec.mirror = asset::voxel_axis::z;
+                    } else {
+                        in.fail(std::format("arguments.mirror: expected x, y or z, found '{}'", *mirror));
+                    }
+                }
+                if (in.failed()) {
+                    return tool_failure(in.error());
+                }
+
+                const auto copied = bindings.nodes->duplicate(spec);
+                if (!copied) {
+                    return tool_failure(copied.error());
+                }
+
+                json::array made;
+                for (const auto& [from, to] : spec.names) {
+                    made.emplace_back(describe_node(bindings, to));
+                }
+                return tool_success(json::object{
+                    {"copied", spec.name},
+                    {"nodes", std::move(made)},
+                    {"node_count", bindings.state->scene.name_to_entity.size()},
+                });
             }
         ),
     });

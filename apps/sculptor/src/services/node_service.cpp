@@ -215,6 +215,113 @@ auto node_service::rename(std::string_view name, std::string_view new_name) -> o
     return {};
 }
 
+auto node_service::duplicate(const duplicate_spec& spec) -> outcome {
+    if (auto ready = require_document_(); !ready) {
+        return ready;
+    }
+
+    const auto& scene = state_->scene;
+    auto& world       = engine_->get_world();
+
+    const auto source = find_(spec.name);
+    if (!source) {
+        return refuse(source.error());
+    }
+    if (spec.name == scene.root_name) {
+        return refuse(std::format(
+            "'{}' is the root node; a prefab has one root, so it cannot be copied", spec.name
+        ));
+    }
+
+    std::vector<ecs::entity> subtree{*source};
+    for (std::size_t at = 0; at < subtree.size(); ++at) {
+        for (const ecs::entity child : world.get<ecs::hierarchy_component>(subtree[at]).get_children()) {
+            if (scene.entity_to_name.contains(child)) {
+                subtree.push_back(child);
+            }
+        }
+    }
+
+    std::vector<std::string> unnamed;
+    std::vector<std::string> subtree_names;
+    for (const ecs::entity ent : subtree) {
+        const std::string& name = scene.entity_to_name.at(ent);
+        subtree_names.push_back(name);
+        if (!spec.names.contains(name)) {
+            unnamed.push_back(name);
+        }
+    }
+    if (!unnamed.empty()) {
+        std::ranges::sort(unnamed);
+        return refuse(std::format(
+            "names: every node that is copied needs a new name; missing for: {}", joined(unnamed)
+        ));
+    }
+
+    std::unordered_set<std::string> taken;
+    for (const auto& [from, to] : spec.names) {
+        if (!std::ranges::contains(subtree_names, from)) {
+            return refuse(std::format(
+                "names: '{}' is not '{}' or a node under it", from, spec.name
+            ));
+        }
+        if (!is_plain_name(to)) {
+            return refuse(std::format(
+                "names: '{}' cannot name a node: use letters, digits, '_', '-' and '.'", to
+            ));
+        }
+        if (scene.name_to_entity.contains(to)) {
+            return refuse(std::format("names: a node '{}' already exists", to));
+        }
+        if (!taken.insert(to).second) {
+            return refuse(std::format("names: '{}' is given to two nodes", to));
+        }
+    }
+
+    for (const auto& [other_name, other] : scene.name_to_entity) {
+        if (!world.has<ecs::animation_target_component>(other)) {
+            continue;
+        }
+        const std::string& target = world.get<ecs::animation_target_component>(other).get_name();
+        if (taken.contains(target)) {
+            return refuse(std::format(
+                "names: '{}' is already the animation target of node '{}', and a copied target "
+                "takes the name of its node",
+                target, other_name
+            ));
+        }
+    }
+
+    if (spec.mirror) {
+        for (const ecs::entity ent : subtree) {
+            if (world.has<ecs::variant_slot_component>(ent)) {
+                return refuse(std::format(
+                    "mirror: '{}' holds a variant slot, and its candidates are files that cannot "
+                    "be mirrored here; copy without mirror",
+                    scene.entity_to_name.at(ent)
+                ));
+            }
+        }
+    }
+
+    const ecs::entity source_parent = world.get<ecs::hierarchy_component>(*source).get_parent();
+    const std::string parent = spec.parent.value_or(scene.entity_to_name.at(source_parent));
+    if (const auto found = find_(parent); !found) {
+        return refuse(found.error());
+    }
+
+    op_manager_->execute(std::make_unique<duplicate_entity_operation>(
+        *engine_, *state_, *library_,
+        duplicate_entity_params{
+            .name        = spec.name,
+            .parent_name = parent,
+            .names       = spec.names,
+            .mirror      = spec.mirror,
+        }
+    ));
+    return {};
+}
+
 auto node_service::reparent(
     std::string_view name, std::string_view parent, std::optional<std::size_t> index
 ) -> outcome {

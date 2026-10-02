@@ -1371,6 +1371,186 @@ def run_rename_scenario(probe):
     tool(probe, "prefab_close", {"discard_unsaved": True})
 
 
+def solid_from(probe, node):
+    ok, volume = tool(probe, "volume_get", {"node": node})
+    return (volume.get("layers") or {}).get("origin") if ok else None
+
+
+def run_copy_scenario(probe):
+    scratch = SCRATCH_PREFABS[0]
+    ok, state = tool(probe, "editor_state")
+    asset_root = pathlib.Path(state["asset_root"])
+    remove_scratch_assets(asset_root)
+    tool(probe, "prefab_close", {"discard_unsaved": True})
+
+    tool(probe, "prefab_new", {"name": scratch})
+    tool(probe, "node_create", {"name": "root"})
+    tool(
+        probe,
+        "node_create",
+        {
+            "name": "arm_r", "parent": "root", "position": [5, 2, 0], "rotation_degrees": [0, 0, 30],
+            "volume": {"size": [2, 4, 2]}, "anim_target": True,
+            "sockets": [{"name": "grip", "position": [1, -2, 0]}],
+        },
+    )
+    tool(probe, "node_create", {"name": "hand_r", "parent": "arm_r", "position": [1, -3, 1], "volume": {"size": [2, 2, 2]}})
+    tool(probe, "volume_write", {"node": "arm_r", "boxes": [{"min": [0, 0, 0], "max": [0, 0, 0], "voxel": "red_3"}]})
+    tool(probe, "node_create", {"name": "spare", "parent": "root", "anim_target": "ghost"})
+    before = nodes_of(probe)
+
+    ok, text = tool(probe, "node_duplicate", {"name": "arm_r", "names": {"arm_r": "arm_l"}})
+    probe.check("node_duplicate asks for a name for every copied node", not ok and "missing for: hand_r" in text, str(text))
+    ok, text = tool(probe, "node_duplicate", {"name": "arm_r", "names": {"arm_r": "arm_l", "hand_r": "spare"}})
+    probe.check("node_duplicate refuses a name that is taken", not ok and "already exists" in text, str(text))
+    ok, text = tool(probe, "node_duplicate", {"name": "arm_r", "names": {"arm_r": "ghost", "hand_r": "hand_l"}})
+    probe.check("node_duplicate refuses a name that is another node's animation target", not ok and "animation target of node 'spare'" in text, str(text))
+    ok, text = tool(probe, "node_duplicate", {"name": "arm_r", "names": {"arm_r": "arm_l", "hand_r": "hand_l", "spare": "s2"}})
+    probe.check("node_duplicate refuses a name for a node outside the copy", not ok and "'spare' is not 'arm_r' or a node under it" in text, str(text))
+    ok, text = tool(probe, "node_duplicate", {"name": "root", "names": {"root": "root2"}})
+    probe.check("node_duplicate refuses the root", not ok and "root node" in text, str(text))
+    ok, text = tool(probe, "node_duplicate", {"name": "arm_r", "names": {"arm_r": "arm_l", "hand_r": "hand_l"}, "mirror": "w"})
+    probe.check("node_duplicate refuses an unknown axis", not ok and "arguments.mirror" in text, str(text))
+    probe.check("refused copies change nothing", nodes_of(probe) == before, str(sorted(nodes_of(probe))))
+
+    ok, copied = tool(probe, "node_duplicate", {"name": "arm_r", "names": {"arm_r": "arm_l", "hand_r": "hand_l"}, "mirror": "x"})
+    after = nodes_of(probe)
+    arm = after.get("arm_l", {})
+    hand = after.get("hand_l", {})
+    probe.check(
+        "a mirrored copy stands across the parent's plane",
+        ok and len(after) == len(before) + 2 and arm.get("parent") == "root" and close_to(arm.get("position"), [-5, 2, 0])
+        and close_to(arm.get("rotation_degrees"), [0, 0, -30], 1e-2),
+        str(arm),
+    )
+    probe.check(
+        "the nodes under it are copied and mirrored with it",
+        hand.get("parent") == "arm_l" and close_to(hand.get("position"), [-1, -3, 1]),
+        str(hand),
+    )
+    probe.check(
+        "a copied target takes the name of its node and the socket is mirrored",
+        arm.get("anim_target") == "arm_l" and "anim_target" not in hand
+        and close_to(arm.get("sockets", [{}])[0].get("position"), [-1, -2, 0]) and arm["sockets"][0].get("name") == "grip",
+        str(arm),
+    )
+    probe.check(
+        "the copy has a volume of its own, mirrored voxel for voxel",
+        arm.get("volume", {}).get("ref") is None and solid_from(probe, "arm_r") == [0, 0, 0] and solid_from(probe, "arm_l") == [1, 0, 0],
+        f"{arm.get('volume')} {solid_from(probe, 'arm_r')} {solid_from(probe, 'arm_l')}",
+    )
+    ok, own = tool(probe, "volume_get", {"node": "arm_l"})
+    probe.check("and shares it with nobody", ok and "shared_with" not in own, str({k: v for k, v in own.items() if k != "layers"}))
+
+    tool(probe, "prefab_get")
+    tool(probe, "undo")
+    probe.check("one undo takes the whole copy back", nodes_of(probe) == before, str(sorted(nodes_of(probe))))
+    tool(probe, "redo")
+    probe.check(
+        "redo copies again",
+        close_to(nodes_of(probe).get("hand_l", {}).get("position"), [-1, -3, 1]) and solid_from(probe, "arm_l") == [1, 0, 0],
+        str(sorted(nodes_of(probe))),
+    )
+
+    ok, plain = tool(probe, "node_duplicate", {"name": "hand_r", "names": {"hand_r": "hand_spare"}, "parent": "root"})
+    spare_hand = nodes_of(probe).get("hand_spare", {})
+    probe.check(
+        "a copy without mirror keeps its place and may go under another parent",
+        ok and spare_hand.get("parent") == "root" and close_to(spare_hand.get("position"), [1, -3, 1]),
+        str(spare_hand),
+    )
+
+    ok, saved = tool(probe, "prefab_save")
+    models = asset_root / "models" / scratch
+    probe.check(
+        "saving names the volume files of the copies after their nodes",
+        ok and (models / "arm_l.voxm").is_file() and (models / "hand_l.voxm").is_file() and (models / "hand_spare.voxm").is_file(),
+        str(sorted(path.name for path in models.glob("*"))),
+    )
+    tool(probe, "prefab_close")
+    tool(probe, "prefab_open", {"name": scratch})
+    reopened = nodes_of(probe)
+    probe.check(
+        "the copy reads back from disk",
+        close_to(reopened.get("arm_l", {}).get("position"), [-5, 2, 0]) and reopened.get("arm_l", {}).get("anim_target") == "arm_l"
+        and solid_from(probe, "arm_l") == [1, 0, 0],
+        str(reopened.get("arm_l")),
+    )
+
+    arm_ref = reopened["arm_r"]["volume"]["ref"]
+    tool(probe, "node_create", {"name": "twin", "parent": "root", "volume": {"ref": arm_ref}})
+    ok, shared = tool(probe, "volume_get", {"node": "twin"})
+    probe.check("a node made from a volume file shares the volume", ok and shared.get("shared_with") == ["arm_r"], str(shared.get("shared_with")))
+
+    ok, text = tool(probe, "volume_fork", {"node": "arm_l", "name": "arm_l_own"})
+    probe.check("volume_fork refuses a volume nobody shares", not ok and "held by this node alone" in text, str(text))
+    ok, text = tool(probe, "volume_fork", {"node": "twin", "name": "arm_r"})
+    probe.check("volume_fork refuses a file name in use", not ok and "already uses a volume named 'arm_r'" in text, str(text))
+    ok, text = tool(probe, "volume_fork", {"node": "twin", "name": "a/b"})
+    probe.check("volume_fork refuses a name with a separator", not ok and "cannot name a volume file" in text, str(text))
+
+    ok, forked = tool(probe, "volume_fork", {"node": "twin", "name": "twin_own"})
+    probe.check(
+        "volume_fork gives the node a copy under a file of its own",
+        ok and forked.get("ref", "").endswith(f"{scratch}/twin_own.voxm") and "shared_with" not in forked
+        and forked.get("voxel_count") == shared.get("voxel_count"),
+        str({k: v for k, v in forked.items() if k != "layers"}),
+    )
+    tool(probe, "volume_write", {"node": "twin", "boxes": [{"min": [1, 3, 1], "max": [1, 3, 1], "voxel": "green_3"}]})
+    ok, original = tool(probe, "volume_get", {"node": "arm_r"})
+    probe.check("a write to the fork leaves the original alone", ok and original.get("voxel_count") == 1 and "shared_with" not in original, str(original.get("voxel_count")))
+
+    tool(probe, "undo")
+    tool(probe, "undo")
+    ok, again = tool(probe, "volume_get", {"node": "twin"})
+    probe.check("undo makes the volume shared again", ok and again.get("shared_with") == ["arm_r"] and again.get("ref") == arm_ref, str({k: v for k, v in again.items() if k != "layers"}))
+    tool(probe, "redo")
+    ok, saved = tool(probe, "prefab_save")
+    probe.check("saving writes the fork to its file", ok and (models / "twin_own.voxm").is_file(), str(saved))
+
+    ok, hidden = tool(probe, "view_hide", {"nodes": ["arm_l"]})
+    probe.check(
+        "view_hide hides the nodes named",
+        ok and hidden.get("hidden") == ["arm_l"] and nodes_of(probe).get("arm_l", {}).get("hidden") is True and "hidden" not in nodes_of(probe).get("arm_r", {}),
+        str(hidden),
+    )
+    ok, state = tool(probe, "editor_state")
+    probe.check("hiding does not change the prefab", ok and state.get("unsaved", {}).get("prefab") is False, str(state.get("unsaved")))
+    ok, text = tool(probe, "view_hide", {"nodes": ["nope"]})
+    probe.check("view_hide refuses an unknown node and keeps the list", not ok and "there is no node 'nope'" in text and nodes_of(probe).get("arm_l", {}).get("hidden") is True, str(text))
+    ok, hidden = tool(probe, "view_hide", {"nodes": []})
+    probe.check("an empty list shows everything", ok and hidden.get("hidden") == [] and "hidden" not in nodes_of(probe).get("arm_l", {}), str(hidden))
+
+    count = len(nodes_of(probe))
+    ok, shown = tool(probe, "socket_preview", {"node": "arm_r", "socket": "grip", "prefab": "m_sword"})
+    probe.check(
+        "socket_preview shows a prefab in the socket without adding nodes",
+        ok and shown.get("sockets", [{}])[0].get("preview") == "m_sword.vox" and len(nodes_of(probe)) == count,
+        str(shown),
+    )
+    ok, state = tool(probe, "editor_state")
+    probe.check("a preview does not change the prefab", ok and state.get("unsaved", {}).get("prefab") is False, str(state.get("unsaved")))
+    ok, text = tool(probe, "socket_preview", {"node": "arm_r", "socket": "palm", "prefab": "m_sword"})
+    probe.check("socket_preview names the sockets for an unknown one", not ok and "its sockets are: grip" in text, str(text))
+    ok, text = tool(probe, "socket_preview", {"node": "arm_r", "socket": "grip", "prefab": "no_such_prefab"})
+    probe.check("socket_preview refuses a prefab that is not there", not ok and "there is no prefab" in text, str(text))
+    ok, other = tool(probe, "socket_preview", {"node": "arm_r", "socket": "grip", "prefab": "m_shield.vox"})
+    probe.check("another prefab replaces the preview", ok and other.get("sockets", [{}])[0].get("preview") == "m_shield.vox", str(other))
+
+    tool(probe, "node_set_transform", {"name": "spare", "position": [0, 1, 0]})
+    tool(probe, "prefab_save")
+    tool(probe, "prefab_close")
+    tool(probe, "prefab_open", {"name": scratch})
+    probe.check("a preview is not saved with the prefab", len(nodes_of(probe)) == count and "preview" not in nodes_of(probe).get("arm_r", {}).get("sockets", [{}])[0], str(sorted(nodes_of(probe))))
+
+    tool(probe, "socket_preview", {"node": "arm_r", "socket": "grip", "prefab": "m_sword"})
+    ok, gone = tool(probe, "socket_preview", {"node": "arm_r", "socket": "grip", "prefab": None})
+    probe.check("null takes the preview away", ok and "preview" not in gone.get("sockets", [{}])[0], str(gone))
+
+    tool(probe, "prefab_close", {"discard_unsaved": True})
+    remove_scratch_assets(asset_root)
+
+
 def main():
     port = DEFAULT_PORT
     with_scenario = False
@@ -1395,6 +1575,7 @@ def main():
             run_clip_scenario(probe)
             run_fsm_scenario(probe)
             run_rename_scenario(probe)
+            run_copy_scenario(probe)
     except OSError as error:
         print(f"FAIL cannot reach Sculptor on {DEFAULT_HOST}:{port} -- {error}")
         print("     start it with: sculptor --mcp")
