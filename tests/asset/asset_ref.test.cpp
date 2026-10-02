@@ -30,9 +30,9 @@ TEST_CASE("an asset ref without an extension reports none", "[asset_ref]") {
 }
 
 TEST_CASE("a model without a ref lands in the models folder of its prefab", "[asset_ref]") {
-    const auto ref = asset::default_model_ref(asset::asset_ref{"prefabs/m_human.vox"}, "body");
+    const auto ref = asset::default_model_ref(asset::asset_ref{"prefabs/p_human.vox"}, "body");
 
-    REQUIRE(ref == asset::asset_ref{"models/m_human/body.voxm"});
+    REQUIRE(ref == asset::asset_ref{"models/p_human/m_body.voxm"});
 }
 
 TEST_CASE("a model of a prefab moves into the folder of another prefab", "[asset_ref]") {

@@ -52,7 +52,7 @@ auto asset_ref::stem() const -> std::string_view {
 auto default_model_ref(
     const asset_ref& prefab, std::string_view entity_name
 ) -> asset_ref {
-    return asset_ref{std::format("{}/{}/{}.voxm", dirs::models, prefab.stem(), entity_name)};
+    return asset_ref{std::format("{}/{}/m_{}.voxm", dirs::models, prefab.stem(), entity_name)};
 }
 
 auto rehomed_model_ref(

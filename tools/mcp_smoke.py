@@ -489,7 +489,7 @@ def run_node_scenario(probe):
     ok, saved = tool(probe, "prefab_save")
     volumes = sorted(path.name for path in (asset_root / "models" / scratch).glob("*.voxm"))
     probe.check("prefab_save writes the prefab", ok and saved.get("unsaved") is False, str(saved))
-    probe.check("new volumes are written into the folder of the prefab", volumes == ["body.voxm", "hand.voxm"], str(volumes))
+    probe.check("new volumes are written into the folder of the prefab", volumes == ["m_body.voxm", "m_hand.voxm"], str(volumes))
 
     in_memory = nodes_of(probe)
     ok, prefab = tool(probe, "prefab_get")
@@ -641,7 +641,7 @@ def run_volume_scenario(probe):
     probe.check("a volume without a file cannot be renamed", not ok and "save the prefab first" in text, str(text))
 
     tool(probe, "prefab_save")
-    ok, twin = tool(probe, "node_create", {"name": "twin", "parent": "root", "volume": {"ref": f"models/{scratch}/box.voxm"}})
+    ok, twin = tool(probe, "node_create", {"name": "twin", "parent": "root", "volume": {"ref": f"models/{scratch}/m_box.voxm"}})
     ok, shared = tool(probe, "volume_get", {"node": "box"})
     probe.check("volume_get names the nodes that share the volume", ok and shared.get("shared_with") == ["twin"], str(shared.get("shared_with")))
 
@@ -662,7 +662,7 @@ def run_volume_scenario(probe):
     probe.check(
         "volume_rename moves the file and both nodes follow",
         ok and renamed.get("ref") == f"models/{scratch}/crate.voxm" and (models / "crate.voxm").is_file()
-        and not (models / "box.voxm").exists() and renamed.get("shared_with") == ["twin"],
+        and not (models / "m_box.voxm").exists() and renamed.get("shared_with") == ["twin"],
         str(renamed),
     )
 
@@ -1464,7 +1464,7 @@ def run_copy_scenario(probe):
     models = asset_root / "models" / scratch
     probe.check(
         "saving names the volume files of the copies after their nodes",
-        ok and (models / "arm_l.voxm").is_file() and (models / "hand_l.voxm").is_file() and (models / "hand_spare.voxm").is_file(),
+        ok and (models / "m_arm_l.voxm").is_file() and (models / "m_hand_l.voxm").is_file() and (models / "m_hand_spare.voxm").is_file(),
         str(sorted(path.name for path in models.glob("*"))),
     )
     tool(probe, "prefab_close")
@@ -1484,8 +1484,8 @@ def run_copy_scenario(probe):
 
     ok, text = tool(probe, "volume_fork", {"node": "arm_l", "name": "arm_l_own"})
     probe.check("volume_fork refuses a volume nobody shares", not ok and "held by this node alone" in text, str(text))
-    ok, text = tool(probe, "volume_fork", {"node": "twin", "name": "arm_r"})
-    probe.check("volume_fork refuses a file name in use", not ok and "already uses a volume named 'arm_r'" in text, str(text))
+    ok, text = tool(probe, "volume_fork", {"node": "twin", "name": "m_arm_r"})
+    probe.check("volume_fork refuses a file name in use", not ok and "already uses a volume named 'm_arm_r'" in text, str(text))
     ok, text = tool(probe, "volume_fork", {"node": "twin", "name": "a/b"})
     probe.check("volume_fork refuses a name with a separator", not ok and "cannot name a volume file" in text, str(text))
 
@@ -1624,9 +1624,9 @@ def run_paint_scenario(probe):
     models = asset_root / "models" / scratch
     probe.check(
         "a new volume does not take the file name another node already holds",
-        ok and named.get("dish", {}).get("volume", {}).get("ref", "").endswith("/plate.voxm")
-        and named.get("plate", {}).get("volume", {}).get("ref", "").endswith("/plate_2.voxm")
-        and (models / "plate.voxm").is_file() and (models / "plate_2.voxm").is_file(),
+        ok and named.get("dish", {}).get("volume", {}).get("ref", "").endswith("/m_plate.voxm")
+        and named.get("plate", {}).get("volume", {}).get("ref", "").endswith("/m_plate_2.voxm")
+        and (models / "m_plate.voxm").is_file() and (models / "m_plate_2.voxm").is_file(),
         f"{named.get('dish', {}).get('volume')} {named.get('plate', {}).get('volume')}",
     )
     tool(probe, "prefab_close")
@@ -1847,7 +1847,7 @@ def run_delete_scenario(probe):
     volume_dir = asset_root / "models" / scratch
     clip_file = asset_root / "animations" / f"{SCRATCH_CLIP}.voxa"
     machine_file = asset_root / "fsm" / f"{SCRATCH_MACHINE}.voxf"
-    probe.check("the assets to delete are on disk", prefab_file.is_file() and (volume_dir / "box.voxm").is_file() and clip_file.is_file() and machine_file.is_file(), str(sorted(path.name for path in volume_dir.glob("*"))))
+    probe.check("the assets to delete are on disk", prefab_file.is_file() and (volume_dir / "m_box.voxm").is_file() and clip_file.is_file() and machine_file.is_file(), str(sorted(path.name for path in volume_dir.glob("*"))))
 
     ok, text = tool(probe, "asset_delete", {"kind": "prefab", "name": scratch})
     probe.check("asset_delete refuses the open prefab", not ok and "is open; close it first" in text and prefab_file.is_file(), str(text))
@@ -1874,7 +1874,7 @@ def run_delete_scenario(probe):
     probe.check(
         "asset_delete removes a prefab with its volumes",
         ok and not prefab_file.exists() and not volume_dir.exists()
-        and gone.get("deleted") == [f"models/{scratch}/box.voxm", f"prefabs/{scratch}.vox"],
+        and gone.get("deleted") == [f"models/{scratch}/m_box.voxm", f"prefabs/{scratch}.vox"],
         str(gone),
     )
     ok, gone = tool(probe, "asset_delete", {"kind": "machine", "name": SCRATCH_MACHINE})
