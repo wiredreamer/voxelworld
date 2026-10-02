@@ -34,7 +34,7 @@ auto parse_launch_options(std::span<const std::string_view> arguments)
             continue;
         }
         if (argument == mcp_flag) {
-            options.mcp_port = default_mcp_port;
+            options.mcp_port = mcp::default_port;
             continue;
         }
         if (argument.starts_with(mcp_flag) && argument.substr(mcp_flag.size()).starts_with('=')) {
@@ -48,7 +48,7 @@ auto parse_launch_options(std::span<const std::string_view> arguments)
         return std::unexpected(std::format("unknown option {}", argument));
     }
 
-    if (options.mcp_port && !mcp_server::compiled_in()) {
+    if (options.mcp_port && !mcp::server::compiled_in()) {
         return std::unexpected(std::string{"--mcp: this build has no MCP server"});
     }
 

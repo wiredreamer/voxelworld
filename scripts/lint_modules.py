@@ -9,6 +9,10 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 SOURCES = ["engine", "apps", "tests"]
 
 VULKAN_C_ALLOWED = {"engine/gfx/src/render/renderer.cpp", "engine/platform/src/window/window.cpp"}
+SOCKET_API_ALLOWED = "engine/net/src/socket/socket.cpp"
+SOCKET_HEADER = re.compile(
+    r"^\s*#\s*include <(winsock2\.h|ws2tcpip\.h|sys/socket\.h|netinet/in\.h|arpa/inet\.h|poll\.h)>",
+    re.M)
 
 COMMENT_OR_STRING = re.compile(r'//[^\n]*|/\*.*?\*/|"(?:[^"\\\n]|\\.)*"', re.S)
 
@@ -225,6 +229,11 @@ def main() -> int:
             for tok in sorted(set(re.findall(
                     r"\bVk[A-Z][A-Za-z0-9]*|\bVK_[A-Z0-9_]+|\bvk[A-Z][A-Za-z0-9]*\(", text))):
                 problems.append("%s: Vulkan C API leaked in: %s" % (name, tok))
+
+        if name != SOCKET_API_ALLOWED:
+            for header in sorted(set(SOCKET_HEADER.findall(raw))):
+                problems.append("%s: system sockets belong to %s alone, found <%s>"
+                                % (name, SOCKET_API_ALLOWED, header))
 
         if "vk::" in text and not name.startswith("engine/gfx/src"):
             problems.append("%s: names vk:: outside vw.gfx" % name)

@@ -8,7 +8,7 @@ import vw.ecs;
 import vw.world;
 import vw.gfx;
 
-namespace vw::sculptor {
+namespace vw::sculptor::mcp {
 
 namespace {
 
@@ -149,7 +149,7 @@ constexpr std::array<std::pair<std::string_view, math::interpolation_type>, 6> i
     );
 }
 
-[[nodiscard]] auto clip_name_of(const mcp_bindings& bindings, argument_reader& in) -> std::string {
+[[nodiscard]] auto clip_name_of(const editor_bindings& bindings, argument_reader& in) -> std::string {
     if (const auto named = in.optional_text("clip")) {
         return *named;
     }
@@ -248,7 +248,7 @@ template <typename T>
 }
 
 [[nodiscard]] auto describe_clip(
-    const mcp_bindings& bindings, const asset::animation_clip& clip, bool with_tracks
+    const editor_bindings& bindings, const asset::animation_clip& clip, bool with_tracks
 ) -> json::object {
     const auto& anim = bindings.state->anim;
 
@@ -278,7 +278,7 @@ template <typename T>
 }
 
 [[nodiscard]] auto answer_with_clip(
-    const mcp_bindings& bindings, const clip_service::outcome& outcome, std::string_view name
+    const editor_bindings& bindings, const clip_service::outcome& outcome, std::string_view name
 ) -> tool_outcome {
     if (!outcome) {
         return tool_failure(outcome.error());
@@ -297,7 +297,7 @@ template <typename T>
     return found == tracks.end() ? nullptr : &*found;
 }
 
-[[nodiscard]] auto set_keys(const mcp_bindings& bindings, const json::value& arguments)
+[[nodiscard]] auto set_keys(const editor_bindings& bindings, const json::value& arguments)
     -> tool_outcome {
     argument_reader in{arguments};
     in.allow({"clip", "keys"});
@@ -397,7 +397,7 @@ template <typename T>
     );
 }
 
-[[nodiscard]] auto remove_keys(const mcp_bindings& bindings, const json::value& arguments)
+[[nodiscard]] auto remove_keys(const editor_bindings& bindings, const json::value& arguments)
     -> tool_outcome {
     argument_reader in{arguments};
     in.allow({"clip", "target", "property", "from", "to"});
@@ -480,8 +480,8 @@ template <typename T>
 
 }  // namespace
 
-auto append_clip_tools(std::vector<mcp_tool>& tools, const mcp_bindings& bindings) -> void {
-    tools.push_back(mcp_tool{
+auto append_clip_tools(std::vector<tool>& tools, const editor_bindings& bindings) -> void {
+    tools.push_back(tool{
         .name = "clip_create",
         .description =
             "Make a new, empty animation clip for the open prefab and open it for editing. The "
@@ -502,7 +502,7 @@ auto append_clip_tools(std::vector<mcp_tool>& tools, const mcp_bindings& binding
         ),
     });
 
-    tools.push_back(mcp_tool{
+    tools.push_back(tool{
         .name = "clip_open",
         .description =
             "Open an animation clip from the animations folder on the open prefab and make it "
@@ -524,7 +524,7 @@ auto append_clip_tools(std::vector<mcp_tool>& tools, const mcp_bindings& binding
         ),
     });
 
-    tools.push_back(mcp_tool{
+    tools.push_back(tool{
         .name = "clip_get",
         .description =
             "Read an open clip: its rig, its length in seconds and, for every animated target, "
@@ -548,7 +548,7 @@ auto append_clip_tools(std::vector<mcp_tool>& tools, const mcp_bindings& binding
             },
     });
 
-    tools.push_back(mcp_tool{
+    tools.push_back(tool{
         .name = "clip_set_keys",
         .description =
             "Put keys into an open clip as one undo step. A track is made for a target that has "
@@ -563,7 +563,7 @@ auto append_clip_tools(std::vector<mcp_tool>& tools, const mcp_bindings& binding
         ),
     });
 
-    tools.push_back(mcp_tool{
+    tools.push_back(tool{
         .name = "clip_remove_keys",
         .description =
             "Remove the keys of one target within a span of time as one undo step, for one "
@@ -577,7 +577,7 @@ auto append_clip_tools(std::vector<mcp_tool>& tools, const mcp_bindings& binding
         ),
     });
 
-    tools.push_back(mcp_tool{
+    tools.push_back(tool{
         .name = "clip_pose_at",
         .description =
             "Put the prefab into the pose the clip gives at a time, so that view_screenshot "
@@ -608,7 +608,7 @@ auto append_clip_tools(std::vector<mcp_tool>& tools, const mcp_bindings& binding
         ),
     });
 
-    tools.push_back(mcp_tool{
+    tools.push_back(tool{
         .name         = "clip_save",
         .description  = "Write an open clip to its file in the animations folder.",
         .input_schema = clip_only_schema,
@@ -626,7 +626,7 @@ auto append_clip_tools(std::vector<mcp_tool>& tools, const mcp_bindings& binding
         ),
     });
 
-    tools.push_back(mcp_tool{
+    tools.push_back(tool{
         .name = "clip_close",
         .description =
             "Close an open clip. When no clip is left open the editor returns to the prefab and "
@@ -661,4 +661,4 @@ auto append_clip_tools(std::vector<mcp_tool>& tools, const mcp_bindings& binding
     });
 }
 
-}  // namespace vw::sculptor
+}  // namespace vw::sculptor::mcp

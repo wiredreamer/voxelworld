@@ -8,7 +8,7 @@ import vw.ecs;
 import vw.world;
 import vw.gfx;
 
-namespace vw::sculptor {
+namespace vw::sculptor::mcp {
 
 namespace {
 
@@ -164,7 +164,7 @@ constexpr std::string_view rename_schema = R"({
     return count;
 }
 
-[[nodiscard]] auto describe_volume(const mcp_bindings& bindings, std::string_view node)
+[[nodiscard]] auto describe_volume(const editor_bindings& bindings, std::string_view node)
     -> json::object {
     const auto held = bindings.volumes->find(node);
     if (!held) {
@@ -561,7 +561,7 @@ private:
     return std::nullopt;
 }
 
-[[nodiscard]] auto read_volume(const mcp_bindings& bindings, const json::value& arguments)
+[[nodiscard]] auto read_volume(const editor_bindings& bindings, const json::value& arguments)
     -> tool_outcome {
     argument_reader in{arguments};
     in.allow({"node", "min", "max"});
@@ -622,7 +622,7 @@ private:
     return tool_success(described);
 }
 
-[[nodiscard]] auto write_volume(const mcp_bindings& bindings, const json::value& arguments)
+[[nodiscard]] auto write_volume(const editor_bindings& bindings, const json::value& arguments)
     -> tool_outcome {
     argument_reader in{arguments};
     in.allow({"node", "boxes", "points", "layers"});
@@ -665,7 +665,7 @@ private:
     return tool_success(described);
 }
 
-[[nodiscard]] auto reshape_volume(const mcp_bindings& bindings, const json::value& arguments)
+[[nodiscard]] auto reshape_volume(const editor_bindings& bindings, const json::value& arguments)
     -> tool_outcome {
     argument_reader in{arguments};
     in.allow({"node", "resize", "trim", "rotate", "mirror"});
@@ -748,8 +748,8 @@ private:
 
 }  // namespace
 
-auto append_volume_tools(std::vector<mcp_tool>& tools, const mcp_bindings& bindings) -> void {
-    tools.push_back(mcp_tool{
+auto append_volume_tools(std::vector<tool>& tools, const editor_bindings& bindings) -> void {
+    tools.push_back(tool{
         .name = "volume_get",
         .description =
             "Read the voxel volume of a node: its size, pivot, the box of occupied voxels and "
@@ -763,7 +763,7 @@ auto append_volume_tools(std::vector<mcp_tool>& tools, const mcp_bindings& bindi
         },
     });
 
-    tools.push_back(mcp_tool{
+    tools.push_back(tool{
         .name = "volume_write",
         .description =
             "Set voxels of a node's volume as one undo step: boxes first, then points, then "
@@ -779,7 +779,7 @@ auto append_volume_tools(std::vector<mcp_tool>& tools, const mcp_bindings& bindi
         ),
     });
 
-    tools.push_back(mcp_tool{
+    tools.push_back(tool{
         .name = "volume_reshape",
         .description =
             "Change the shape of a node's volume: resize it, trim it to its voxels, rotate it "
@@ -795,7 +795,7 @@ auto append_volume_tools(std::vector<mcp_tool>& tools, const mcp_bindings& bindi
         ),
     });
 
-    tools.push_back(mcp_tool{
+    tools.push_back(tool{
         .name = "volume_set_pivot",
         .description =
             "Move the pivot of a node's volume: the point of the volume that sits at the origin "
@@ -825,7 +825,7 @@ auto append_volume_tools(std::vector<mcp_tool>& tools, const mcp_bindings& bindi
         ),
     });
 
-    tools.push_back(mcp_tool{
+    tools.push_back(tool{
         .name = "volume_rename",
         .description =
             "Rename the file of a node's volume inside the folder of the prefab. Writes the "
@@ -853,4 +853,4 @@ auto append_volume_tools(std::vector<mcp_tool>& tools, const mcp_bindings& bindi
     });
 }
 
-}  // namespace vw::sculptor
+}  // namespace vw::sculptor::mcp

@@ -8,7 +8,7 @@ import vw.ecs;
 import vw.world;
 import vw.gfx;
 
-namespace vw::sculptor {
+namespace vw::sculptor::mcp {
 
 namespace {
 
@@ -370,7 +370,7 @@ auto read_point(
 }
 
 [[nodiscard]] auto answer(
-    const mcp_bindings& bindings, const node_service::outcome& outcome, std::string_view name
+    const editor_bindings& bindings, const node_service::outcome& outcome, std::string_view name
 ) -> tool_outcome {
     if (!outcome) {
         return tool_failure(outcome.error());
@@ -378,7 +378,7 @@ auto read_point(
     return tool_success(describe_node(bindings, name));
 }
 
-[[nodiscard]] auto current_placement(const mcp_bindings& bindings, std::string_view name)
+[[nodiscard]] auto current_placement(const editor_bindings& bindings, std::string_view name)
     -> transform {
     const auto& scene = bindings.state->scene;
     const auto found  = scene.name_to_entity.find(std::string{name});
@@ -390,7 +390,7 @@ auto read_point(
 
 }  // namespace
 
-auto describe_node(const mcp_bindings& bindings, std::string_view name) -> json::value {
+auto describe_node(const editor_bindings& bindings, std::string_view name) -> json::value {
     const auto& scene = bindings.state->scene;
     const auto found  = scene.name_to_entity.find(std::string{name});
     if (found == scene.name_to_entity.end()) {
@@ -499,8 +499,8 @@ auto describe_node(const mcp_bindings& bindings, std::string_view name) -> json:
     return node;
 }
 
-auto append_node_tools(std::vector<mcp_tool>& tools, const mcp_bindings& bindings) -> void {
-    tools.push_back(mcp_tool{
+auto append_node_tools(std::vector<tool>& tools, const editor_bindings& bindings) -> void {
+    tools.push_back(tool{
         .name = "node_create",
         .description =
             "Add a node to the open prefab, with its placement and any components, as one undo "
@@ -530,7 +530,7 @@ auto append_node_tools(std::vector<mcp_tool>& tools, const mcp_bindings& binding
         ),
     });
 
-    tools.push_back(mcp_tool{
+    tools.push_back(tool{
         .name = "node_delete",
         .description =
             "Delete a node together with every node under it, as one undo step. Deleting the "
@@ -559,7 +559,7 @@ auto append_node_tools(std::vector<mcp_tool>& tools, const mcp_bindings& binding
         ),
     });
 
-    tools.push_back(mcp_tool{
+    tools.push_back(tool{
         .name = "node_move",
         .description =
             "Put a node under another parent or at another place among its siblings. The node "
@@ -583,7 +583,7 @@ auto append_node_tools(std::vector<mcp_tool>& tools, const mcp_bindings& binding
         ),
     });
 
-    tools.push_back(mcp_tool{
+    tools.push_back(tool{
         .name = "node_set_transform",
         .description =
             "Set the position, rotation or scale of a node relative to its parent. Fields left "
@@ -610,7 +610,7 @@ auto append_node_tools(std::vector<mcp_tool>& tools, const mcp_bindings& binding
         ),
     });
 
-    tools.push_back(mcp_tool{
+    tools.push_back(tool{
         .name = "node_set_components",
         .description =
             "Add, change or remove components of a node as one undo step. Only the components "
@@ -642,7 +642,7 @@ auto append_node_tools(std::vector<mcp_tool>& tools, const mcp_bindings& binding
         ),
     });
 
-    tools.push_back(mcp_tool{
+    tools.push_back(tool{
         .name = "prefab_set_rig",
         .description =
             "Name the rig of the open prefab. A clip or a state machine belongs to the prefab "
@@ -668,4 +668,4 @@ auto append_node_tools(std::vector<mcp_tool>& tools, const mcp_bindings& binding
     });
 }
 
-}  // namespace vw::sculptor
+}  // namespace vw::sculptor::mcp

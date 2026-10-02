@@ -5,15 +5,16 @@ import std;
 import vw.core;
 import vw.asset;
 import vw.gfx;
+import vw.net;
 import :state;
 import :operations;
 import :services;
 
-export namespace vw::sculptor {
+export namespace vw::sculptor::mcp {
 
-inline constexpr uint16 default_mcp_port = 17800;
+inline constexpr uint16 default_port = 17800;
 
-struct mcp_bindings {
+struct editor_bindings {
     gfx::engine* engine           = nullptr;
     app_state* state              = nullptr;
     operation_manager* operations = nullptr;
@@ -24,65 +25,28 @@ struct mcp_bindings {
     fsm_service* machines         = nullptr;
 };
 
-class mcp_server final {
+class server final {
 public:
     [[nodiscard]] static auto compiled_in() -> bool;
 
-    mcp_server(uint16 port, const mcp_bindings& bindings);
-    ~mcp_server();
+    server(uint16 port, const editor_bindings& bindings);
+    ~server();
 
-    mcp_server(const mcp_server&)                    = delete;
-    auto operator=(const mcp_server&) -> mcp_server& = delete;
+    server(const server&)                    = delete;
+    auto operator=(const server&) -> server& = delete;
 
     auto poll() -> void;
 
-    [[nodiscard]] auto status() const -> mcp_status;
+    [[nodiscard]] auto status() const -> server_status;
 
 private:
     struct impl;
     std::unique_ptr<impl> impl_;
 };
 
-}  // namespace vw::sculptor
+}  // namespace vw::sculptor::mcp
 
-namespace vw::sculptor {
-
-struct http_request {
-    std::string method;
-    std::string target;
-    std::string body;
-};
-
-struct http_response {
-    uint32 status = 200;
-    std::string content_type;
-    std::string allow;
-    std::string body;
-};
-
-struct http_exchange {
-    http_request request;
-    std::promise<http_response> reply;
-    std::atomic<bool> abandoned{false};
-};
-
-class http_listener final {
-public:
-    explicit http_listener(uint16 port);
-    ~http_listener();
-
-    http_listener(const http_listener&)                    = delete;
-    auto operator=(const http_listener&) -> http_listener& = delete;
-
-    [[nodiscard]] auto is_listening() const -> bool;
-    [[nodiscard]] auto failure() const -> const std::string&;
-
-    [[nodiscard]] auto take_pending() -> std::vector<std::shared_ptr<http_exchange>>;
-
-private:
-    struct impl;
-    std::unique_ptr<impl> impl_;
-};
+namespace vw::sculptor::mcp {
 
 struct tool_image {
     std::string media_type;
@@ -97,14 +61,14 @@ struct tool_outcome {
 };
 
 struct dispatch_result {
-    std::optional<http_response> ready;
-    std::function<std::optional<http_response>()> later;
+    std::optional<net::http::response> ready;
+    std::function<std::optional<net::http::response>()> later;
 };
 
 [[nodiscard]] auto tool_success(const json::value& payload) -> tool_outcome;
 [[nodiscard]] auto tool_failure(std::string reason) -> tool_outcome;
 
-struct mcp_tool {
+struct tool {
     std::string_view name;
     std::string_view description;
     std::string_view input_schema;
@@ -113,16 +77,16 @@ struct mcp_tool {
 
 using tool_body = std::function<tool_outcome(const json::value& arguments)>;
 
-[[nodiscard]] auto make_editor_tools(const mcp_bindings& bindings) -> std::vector<mcp_tool>;
+[[nodiscard]] auto make_editor_tools(const editor_bindings& bindings) -> std::vector<tool>;
 
-auto append_prefab_tools(std::vector<mcp_tool>& tools, const mcp_bindings& bindings) -> void;
-auto append_node_tools(std::vector<mcp_tool>& tools, const mcp_bindings& bindings) -> void;
-auto append_volume_tools(std::vector<mcp_tool>& tools, const mcp_bindings& bindings) -> void;
-auto append_view_tools(std::vector<mcp_tool>& tools, const mcp_bindings& bindings) -> void;
-auto append_clip_tools(std::vector<mcp_tool>& tools, const mcp_bindings& bindings) -> void;
-auto append_fsm_tools(std::vector<mcp_tool>& tools, const mcp_bindings& bindings) -> void;
+auto append_prefab_tools(std::vector<tool>& tools, const editor_bindings& bindings) -> void;
+auto append_node_tools(std::vector<tool>& tools, const editor_bindings& bindings) -> void;
+auto append_volume_tools(std::vector<tool>& tools, const editor_bindings& bindings) -> void;
+auto append_view_tools(std::vector<tool>& tools, const editor_bindings& bindings) -> void;
+auto append_clip_tools(std::vector<tool>& tools, const editor_bindings& bindings) -> void;
+auto append_fsm_tools(std::vector<tool>& tools, const editor_bindings& bindings) -> void;
 
-[[nodiscard]] auto describe_node(const mcp_bindings& bindings, std::string_view name)
+[[nodiscard]] auto describe_node(const editor_bindings& bindings, std::string_view name)
     -> json::value;
 
 class argument_reader final {
@@ -157,25 +121,25 @@ private:
 };
 
 [[nodiscard]] auto editor_busy_reason(const app_state& state) -> std::string_view;
-[[nodiscard]] auto when_idle(const mcp_bindings& bindings, tool_body body) -> tool_body;
+[[nodiscard]] auto when_idle(const editor_bindings& bindings, tool_body body) -> tool_body;
 
 [[nodiscard]] auto json_of(float32 number) -> json::value;
 [[nodiscard]] auto json_of(const vec3f& vector) -> json::value;
 [[nodiscard]] auto json_of(const vec3i& vector) -> json::value;
 [[nodiscard]] auto json_or_null(std::string_view text) -> json::value;
 
-class mcp_dispatcher final {
+class dispatcher final {
 public:
-    explicit mcp_dispatcher(std::vector<mcp_tool> tools);
+    explicit dispatcher(std::vector<tool> tools);
 
-    [[nodiscard]] auto handle(const http_request& request) -> dispatch_result;
+    [[nodiscard]] auto handle(const net::http::request& request) -> dispatch_result;
 
     [[nodiscard]] auto request_count() const -> uint64;
     [[nodiscard]] auto last_tool() const -> const std::string&;
 
 private:
     struct registered_tool {
-        mcp_tool tool;
+        tool definition;
         json::value input_schema;
     };
 
@@ -195,4 +159,4 @@ private:
     std::string last_tool_;
 };
 
-}  // namespace vw::sculptor
+}  // namespace vw::sculptor::mcp

@@ -9,7 +9,7 @@
 
 ## Architecture
 
-Всё — именованные модули C++: движок из шести библиотек плюс приложения
+Всё — именованные модули C++: движок из семи библиотек плюс приложения
 `vw.sculptor` и `vw.arena`. Заголовков движка не существует, только `import`.
 
 - **vw.core** (`engine/core/src/`, таргет `vw_core`) — типы, math, transform,
@@ -18,6 +18,9 @@
 - **vw.asset** (`engine/asset/src/`, таргет `vw_asset`) — модели, анимации,
   форматы `.vox`/`.voxa`, хранилище ассетов. Зависит только от `vw.core` и
   ничего не знает про ECS; каталоги `model/ anim/ serial/`
+- **vw.net** (`engine/net/src/`, таргет `vw_net`) — адреса, сокеты TCP и UDP,
+  сервер HTTP. Зависит только от `vw.core`, собирается без Vulkan; системные
+  сокеты живут ровно в одном `.cpp`; каталоги `socket/ http/`
 - **vw.ecs** (`engine/ecs/src/`, таргет `vw_ecs`) — entity, type-erased пул,
   реестр с рантайм-идентификаторами компонентов
 - **vw.world** (`engine/world/src/`, таргет `vw_world`) — компоненты, системы,
@@ -40,8 +43,9 @@
 (`vw.world:systems.transform`), а крупные партиции — агрегаторы из `export import`.
 
 Пространства имён: `vw` (core), `vw::spatial` (геометрия), `vw::json`, `vw::asset` (данные
-ассетов), `vw::ecs` (реестр, мир, компоненты, системы), `vw::plat` (окно и ввод),
-`vw::gfx`, `vw::sculptor`. Модуль ≠ namespace: `vw.world` экспортирует `vw::ecs`,
+ассетов), `vw::net` и `vw::net::http` (сеть), `vw::ecs` (реестр, мир, компоненты,
+системы), `vw::plat` (окно и ввод), `vw::gfx`, `vw::sculptor` и вложенное
+`vw::sculptor::mcp` (сервер MCP). Модуль ≠ namespace: `vw.world` экспортирует `vw::ecs`,
 включая сериализацию сцены в `:scene.*`, а `vw.asset` — одноимённое `vw::asset`.
 
 Undo/redo в Sculptor — command-паттерн через `base_operation`.

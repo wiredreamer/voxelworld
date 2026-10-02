@@ -126,6 +126,16 @@ jobs:
           -max_total_time=60 -print_final_stats=1 -artifact_prefix=json-
           corpus/json tests/data/json_test_suite/test_parsing
 
+      - name: Fuzz the HTTP head parser
+        env:
+          ASAN_OPTIONS: detect_leaks=1:detect_stack_use_after_return=1
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+        run: >
+          mkdir -p corpus/http &&
+          ./build-fuzz/tests/fuzz/http_head_fuzzer
+          -max_total_time=60 -print_final_stats=1 -artifact_prefix=http-
+          corpus/http tests/data/http_heads
+
       - name: Upload crashing inputs
         if: failure()
         uses: actions/upload-artifact@v4
@@ -135,6 +145,7 @@ jobs:
             vox-*
             voxa-*
             json-*
+            http-*
           if-no-files-found: ignore
 
   coverage:
@@ -181,7 +192,7 @@ jobs:
           cov=llvm-cov-${{ env.VW_LLVM_VERSION }}
           $profdata merge -sparse prof/*.profraw -o merged.profdata
 
-          test_targets="core_tests asset_tests ecs_tests world_tests"
+          test_targets="core_tests asset_tests net_tests ecs_tests world_tests"
 
           objects=""
           for target in $test_targets; do

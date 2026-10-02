@@ -8,7 +8,7 @@ import vw.ecs;
 import vw.world;
 import vw.gfx;
 
-namespace vw::sculptor {
+namespace vw::sculptor::mcp {
 
 namespace {
 
@@ -243,7 +243,7 @@ template <typename T, std::size_t N>
 }
 
 [[nodiscard]] auto describe_machine(
-    const mcp_bindings& bindings, const asset::asset_ref& machine, const asset::voxf_data& data
+    const editor_bindings& bindings, const asset::asset_ref& machine, const asset::voxf_data& data
 ) -> json::value {
     json::array params;
     for (const asset::voxf_param& param : data.params) {
@@ -499,7 +499,7 @@ template <typename T, std::size_t N>
     return data;
 }
 
-[[nodiscard]] auto rig_of_prefab(const mcp_bindings& bindings) -> std::string {
+[[nodiscard]] auto rig_of_prefab(const editor_bindings& bindings) -> std::string {
     const auto& scene = bindings.state->scene;
     const auto root   = scene.name_to_entity.find(scene.root_name);
     if (root == scene.name_to_entity.end()) {
@@ -512,7 +512,7 @@ template <typename T, std::size_t N>
                : std::string{};
 }
 
-[[nodiscard]] auto answer_with_machine(const mcp_bindings& bindings, const asset::asset_ref& machine)
+[[nodiscard]] auto answer_with_machine(const editor_bindings& bindings, const asset::asset_ref& machine)
     -> tool_outcome {
     const auto data = bindings.machines->read(machine);
     if (!data) {
@@ -521,7 +521,7 @@ template <typename T, std::size_t N>
     return tool_success(describe_machine(bindings, machine, *data));
 }
 
-[[nodiscard]] auto describe_attached(const mcp_bindings& bindings) -> json::value {
+[[nodiscard]] auto describe_attached(const editor_bindings& bindings) -> json::value {
     json::array attached;
     for (const asset::asset_ref& machine : bindings.machines->machines()) {
         attached.emplace_back(machine.str());
@@ -531,8 +531,8 @@ template <typename T, std::size_t N>
 
 }  // namespace
 
-auto append_fsm_tools(std::vector<mcp_tool>& tools, const mcp_bindings& bindings) -> void {
-    tools.push_back(mcp_tool{
+auto append_fsm_tools(std::vector<tool>& tools, const editor_bindings& bindings) -> void {
+    tools.push_back(tool{
         .name = "fsm_get",
         .description =
             "Read a state machine: its parameters, its states with the clip each plays and the "
@@ -559,7 +559,7 @@ auto append_fsm_tools(std::vector<mcp_tool>& tools, const mcp_bindings& bindings
             },
     });
 
-    tools.push_back(mcp_tool{
+    tools.push_back(tool{
         .name = "fsm_set",
         .description =
             "Replace a state machine of the open prefab with the one given, whole, as one undo "
@@ -589,7 +589,7 @@ auto append_fsm_tools(std::vector<mcp_tool>& tools, const mcp_bindings& bindings
         ),
     });
 
-    tools.push_back(mcp_tool{
+    tools.push_back(tool{
         .name         = "fsm_save",
         .description  = "Write the state machine open in the editor to its file.",
         .input_schema = no_arguments,
@@ -608,7 +608,7 @@ auto append_fsm_tools(std::vector<mcp_tool>& tools, const mcp_bindings& bindings
         ),
     });
 
-    tools.push_back(mcp_tool{
+    tools.push_back(tool{
         .name = "fsm_create",
         .description =
             "Make a new state machine file with a single state 'idle' and, unless told not to, "
@@ -635,7 +635,7 @@ auto append_fsm_tools(std::vector<mcp_tool>& tools, const mcp_bindings& bindings
         ),
     });
 
-    tools.push_back(mcp_tool{
+    tools.push_back(tool{
         .name = "prefab_set_machines",
         .description =
             "Set which state machines the open prefab runs and in what order. Machine i drives "
@@ -669,4 +669,4 @@ auto append_fsm_tools(std::vector<mcp_tool>& tools, const mcp_bindings& bindings
     });
 }
 
-}  // namespace vw::sculptor
+}  // namespace vw::sculptor::mcp

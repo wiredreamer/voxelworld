@@ -149,32 +149,32 @@ auto menu_bar::render_volume_menu_() const -> void {
 }
 
 auto menu_bar::render_mcp_status_() const -> void {
-    const mcp_status& mcp = state_->mcp;
-    if (!mcp.enabled) {
+    const mcp::server_status& server = state_->mcp;
+    if (!server.enabled) {
         return;
     }
 
-    const std::string label = mcp.listening
-        ? std::format("MCP :{} | {}", mcp.port, mcp.requests)
+    const std::string label = server.listening
+        ? std::format("MCP :{} | {}", server.port, server.requests)
         : std::string{"MCP off"};
 
     constexpr float32 right_margin = 12.0f;
     const float32 label_width      = ImGui::CalcTextSize(label.c_str()).x;
     ImGui::SameLine(ImGui::GetWindowWidth() - label_width - right_margin);
 
-    if (mcp.listening) {
+    if (server.listening) {
         ImGui::TextUnformatted(label.c_str());
     } else {
         ImGui::TextDisabled("%s", label.c_str());
     }
 
     if (ImGui::IsItemHovered()) {
-        const std::string hint = mcp.listening
+        const std::string hint = server.listening
             ? std::format(
-                  "MCP server on 127.0.0.1:{}, {} requests, last tool: {}", mcp.port, mcp.requests,
-                  mcp.last_tool.empty() ? std::string_view{"none"} : std::string_view{mcp.last_tool}
+                  "MCP server on 127.0.0.1:{}, {} requests, last tool: {}", server.port, server.requests,
+                  server.last_tool.empty() ? std::string_view{"none"} : std::string_view{server.last_tool}
               )
-            : std::format("MCP server is not listening: {}", mcp.failure);
+            : std::format("MCP server is not listening: {}", server.failure);
         ImGui::SetTooltip("%s", hint.c_str());
     }
 }

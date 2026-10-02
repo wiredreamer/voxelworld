@@ -389,7 +389,9 @@ struct fsm_document {
     }
 };
 
-struct mcp_status {
+namespace mcp {
+
+struct server_status {
     bool enabled    = false;
     bool listening  = false;
     uint16 port     = 0;
@@ -397,6 +399,8 @@ struct mcp_status {
     std::string last_tool;
     std::string failure;
 };
+
+}  // namespace mcp
 
 struct app_state {
     static constexpr std::string_view asset_root_name = VW_SCULPTOR_ASSET_ROOT;
@@ -417,7 +421,7 @@ struct app_state {
     tool_state tool;
     animation_state anim;
     socket_state sockets;
-    mcp_status mcp;
+    mcp::server_status mcp;
 
     [[nodiscard]] auto edited_node() const -> const std::string& {
         if (!ctx.stack.empty() && !ctx.stack.back().node_name.empty()) {

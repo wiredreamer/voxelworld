@@ -116,9 +116,9 @@ app::app(
 auto app::start_mcp_(
     uint16 port
 ) -> void {
-    mcp_server_ = std::make_unique<mcp_server>(
+    mcp_server_ = std::make_unique<mcp::server>(
         port,
-        mcp_bindings{
+        mcp::editor_bindings{
             .engine     = &get_engine(),
             .state      = &state_,
             .operations = &op_manager_,

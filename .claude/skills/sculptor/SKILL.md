@@ -15,7 +15,7 @@ description: Редактор вокселей Sculptor — apps/sculptor, мо�
 | `:services` | `services.cppm` | `services/*.cpp` | `file_service`, `node_service`, `volume_service`, `clip_service`, `clipboard_service`, `keyframe_service`, `playback_service`, `fsm_service` |
 | `:tools` | `tools.cppm` | `tools/*.cpp` | `base_tool`, инструменты, `gizmo` |
 | `:ui` | `ui.cppm` | `ui/*.cpp` | панели, модальные окна, `component_drawer` |
-| `:mcp` | `mcp.cppm` | `mcp/*.cpp` | `mcp_server`: слушатель HTTP, диспетчер JSON-RPC, инструменты агента |
+| `:mcp` | `mcp.cppm` | `mcp/*.cpp` | `mcp::server`: диспетчер JSON-RPC и инструменты агента поверх `net::http::server` из `vw.net`; всё в `namespace vw::sculptor::mcp` |
 | `:app` | `app.cppm` | `app/app.cpp`, `app/launch_options.cpp` | `app`: владеет всем перечисленным, тик, кадр, ввод; разбор флагов запуска |
 
 Партиция — один `.cppm` без подпартиций: новый класс дописывается в него
@@ -43,7 +43,13 @@ ImGui и `renderer.draw_*` в `update` запрещены — кадра там 
 Устройство сервера, HTTP и протокол — `docs/mcp.md`. Здесь только то, что нужно
 при правке.
 
-**Новый инструмент агента** — запись `mcp_tool` в `make_editor_tools`
+**Всё серверное живёт в `namespace vw::sculptor::mcp`** и префикса `mcp_` в
+имени не носит: `mcp::server`, `mcp::tool`, `mcp::argument_reader`. Тела в
+`mcp/*.cpp` открывают `namespace vw::sculptor::mcp`, имена редактора видны из
+объемлющего пространства. Сокетов в редакторе нет: HTTP отдаёт `vw.net`
+(`docs/ENGINE.md#сеть`).
+
+**Новый инструмент агента** — запись `mcp::tool` в `make_editor_tools`
 (`mcp/editor_tools.cpp`): `name`, `description`, `input_schema` текстом JSON
 Schema и `run`, который получает аргументы объектом `json::value` и возвращает
 `tool_success(значение)` либо `tool_failure("причина")`.
@@ -55,7 +61,7 @@ Schema и `run`, который получает аргументы объект
   допустимо («узла `hand` нет; есть: …»).
 - Схема разбирается при старте; битая пишет ошибку в лог и заменяется на пустой
   объект. Проверяй лог после добавления инструмента.
-- Доступ к редактору — через `mcp_bindings`. Новую зависимость (сервис,
+- Доступ к редактору — через `mcp::editor_bindings`. Новую зависимость (сервис,
   `operation_manager`) добавляй полем туда и в `app::start_mcp_`.
 - `run` исполняется на главном потоке из `app::update`: ImGui и
   `renderer.draw_*` там звать нельзя (см. «Тик и кадр»), а проверка открытого
@@ -66,7 +72,7 @@ Schema и `run`, который получает аргументы объект
   `op_manager.execute` и сервисы, как любой другой код редактора.
 - Координаты, размеры и прочие `float32` отдавай через `json_of`: прямое
   расширение до `float64` пишет `0.9900000095367432` вместо `0.99`.
-- Аргументы разбирает `argument_reader`: он копит первую ошибку с путём до
+- Аргументы разбирает `mcp::argument_reader`: он копит первую ошибку с путём до
   поля, поэтому тело инструмента читает все поля подряд и один раз проверяет
   `failed()`. Первым делом зови `allow({...})` со списком полей схемы —
   неизвестное поле станет ошибкой, а не будет молча пропущено.

@@ -105,7 +105,7 @@ private:
     create_clip_modal create_clip_modal_;
     open_clip_modal open_clip_modal_;
 
-    std::unique_ptr<mcp_server> mcp_server_;
+    std::unique_ptr<mcp::server> mcp_server_;
 };
 
 }  // namespace vw::sculptor

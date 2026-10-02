@@ -1,6 +1,6 @@
 ---
 name: cmake-build
-description: Сборка и CI voxelworld — генератор Ninja и окружение vcvars, таргеты vw_core/vw_asset/vw_ecs/vw_world/vw_platform/vw_gfx/vwengine, опции VW_BUILD_*, подключение нового модульного юнита, тесты и headless-конфигурация без Vulkan, гейт import std при обновлении CMake, доставка шейдеров и ассетов, предупреждения, джобы GitHub Actions (санитайзеры, фаззеры, покрытие, Linux на libc++, релиз) и vcpkg-триплет. Читай при правке CMakeLists.txt, cmake/*.cmake, cmake/triplets/*, vcpkg.json, .github/workflows/*.yml и перед запуском сборки или тестов.
+description: Сборка и CI voxelworld — генератор Ninja и окружение vcvars, таргеты vw_core/vw_asset/vw_net/vw_ecs/vw_world/vw_platform/vw_gfx/vwengine, опции VW_BUILD_*, подключение нового модульного юнита, тесты и headless-конфигурация без Vulkan, гейт import std при обновлении CMake, доставка шейдеров и ассетов, предупреждения, джобы GitHub Actions (санитайзеры, фаззеры, покрытие, Linux на libc++, релиз) и vcpkg-триплет. Читай при правке CMakeLists.txt, cmake/*.cmake, cmake/triplets/*, vcpkg.json, .github/workflows/*.yml и перед запуском сборки или тестов.
 ---
 
 # Сборка voxelworld
@@ -30,7 +30,7 @@ cmake -S . -B build/release -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build
 # тесты
 cmake -S . -B build/tests -G Ninja -DCMAKE_TOOLCHAIN_FILE=C:/Users/lucius/vcpkg/scripts/buildsystems/vcpkg.cmake \
       -DVCPKG_TARGET_TRIPLET=x64-windows -DVW_BUILD_APPS=OFF
-cmake --build build/tests --target core_tests asset_tests ecs_tests world_tests
+cmake --build build/tests --target core_tests asset_tests net_tests ecs_tests world_tests
 ctest --test-dir build/tests --output-on-failure
 ctest --test-dir build/tests -R core        # или -R ecs, -R world
 
@@ -51,15 +51,16 @@ cmake -S . -B build/headless -G Ninja -DCMAKE_BUILD_TYPE=Release \
 |---|---|
 | `vw_core` | модуль `vw.core` (`engine/core/`) |
 | `vw_asset` | модуль `vw.asset` (`engine/asset/`); линкуется только с `vw_core` |
+| `vw_net` | модуль `vw.net` (`engine/net/`); линкуется только с `vw_core`, на Windows тянет `ws2_32` |
 | `vw_ecs` | модуль `vw.ecs` (`engine/ecs/`) |
 | `vw_world` | модуль `vw.world` (`engine/world/`) |
 | `vw_platform` | модуль `vw.platform` (`engine/platform/`); только при `VW_BUILD_GFX=ON` |
 | `vw_gfx` | модуль `vw.gfx` (`engine/gfx/`) поверх `VulkanHppModule`; только при `VW_BUILD_GFX=ON` |
-| `vwengine` | INTERFACE-набор всех шести модулей, на него линкуются приложения; только при `VW_BUILD_GFX=ON` |
-| `core_tests` `asset_tests` `ecs_tests` `world_tests` | тесты Catch2; линкуются на модульные таргеты, никогда на `vwengine` |
+| `vwengine` | INTERFACE-набор всех семи модулей, на него линкуются приложения; только при `VW_BUILD_GFX=ON` |
+| `core_tests` `asset_tests` `net_tests` `ecs_tests` `world_tests` | тесты Catch2; линкуются на модульные таргеты, никогда на `vwengine` |
 | `gfx_tests` | тесты мешера и камеры на CPU; только при `VW_BUILD_GFX=ON` |
 | `view_bench` | микробенчмарк обхода ECS (регрессионный сторож из M2) |
-| `vox_parse_fuzzer` `voxa_parse_fuzzer` `json_parse_fuzzer` | фаззеры разборщиков; только при `VW_BUILD_FUZZERS=ON`, см. «Фаззинг» |
+| `vox_parse_fuzzer` `voxa_parse_fuzzer` `json_parse_fuzzer` `http_head_fuzzer` | фаззеры разборщиков; только при `VW_BUILD_FUZZERS=ON`, см. «Фаззинг» |
 
 Опции: `VW_BUILD_GFX` (по умолчанию ON), `VW_BUILD_APPS`, `VW_BUILD_TESTS`,
 `VW_BUILD_FUZZERS` (OFF, только Clang), `VW_WARNINGS_AS_ERRORS` (OFF),
@@ -257,11 +258,12 @@ cmake -S . -B build/asan -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DVW_BUILD_A
 `VW_BUILD_FUZZERS=ON` подключает `tests/fuzz/` независимо от `VW_BUILD_TESTS`;
 без Clang конфигурация падает — libFuzzer есть только у него. `vw_add_fuzzer(name
 source)` вешает `-fsanitize=fuzzer-no-link`/`-fsanitize=fuzzer` на свой таргет;
-`fuzzer-no-link` получают и сами `vw_core` с `vw_asset` — без него покрытие
+`fuzzer-no-link` получают и сами `vw_core`, `vw_asset` и `vw_net` — без него покрытие
 снимается только с обвязки, и фаззер перебирает входы вслепую. ASan и UBSan
 ожидаются снаружи в `CMAKE_CXX_FLAGS`/`CMAKE_EXE_LINKER_FLAGS`, как
-в шаге Configure джоба `fuzz`. Отдельного корпуса нет: затравка — `assets/models`,
-`assets/animations` и, для JSON, `tests/data/json_test_suite/test_parsing`;
+в шаге Configure джоба `fuzz`. Затравка — то, что уже лежит в репозитории: `assets/models`,
+`assets/animations`, для JSON — `tests/data/json_test_suite/test_parsing`, для
+головы HTTP-запроса — два файла в `tests/data/http_heads`;
 ctest-тесты `fuzz_*_seed_corpus` прогоняют её с
 `-runs=0`. Упавшие входы джоб выгружает артефактом `fuzz-crashes`.
 

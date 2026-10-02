@@ -127,7 +127,6 @@ if (VW_SCULPTOR_MCP)
     target_sources(${PROJECT_NAME} PRIVATE
         src/mcp/editor_tools.cpp
         src/mcp/fsm_tools.cpp
-        src/mcp/http_listener.cpp
         src/mcp/arguments.cpp
         src/mcp/clip_tools.cpp
         src/mcp/node_tools.cpp
@@ -143,9 +142,6 @@ endif()
 
 target_link_libraries(${PROJECT_NAME} PRIVATE vwengine imgui::imgui)
 
-if (VW_SCULPTOR_MCP AND WIN32)
-    target_link_libraries(${PROJECT_NAME} PRIVATE ws2_32)
-endif()
 target_compile_definitions(${PROJECT_NAME}
     PRIVATE VW_SCULPTOR_ASSET_ROOT="${VW_SCULPTOR_ASSET_ROOT}")
 vw_use_std_module(${PROJECT_NAME})

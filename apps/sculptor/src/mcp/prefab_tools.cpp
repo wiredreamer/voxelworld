@@ -8,7 +8,7 @@ import vw.ecs;
 import vw.world;
 import vw.gfx;
 
-namespace vw::sculptor {
+namespace vw::sculptor::mcp {
 
 namespace {
 
@@ -139,7 +139,7 @@ constexpr std::string_view save_as_schema = R"({
     return "unknown prefab error";
 }
 
-[[nodiscard]] auto prefab_summary(const mcp_bindings& bindings) -> json::value {
+[[nodiscard]] auto prefab_summary(const editor_bindings& bindings) -> json::value {
     const app_state& state = *bindings.state;
 
     return json::object{
@@ -150,7 +150,7 @@ constexpr std::string_view save_as_schema = R"({
     };
 }
 
-[[nodiscard]] auto describe_prefab(const mcp_bindings& bindings) -> tool_outcome {
+[[nodiscard]] auto describe_prefab(const editor_bindings& bindings) -> tool_outcome {
     const app_state& state = *bindings.state;
 
     if (state.file.filename.empty()) {
@@ -196,8 +196,8 @@ constexpr std::string_view save_as_schema = R"({
 
 }  // namespace
 
-auto append_prefab_tools(std::vector<mcp_tool>& tools, const mcp_bindings& bindings) -> void {
-    tools.push_back(mcp_tool{
+auto append_prefab_tools(std::vector<tool>& tools, const editor_bindings& bindings) -> void {
+    tools.push_back(tool{
         .name = "prefab_get",
         .description =
             "Read the open prefab: its rig, its state machines and every node with its parent, "
@@ -208,7 +208,7 @@ auto append_prefab_tools(std::vector<mcp_tool>& tools, const mcp_bindings& bindi
             [bindings](const json::value&) -> tool_outcome { return describe_prefab(bindings); },
     });
 
-    tools.push_back(mcp_tool{
+    tools.push_back(tool{
         .name = "prefab_new",
         .description =
             "Create an empty prefab file and open it in place of what is open now. The new "
@@ -237,7 +237,7 @@ auto append_prefab_tools(std::vector<mcp_tool>& tools, const mcp_bindings& bindi
         ),
     });
 
-    tools.push_back(mcp_tool{
+    tools.push_back(tool{
         .name = "prefab_open",
         .description =
             "Open a prefab from the prefabs folder in place of what is open now. Volumes are "
@@ -264,7 +264,7 @@ auto append_prefab_tools(std::vector<mcp_tool>& tools, const mcp_bindings& bindi
         ),
     });
 
-    tools.push_back(mcp_tool{
+    tools.push_back(tool{
         .name = "prefab_save",
         .description =
             "Write the open prefab and every volume changed since the last save. Clips and "
@@ -289,7 +289,7 @@ auto append_prefab_tools(std::vector<mcp_tool>& tools, const mcp_bindings& bindi
         ),
     });
 
-    tools.push_back(mcp_tool{
+    tools.push_back(tool{
         .name = "prefab_save_as",
         .description =
             "Save the open prefab under another name and keep editing the copy. The volumes of "
@@ -324,7 +324,7 @@ auto append_prefab_tools(std::vector<mcp_tool>& tools, const mcp_bindings& bindi
         ),
     });
 
-    tools.push_back(mcp_tool{
+    tools.push_back(tool{
         .name = "prefab_close",
         .description =
             "Close the open prefab without saving and leave the editor empty. Open clips are "
@@ -351,4 +351,4 @@ auto append_prefab_tools(std::vector<mcp_tool>& tools, const mcp_bindings& bindi
     });
 }
 
-}  // namespace vw::sculptor
+}  // namespace vw::sculptor::mcp

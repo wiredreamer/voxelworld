@@ -10,7 +10,7 @@ import vw.core;
 import vw.asset;
 import vw.gfx;
 
-namespace vw::sculptor {
+namespace vw::sculptor::mcp {
 
 namespace {
 
@@ -59,7 +59,7 @@ constexpr std::string_view no_arguments =
     return "unknown";
 }
 
-[[nodiscard]] auto describe_editor(const mcp_bindings& bindings) -> json::value {
+[[nodiscard]] auto describe_editor(const editor_bindings& bindings) -> json::value {
     const app_state& state = *bindings.state;
 
     json::array contexts;
@@ -118,7 +118,7 @@ constexpr std::string_view no_arguments =
     };
 }
 
-[[nodiscard]] auto history_state(const mcp_bindings& bindings) -> json::value {
+[[nodiscard]] auto history_state(const editor_bindings& bindings) -> json::value {
     return json::object{
         {"can_undo", !bindings.operations->is_undo_empty()},
         {"can_redo", !bindings.operations->is_redo_empty()},
@@ -241,7 +241,7 @@ auto editor_busy_reason(const app_state& state) -> std::string_view {
     return {};
 }
 
-auto when_idle(const mcp_bindings& bindings, tool_body body) -> tool_body {
+auto when_idle(const editor_bindings& bindings, tool_body body) -> tool_body {
     return [bindings, body = std::move(body)](const json::value& arguments) -> tool_outcome {
         const std::string_view reason = editor_busy_reason(*bindings.state);
         if (!reason.empty()) {
@@ -251,10 +251,10 @@ auto when_idle(const mcp_bindings& bindings, tool_body body) -> tool_body {
     };
 }
 
-auto make_editor_tools(const mcp_bindings& bindings) -> std::vector<mcp_tool> {
-    std::vector<mcp_tool> tools;
+auto make_editor_tools(const editor_bindings& bindings) -> std::vector<tool> {
+    std::vector<tool> tools;
 
-    tools.push_back(mcp_tool{
+    tools.push_back(tool{
         .name = "editor_state",
         .description =
             "Report what the editor has open: the prefab, the edit context, the selected and "
@@ -268,7 +268,7 @@ auto make_editor_tools(const mcp_bindings& bindings) -> std::vector<mcp_tool> {
             },
     });
 
-    tools.push_back(mcp_tool{
+    tools.push_back(tool{
         .name = "assets_list",
         .description =
             "List the asset files the editor can open, as paths relative to the asset root: "
@@ -278,7 +278,7 @@ auto make_editor_tools(const mcp_bindings& bindings) -> std::vector<mcp_tool> {
         .run          = [](const json::value&) -> tool_outcome { return tool_success(list_assets()); },
     });
 
-    tools.push_back(mcp_tool{
+    tools.push_back(tool{
         .name = "palette_list",
         .description =
             "List every voxel a volume may contain: its index, name and colour, and for glowing "
@@ -291,7 +291,7 @@ auto make_editor_tools(const mcp_bindings& bindings) -> std::vector<mcp_tool> {
             },
     });
 
-    tools.push_back(mcp_tool{
+    tools.push_back(tool{
         .name = "undo",
         .description =
             "Undo the last edit, exactly as Ctrl+Z in the editor. The history is shared with the "
@@ -309,7 +309,7 @@ auto make_editor_tools(const mcp_bindings& bindings) -> std::vector<mcp_tool> {
         ),
     });
 
-    tools.push_back(mcp_tool{
+    tools.push_back(tool{
         .name         = "redo",
         .description  = "Redo the edit that undo took back, exactly as Ctrl+Shift+Z in the editor.",
         .input_schema = no_arguments,
@@ -335,4 +335,4 @@ auto make_editor_tools(const mcp_bindings& bindings) -> std::vector<mcp_tool> {
     return tools;
 }
 
-}  // namespace vw::sculptor
+}  // namespace vw::sculptor::mcp

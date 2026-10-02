@@ -4,7 +4,7 @@ import std;
 
 import vw.core;
 
-namespace vw::sculptor {
+namespace vw::sculptor::mcp {
 
 namespace {
 
@@ -205,4 +205,4 @@ auto argument_reader::text_list(std::string_view key) -> std::vector<std::string
     return listed;
 }
 
-}  // namespace vw::sculptor
+}  // namespace vw::sculptor::mcp

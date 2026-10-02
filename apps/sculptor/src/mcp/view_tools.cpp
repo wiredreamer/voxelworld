@@ -8,7 +8,7 @@ import vw.ecs;
 import vw.world;
 import vw.gfx;
 
-namespace vw::sculptor {
+namespace vw::sculptor::mcp {
 
 namespace {
 
@@ -167,7 +167,7 @@ struct view_direction {
     };
 }
 
-[[nodiscard]] auto set_view(const mcp_bindings& bindings, const json::value& arguments)
+[[nodiscard]] auto set_view(const editor_bindings& bindings, const json::value& arguments)
     -> tool_outcome {
     argument_reader in{arguments};
     in.allow({"node", "from", "yaw_degrees", "pitch_degrees", "distance"});
@@ -250,7 +250,7 @@ struct shot_progress {
     bool requested       = false;
 };
 
-[[nodiscard]] auto take_screenshot(const mcp_bindings& bindings, const json::value& arguments)
+[[nodiscard]] auto take_screenshot(const editor_bindings& bindings, const json::value& arguments)
     -> tool_outcome {
     argument_reader in{arguments};
     in.allow({"max_size", "overlays", "interface"});
@@ -327,8 +327,8 @@ struct shot_progress {
 
 }  // namespace
 
-auto append_view_tools(std::vector<mcp_tool>& tools, const mcp_bindings& bindings) -> void {
-    tools.push_back(mcp_tool{
+auto append_view_tools(std::vector<tool>& tools, const editor_bindings& bindings) -> void {
+    tools.push_back(tool{
         .name = "view_set",
         .description =
             "Point the editor's camera at a node or at the whole prefab, from a named side or "
@@ -345,7 +345,7 @@ auto append_view_tools(std::vector<mcp_tool>& tools, const mcp_bindings& binding
         ),
     });
 
-    tools.push_back(mcp_tool{
+    tools.push_back(tool{
         .name = "view_screenshot",
         .description =
             "Take a picture of the editor's viewport as it is drawn now, without the panels "
@@ -358,4 +358,4 @@ auto append_view_tools(std::vector<mcp_tool>& tools, const mcp_bindings& binding
     });
 }
 
-}  // namespace vw::sculptor
+}  // namespace vw::sculptor::mcp

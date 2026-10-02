@@ -83,6 +83,23 @@ vw_use_std_module(asset_tests)
 
 catch_discover_tests(asset_tests)
 
+add_executable(net_tests
+    net/endpoint.test.cpp
+    net/socket.test.cpp
+    net/http.test.cpp
+)
+
+target_link_libraries(net_tests PRIVATE
+    vw_core
+    vw_net
+    Catch2::Catch2WithMain
+)
+
+target_compile_features(net_tests PRIVATE cxx_std_23)
+vw_use_std_module(net_tests)
+
+catch_discover_tests(net_tests)
+
 add_executable(ecs_tests
     ecs/entity_pool.test.cpp
     ecs/component_pool.test.cpp

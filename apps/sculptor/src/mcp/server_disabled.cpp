@@ -4,22 +4,22 @@ import std;
 
 import vw.core;
 
-namespace vw::sculptor {
+namespace vw::sculptor::mcp {
 
-struct mcp_server::impl {};
+struct server::impl {};
 
-auto mcp_server::compiled_in() -> bool {
+auto server::compiled_in() -> bool {
     return false;
 }
 
-mcp_server::mcp_server(uint16, const mcp_bindings&) {}
+server::server(uint16, const editor_bindings&) {}
 
-mcp_server::~mcp_server() = default;
+server::~server() = default;
 
-auto mcp_server::poll() -> void {}
+auto server::poll() -> void {}
 
-auto mcp_server::status() const -> mcp_status {
-    return mcp_status{
+auto server::status() const -> server_status {
+    return server_status{
         .enabled   = true,
         .listening = false,
         .port      = 0,
@@ -29,4 +29,4 @@ auto mcp_server::status() const -> mcp_status {
     };
 }
 
-}  // namespace vw::sculptor
+}  // namespace vw::sculptor::mcp

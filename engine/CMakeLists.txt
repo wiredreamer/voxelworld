@@ -4,6 +4,7 @@ project(vwengine)
 
 add_subdirectory(core)
 add_subdirectory(asset)
+add_subdirectory(net)
 add_subdirectory(ecs)
 add_subdirectory(world)
 
@@ -21,6 +22,7 @@ target_compile_features(${PROJECT_NAME} INTERFACE cxx_std_23)
 target_link_libraries(${PROJECT_NAME} INTERFACE
         vw_core
         vw_asset
+        vw_net
         vw_ecs
         vw_world
         vw_platform

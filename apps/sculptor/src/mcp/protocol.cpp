@@ -7,8 +7,9 @@ module vw.sculptor;
 import std;
 
 import vw.core;
+import vw.net;
 
-namespace vw::sculptor {
+namespace vw::sculptor::mcp {
 
 namespace {
 
@@ -38,17 +39,17 @@ constexpr int64 invalid_params_code   = -32602;
     return target.substr(0, target.find('?'));
 }
 
-[[nodiscard]] auto json_reply(uint32 status, const json::value& payload) -> http_response {
-    return http_response{
+[[nodiscard]] auto json_reply(uint32 status, const json::value& payload) -> net::http::response {
+    return net::http::response{
         .status       = status,
         .content_type = std::string{json_media_type},
-        .allow        = {},
+        .fields       = {},
         .body         = json::dump(payload),
     };
 }
 
-[[nodiscard]] auto accepted() -> http_response {
-    return http_response{.status = 202, .content_type = {}, .allow = {}, .body = {}};
+[[nodiscard]] auto accepted() -> net::http::response {
+    return net::http::response{.status = 202, .content_type = {}, .fields = {}, .body = {}};
 }
 
 [[nodiscard]] auto rpc_result(const json::value& id, json::value result) -> json::value {
@@ -119,7 +120,7 @@ auto tool_failure(std::string reason) -> tool_outcome {
     return tool_outcome{.text = std::move(reason), .failed = true, .image = {}, .later = {}};
 }
 
-mcp_dispatcher::mcp_dispatcher(std::vector<mcp_tool> tools) {
+dispatcher::dispatcher(std::vector<tool> tools) {
     tools_.reserve(tools.size());
     for (auto& tool : tools) {
         auto schema = json::parse(tool.input_schema);
@@ -130,36 +131,36 @@ mcp_dispatcher::mcp_dispatcher(std::vector<mcp_tool> tools) {
             );
             schema = json::value{json::object{{"type", "object"}}};
         }
-        tools_.push_back(registered_tool{.tool = std::move(tool), .input_schema = std::move(*schema)});
+        tools_.push_back(registered_tool{.definition = std::move(tool), .input_schema = std::move(*schema)});
     }
 }
 
-auto mcp_dispatcher::request_count() const -> uint64 {
+auto dispatcher::request_count() const -> uint64 {
     return request_count_;
 }
 
-auto mcp_dispatcher::last_tool() const -> const std::string& {
+auto dispatcher::last_tool() const -> const std::string& {
     return last_tool_;
 }
 
-auto mcp_dispatcher::handle(const http_request& request) -> dispatch_result {
-    const auto at_once = [](http_response response) {
+auto dispatcher::handle(const net::http::request& request) -> dispatch_result {
+    const auto at_once = [](net::http::response response) {
         return dispatch_result{.ready = std::move(response), .later = {}};
     };
 
     if (path_of(request.target) != endpoint_path) {
-        return at_once(http_response{
+        return at_once(net::http::response{
             .status       = 404,
             .content_type = "text/plain; charset=utf-8",
-            .allow        = {},
+            .fields       = {},
             .body         = "the MCP endpoint is /mcp",
         });
     }
     if (request.method != "POST") {
-        return at_once(http_response{
+        return at_once(net::http::response{
             .status       = 405,
             .content_type = "text/plain; charset=utf-8",
-            .allow        = "POST",
+            .fields       = {net::http::field{.name = "Allow", .value = "POST"}},
             .body         = "the MCP endpoint answers POST only",
         });
     }
@@ -182,7 +183,7 @@ auto mcp_dispatcher::handle(const http_request& request) -> dispatch_result {
     if (answer.later) {
         return dispatch_result{
             .ready = {},
-            .later = [later = std::move(answer.later)]() -> std::optional<http_response> {
+            .later = [later = std::move(answer.later)]() -> std::optional<net::http::response> {
                 const auto reply = later();
                 return reply ? std::optional{json_reply(200, *reply)} : std::nullopt;
             },
@@ -191,7 +192,7 @@ auto mcp_dispatcher::handle(const http_request& request) -> dispatch_result {
     return at_once(answer.reply ? json_reply(200, *answer.reply) : accepted());
 }
 
-auto mcp_dispatcher::answer_(const json::value& message) -> rpc_answer {
+auto dispatcher::answer_(const json::value& message) -> rpc_answer {
     const auto at_once = [](std::optional<json::value> reply) {
         return rpc_answer{.reply = std::move(reply), .later = {}};
     };
@@ -257,7 +258,7 @@ auto mcp_dispatcher::answer_(const json::value& message) -> rpc_answer {
     );
 }
 
-auto mcp_dispatcher::initialize_(const json::value& params) const -> json::value {
+auto dispatcher::initialize_(const json::value& params) const -> json::value {
     std::string_view protocol = latest_protocol;
     if (const auto* asked = params.find("protocolVersion"); asked != nullptr) {
         if (const auto* text = asked->as_string(); text != nullptr) {
@@ -281,20 +282,20 @@ auto mcp_dispatcher::initialize_(const json::value& params) const -> json::value
     };
 }
 
-auto mcp_dispatcher::list_tools_() const -> json::value {
+auto dispatcher::list_tools_() const -> json::value {
     json::array listed;
     listed.reserve(tools_.size());
-    for (const auto& [tool, input_schema] : tools_) {
+    for (const auto& [definition, input_schema] : tools_) {
         listed.emplace_back(json::object{
-            {"name", tool.name},
-            {"description", tool.description},
+            {"name", definition.name},
+            {"description", definition.description},
             {"inputSchema", input_schema},
         });
     }
     return json::object{{"tools", std::move(listed)}};
 }
 
-auto mcp_dispatcher::call_tool_(const json::value& params)
+auto dispatcher::call_tool_(const json::value& params)
     -> std::expected<tool_outcome, std::string> {
     const auto name = json::cursor{params, "params"}["name"].string();
     if (!name) {
@@ -302,7 +303,7 @@ auto mcp_dispatcher::call_tool_(const json::value& params)
     }
 
     const auto found = std::ranges::find(tools_, *name, [](const registered_tool& entry) {
-        return entry.tool.name;
+        return entry.definition.name;
     });
     if (found == tools_.end()) {
         return std::unexpected(std::format("unknown tool {}", *name));
@@ -315,13 +316,13 @@ auto mcp_dispatcher::call_tool_(const json::value& params)
         return std::unexpected(std::string{"params.arguments: expected object"});
     }
 
-    last_tool_ = found->tool.name;
+    last_tool_ = found->definition.name;
 
-    tool_outcome outcome = found->tool.run(fields);
+    tool_outcome outcome = found->definition.run(fields);
     if (outcome.failed) {
-        log::warn(lc_, "{} failed: {}", found->tool.name, outcome.text);
+        log::warn(lc_, "{} failed: {}", found->definition.name, outcome.text);
     }
     return outcome;
 }
 
-}  // namespace vw::sculptor
+}  // namespace vw::sculptor::mcp
