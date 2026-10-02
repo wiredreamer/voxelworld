@@ -357,6 +357,34 @@ private:
 
 export namespace vw::sculptor {
 
+class rename_entity_modal final {
+public:
+    using engine_type = gfx::engine;
+
+    rename_entity_modal(engine_type& eng, app_state& state, operation_manager& op_manager);
+
+    auto open(const std::string& name) -> void;
+
+    auto render() -> void;
+
+private:
+    auto rename_() -> bool;
+
+    engine_type* engine_;
+    app_state* state_;
+    operation_manager* op_manager_;
+
+    bool need_open_ = false;
+
+    std::string name_;
+    std::string new_name_;
+    std::string error_;
+};
+
+}  // namespace vw::sculptor
+
+export namespace vw::sculptor {
+
 class delete_track_modal final {
 public:
     using engine_type = gfx::engine;
@@ -515,6 +543,7 @@ private:
 
     create_entity_modal creation_modal_;
     delete_entity_modal deletion_modal_;
+    rename_entity_modal rename_modal_;
 
     std::optional<move_entity_params> pending_move_;
 

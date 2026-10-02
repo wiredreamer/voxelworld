@@ -835,6 +835,32 @@ private:
 
 export namespace vw::sculptor {
 
+struct rename_entity_params {
+    std::string name;
+    std::string new_name;
+};
+
+class rename_entity_operation final : public base_operation {
+public:
+    using engine_type = gfx::engine;
+
+    rename_entity_operation(engine_type& engine, app_state& st, const rename_entity_params& params);
+
+    auto execute() -> void override;
+    auto undo() -> void override;
+
+private:
+    auto rename_(const std::string& from, const std::string& to) const -> void;
+
+    engine_type* engine_;
+    app_state* state_;
+    rename_entity_params params_;
+};
+
+}  // namespace vw::sculptor
+
+export namespace vw::sculptor {
+
 struct set_rig_params {
     std::string rig_name;
 };

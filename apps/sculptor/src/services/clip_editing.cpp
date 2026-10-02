@@ -276,7 +276,8 @@ auto clip_service::set_tracks(std::string_view name, std::vector<asset::animatio
     return {};
 }
 
-auto clip_service::show_pose(std::string_view name, float32 time) -> outcome {
+auto clip_service::retarget(std::string_view name, std::string_view from, std::string_view to)
+    -> outcome {
     const auto root = root_();
     if (!root) {
         return refuse(root.error());
@@ -286,11 +287,64 @@ auto clip_service::show_pose(std::string_view name, float32 time) -> outcome {
     if (!clip) {
         return refuse(clip.error());
     }
-    if (time < 0.0F) {
-        return refuse(std::format("the time must not be negative, got {}", time));
+
+    std::vector<asset::animation_track> tracks = (*clip)->get_tracks();
+
+    const auto moved = std::ranges::find(tracks, from, &asset::animation_track::get_target_name);
+    if (moved == tracks.end()) {
+        std::vector<std::string> keyed;
+        for (const asset::animation_track& track : tracks) {
+            keyed.push_back(track.get_target_name());
+        }
+        return refuse(std::format(
+            "the clip '{}' has no track for '{}'; its tracks are: {}", (*clip)->get_name(), from,
+            joined(keyed)
+        ));
     }
+    if (from == to) {
+        return {};
+    }
+    if (std::ranges::contains(tracks, to, &asset::animation_track::get_target_name)) {
+        return refuse(std::format(
+            "the clip '{}' already has a track for '{}'; remove its keys with clip_remove_keys "
+            "first",
+            (*clip)->get_name(), to
+        ));
+    }
+
+    const auto targets = engine_->get_world().system<ecs::animation_system>().collect_targets(*root);
+    if (!std::ranges::contains(targets, to)) {
+        return refuse(std::format(
+            "'{}' is not an animation target of this prefab; the targets are: {}", to,
+            joined(targets)
+        ));
+    }
+
+    *moved = moved->retargeted(std::string{to});
+
     if (auto selected = select((*clip)->get_name()); !selected) {
         return selected;
+    }
+
+    op_manager_->execute(std::make_unique<set_clip_tracks_operation>(
+        *engine_, *state_,
+        set_clip_tracks_params{.clip_name = (*clip)->get_name(), .tracks = std::move(tracks)}
+    ));
+    return {};
+}
+
+auto clip_service::layer_for_(std::string_view name) -> std::expected<clip_layer, std::string> {
+    const auto root = root_();
+    if (!root) {
+        return refuse(root.error());
+    }
+
+    const auto clip = find(name);
+    if (!clip) {
+        return refuse(clip.error());
+    }
+    if (auto selected = select((*clip)->get_name()); !selected) {
+        return refuse(selected.error());
     }
 
     auto& world          = engine_->get_world();
@@ -301,25 +355,117 @@ auto clip_service::show_pose(std::string_view name, float32 time) -> outcome {
         world.modify(*root).with<ecs::animation_player_component>();
     }
 
-    const auto& player = world.get<ecs::animation_player_component>(*root);
+    const auto& player  = world.get<ecs::animation_player_component>(*root);
     const bool on_layer = player.has_layer(layer_idx) && player.get_layer(layer_idx).clip == *clip;
     if (!on_layer) {
-        const auto& settings = state_->anim.get_clip_settings((*clip)->get_name());
-
-        auto layer = anim_sys.modify_player(*root).layer(layer_idx);
-        layer.blend_to(*clip, std::nullopt);
-        layer.set_playback_speed(settings.playback_speed);
-        layer.set_loop_mode(settings.loop_mode);
+        anim_sys.modify_player(*root).layer(layer_idx).blend_to(*clip, std::nullopt);
     }
 
-    auto posed = anim_sys.modify_player(*root);
-    posed.layer(layer_idx).pause();
-    posed.layer(layer_idx).set_time(time);
+    const auto& settings = state_->anim.get_clip_settings((*clip)->get_name());
+    const auto layer     = anim_sys.modify_player(*root).layer(layer_idx);
+    layer.set_playback_speed(settings.playback_speed);
+    layer.set_loop_mode(settings.loop_mode);
+
+    return clip_layer{.root = *root, .clip = *clip, .index = layer_idx};
+}
+
+auto clip_service::show_pose(std::string_view name, float32 time) -> outcome {
+    if (time < 0.0F) {
+        return refuse(std::format("the time must not be negative, got {}", time));
+    }
+
+    const auto on = layer_for_(name);
+    if (!on) {
+        return refuse(on.error());
+    }
+
+    auto posed = engine_->get_world().system<ecs::animation_system>().modify_player(on->root);
+    posed.layer(on->index).pause();
+    posed.layer(on->index).set_time(time);
     posed.apply_pose();
 
     state_->anim.timeline_cursor = time;
     state_->anim.need_apply_pose = false;
     return {};
+}
+
+auto clip_service::play(std::string_view name, const clip_playback& how) -> outcome {
+    if (how.from < 0.0F) {
+        return refuse(std::format("the start time must not be negative, got {}", how.from));
+    }
+    if (how.speed && !(*how.speed > 0.0F && std::isfinite(*how.speed))) {
+        return refuse(std::format("the speed must be a positive number, got {}", *how.speed));
+    }
+
+    const auto clip = find(name);
+    if (!clip) {
+        return refuse(clip.error());
+    }
+    if (how.from > (*clip)->get_duration()) {
+        return refuse(std::format(
+            "the start time {} is past the end of the clip, {} s", how.from, (*clip)->get_duration()
+        ));
+    }
+
+    auto& settings = state_->anim.get_clip_settings_mut((*clip)->get_name());
+    if (how.loop) {
+        settings.loop_mode = *how.loop;
+    }
+    if (how.speed) {
+        settings.playback_speed = *how.speed;
+    }
+
+    const auto on = layer_for_(name);
+    if (!on) {
+        return refuse(on.error());
+    }
+
+    const auto layer =
+        engine_->get_world().system<ecs::animation_system>().modify_player(on->root).layer(on->index);
+    layer.stop();
+    layer.play();
+    layer.set_time(how.from);
+
+    state_->anim.timeline_cursor = how.from;
+    state_->anim.need_apply_pose = false;
+    return {};
+}
+
+auto clip_service::stop(std::string_view name) -> outcome {
+    return show_pose(name, 0.0F);
+}
+
+auto clip_service::playback(std::string_view name) const -> clip_playback_status {
+    const auto& settings = state_->anim.get_clip_settings(std::string{name});
+
+    clip_playback_status status{
+        .state = asset::animation_state::stopped,
+        .time  = 0.0F,
+        .loop  = settings.loop_mode,
+        .speed = settings.playback_speed,
+    };
+
+    const auto root = root_();
+    const auto clip = find(name);
+    if (!root || !clip) {
+        return status;
+    }
+
+    const auto& world = engine_->get_world();
+    if (!world.has<ecs::animation_player_component>(*root)) {
+        return status;
+    }
+
+    const auto& player   = world.get<ecs::animation_player_component>(*root);
+    const auto layer_idx = state_->anim.get_layer_for_clip((*clip)->get_name());
+    if (!player.has_layer(layer_idx) || player.get_layer(layer_idx).clip != *clip) {
+        return status;
+    }
+
+    const auto& layer = player.get_layer(layer_idx);
+    status.state      = layer.state;
+    status.time       = layer.time;
+    return status;
 }
 
 }  // namespace vw::sculptor

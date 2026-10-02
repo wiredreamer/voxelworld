@@ -55,6 +55,25 @@ auto socket_state::erase_previews_for(
     });
 }
 
+auto socket_state::rename_previews_for(
+    const std::string& entity_name, const std::string& new_name
+) -> void {
+    const auto prefix = entity_name + ":";
+
+    std::vector<std::string> keys;
+    for (const auto& key : socket_previews | std::views::keys) {
+        if (key.starts_with(prefix)) {
+            keys.push_back(key);
+        }
+    }
+
+    for (const std::string& key : keys) {
+        auto preview  = socket_previews.extract(key);
+        preview.key() = socket_preview_key(new_name, key.substr(prefix.size()));
+        socket_previews.insert(std::move(preview));
+    }
+}
+
 auto socket_state::clear_all(
     world_type& world
 ) -> void {

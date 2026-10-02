@@ -102,6 +102,61 @@ constexpr std::string_view pose_schema = R"({
     "additionalProperties": false
 })";
 
+constexpr std::string_view retarget_schema = R"({
+    "type": "object",
+    "properties": {
+        "clip": {"type": "string", "description": "Name of an open clip. Defaults to the clip selected in the editor."},
+        "from": {"type": "string", "description": "Target the clip has a track for."},
+        "to": {"type": "string", "description": "Animation target of the prefab the track is to drive; the clip must not have a track for it yet."}
+    },
+    "required": ["from", "to"],
+    "additionalProperties": false
+})";
+
+constexpr std::string_view play_schema = R"({
+    "type": "object",
+    "properties": {
+        "clip": {"type": "string", "description": "Name of an open clip. Defaults to the clip selected in the editor."},
+        "from": {"type": "number", "minimum": 0, "description": "Seconds from the start of the clip to play from. Default 0."},
+        "loop": {"enum": ["once", "loop", "ping_pong"], "description": "How the clip repeats. Kept for the clip until the editor closes; 'once' unless set before."},
+        "speed": {"type": "number", "exclusiveMinimum": 0, "description": "Playback speed, 1 is real time. Kept for the clip until the editor closes."}
+    },
+    "additionalProperties": false
+})";
+
+constexpr std::array<std::pair<std::string_view, asset::animation_loop_mode>, 3> loop_names{{
+    {"once", asset::animation_loop_mode::once},
+    {"loop", asset::animation_loop_mode::loop},
+    {"ping_pong", asset::animation_loop_mode::ping_pong},
+}};
+
+constexpr std::array<std::pair<std::string_view, asset::animation_state>, 3> playback_names{{
+    {"stopped", asset::animation_state::stopped},
+    {"playing", asset::animation_state::playing},
+    {"paused", asset::animation_state::paused},
+}};
+
+template <typename Value, std::size_t Count>
+[[nodiscard]] auto name_in(
+    const std::array<std::pair<std::string_view, Value>, Count>& names, Value value
+) -> std::string_view {
+    const auto found = std::ranges::find(names, value, [](const auto& entry) {
+        return entry.second;
+    });
+    return found == names.end() ? std::string_view{} : found->first;
+}
+
+[[nodiscard]] auto describe_playback(const editor_bindings& bindings, std::string_view clip_name)
+    -> json::object {
+    const clip_playback_status status = bindings.clips->playback(clip_name);
+    return json::object{
+        {"state", name_in(playback_names, status.state)},
+        {"time", json_of(status.time)},
+        {"loop", name_in(loop_names, status.loop)},
+        {"speed", json_of(status.speed)},
+    };
+}
+
 constexpr std::array<std::pair<std::string_view, math::interpolation_type>, 6> interp_names{{
     {"linear", math::interpolation_type::linear},
     {"step", math::interpolation_type::step},
@@ -265,6 +320,7 @@ template <typename T>
         {"key_count", key_count},
         {"unsaved", anim.has_unsaved_clip(clip.get_name())},
         {"selected", anim.selected_clip_name == clip.get_name()},
+        {"playback", describe_playback(bindings, clip.get_name())},
     };
 
     if (with_tracks) {
@@ -604,6 +660,108 @@ auto append_clip_tools(std::vector<tool>& tools, const editor_bindings& bindings
                 json::object described = describe_clip(bindings, **clip, false);
                 described.set("posed_at", json_of(static_cast<float32>(*time)));
                 return tool_success(described);
+            }
+        ),
+    });
+
+    tools.push_back(tool{
+        .name = "clip_retarget",
+        .description =
+            "Make the track of one target drive another target, keys untouched, as one undo "
+            "step. Use it after an animation target was renamed: the clips are not followed "
+            "automatically, each open clip is retargeted and saved on its own.",
+        .input_schema = retarget_schema,
+        .run          = when_idle(
+            bindings,
+            [bindings](const json::value& arguments) -> tool_outcome {
+                argument_reader in{arguments};
+                in.allow({"clip", "from", "to"});
+                const std::string clip_name = clip_name_of(bindings, in);
+                const std::string from      = in.text("from");
+                const std::string to        = in.text("to");
+                if (in.failed()) {
+                    return tool_failure(in.error());
+                }
+
+                const auto moved = bindings.clips->retarget(clip_name, from, to);
+                if (!moved) {
+                    return tool_failure(moved.error());
+                }
+
+                const auto clip = bindings.clips->find(clip_name);
+                return tool_success(describe_clip(bindings, **clip, true));
+            }
+        ),
+    });
+
+    tools.push_back(tool{
+        .name = "clip_play",
+        .description =
+            "Play an open clip in the editor so that the user can watch it; the answer comes at "
+            "once and the clip keeps playing. 'loop' and 'speed' stay with the clip for the rest "
+            "of the session. To look at a moment yourself use clip_pose_at and view_screenshot: "
+            "a screenshot of a playing clip shows whatever moment it happens to catch.",
+        .input_schema = play_schema,
+        .run          = when_idle(
+            bindings,
+            [bindings](const json::value& arguments) -> tool_outcome {
+                argument_reader in{arguments};
+                in.allow({"clip", "from", "loop", "speed"});
+                const std::string clip_name = clip_name_of(bindings, in);
+
+                clip_playback how;
+                if (in.has("from")) {
+                    const auto from = in.at("from").number();
+                    if (!from) {
+                        in.fail(json::describe(from.error()));
+                    } else {
+                        how.from = static_cast<float32>(*from);
+                    }
+                }
+                if (in.has("speed")) {
+                    const auto speed = in.at("speed").number();
+                    if (!speed) {
+                        in.fail(json::describe(speed.error()));
+                    } else {
+                        how.speed = static_cast<float32>(*speed);
+                    }
+                }
+                if (const auto loop = in.optional_text("loop")) {
+                    const auto found = std::ranges::find(loop_names, *loop, [](const auto& entry) {
+                        return entry.first;
+                    });
+                    if (found == loop_names.end()) {
+                        in.fail(std::format(
+                            "loop: '{}' is not a loop mode; one of once, loop, ping_pong", *loop
+                        ));
+                    } else {
+                        how.loop = found->second;
+                    }
+                }
+                if (in.failed()) {
+                    return tool_failure(in.error());
+                }
+
+                return answer_with_clip(bindings, bindings.clips->play(clip_name, how), clip_name);
+            }
+        ),
+    });
+
+    tools.push_back(tool{
+        .name = "clip_stop",
+        .description =
+            "Stop a playing clip and put the prefab into the pose the clip gives at its start.",
+        .input_schema = clip_only_schema,
+        .run          = when_idle(
+            bindings,
+            [bindings](const json::value& arguments) -> tool_outcome {
+                argument_reader in{arguments};
+                in.allow({"clip"});
+                const std::string clip_name = clip_name_of(bindings, in);
+                if (in.failed()) {
+                    return tool_failure(in.error());
+                }
+                return answer_with_clip(bindings, bindings.clips->stop(clip_name), clip_name);
             }
         ),
     });

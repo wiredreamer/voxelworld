@@ -346,6 +346,7 @@ struct socket_state {
 
     auto erase_preview(const std::string& key, world_type& world) -> void;
     auto erase_previews_for(const std::string& entity_name, world_type& world) -> void;
+    auto rename_previews_for(const std::string& entity_name, const std::string& new_name) -> void;
     auto clear_all(world_type& world) -> void;
 };
 

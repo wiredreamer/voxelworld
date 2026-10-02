@@ -65,6 +65,22 @@ auto list_node_names(const app_state& state) -> std::vector<std::string> {
     return listed;
 }
 
+auto node_rename_problem(const app_state& state, std::string_view name, std::string_view new_name)
+    -> std::optional<std::string> {
+    if (!state.scene.name_to_entity.contains(std::string{name})) {
+        return std::format("there is no node '{}'", name);
+    }
+    if (!is_plain_name(new_name)) {
+        return std::format(
+            "'{}' cannot name a node: use letters, digits, '_', '-' and '.'", new_name
+        );
+    }
+    if (state.scene.name_to_entity.contains(std::string{new_name})) {
+        return std::format("a node '{}' already exists", new_name);
+    }
+    return std::nullopt;
+}
+
 auto leave_edit_contexts(app_state& state, clip_service& clips) -> void {
     const bool inside_clip = std::ranges::any_of(state.ctx.stack, [](const edit_context& ctx) {
         return ctx.kind == edit_kind::clip;
@@ -174,6 +190,27 @@ auto node_service::remove(std::string_view name) -> outcome {
 
     op_manager_->execute(std::make_unique<delete_entity_operation>(
         *engine_, *state_, *library_, delete_entity_params{.name = std::string{name}}
+    ));
+    return {};
+}
+
+auto node_service::rename(std::string_view name, std::string_view new_name) -> outcome {
+    if (auto ready = require_document_(); !ready) {
+        return ready;
+    }
+    if (const auto node = find_(name); !node) {
+        return refuse(node.error());
+    }
+    if (name == new_name) {
+        return {};
+    }
+    if (auto problem = node_rename_problem(*state_, name, new_name)) {
+        return refuse(std::move(*problem));
+    }
+
+    op_manager_->execute(std::make_unique<rename_entity_operation>(
+        *engine_, *state_,
+        rename_entity_params{.name = std::string{name}, .new_name = std::string{new_name}}
     ));
     return {};
 }

@@ -152,6 +152,8 @@ public:
         return target_name_;
     }
 
+    [[nodiscard]] auto retargeted(std::string target_name) const -> animation_track;
+
     [[nodiscard]] auto get_channel(animation_property prop) const
         -> const animation_channel_variant*;
     [[nodiscard]] auto get_channel_mut(animation_property prop) -> animation_channel_variant*;

@@ -77,6 +77,16 @@ constexpr std::string_view node_name_only_schema = R"({
     "additionalProperties": false
 })";
 
+constexpr std::string_view rename_schema = R"({
+    "type": "object",
+    "properties": {
+        "name": {"type": "string", "description": "Name of the node."},
+        "new_name": {"type": "string", "description": "The name it gets: letters, digits, '_', '-' and '.'; no other node may have it."}
+    },
+    "required": ["name", "new_name"],
+    "additionalProperties": false
+})";
+
 constexpr std::string_view move_schema = R"({
     "type": "object",
     "properties": {
@@ -526,6 +536,34 @@ auto append_node_tools(std::vector<tool>& tools, const editor_bindings& bindings
                 }
 
                 return answer(bindings, bindings.nodes->create(spec), spec.name);
+            }
+        ),
+    });
+
+    tools.push_back(tool{
+        .name = "node_rename",
+        .description =
+            "Give a node another name, as one undo step. Only the node is renamed: its animation "
+            "target, the name of its variant slot and its volume file stay as they are. Rename "
+            "the target with node_set_components and anim_target, move the keys of a clip to the "
+            "new target with clip_retarget, rename the volume file with volume_rename.",
+        .input_schema = rename_schema,
+        .run          = when_idle(
+            bindings,
+            [bindings](const json::value& arguments) -> tool_outcome {
+                argument_reader in{arguments};
+                in.allow({"name", "new_name"});
+                const std::string name     = in.text("name");
+                const std::string new_name = in.text("new_name");
+                if (in.failed()) {
+                    return tool_failure(in.error());
+                }
+
+                const auto renamed = bindings.nodes->rename(name, new_name);
+                if (!renamed) {
+                    return tool_failure(renamed.error());
+                }
+                return tool_success(describe_node(bindings, new_name));
             }
         ),
     });

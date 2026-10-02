@@ -39,6 +39,7 @@ target_sources(${PROJECT_NAME}
         src/operations/create_clip_operation.cpp
         src/operations/create_entity_operation.cpp
         src/operations/delete_entity_operation.cpp
+        src/operations/rename_entity_operation.cpp
         src/operations/expand_model_operation.cpp
         src/operations/modify_keyframe_operation.cpp
         src/operations/move_entity_operation.cpp
@@ -98,6 +99,7 @@ target_sources(${PROJECT_NAME}
         src/ui/create_entity_modal.cpp
         src/ui/create_keyframe_modal.cpp
         src/ui/delete_entity_modal.cpp
+        src/ui/rename_entity_modal.cpp
         src/ui/delete_track_modal.cpp
         src/ui/component_drawers.cpp
         src/ui/edit_components_modal.cpp

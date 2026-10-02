@@ -5,6 +5,7 @@ import pathlib
 import shutil
 import struct
 import sys
+import time
 
 SCRATCH_PREFABS = ("_mcp_smoke", "_mcp_smoke_copy")
 SCRATCH_CLIP = "_mcp_smoke_clip"
@@ -953,8 +954,71 @@ def run_clip_scenario(probe):
     )
 
     tool(probe, "clip_close", {"clip": "a_idle", "discard_unsaved": True})
+    run_playback_checks(probe)
     tool(probe, "prefab_close", {"discard_unsaved": True})
     remove_scratch_assets(asset_root)
+
+
+def run_playback_checks(probe):
+    ok, opened = tool(probe, "clip_open", {"name": "a_walk"})
+    probe.check(
+        "an opened clip is not playing",
+        ok and opened.get("playback", {}).get("state") == "stopped",
+        str(opened),
+    )
+
+    ok, played = tool(probe, "clip_play", {"loop": "loop", "speed": 0.5})
+    playback = played.get("playback", {}) if ok else {}
+    probe.check(
+        "clip_play starts the clip with the loop and the speed given",
+        ok and playback.get("state") == "playing" and playback.get("loop") == "loop" and close_to(playback.get("speed"), 0.5),
+        str(played),
+    )
+
+    time.sleep(0.3)
+    _, first = tool(probe, "clip_get")
+    time.sleep(0.3)
+    ok, second = tool(probe, "clip_get")
+    probe.check(
+        "a playing clip moves on between two reads",
+        ok and second["playback"]["state"] == "playing" and second["playback"]["time"] != first["playback"]["time"],
+        f"{first.get('playback')} {second.get('playback')}",
+    )
+
+    ok, state = tool(probe, "editor_state")
+    probe.check("playing keeps the editor in the clip", ok and state.get("context") == "clip", str(state.get("context")))
+
+    ok, played = tool(probe, "clip_play", {"from": 0.2, "loop": "once", "speed": 1})
+    probe.check(
+        "clip_play starts from the time given",
+        ok and played["playback"]["state"] == "playing" and close_to(played["playback"]["time"], 0.2),
+        str(played),
+    )
+
+    ok, kept = tool(probe, "clip_play")
+    probe.check(
+        "the loop and the speed stay with the clip",
+        ok and kept["playback"]["loop"] == "once" and close_to(kept["playback"]["speed"], 1),
+        str(kept),
+    )
+
+    ok, stopped = tool(probe, "clip_stop")
+    probe.check(
+        "clip_stop leaves the clip at its start and not playing",
+        ok and stopped["playback"]["state"] != "playing" and close_to(stopped["playback"]["time"], 0),
+        str(stopped),
+    )
+
+    ok, text = tool(probe, "clip_play", {"speed": 0})
+    probe.check("clip_play refuses a speed that is not positive", not ok and "positive" in text, str(text))
+    ok, text = tool(probe, "clip_play", {"from": 99})
+    probe.check("clip_play refuses a start past the end", not ok and "past the end" in text, str(text))
+    ok, text = tool(probe, "clip_play", {"loop": "forever"})
+    probe.check("clip_play refuses an unknown loop mode", not ok and "once, loop, ping_pong" in text, str(text))
+    ok, text = tool(probe, "clip_play", {"clip": "nope"})
+    probe.check("clip_play refuses a clip that is not open", not ok and "is not open" in text, str(text))
+
+    tool(probe, "clip_close", {"clip": "a_walk", "discard_unsaved": True})
 
 
 def machine_payload(machine):
@@ -1158,6 +1222,107 @@ def run_fsm_scenario(probe):
     remove_scratch_assets(asset_root)
 
 
+def run_rename_scenario(probe):
+    tool(probe, "prefab_close", {"discard_unsaved": True})
+    ok, opened = tool(probe, "prefab_open", {"name": "p_humanoid"})
+    probe.check("the humanoid opens for the rename checks", ok, str(opened))
+
+    before = nodes_of(probe)
+    head = before.get("head", {})
+
+    ok, renamed = tool(probe, "node_rename", {"name": "head", "new_name": "skull"})
+    after = nodes_of(probe)
+    skull = after.get("skull", {})
+    probe.check(
+        "node_rename gives the node its new name and nothing else",
+        ok and renamed.get("name") == "skull" and "head" not in after and len(after) == len(before)
+        and skull.get("parent") == head.get("parent") and close_to(skull.get("position"), head.get("position")),
+        str(renamed),
+    )
+    probe.check(
+        "the animation target keeps its name through a node rename",
+        skull.get("anim_target") == "head",
+        str(skull.get("anim_target")),
+    )
+
+    ok, state = tool(probe, "editor_state")
+    probe.check("a rename leaves the prefab unsaved", ok and state.get("unsaved", {}).get("prefab") is True, str(state.get("unsaved")))
+
+    ok, text = tool(probe, "node_rename", {"name": "skull", "new_name": "body"})
+    probe.check("node_rename refuses a name another node has", not ok and "already exists" in text, str(text))
+    ok, text = tool(probe, "node_rename", {"name": "skull", "new_name": "top head"})
+    probe.check("node_rename refuses a name with a space", not ok and "cannot name a node" in text, str(text))
+    ok, text = tool(probe, "node_rename", {"name": "nope", "new_name": "x"})
+    probe.check("node_rename refuses a node that is not there", not ok and "there is no node 'nope'" in text, str(text))
+    probe.check("refused renames change nothing", set(nodes_of(probe)) == set(after), str(sorted(nodes_of(probe))))
+
+    tool(probe, "undo")
+    probe.check("undo takes the rename back", "head" in nodes_of(probe) and "skull" not in nodes_of(probe), str(sorted(nodes_of(probe))))
+    tool(probe, "redo")
+    probe.check("redo renames again", "skull" in nodes_of(probe) and "head" not in nodes_of(probe), str(sorted(nodes_of(probe))))
+    tool(probe, "undo")
+
+    tool(probe, "node_set_transform", {"name": "head", "position": [0, 11, 0]})
+    tool(probe, "node_rename", {"name": "head", "new_name": "skull"})
+    tool(probe, "node_set_transform", {"name": "skull", "position": [0, 12, 0]})
+    tool(probe, "undo")
+    tool(probe, "undo")
+    tool(probe, "undo")
+    probe.check(
+        "steps made before and after a rename undo in order",
+        close_to(head_position(probe), head.get("position")),
+        str(head_position(probe)),
+    )
+
+    ok, prefab = tool(probe, "prefab_get")
+    root_name = prefab.get("root_node") if ok else None
+    ok, renamed = tool(probe, "node_rename", {"name": root_name, "new_name": "origin"})
+    ok_get, prefab = tool(probe, "prefab_get")
+    probe.check(
+        "renaming the root renames the root of the prefab",
+        ok and ok_get and prefab.get("root_node") == "origin",
+        str(prefab.get("root_node") if ok_get else prefab),
+    )
+    tool(probe, "undo")
+
+    tool(probe, "clip_open", {"name": "a_idle"})
+    ok, clip = tool(probe, "clip_get")
+    head_keys = keys_of(clip, "head") if ok else None
+
+    ok, changed = tool(probe, "node_set_components", {"name": "head", "anim_target": "skull"})
+    probe.check(
+        "a target is renamed on its own, the node keeps its name",
+        ok and changed.get("name") == "head" and changed.get("anim_target") == "skull",
+        str(changed),
+    )
+
+    ok, text = tool(probe, "clip_retarget", {"clip": "a_idle", "from": "neck", "to": "skull"})
+    probe.check("clip_retarget refuses a track the clip does not have", not ok and "has no track for 'neck'" in text, str(text))
+    ok, text = tool(probe, "clip_retarget", {"clip": "a_idle", "from": "head", "to": "crown"})
+    probe.check("clip_retarget refuses a target the prefab does not have", not ok and "is not an animation target" in text, str(text))
+    ok, text = tool(probe, "clip_retarget", {"clip": "a_idle", "from": "head", "to": "body"})
+    probe.check("clip_retarget refuses a target that already has a track", not ok and "already has a track" in text, str(text))
+
+    ok, moved = tool(probe, "clip_retarget", {"clip": "a_idle", "from": "head", "to": "skull"})
+    probe.check(
+        "clip_retarget moves the keys to the new target",
+        ok and keys_of(moved, "head") is None and close_to(keys_of(moved, "skull"), head_keys)
+        and moved.get("track_count") == clip.get("track_count") and moved.get("unsaved") is True,
+        json.dumps(moved)[:400],
+    )
+
+    tool(probe, "undo")
+    ok, back = tool(probe, "clip_get", {"clip": "a_idle"})
+    probe.check(
+        "undo puts the keys back under the old target",
+        ok and keys_of(back, "skull") is None and close_to(keys_of(back, "head"), head_keys),
+        json.dumps(back)[:400],
+    )
+
+    tool(probe, "clip_close", {"clip": "a_idle", "discard_unsaved": True})
+    tool(probe, "prefab_close", {"discard_unsaved": True})
+
+
 def main():
     port = DEFAULT_PORT
     with_scenario = False
@@ -1181,6 +1346,7 @@ def main():
             run_view_scenario(probe)
             run_clip_scenario(probe)
             run_fsm_scenario(probe)
+            run_rename_scenario(probe)
     except OSError as error:
         print(f"FAIL cannot reach Sculptor on {DEFAULT_HOST}:{port} -- {error}")
         print("     start it with: sculptor --mcp")

@@ -20,6 +20,19 @@ struct clip_load_report {
     ecs::rig_report rig;
 };
 
+struct clip_playback {
+    float32 from = 0.0F;
+    std::optional<asset::animation_loop_mode> loop;
+    std::optional<float32> speed;
+};
+
+struct clip_playback_status {
+    asset::animation_state state   = asset::animation_state::stopped;
+    float32 time                   = 0.0F;
+    asset::animation_loop_mode loop = asset::animation_loop_mode::once;
+    float32 speed                  = 1.0F;
+};
+
 class clip_service final {
 public:
     using engine_type = gfx::engine;
@@ -56,10 +69,21 @@ public:
     auto save(std::string_view name) -> outcome;
     auto close(std::string_view name, bool discard_unsaved) -> outcome;
     auto set_tracks(std::string_view name, std::vector<asset::animation_track> tracks) -> outcome;
+    auto retarget(std::string_view name, std::string_view from, std::string_view to) -> outcome;
     auto show_pose(std::string_view name, float32 time) -> outcome;
+    auto play(std::string_view name, const clip_playback& how) -> outcome;
+    auto stop(std::string_view name) -> outcome;
+    [[nodiscard]] auto playback(std::string_view name) const -> clip_playback_status;
 
 private:
+    struct clip_layer {
+        ecs::entity root;
+        std::shared_ptr<asset::animation_clip> clip;
+        std::size_t index = 0;
+    };
+
     [[nodiscard]] auto root_() const -> std::expected<ecs::entity, std::string>;
+    [[nodiscard]] auto layer_for_(std::string_view name) -> std::expected<clip_layer, std::string>;
 
     engine_type* engine_;
     app_state* state_;
@@ -353,6 +377,7 @@ public:
 
     auto create(const node_spec& spec) -> outcome;
     auto remove(std::string_view name) -> outcome;
+    auto rename(std::string_view name, std::string_view new_name) -> outcome;
     auto reparent(std::string_view name, std::string_view parent, std::optional<std::size_t> index)
         -> outcome;
     auto set_transform(std::string_view name, const transform& placement) -> outcome;
@@ -410,6 +435,9 @@ private:
 export namespace vw::sculptor {
 
 [[nodiscard]] auto list_node_names(const app_state& state) -> std::vector<std::string>;
+[[nodiscard]] auto node_rename_problem(
+    const app_state& state, std::string_view name, std::string_view new_name
+) -> std::optional<std::string>;
 
 auto leave_edit_contexts(app_state& state, clip_service& clips) -> void;
 

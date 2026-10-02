@@ -8,6 +8,12 @@ namespace vw::asset {
 animation_track::animation_track(std::string target_name, float32 fps)
     : target_name_(std::move(target_name)), compiled_fps_(fps) {}
 
+auto animation_track::retargeted(std::string target_name) const -> animation_track {
+    animation_track moved = *this;
+    moved.target_name_    = std::move(target_name);
+    return moved;
+}
+
 auto animation_track::recompile_if_needed() const -> void {
     if (!is_dirty_) {
         return;

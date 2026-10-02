@@ -30,7 +30,8 @@ entity_tree_panel::entity_tree_panel(
     , state_(&st)
     , op_manager_(&op_manager)
     , creation_modal_(eng, st, op_manager, library)
-    , deletion_modal_(eng, st, op_manager, library) {}
+    , deletion_modal_(eng, st, op_manager, library)
+    , rename_modal_(eng, st, op_manager) {}
 
 auto entity_tree_panel::render(
     float delta_time
@@ -71,6 +72,7 @@ auto entity_tree_panel::render(
 
     creation_modal_.render(delta_time);
     deletion_modal_.render(delta_time);
+    rename_modal_.render();
 
     ImGui::Dummy({200.0f, 0.0f});
 
@@ -150,6 +152,9 @@ auto entity_tree_panel::render_entity_node(
             state_->scene.selected_name = name;
             if (ImGui::MenuItem("Create child")) {
                 creation_modal_.open();
+            }
+            if (ImGui::MenuItem("Rename")) {
+                rename_modal_.open(name);
             }
             if (ImGui::MenuItem("Delete")) {
                 deletion_modal_.open(name);

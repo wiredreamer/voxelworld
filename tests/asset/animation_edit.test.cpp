@@ -40,6 +40,22 @@ TEST_CASE("a key creates the channels it has values for", "[animation_edit]") {
     CHECK(position_at(track, 0).value == vec3f{1.F, 2.F, 3.F});
 }
 
+TEST_CASE("a retargeted track keeps its keys under the new target", "[animation_edit]") {
+    asset::animation_track track{"arm", 30.0F};
+    asset::put_key(track, {.time = 0.0F, .position = vec3f{1.F, 2.F, 3.F}});
+    asset::put_key(track, {.time = 0.5F, .position = vec3f{4.F, 5.F, 6.F}, .scale = vec3f{2.F}});
+
+    const asset::animation_track moved = track.retargeted("arm_l");
+
+    CHECK(moved.get_target_name() == "arm_l");
+    CHECK(track.get_target_name() == "arm");
+    CHECK(moved.get_fps() == 30.0F);
+    CHECK(asset::count_keys(moved) == asset::count_keys(track));
+    CHECK(position_times(moved) == position_times(track));
+    CHECK(position_at(moved, 1).value == vec3f{4.F, 5.F, 6.F});
+    CHECK(moved.get_duration() == track.get_duration());
+}
+
 TEST_CASE("keys are kept in the order of time whatever the order they came in", "[animation_edit]") {
     asset::animation_track track{"head"};
 
