@@ -1,0 +1,72 @@
+# Voxa File Version 2.0
+rig humanoid
+
+track foot_right 60
+  channel position
+    k 0 5 -9 0 linear 0 1
+  channel rotation
+    k 0 -0 0 -0 1 linear 0 1
+
+track foot_left 60
+  channel position
+    k 0 -5 -9 0 linear 0 1
+  channel rotation
+    k 0 -0 0 -0 1 linear 0 1
+
+track body 60
+  channel position
+    k 0 0 2 0 ease_in_out 0 1
+    k 1 0 2.1 0.15 ease_in_out 0 1
+    k 2.4 0 2 0 ease_in_out 0 1
+    k 3.4 0.3 2.1 0.15 ease_in_out 0 1
+    k 4.8 0 2 0 ease_in_out 0 1
+  channel rotation
+    k 0 -0 0 -0 1 ease_in_out 0 1
+    k 1 -0.00872654 0 -0 0.999962 ease_in_out 0 1
+    k 2.4 -0 0 -0 1 ease_in_out 0 1
+    k 3.4 -0.00872645 3.80766e-05 -0.00436314 0.999952 ease_in_out 0 1
+    k 4.8 -0 0 -0 1 ease_in_out 0 1
+  channel scale
+    k 0 1 1 1 ease_in_out 0 1
+    k 1 1 1.02 1.04 ease_in_out 0 1
+    k 2.4 1 1 1 ease_in_out 0 1
+    k 3.4 1 1.02 1.04 ease_in_out 0 1
+    k 4.8 1 1 1 ease_in_out 0 1
+
+track head 60
+  channel position
+    k 0 0 11.5 0 ease_in_out 0 1
+    k 0.1 0 11.5 0 ease_in_out 0 1
+    k 1.1 0 11.85 0.15 ease_in_out 0 1
+    k 2.5 0 11.5 0 ease_in_out 0 1
+    k 3.5 0.35 11.85 0.15 ease_in_out 0 1
+    k 4.8 0 11.5 0 ease_in_out 0 1
+  channel rotation
+    k 0 -0 0 -0 1 ease_in_out 0 1
+    k 1.1 -0.00872654 0 -0 0.999962 ease_in_out 0 1
+    k 2.5 -0 0 -0 1 ease_in_out 0 1
+    k 3.3 -0.00435916 -0.043619 -0.000190325 0.999039 ease_in_out 0 1
+    k 4.2 -0 0 -0 1 ease_in_out 0 1
+    k 4.8 -0 0 -0 1 ease_in_out 0 1
+
+track hand_right 60
+  channel position
+    k 0 10 4 0 ease_in_out 0 1
+    k 0.17 10 4 0 ease_in_out 0 1
+    k 1.17 10.3 4.05 0 ease_in_out 0 1
+    k 2.57 10 4 0 ease_in_out 0 1
+    k 3.57 10.6 4.05 0 ease_in_out 0 1
+    k 4.8 10 4 0 ease_in_out 0 1
+  channel rotation
+    k 0 -0.707107 0 -0 0.707107 ease_in_out 0 1
+
+track hand_left 60
+  channel position
+    k 0 -10 4 0 ease_in_out 0 1
+    k 0.17 -10 4 0 ease_in_out 0 1
+    k 1.17 -10.3 4.05 0 ease_in_out 0 1
+    k 2.57 -10 4 0 ease_in_out 0 1
+    k 3.57 -10 4.05 0 ease_in_out 0 1
+    k 4.8 -10 4 0 ease_in_out 0 1
+  channel rotation
+    k 0 -0.707107 0 -0 0.707107 ease_in_out 0 1

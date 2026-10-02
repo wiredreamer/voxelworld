@@ -122,7 +122,7 @@ private:
 
     vec3f move_input_{0.0F, 0.0F, 0.0F};
     vec3f facing_direction_{0.0F, 0.0F, 1.0F};
-    float32 move_speed_     = 100.0F;
+    float32 move_speed_     = 65.0F;
     float32 jump_impulse_   = 150.0F;
     float32 rotation_speed_ = 5.0F;
     bool jump_requested_    = false;

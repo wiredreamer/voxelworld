@@ -1,0 +1,114 @@
+# Voxa File Version 2.0
+rig humanoid
+
+track foot_left 60
+  channel position
+    k 0 -4 -7.95 5 linear 0 1
+    k 0.1 -4 -9 3 linear 0 1
+    k 0.3 -4 -9 -1 linear 0 1
+    k 0.4 -4 -7.9 -3 linear 0 1
+    k 0.5 -4 -6.8 -5 linear 0 1
+    k 0.6 -5.5 -6 -3.5 linear 0 1
+    k 0.7 -5.5 -6.8 3.5 linear 0 1
+    k 0.8 -4 -7.95 5 linear 0 1
+  channel rotation
+    k 0 -0.130526 0 -0 0.991445 linear 0 1
+    k 0.1 -0 0 -0 1 linear 0 1
+    k 0.3 -0 0 -0 1 linear 0 1
+    k 0.4 0.0871557 -0 0 0.996195 linear 0 1
+    k 0.5 0.190809 -0 0 0.981627 linear 0 1
+    k 0.6 0.173648 -0 0 0.984808 linear 0 1
+    k 0.7 -0.0436194 0 -0 0.999048 linear 0 1
+    k 0.8 -0.130526 0 -0 0.991445 linear 0 1
+
+track foot_right 60
+  channel position
+    k 0 4 -7.9 -3 linear 0 1
+    k 0.1 4 -6.8 -5 linear 0 1
+    k 0.2 5.5 -6 -3.5 linear 0 1
+    k 0.3 5.5 -6.8 3.5 linear 0 1
+    k 0.4 4 -7.95 5 linear 0 1
+    k 0.5 4 -9 3 linear 0 1
+    k 0.7 4 -9 -1 linear 0 1
+    k 0.8 4 -7.9 -3 linear 0 1
+  channel rotation
+    k 0 0.0871557 -0 0 0.996195 linear 0 1
+    k 0.1 0.190809 -0 0 0.981627 linear 0 1
+    k 0.2 0.173648 -0 0 0.984808 linear 0 1
+    k 0.3 -0.0436194 0 -0 0.999048 linear 0 1
+    k 0.4 -0.130526 0 -0 0.991445 linear 0 1
+    k 0.5 -0 0 -0 1 linear 0 1
+    k 0.7 -0 0 -0 1 linear 0 1
+    k 0.8 0.0871557 -0 0 0.996195 linear 0 1
+
+track body 60
+  channel position
+    k 0 0 1.75 0 ease_out 0 1
+    k 0.1 -0.5 1 0 ease_in_out 0 1
+    k 0.3 -0.5 2.5 0 ease_in_out 0 1
+    k 0.5 0.5 1 0 ease_in_out 0 1
+    k 0.7 0.5 2.5 0 ease_in 0 1
+    k 0.8 0 1.75 0 ease_out 0 1
+  channel scale
+    k 0 1.005 0.995 1.005 ease_out 0 1
+    k 0.1 1.03 0.96 1.03 ease_in_out 0 1
+    k 0.3 0.98 1.03 0.98 ease_in_out 0 1
+    k 0.5 1.03 0.96 1.03 ease_in_out 0 1
+    k 0.7 0.98 1.03 0.98 ease_in 0 1
+    k 0.8 1.005 0.995 1.005 ease_out 0 1
+  channel rotation
+    k 0 0.0348517 -0.0523041 0.0018265 0.998021 linear 0 1
+    k 0.1 0.0353279 -0.0365381 0.0135793 0.998615 linear 0 1
+    k 0.2 0.0348942 0.00060908 0.0174418 0.999239 linear 0 1
+    k 0.3 0.0344181 0.0373963 0.0109974 0.998647 linear 0 1
+    k 0.4 0.0348517 0.0523041 -0.0018265 0.998021 linear 0 1
+    k 0.5 0.0353279 0.0365381 -0.0135793 0.998615 linear 0 1
+    k 0.6 0.0348942 -0.00060908 -0.0174418 0.999239 linear 0 1
+    k 0.7 0.0344181 -0.0373963 -0.0109974 0.998647 linear 0 1
+    k 0.8 0.0348517 -0.0523041 0.0018265 0.998021 linear 0 1
+
+track head 60
+  channel position
+    k 0 0.6 11.92 0.7 ease_out 0 1
+    k 0.15 -0.8 10.3 0.7 ease_in_out 0 1
+    k 0.35 -0.8 12.15 0.7 ease_in_out 0 1
+    k 0.55 0.8 10.3 0.7 ease_in_out 0 1
+    k 0.75 0.8 12.15 0.7 ease_in 0 1
+    k 0.8 0.6 11.92 0.7 ease_out 0 1
+  channel rotation
+    k 0 0.0174509 -0.0130876 0.000228445 0.999762 linear 0 1
+    k 0.05 0.0174497 -0.0174497 0.000304586 0.999695 ease_in_out 0 1
+    k 0.45 0.0174497 0.0174497 -0.000304586 0.999695 ease_in_out 0 1
+    k 0.8 0.0174509 -0.0130876 0.000228445 0.999762 linear 0 1
+
+track hand_right 60
+  channel position
+    k 0 9.36 5.39 3.75 linear 0 1
+    k 0.05 9.3 5.5 4 ease_in 0 1
+    k 0.25 10.3 3.7 0 ease_out 0 1
+    k 0.45 10.3 4.4 -4 ease_in 0 1
+    k 0.65 10.3 3.7 0 ease_out 0 1
+    k 0.8 9.36 5.39 3.75 linear 0 1
+  channel rotation
+    k 0 -0.788011 0 -0 0.615662 linear 0 1
+    k 0.05 -0.793353 0 -0 0.608761 ease_in 0 1
+    k 0.25 -0.707107 0 -0 0.707107 ease_out 0 1
+    k 0.45 -0.608761 0 -0 0.793353 ease_in 0 1
+    k 0.65 -0.707107 0 -0 0.707107 ease_out 0 1
+    k 0.8 -0.788011 0 -0 0.615662 linear 0 1
+
+track hand_left 60
+  channel position
+    k 0 -10.3 4.36 -3.75 linear 0 1
+    k 0.05 -10.3 4.4 -4 ease_in 0 1
+    k 0.25 -10.3 3.7 0 ease_out 0 1
+    k 0.45 -9.3 5.5 4 ease_in 0 1
+    k 0.65 -10.3 3.7 0 ease_out 0 1
+    k 0.8 -10.3 4.36 -3.75 linear 0 1
+  channel rotation
+    k 0 -0.615662 0 -0 0.788011 linear 0 1
+    k 0.05 -0.608761 0 -0 0.793353 ease_in 0 1
+    k 0.25 -0.707107 0 -0 0.707107 ease_out 0 1
+    k 0.45 -0.793353 0 -0 0.608761 ease_in 0 1
+    k 0.65 -0.707107 0 -0 0.707107 ease_out 0 1
+    k 0.8 -0.615662 0 -0 0.788011 linear 0 1

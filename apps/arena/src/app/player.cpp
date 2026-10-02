@@ -35,7 +35,7 @@ player::player(
     transform_sys.modify(root_).set_position({0.0f, 500.0f, 0.0f});
 
     physics_sys.modify_collider(root_)
-        .set_extents({12.0f, 28.0f, 12.0f})
+        .set_extents({12.0f, 30.0f, 12.0f})
         .set_offset({0.0f, 2.0f, 0.0f});
 
     world.system<ecs::spatial_system>().modify(root_).set_layer(ecs::spatial_layer::character);
