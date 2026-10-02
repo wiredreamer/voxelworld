@@ -31,6 +31,7 @@ add_executable(core_tests
     core/log.test.cpp
     core/latency.test.cpp
     core/jobs.test.cpp
+    core/build_info.test.cpp
     core/json.test.cpp
     core/json_suite.test.cpp
 )

@@ -548,7 +548,7 @@ auto app::update_title_() -> void {
             title += " | UNSAVED CHANGES";
         }
     }
-    get_engine().get_window().set_title(title);
+    get_engine().get_window().set_title(build::titled(title));
 }
 
 auto app::prune_contexts_() -> void {

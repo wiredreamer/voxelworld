@@ -125,6 +125,13 @@ cache-переменная → `target_compile_definitions(... PRIVATE ...)` →
 `inline constexpr` в партиции. Образец — `VW_LOG_MIN_LEVEL` → `vw::log::min_level`
 в `engine/core/CMakeLists.txt` и `engine/core/src/log/log.cppm`.
 
+Так же до кода доходит конфигурация сборки: `CMAKE_BUILD_TYPE` →
+`VW_BUILD_CONFIG` → `vw::build::config` (`engine/core/src/utils/build_info.cppm`).
+`vw::build::titled(имя)` дописывает её к заголовку окна — `Sculptor 0.2.0
+[Debug]`; все три приложения зовут его, а Sculptor ещё и при каждой смене
+заголовка. Отчёт замера берёт строку `build:` оттуда же, поэтому
+`RelWithDebInfo` в нём больше не выдаёт себя за `Release`.
+
 ## Обновление CMake
 
 `import std` открывается экспериментальным гейтом

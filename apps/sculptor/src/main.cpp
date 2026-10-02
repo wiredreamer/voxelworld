@@ -20,7 +20,8 @@ auto main(int argc, char** argv) -> int {
     }
 
     try {
-        const auto title = std::format("Sculptor {}", vw::sculptor::version_string);
+        const auto title =
+            vw::build::titled(std::format("Sculptor {}", vw::sculptor::version_string));
         vw::gfx::engine{1800, 1200, title}.run<vw::sculptor::app>(*options);
     } catch (const std::exception& e) {
         vw::log::error("Ошибка выполнения: {}", e.what());

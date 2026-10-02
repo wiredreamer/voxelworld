@@ -13,6 +13,7 @@ target_sources(vw_core
             src/utils/timing.cppm
             src/utils/latency.cppm
             src/utils/jobs.cppm
+            src/utils/build_info.cppm
             src/math/vector.cppm
             src/math/matrix.cppm
             src/math/transform.cppm
@@ -35,7 +36,15 @@ target_sources(vw_core
         src/json/json.cpp
 )
 
-target_compile_definitions(vw_core PRIVATE VW_LOG_MIN_LEVEL=${VW_LOG_MIN_LEVEL})
+set(vw_build_config "${CMAKE_BUILD_TYPE}")
+if(NOT vw_build_config)
+    set(vw_build_config "Unspecified")
+endif()
+
+target_compile_definitions(vw_core PRIVATE
+    VW_LOG_MIN_LEVEL=${VW_LOG_MIN_LEVEL}
+    VW_BUILD_CONFIG="${vw_build_config}"
+)
 target_compile_features(vw_core PUBLIC cxx_std_23)
 vw_use_std_module(vw_core)
 vw_set_warnings(vw_core)

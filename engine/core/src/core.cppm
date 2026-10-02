@@ -4,6 +4,7 @@ export import :types;
 export import :timing;
 export import :latency;
 export import :jobs;
+export import :build_info;
 export import :log;
 export import :json;
 export import :vector;

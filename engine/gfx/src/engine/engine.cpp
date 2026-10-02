@@ -27,12 +27,6 @@ constexpr log::log_category lc_bench_{"bench"};
 
 constexpr std::chrono::milliseconds hidden_window_tick{16};
 
-constexpr std::string_view build_config =
-#ifdef NDEBUG
-    "Release";
-#else
-    "Debug";
-#endif
 }  // namespace
 
 engine::engine(
@@ -187,7 +181,7 @@ auto engine::write_bench_report_() const -> void {
     std::string report_text = std::format(
         "gpu: {}\nbuild: {}\npresent mode: {}\nmsaa: {}x\nframes in flight: {}\nwarmup frames: {}\n{}",
         static_cast<const char*>(props.deviceName),
-        build_config,
+        build::config,
         renderer_->get_present_mode_name(),
         renderer_->get_msaa_samples(),
         renderer_type::get_frames_in_flight(),
@@ -418,7 +412,7 @@ auto engine::write_bench_report_() const -> void {
     report structured;
     structured.section("run")
         .value("gpu", std::string_view{static_cast<const char*>(props.deviceName)})
-        .value("build", std::string_view{build_config})
+        .value("build", build::config)
         .value("present_mode", std::string_view{renderer_->get_present_mode_name()})
         .value("msaa_samples", static_cast<uint64>(renderer_->get_msaa_samples()))
         .value("frames_in_flight", static_cast<uint64>(renderer_type::get_frames_in_flight()))

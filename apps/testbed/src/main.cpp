@@ -85,7 +85,7 @@ auto main(int argc, char** argv) -> int {
     try {
         log::add_file_sink("testbed.log");
         std::make_unique<gfx::engine>(
-            1280, 720, "Voxel World - Testbed", bench_from(args),
+            1280, 720, build::titled("Voxel World - Testbed"), bench_from(args),
             args.count("--msaa", gfx::msaa_sample_count)
         )
             ->run<testbed::testbed_app>(args, *scene, camera);
