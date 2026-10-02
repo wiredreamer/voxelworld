@@ -52,6 +52,8 @@ Undo/redo в Sculptor — command-паттерн через `base_operation`.
 
 - `cmake -S . -B build/release -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build/release`
 - `ctest --test-dir build/release --output-on-failure`
+- `sculptor --mcp` — редактор с сервером MCP на `127.0.0.1:17800`; адрес для
+  Claude Code лежит в `.mcp.json`
 
 Подробности — навык `cmake-build`.
 
@@ -81,8 +83,10 @@ Undo/redo в Sculptor — command-паттерн через `base_operation`.
   снятие чисел до и после правки, пороги и вердикт по отчёту
 - **`gpu-contracts`** — данные, общие для C++ и шейдеров: что менять вместе и
   чем проверить
-- **`sculptor`** — редактор: рецепты инструментов и операций, ловушки записи,
-  undo и ImGui
+- **`sculptor`** — редактор: рецепты инструментов и операций, сервисы узлов,
+  объёмов, клипов и машин, сервер MCP, ловушки записи, undo и ImGui
+- **`sculptor-mcp`** — контент через MCP запущенного Sculptor: порядок работы,
+  координаты, масштаб, палитра, имена, сохранение
 - **`git-workflow`** — что агент делает сам, формат коммитов и веток
 
 ## Working Style

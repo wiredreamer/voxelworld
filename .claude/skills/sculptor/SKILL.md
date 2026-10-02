@@ -1,6 +1,6 @@
 ---
 name: sculptor
-description: Редактор вокселей Sculptor — apps/sculptor, модуль vw.sculptor с партициями :state, :shortcuts, :operations, :services, :tools, :ui, :app. Рецепты нового инструмента (base_tool, регистрация, кнопка, горячая клавиша) и операции с undo/redo (base_operation, composite_operation, operation_manager); сервисы и панели ImGui; ловушки записи .voxm и общих объёмов, контекста правки после undo, выделения, буфера и режима вставки, ключей анимации и правок посреди обхода ImGui. Читай перед правкой apps/sculptor.
+description: Редактор вокселей Sculptor — apps/sculptor, модуль vw.sculptor с партициями :state, :shortcuts, :operations, :services, :tools, :ui, :mcp, :app. Рецепты нового инструмента (base_tool, регистрация, кнопка, горячая клавиша) и операции с undo/redo (base_operation, composite_operation, operation_manager); сервисы с проверками (file, node, volume, clip, fsm) и панели ImGui; сервер MCP и рецепт инструмента агента; тик и кадр; ловушки записи .voxm и общих объёмов, контекста правки после undo, выделения, буфера и режима вставки, ключей анимации и правок посреди обхода ImGui. Читай перед правкой apps/sculptor. Как делать контент этими инструментами — навык sculptor-mcp.
 ---
 
 # Sculptor

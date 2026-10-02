@@ -332,8 +332,10 @@ auto append_view_tools(std::vector<mcp_tool>& tools, const mcp_bindings& binding
         .name = "view_set",
         .description =
             "Point the editor's camera at a node or at the whole prefab, from a named side or "
-            "by yaw and pitch, far enough for the target to fill the view. x is right, y is up. "
-            "Use it before view_screenshot to look at the model from the side that matters.",
+            "by yaw and pitch, far enough for the target to fill the view. y is up and a "
+            "character faces +z. Seen from '-z' x grows to the right, as in the layer text of "
+            "volume_get; seen from '+z', the front, the picture is mirrored and x = 0 is on the "
+            "right. Use it before view_screenshot.",
         .input_schema = set_schema,
         .run          = when_idle(
             bindings,
