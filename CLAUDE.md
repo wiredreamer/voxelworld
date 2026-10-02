@@ -9,12 +9,13 @@
 
 ## Architecture
 
-Всё — именованные модули C++: движок из семи библиотек плюс приложения
-`vw.sculptor` и `vw.arena`. Заголовков движка не существует, только `import`.
+Всё — именованные модули C++: движок из семи библиотек, игра `vw.game` плюс
+приложения `vw.sculptor` и `vw.arena`. Заголовков движка не существует, только `import`.
 
 - **vw.core** (`engine/core/src/`, таргет `vw_core`) — типы, math, transform,
-  лог, воксели, геометрия `vw::spatial`, JSON `vw::json`; каталоги
-  `types/ math/ utils/ spatial/ voxels/ log/ json/`
+  лог, воксели, геометрия `vw::spatial`, JSON `vw::json`, коды клавиш
+  (`vw::keyboard`, `vw::mouse`, значения свои, не GLFW); каталоги
+  `types/ math/ utils/ spatial/ voxels/ log/ json/ input/`
 - **vw.asset** (`engine/asset/src/`, таргет `vw_asset`) — модели, анимации,
   форматы `.vox`/`.voxa`, хранилище ассетов. Зависит только от `vw.core` и
   ничего не знает про ECS; каталоги `model/ anim/ serial/`
@@ -26,8 +27,13 @@
 - **vw.world** (`engine/world/src/`, таргет `vw_world`) — компоненты, системы,
   сетка чанков, свет, чтение и запись сцены. Собирается без Vulkan;
   каталоги `scene/ components/ systems/ grid/ light/ spatial/`
-- **vw.platform** (`engine/platform/src/`, таргет `vw_platform`) — окно, ввод,
-  события; GLFW живёт ровно в одном `.cpp`; каталоги `input/ window/`
+- **vw.game** (`engine/game/src/`, таргет `vw_game`) — правила игры: системы и
+  компоненты, которые ставятся в мир через `world::add_system`; порядок тика —
+  в `game::install_systems`. Здесь же весь игровой ввод: привязки, кадр ввода,
+  `input_mapper`. Зависит от `vw.world`, собирается без Vulkan; каталоги по
+  фичам (`input/ player/ spawn/`)
+- **vw.platform** (`engine/platform/src/`, таргет `vw_platform`) — окно, сырой
+  ввод, события; GLFW и перевод его кодов живут ровно в одном `.cpp`; каталоги `input/ window/`
 - **vw.gfx** (`engine/gfx/src/`, таргет `vw_gfx`) — рендер на `vk::` через
   `import vulkan`, камера, ImGui, debug; C API Vulkan в исходниках нет;
   каталоги `camera/ resource/ render/ debug/ engine/`
@@ -44,7 +50,7 @@
 
 Пространства имён: `vw` (core), `vw::spatial` (геометрия), `vw::json`, `vw::asset` (данные
 ассетов), `vw::net` и `vw::net::http` (сеть), `vw::ecs` (реестр, мир, компоненты,
-системы), `vw::plat` (окно и ввод), `vw::gfx`, `vw::sculptor` и вложенное
+системы), `vw::game` (игра), `vw::plat` (окно и ввод), `vw::gfx`, `vw::sculptor` и вложенное
 `vw::sculptor::mcp` (сервер MCP). Модуль ≠ namespace: `vw.world` экспортирует `vw::ecs`,
 включая сериализацию сцены в `:scene.*`, а `vw.asset` — одноимённое `vw::asset`.
 

@@ -18,7 +18,6 @@ target_sources(vw_gfx
             src/camera/fps_camera_controller.cppm
             src/camera/free_camera_controller.cppm
             src/camera/third_person_camera_controller.cppm
-            src/camera/player_input_controller.cppm
             src/resource/resource.cppm
             src/resource/meshing.cppm
             src/resource/mesh_pool.cppm
@@ -55,7 +54,6 @@ target_sources(vw_gfx
         src/camera/fps_camera_controller.cpp
         src/camera/free_camera_controller.cpp
         src/camera/third_person_camera_controller.cpp
-        src/camera/player_input_controller.cpp
         src/resource/shader.cpp
         src/resource/buffer.cpp
         src/resource/staging_buffer.cpp

@@ -9,6 +9,7 @@ import std;
 import vw.core;
 import vw.ecs;
 import vw.world;
+import vw.game;
 import vw.platform;
 import vw.gfx;
 
@@ -16,7 +17,7 @@ namespace vw::arena {
 
 auto render_debug_hud(
     const gfx::engine& engine,
-    const player& player,
+    ecs::entity player,
     const gfx::third_person_camera_controller& camera_controller,
     bool show_colliders
 ) -> void {
@@ -47,9 +48,10 @@ auto render_debug_hud(
     ImGui::Text("ESC - exit");
     ImGui::Separator();
 
-    if (player.is_placed()) {
-        auto& world           = engine.get_world();
-        const auto player_ent = player.get_entity();
+    auto& world = engine.get_world();
+
+    if (!world.system<game::surface_placement_system>().is_waiting(player)) {
+        const auto player_ent = player;
         const auto& tc        = world.get<ecs::transform_component>(player_ent);
         const auto pos        = tc.get_position();
         ImGui::Text("Position: (%.1f, %.1f, %.1f)", pos.x, pos.y, pos.z);
@@ -73,7 +75,8 @@ auto render_debug_hud(
         }
 
         ImGui::Separator();
-        ImGui::Text("Sword: %s", player.has_sword() ? "equipped" : "none");
+        const bool armed = world.get<game::player_component>(player_ent).has_weapon();
+        ImGui::Text("Sword: %s", armed ? "equipped" : "none");
         ImGui::Text("Colliders: %s", show_colliders ? "visible" : "hidden");
     }
 

@@ -7,6 +7,7 @@ add_subdirectory(asset)
 add_subdirectory(net)
 add_subdirectory(ecs)
 add_subdirectory(world)
+add_subdirectory(game)
 
 if(NOT VW_BUILD_GFX)
     return()

@@ -158,6 +158,30 @@ vw_use_std_module(world_tests)
 
 catch_discover_tests(world_tests)
 
+add_executable(game_tests
+    game/surface_placement.test.cpp
+    game/input.test.cpp
+    game/player.test.cpp
+)
+
+target_link_libraries(game_tests PRIVATE
+    vw_core
+    vw_asset
+    vw_ecs
+    vw_world
+    vw_game
+    Catch2::Catch2WithMain
+)
+
+target_compile_definitions(game_tests PRIVATE
+    VW_ASSET_DIR="${CMAKE_SOURCE_DIR}/assets"
+)
+
+target_compile_features(game_tests PRIVATE cxx_std_23)
+vw_use_std_module(game_tests)
+
+catch_discover_tests(game_tests)
+
 if(VW_BUILD_GFX)
     add_executable(gfx_tests
         gfx/mesher.test.cpp

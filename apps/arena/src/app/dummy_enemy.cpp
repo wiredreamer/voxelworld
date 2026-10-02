@@ -6,6 +6,7 @@ import vw.core;
 import vw.asset;
 import vw.ecs;
 import vw.world;
+import vw.game;
 import vw.platform;
 import vw.gfx;
 
@@ -45,6 +46,8 @@ dummy_enemy::dummy_enemy(
         .set_layer(ecs::spatial_layer::character);
 
     model_sys.modify(ent_).set_model(create_model());
+
+    world.system<game::surface_placement_system>().place(ent_, spawn_xz_);
 }
 
 dummy_enemy::~dummy_enemy() {
@@ -53,35 +56,8 @@ dummy_enemy::~dummy_enemy() {
     }
 }
 
-auto dummy_enemy::try_place() -> void {
-    if (placed_) {
-        return;
-    }
-
-    const auto grid    = engine_.get_world().system<ecs::world_grid_system>().grid();
-    const auto vs      = grid->world_units_per_voxel();
-    const auto surface = grid->get_surface_voxel_y(
-        static_cast<int32>(spawn_xz_.x / vs), static_cast<int32>(spawn_xz_.y / vs)
-    );
-    if (!surface) {
-        return;
-    }
-
-    float32 spawn_y = (static_cast<float32>(*surface) + 6.0f) * vs;
-
-    engine_.get_world().system<ecs::transform_system>().modify(ent_).set_position(
-        {spawn_xz_.x, spawn_y, spawn_xz_.y}
-    );
-
-    placed_ = true;
-}
-
 auto dummy_enemy::get_entity() const -> ecs::entity {
     return ent_;
-}
-
-auto dummy_enemy::is_placed() const -> bool {
-    return placed_;
 }
 
 auto dummy_enemy::create_model() -> std::shared_ptr<asset::model> {

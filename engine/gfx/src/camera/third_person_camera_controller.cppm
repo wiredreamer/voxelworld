@@ -21,8 +21,6 @@ struct third_person_camera_params {
     float32 arm_length_min = 2.0f;
     float32 arm_length_max = 50.0f;
     vec3f target_offset    = {0.0f, 8.0f, 0.0f};
-    float32 pitch_min      = -89.0f;
-    float32 pitch_max      = 89.0f;
     float32 zoom_speed     = 2.0f;
     float32 collision_skin = 0.3f;
 };
@@ -36,11 +34,12 @@ public:
         third_person_camera_params params = {}
     );
 
-    auto update(const player_input_state& input, entity target) -> void;
+    // см. docs/ENGINE.md#ввод
+    auto update(
+        entity target, float32 look_yaw_degrees, float32 look_pitch_degrees, float32 zoom_delta
+    ) -> void;
 
     [[nodiscard]] auto get_params() -> third_person_camera_params&;
-    [[nodiscard]] auto get_pitch() const -> float32;
-    [[nodiscard]] auto get_yaw() const -> float32;
     [[nodiscard]] auto get_actual_arm_length() const -> float32;
 
 private:
@@ -48,8 +47,6 @@ private:
     world_type* world_;
     third_person_camera_params params_;
 
-    float32 pitch_ = 20.0f;
-    float32 yaw_   = 0.0f;
     float32 actual_arm_length_ = 0.0f;
 
     std::vector<entity> collision_candidates_;

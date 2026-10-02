@@ -192,7 +192,7 @@ jobs:
           cov=llvm-cov-${{ env.VW_LLVM_VERSION }}
           $profdata merge -sparse prof/*.profraw -o merged.profdata
 
-          test_targets="core_tests asset_tests net_tests ecs_tests world_tests"
+          test_targets="core_tests asset_tests net_tests ecs_tests world_tests game_tests"
 
           objects=""
           for target in $test_targets; do

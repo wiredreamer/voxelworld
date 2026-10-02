@@ -12,12 +12,11 @@ target_sources(${PROJECT_NAME}
         src/main.cpp
         src/app/arena_app.cpp
         src/app/dummy_enemy.cpp
-        src/app/player.cpp
         src/app/world_setup.cpp
         src/app/debug_hud.cpp
 )
 
-target_link_libraries(${PROJECT_NAME} PRIVATE vwengine imgui::imgui)
+target_link_libraries(${PROJECT_NAME} PRIVATE vwengine vw_game imgui::imgui)
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_23)
 vw_use_std_module(${PROJECT_NAME})
 vw_set_warnings(${PROJECT_NAME})

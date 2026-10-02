@@ -30,9 +30,9 @@ cmake -S . -B build/release -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build
 # тесты
 cmake -S . -B build/tests -G Ninja -DCMAKE_TOOLCHAIN_FILE=C:/Users/lucius/vcpkg/scripts/buildsystems/vcpkg.cmake \
       -DVCPKG_TARGET_TRIPLET=x64-windows -DVW_BUILD_APPS=OFF
-cmake --build build/tests --target core_tests asset_tests net_tests ecs_tests world_tests
+cmake --build build/tests --target core_tests asset_tests net_tests ecs_tests world_tests game_tests
 ctest --test-dir build/tests --output-on-failure
-ctest --test-dir build/tests -R core        # или -R ecs, -R world
+ctest --test-dir build/tests -R core        # или -R ecs, -R world, -R game
 
 # headless: ни Vulkan, ни GLFW, ни imgui — ни в линковке, ни в vcpkg
 cmake -S . -B build/headless -G Ninja -DCMAKE_BUILD_TYPE=Release \
@@ -54,10 +54,11 @@ cmake -S . -B build/headless -G Ninja -DCMAKE_BUILD_TYPE=Release \
 | `vw_net` | модуль `vw.net` (`engine/net/`); линкуется только с `vw_core`, на Windows тянет `ws2_32` |
 | `vw_ecs` | модуль `vw.ecs` (`engine/ecs/`) |
 | `vw_world` | модуль `vw.world` (`engine/world/`) |
+| `vw_game` | модуль `vw.game` (`engine/game/`) — правила игры; собирается и при `VW_BUILD_GFX=OFF`, в `vwengine` не входит: его линкует приложение, которому нужна игра (`arena`) |
 | `vw_platform` | модуль `vw.platform` (`engine/platform/`); только при `VW_BUILD_GFX=ON` |
 | `vw_gfx` | модуль `vw.gfx` (`engine/gfx/`) поверх `VulkanHppModule`; только при `VW_BUILD_GFX=ON` |
 | `vwengine` | INTERFACE-набор всех семи модулей, на него линкуются приложения; только при `VW_BUILD_GFX=ON` |
-| `core_tests` `asset_tests` `net_tests` `ecs_tests` `world_tests` | тесты Catch2; линкуются на модульные таргеты, никогда на `vwengine` |
+| `core_tests` `asset_tests` `net_tests` `ecs_tests` `world_tests` `game_tests` | тесты Catch2; линкуются на модульные таргеты, никогда на `vwengine` |
 | `gfx_tests` | тесты мешера и камеры на CPU; только при `VW_BUILD_GFX=ON` |
 | `view_bench` | микробенчмарк обхода ECS (регрессионный сторож из M2) |
 | `vox_parse_fuzzer` `voxa_parse_fuzzer` `json_parse_fuzzer` `http_head_fuzzer` | фаззеры разборщиков; только при `VW_BUILD_FUZZERS=ON`, см. «Фаззинг» |
