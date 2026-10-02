@@ -80,6 +80,7 @@ private:
 
     std::vector<pending_copy> pending_copies_;
     std::vector<vk::BufferCopy> flush_regions_;
+    std::vector<vk::Buffer> born_this_frame_;
 };
 
 }  // namespace vw::gfx

@@ -107,10 +107,15 @@ auto staging_buffer::copy_buffer(
     if (size == 0) {
         return;
     }
+    // см. docs/rendering.md#staging
+    if (std::ranges::contains(born_this_frame_, src)) {
+        return;
+    }
     pending_copies_.push_back({src, dst, {src_offset, dst_offset, size}});
 }
 
 auto staging_buffer::replace_buffer(vk::Buffer old_buf, vk::Buffer new_buf) -> void {
+    born_this_frame_.push_back(new_buf);
     for (auto& copy : pending_copies_) {
         if (copy.src == old_buf) copy.src = new_buf;
         if (copy.dst == old_buf) copy.dst = new_buf;
@@ -120,6 +125,8 @@ auto staging_buffer::replace_buffer(vk::Buffer old_buf, vk::Buffer new_buf) -> v
 auto staging_buffer::flush(
     vk::CommandBuffer cmd
 ) -> void {
+    born_this_frame_.clear();
+
     if (pending_copies_.empty()) {
         return;
     }
