@@ -10,11 +10,19 @@ entity body
 	transform 0 0 0	-0 -0 -0	1 1 1
 	model models/p_humanoid/m_body.voxm
 	anim_target body
+	socket body
+		pos 0 0 0
+		rot -0 -0 -0
+		scale 1 1 1
 entity head
 	parent root
 	transform 0 9.5 0	-0 -0 -0	1 1 1
 	model models/p_humanoid/m_head.voxm
 	anim_target head
+	socket head
+		pos 0 0 0
+		rot -0 -0 -0
+		scale 1 1 1
 	variant head
 		selected 0
 entity hand_right
@@ -37,11 +45,19 @@ entity hand_left
 		scale 0.99 0.99 0.99
 entity foot_right
 	parent root
-	transform 5 -9 0	0 -0 0	1 1 1
+	transform 5 -9 0	-0 -0 -0	1 1 1
 	model models/p_humanoid/m_foot_r.voxm
 	anim_target foot_right
+	socket foot_right
+		pos 0 0 0
+		rot -0 -0 -0
+		scale 1 1 1
 entity foot_left
 	parent root
-	transform -5 -9 0	0 -0 0	1 1 1
+	transform -5 -9 0	-0 -0 -0	1 1 1
 	model models/p_humanoid/m_foot_l.voxm
 	anim_target foot_left
+	socket foot_left
+		pos 0 0 0
+		rot -0 -0 -0
+		scale 1 1 1
