@@ -15,8 +15,9 @@ constexpr std::string_view shield_prefab = "p_shield";
 constexpr std::string_view item_node     = "root";
 constexpr std::string_view weapon_socket = "hand_right";
 constexpr std::string_view shield_socket = "hand_left";
-constexpr std::string_view run_state     = "run";
-constexpr float32 guard_back_cosine      = 0.3f;
+constexpr std::string_view stance_step_prefix = "walk_";
+constexpr float32 anchor_twist_radians        = 0.02f;
+constexpr float32 anchor_lift_voxels          = 0.05f;
 
 constexpr std::size_t locomotion_layer = 0;
 constexpr std::size_t action_layer     = 1;
@@ -25,6 +26,10 @@ auto rotated(const quat& q, const vec3f& v) -> vec3f {
     const vec3f axis{q.x, q.y, q.z};
     const vec3f t = math::cross(axis, v) * 2.0f;
     return v + t * q.w + math::cross(axis, t);
+}
+
+auto wrapped_radians(float32 angle) -> float32 {
+    return std::atan2(std::sin(angle), std::cos(angle));
 }
 
 auto lean_degrees(float32 acceleration, float32 full_acceleration, float32 full_degrees)
@@ -280,30 +285,25 @@ auto player_system::take_hit_on_shield(
     return true;
 }
 
-auto player_system::pace_guard_steps_(
-    ecs::entity ent, const player_component& state, const vec3f& move_dir, const vec3f& look
+auto player_system::pace_stance_steps_(
+    ecs::entity ent
 ) const -> void {
     const auto& machines = world_->get<ecs::animation_fsm_component>(ent);
     if (machines.machine_count() <= locomotion_layer) {
         return;
     }
-    const auto* running = machines.get_machine(locomotion_layer).get_current_state_node();
-    if (running == nullptr || running->name != run_state) {
+    const auto* stepping = machines.get_machine(locomotion_layer).get_current_state_node();
+    if (stepping == nullptr || !stepping->name.starts_with(stance_step_prefix) ||
+        tuning_.stance_step_speed <= 0.0f) {
         return;
     }
 
-    float32 rate = running->playback_speed;
-    if (state.guarding_) {
-        rate *= tuning_.guard_speed_scale;
-        const bool stepping_back = math::dot(move_dir, look) < -guard_back_cosine;
-        if (tuning_.guard_steps_back_in_reverse && stepping_back) {
-            rate = -rate;
-        }
-    }
+    const auto& wish     = world_->get<ecs::movement_intent_component>(ent).get_wish_velocity();
+    const float32 planar = math::length(vec3f{wish.x, 0.0f, wish.z});
     world_->system<ecs::animation_system>()
         .modify_player(ent)
         .layer(locomotion_layer)
-        .set_playback_speed(rate);
+        .set_playback_speed(stepping->playback_speed * planar / tuning_.stance_step_speed);
 }
 
 auto player_system::lean_(
@@ -437,6 +437,80 @@ auto player_system::turn_head_(
     );
 }
 
+auto player_system::plant_feet_(
+    ecs::entity ent, player_component& state, float32 delta_time
+) const -> void {
+    const vec3f facing     = rotated(world_->get<ecs::transform_component>(ent).get_rotation(), {0.0f, 0.0f, 1.0f});
+    const float32 body_yaw = std::atan2(facing.x, facing.z);
+    const auto& wish       = world_->get<ecs::movement_intent_component>(ent).get_wish_velocity();
+    const bool standing    = math::length(vec3f{wish.x, 0.0f, wish.z}) <= math::epsilon;
+    const bool planting    = state.guarding_ && standing && state.air_state_ == air_state::ground;
+    const float32 step_seconds = std::max(tuning_.stance_turn_step_seconds, math::epsilon);
+
+    if (!planting) {
+        const float32 follow = 1.0f - std::exp(-delta_time / step_seconds);
+        for (auto& foot : state.feet_) {
+            foot.twist -= foot.twist * follow;
+            foot.lift -= foot.lift * follow;
+            foot.step_elapsed = -1.0f;
+            foot.plant_yaw    = body_yaw - foot.twist;
+        }
+    } else {
+        for (auto& foot : state.feet_) {
+            if (foot.step_elapsed < 0.0f) {
+                foot.twist = wrapped_radians(body_yaw - foot.plant_yaw);
+                continue;
+            }
+            foot.step_elapsed += delta_time;
+            const float32 u      = math::clamp(foot.step_elapsed / step_seconds, 0.0f, 1.0f);
+            const float32 eased  = u * u * (3.0f - 2.0f * u);
+            foot.twist           = foot.step_from * (1.0f - eased);
+            foot.lift            = std::sin(std::numbers::pi_v<float32> * u) * tuning_.stance_turn_step_lift;
+            if (u >= 1.0f) {
+                foot.step_elapsed = -1.0f;
+                foot.twist        = 0.0f;
+                foot.lift         = 0.0f;
+                foot.plant_yaw    = body_yaw;
+                ++state.turn_steps_;
+            }
+        }
+
+        const bool stepping = std::ranges::any_of(state.feet_, [](const auto& foot) { return foot.step_elapsed >= 0.0f; });
+        if (!stepping) {
+            const float32 step_at   = math::radians(tuning_.stance_turn_step_degrees);
+            const float32 follow_at = math::radians(tuning_.stance_turn_follow_degrees);
+            const auto wants_step   = [&](std::size_t index) {
+                const float32 own   = std::abs(state.feet_[index].twist);
+                const float32 other = std::abs(state.feet_[1 - index].twist);
+                return own > step_at || (own > follow_at && other < follow_at);
+            };
+            const std::size_t turning_side = state.feet_[0].twist + state.feet_[1].twist > 0.0f ? 1 : 0;
+            for (const std::size_t index : {turning_side, 1 - turning_side}) {
+                if (wants_step(index)) {
+                    state.feet_[index].step_from    = state.feet_[index].twist;
+                    state.feet_[index].step_elapsed = 0.0f;
+                    break;
+                }
+            }
+        }
+    }
+
+    const std::array<ecs::entity, 2> parts{state.foot_left_, state.foot_right_};
+    for (std::size_t index = 0; index < parts.size(); ++index) {
+        auto& foot = state.feet_[index];
+        if (!parts[index].is_valid()) {
+            continue;
+        }
+        const bool unturned = std::abs(foot.twist) < anchor_twist_radians && foot.lift < anchor_lift_voxels;
+        if (unturned) {
+            foot.anchor = world_->get<ecs::transform_component>(parts[index]).get_position() - foot.turn_offset;
+        }
+        const float32 half = -foot.twist * 0.5f;
+        const quat counter{0.0f, std::sin(half), 0.0f, std::cos(half)};
+        foot.turn_offset = rotated(counter, foot.anchor) - foot.anchor + vec3f{0.0f, foot.lift, 0.0f};
+    }
+}
+
 auto player_system::swing_legs_(
     ecs::entity ent, player_component& state, float32 delta_time
 ) const -> void {
@@ -466,15 +540,21 @@ auto player_system::swing_legs_(
     auto& animation = world_->system<ecs::animation_system>();
     const float32 step = state.stride_ * tuning_.stride_voxels;
     const float32 arm  = state.stride_ * tuning_.stride_arm_swing_voxels;
+    const auto counter_turn = [](const player_component::planted_foot& foot) {
+        const float32 half = -foot.twist * 0.5f;
+        return quat{0.0f, std::sin(half), 0.0f, std::cos(half)};
+    };
     if (state.foot_right_.is_valid()) {
+        const auto& planted = state.feet_[1];
         animation.modify_adjustment(state.foot_right_)
-            .set_translation({0.0f, 0.0f, step})
-            .set_rotation(pitch(state.stride_));
+            .set_translation(vec3f{0.0f, 0.0f, step} + planted.turn_offset)
+            .set_rotation(counter_turn(planted) * pitch(state.stride_));
     }
     if (state.foot_left_.is_valid()) {
+        const auto& planted = state.feet_[0];
         animation.modify_adjustment(state.foot_left_)
-            .set_translation({0.0f, 0.0f, -step})
-            .set_rotation(pitch(-state.stride_));
+            .set_translation(vec3f{0.0f, 0.0f, -step} + planted.turn_offset)
+            .set_rotation(counter_turn(planted) * pitch(-state.stride_));
     }
     if (state.hand_right_.is_valid()) {
         animation.modify_adjustment(state.hand_right_).set_translation({0.0f, 0.0f, -arm});
@@ -632,6 +712,7 @@ auto player_system::update(
                 !state.dodging_ && !state.swinging_ && !state.body_locked_ &&
                 state.air_state_ == air_state::ground;
             machines.modify(ent).set_parameter("block", state.guarding_ ? 1.0f : 0.0f);
+            machines.modify(ent).set_parameter("stance", state.guarding_ ? 1.0f : 0.0f);
 
             const bool strike_allowed = !state.dodging_ && !state.body_locked_ &&
                 !state.guarding_ && (!state.swinging_ || state.cancel_open_);
@@ -701,7 +782,12 @@ auto player_system::update(
                         .set_playback_speed(tuning_.attack_playback_rate);
                 }
             } else if (state.guarding_) {
-                controller.set_move_input(moving ? move_dir * tuning_.guard_speed_scale : vec3f{0.0f, 0.0f, 0.0f})
+                const float32 ahead = math::dot(move_dir, forward);
+                const float32 aside = math::dot(move_dir, right);
+                const float32 pace  = ahead * ahead *
+                        (ahead >= 0.0f ? tuning_.guard_speed_scale : tuning_.guard_back_speed_scale) +
+                    aside * aside * tuning_.guard_side_speed_scale;
+                controller.set_move_input(moving ? move_dir * pace : vec3f{0.0f, 0.0f, 0.0f})
                     .set_acceleration_seconds(tuning_.acceleration_seconds)
                     .set_deceleration_seconds(tuning_.deceleration_seconds)
                     .set_facing_direction(forward)
@@ -717,7 +803,7 @@ auto player_system::update(
                 }
             }
 
-            pace_guard_steps_(ent, state, move_dir, forward);
+            pace_stance_steps_(ent);
             recharge_dodge_(state, delta_time);
 
             const uint32 jump_count =
@@ -771,6 +857,7 @@ auto player_system::update(
 
             lean_(ent, state, delta_time);
             turn_head_(ent, state, forward, delta_time);
+            plant_feet_(ent, state, delta_time);
             swing_legs_(ent, state, delta_time);
         }
     );

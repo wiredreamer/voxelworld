@@ -63,8 +63,14 @@ struct movement_tuning final {
     float32 chain_reset_seconds            = 0.3f;
     float32 attack_playback_rate           = 0.75f;
     float32 guard_speed_scale              = 0.5f;
+    float32 guard_back_speed_scale         = 0.35f;
+    float32 guard_side_speed_scale         = 0.35f;
     float32 guard_turn_degrees_per_second  = 720.0f;
-    bool guard_steps_back_in_reverse       = true;
+    float32 stance_step_speed              = 40.0f;
+    float32 stance_turn_step_degrees       = 35.0f;
+    float32 stance_turn_follow_degrees     = 10.0f;
+    float32 stance_turn_step_seconds       = 0.15f;
+    float32 stance_turn_step_lift          = 1.5f;
 };
 
 struct player_component final {
@@ -82,6 +88,18 @@ struct player_component final {
 
     [[nodiscard]] auto get_blocked_hits() const -> uint32 {
         return blocked_hits_;
+    }
+
+    [[nodiscard]] auto get_foot_twist_degrees(std::size_t foot) const -> float32 {
+        return math::degrees(feet_[foot].twist);
+    }
+
+    [[nodiscard]] auto is_foot_stepping(std::size_t foot) const -> bool {
+        return feet_[foot].step_elapsed >= 0.0f;
+    }
+
+    [[nodiscard]] auto get_turn_steps() const -> uint32 {
+        return turn_steps_;
     }
 
     [[nodiscard]] auto is_attacking() const -> bool {
@@ -191,6 +209,16 @@ struct player_component final {
 private:
     friend class player_system;
 
+    struct planted_foot {
+        float32 plant_yaw    = 0.0f;
+        float32 twist        = 0.0f;
+        float32 step_from    = 0.0f;
+        float32 step_elapsed = -1.0f;
+        float32 lift         = 0.0f;
+        vec3f turn_offset{0.0f, 0.0f, 0.0f};
+        vec3f anchor{0.0f, 0.0f, 0.0f};
+    };
+
     ecs::entity pose_;
     ecs::entity body_;
     ecs::entity head_;
@@ -233,6 +261,8 @@ private:
     bool dodging_                 = false;
     bool invulnerable_            = false;
     bool guarding_                = false;
+    std::array<planted_foot, 2> feet_{};
+    uint32 turn_steps_            = 0;
     uint32 blocked_hits_          = 0;
     bool attacking_     = false;
     bool swinging_      = false;
@@ -267,6 +297,7 @@ private:
     auto attach_machines_(ecs::entity root) const -> void;
     auto lean_(ecs::entity ent, player_component& state, float32 delta_time) const -> void;
     auto swing_legs_(ecs::entity ent, player_component& state, float32 delta_time) const -> void;
+    auto plant_feet_(ecs::entity ent, player_component& state, float32 delta_time) const -> void;
     [[nodiscard]] auto lowest_point_(const player_component& state, const quat& turn) const
         -> float32;
     auto turn_head_(
@@ -275,9 +306,7 @@ private:
     static auto read_action_events_(player_component& state, const ecs::animation_player_component& layers)
         -> void;
     auto recharge_dodge_(player_component& state, float32 delta_time) const -> void;
-    auto pace_guard_steps_(
-        ecs::entity ent, const player_component& state, const vec3f& move_dir, const vec3f& look
-    ) const -> void;
+    auto pace_stance_steps_(ecs::entity ent) const -> void;
     [[nodiscard]] auto hold_in_socket_(
         ecs::entity hand, std::string_view socket, std::string_view prefab
     ) const -> ecs::entity;

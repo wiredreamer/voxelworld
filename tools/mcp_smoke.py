@@ -1737,7 +1737,8 @@ def run_machine_scenario(probe):
         "fsm_run starts every machine of the prefab at its entry state",
         ok and started.get("running") is True and [layer.get("machine") for layer in layers] == ["humanoid_locomotion", "humanoid_action"]
         and [layer.get("state") for layer in layers] == ["idle", "none"]
-        and started.get("parameters") == {"speed": 0.0, "air_state": 0, "attack_chain": 0, "block": False},
+        and started.get("parameters")
+        == {"speed": 0.0, "air_state": 0, "dir_x": 0.0, "dir_z": 0.0, "stance": False, "attack_chain": 0, "block": False},
         str(started),
     )
     ok, state = tool(probe, "editor_state")
@@ -1801,7 +1802,7 @@ def run_machine_scenario(probe):
     )
 
     ok, text = tool(probe, "fsm_drive", {"set": {"stamina": 1}})
-    probe.check("fsm_drive names the parameters for an unknown one", not ok and "speed, air_state, attack_chain, block" in text, str(text))
+    probe.check("fsm_drive names the parameters for an unknown one", not ok and "speed, air_state, dir_x, dir_z, stance, attack_chain, block" in text, str(text))
     ok, text = tool(probe, "fsm_drive", {"fire": ["speed"]})
     probe.check("fsm_drive refuses to fire a value", not ok and "they are: land" in text and "attack" in text, str(text))
     ok, text = tool(probe, "fsm_drive", {"set": {"air_state": 0.5}})

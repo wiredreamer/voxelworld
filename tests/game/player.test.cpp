@@ -481,6 +481,26 @@ TEST_CASE("a pinned parameter drives the machines against the game", "[game][pla
     REQUIRE(fsm.get_machine(0).get_current_state() == "fall");
 }
 
+TEST_CASE("the machines read the move in the body's own frame", "[game][player]") {
+    game_world g;
+    const auto player = g.spawn_controlled();
+    const auto& board = g.world.get<ecs::animation_fsm_component>(player).get_board();
+
+    g.world.update(0.016F);
+    REQUIRE(board.get("dir_x") == 0.0F);
+    REQUIRE(board.get("dir_z") == 0.0F);
+
+    g.mapper().key(keys::W, true);
+    g.world.update(0.016F);
+    REQUIRE(board.get("dir_z") < -0.9F);
+
+    for (int32 tick_index = 0; tick_index < 90; ++tick_index) {
+        g.world.update(0.016F);
+    }
+    REQUIRE(board.get("dir_z") == Catch::Approx(1.0F).margin(1.0e-3F));
+    REQUIRE(board.get("dir_x") == Catch::Approx(0.0F).margin(1.0e-3F));
+}
+
 TEST_CASE("the weapon key takes the sword out and puts it away", "[game][player]") {
     game_world g;
     const auto player = g.spawn_controlled();

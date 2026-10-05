@@ -96,8 +96,23 @@ auto animation_fsm_system::fill_builtins_(
     auto& registry = world_->registry();
 
     if (registry.has<movement_intent_component>(ent)) {
-        const auto& wish = registry.get<movement_intent_component>(ent).get_wish_velocity();
-        board.set("speed", math::length(vec3f{wish.x, 0.0F, wish.z}));
+        const auto& wish    = registry.get<movement_intent_component>(ent).get_wish_velocity();
+        const vec3f planar{wish.x, 0.0F, wish.z};
+        const float32 speed = math::length(planar);
+        board.set("speed", speed);
+
+        vec3f along_body{0.0F, 0.0F, 0.0F};
+        if (speed > math::epsilon && registry.has<transform_component>(ent)) {
+            const mat4f turn  = math::rotation_matrix(registry.get<transform_component>(ent).get_rotation());
+            const vec3f moved = planar / speed;
+            along_body = {
+                math::dot(moved, turn * vec3f{1.0F, 0.0F, 0.0F}),
+                0.0F,
+                math::dot(moved, turn * vec3f{0.0F, 0.0F, 1.0F}),
+            };
+        }
+        board.set("dir_x", along_body.x);
+        board.set("dir_z", along_body.z);
     }
 
     if (registry.has<rigid_body_component>(ent)) {

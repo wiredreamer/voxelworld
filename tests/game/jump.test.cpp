@@ -625,7 +625,7 @@ struct guard_stand {
     const game::player_component& state = g.world.get<game::player_component>(g.player);
     game::input_mapper& mapper          = g.world.system<game::input_system>().mapper();
 
-    guard_stand() {
+    explicit guard_stand(float32 tick = display_tick_seconds) : g{tick} {
         static_cast<void>(g.settle());
         mapper.key(keys::KEY_1, true);
         g.tick();
@@ -678,7 +678,7 @@ TEST_CASE("the shield comes with the sword and is raised while the block is held
     REQUIRE(s.action_state() == "none");
 }
 
-TEST_CASE("in the guard the body faces the look and walks at half speed", "[game][guard]") {
+TEST_CASE("in the guard the body faces the look and walks slower aside than ahead", "[game][guard]") {
     guard_stand s;
     const auto& tuning = s.g.world.system<game::player_system>().tuning();
     const float32 run_speed =
@@ -698,24 +698,48 @@ TEST_CASE("in the guard the body faces the look and walks at half speed", "[game
 
     s.mapper.key(keys::D, true);
     s.g.run_for(0.6F);
+    REQUIRE(s.planar_speed() == Catch::Approx(run_speed * tuning.guard_side_speed_scale).epsilon(0.02));
+    s.mapper.key(keys::D, false);
+
+    s.mapper.key(keys::W, true);
+    s.g.run_for(0.6F);
     REQUIRE(s.planar_speed() == Catch::Approx(run_speed * tuning.guard_speed_scale).epsilon(0.02));
     REQUIRE(s.faces_the_look());
 }
 
-TEST_CASE("a step back in the guard plays the run backwards and slower", "[game][guard]") {
+TEST_CASE("the stance steps pick a clip by the side the body moves to", "[game][guard]") {
     guard_stand s;
     const auto& tuning = s.g.world.system<game::player_system>().tuning();
     const auto& layers = s.g.world.get<ecs::animation_player_component>(s.g.player);
+    const auto locomotion_state = [&] {
+        return s.g.world.get<ecs::animation_fsm_component>(s.g.player).get_machine(0).get_current_state();
+    };
 
     s.mapper.button(mouse::buttons::RIGHT, true);
+    s.g.run_for(0.3F);
+    REQUIRE(locomotion_state() == "stance_idle");
+
     s.mapper.key(keys::S, true);
     s.g.run_for(0.6F);
-    REQUIRE(s.g.world.get<ecs::animation_fsm_component>(s.g.player).get_machine(0).get_current_state() == "run");
-    REQUIRE(layers.get_layer(0).playback_speed == Catch::Approx(-tuning.guard_speed_scale));
+    REQUIRE(locomotion_state() == "walk_b");
+    REQUIRE(layers.get_layer(0).playback_speed ==
+            Catch::Approx(s.planar_speed() / tuning.stance_step_speed).epsilon(0.02));
+    s.mapper.key(keys::S, false);
 
+    s.mapper.key(keys::D, true);
+    s.g.run_for(0.6F);
+    REQUIRE(locomotion_state() == "walk_r");
+    REQUIRE(layers.get_layer(0).playback_speed > s.planar_speed() / tuning.stance_step_speed);
+
+    s.mapper.key(keys::A, true);
+    s.mapper.key(keys::D, false);
+    s.g.run_for(0.6F);
+    REQUIRE(locomotion_state() == "walk_l");
+
+    s.mapper.key(keys::A, false);
     s.mapper.button(mouse::buttons::RIGHT, false);
-    s.g.run_for(0.1F);
-    REQUIRE(layers.get_layer(0).playback_speed == Catch::Approx(1.0F));
+    s.g.run_for(0.3F);
+    REQUIRE_FALSE(locomotion_state().starts_with("walk_"));
 }
 
 TEST_CASE("a hit on the shield plays the recoil only while guarding", "[game][guard]") {
@@ -734,4 +758,70 @@ TEST_CASE("a hit on the shield plays the recoil only while guarding", "[game][gu
 
     s.g.run_for(0.6F);
     REQUIRE(s.action_state() == "block");
+}
+
+TEST_CASE("standing in the stance the feet hold the ground and step after a wide turn", "[game][guard]") {
+    guard_stand s;
+    const auto& tuning = s.g.world.system<game::player_system>().tuning();
+
+    s.mapper.cursor_at(0.0, 0.0);
+    s.mapper.button(mouse::buttons::RIGHT, true);
+    s.g.run_for(1.0F);
+    s.mapper.button(mouse::buttons::RIGHT, false);
+    s.g.run_for(1.0F);
+    s.mapper.button(mouse::buttons::RIGHT, true);
+    s.g.run_for(0.3F);
+    const uint32 steps_before = s.state.get_turn_steps();
+
+    s.mapper.cursor_at(300.0, 0.0);
+    s.g.run_for(0.3F);
+    REQUIRE(s.state.get_turn_steps() == steps_before);
+    REQUIRE(std::abs(s.state.get_foot_twist_degrees(0)) == Catch::Approx(30.0F).margin(2.0F));
+    REQUIRE(std::abs(s.state.get_foot_twist_degrees(1)) == Catch::Approx(30.0F).margin(2.0F));
+
+    s.mapper.cursor_at(900.0, 0.0);
+    s.g.run_for(1.0F);
+    REQUIRE(s.state.get_turn_steps() >= steps_before + 2);
+    for (const std::size_t foot : {std::size_t{0}, std::size_t{1}}) {
+        REQUIRE_FALSE(s.state.is_foot_stepping(foot));
+        REQUIRE(std::abs(s.state.get_foot_twist_degrees(foot)) < tuning.stance_turn_step_degrees);
+    }
+
+    s.mapper.button(mouse::buttons::RIGHT, false);
+    s.g.run_for(1.0F);
+    REQUIRE(std::abs(s.state.get_foot_twist_degrees(0)) < 1.0F);
+    REQUIRE(std::abs(s.state.get_foot_twist_degrees(1)) < 1.0F);
+}
+
+TEST_CASE("the feet stay under the body however long the stance turns in place", "[game][guard]") {
+    const float32 tick = GENERATE(display_tick_seconds, 0.004F);
+    guard_stand s{tick};
+    const auto foot_reach = [&] {
+        float32 farthest = 0.0F;
+        for (const auto* part : {"foot_left", "foot_right"}) {
+            s.g.world.for_each<ecs::animation_target_component>(
+                [&](ecs::entity ent, const ecs::animation_target_component& target) {
+                    if (target.get_name() == part) {
+                        const vec3f at = s.g.world.get<ecs::transform_component>(ent).get_position();
+                        REQUIRE(std::isfinite(at.x));
+                        REQUIRE(std::isfinite(at.z));
+                        farthest = std::max(farthest, std::sqrt(at.x * at.x + at.z * at.z));
+                    }
+                }
+            );
+        }
+        return farthest;
+    };
+
+    s.mapper.button(mouse::buttons::RIGHT, true);
+    float64 cursor = 0.0;
+    float32 farthest = 0.0F;
+    const int32 ticks = static_cast<int32>(6.4F / tick);
+    for (int32 tick_index = 0; tick_index < ticks; ++tick_index) {
+        cursor += (tick_index * tick) - std::floor(tick_index * tick / 1.92F) * 1.92F < 0.96F ? 1560.0 * tick : -750.0 * tick;
+        s.mapper.cursor_at(cursor, 0.0);
+        s.g.tick();
+        farthest = std::max(farthest, foot_reach());
+    }
+    REQUIRE(farthest < 12.0F);
 }

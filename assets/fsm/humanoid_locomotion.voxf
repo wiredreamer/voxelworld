@@ -7,9 +7,15 @@ param land trigger
 param land_hard trigger
 param dodge_roll trigger
 param dodge_dash trigger
+param dir_x float
+param dir_z float
+param stance bool
 state idle
 	clip animations/a_humanoid_idle.voxa
 	playback loop
+	to stance_idle
+		when stance == 1
+		blend 0.15
 	to dodge_roll
 		on dodge_roll
 		blend 0.05
@@ -28,6 +34,9 @@ state idle
 state run
 	clip animations/a_humanoid_run_f.voxa
 	playback loop
+	to stance_idle
+		when stance == 1
+		blend 0.15
 	to dodge_roll
 		on dodge_roll
 		blend 0.05
@@ -116,4 +125,180 @@ state dodge_dash
 		blend 0.1
 	to idle
 		wait end
+		blend 0.1
+state stance_idle
+	clip animations/a_humanoid_stance_idle.voxa
+	playback loop
+	to dodge_roll
+		on dodge_roll
+		blend 0.05
+	to dodge_dash
+		on dodge_dash
+		blend 0.03
+	to rise
+		when air_state == 1
+		blend 0.02
+	to fall
+		when air_state == 2
+		blend 0.15
+	to run
+		when stance == 0
+		when speed > 0
+		blend 0.15
+	to idle
+		when stance == 0
+		blend 0.15
+	to walk_f
+		when speed > 0
+		when dir_z >= 0.5
+		blend 0.12
+	to walk_b
+		when speed > 0
+		when dir_z <= -0.5
+		blend 0.12
+	to walk_l
+		when speed > 0
+		when dir_x <= -0.5
+		blend 0.12
+	to walk_r
+		when speed > 0
+		when dir_x >= 0.5
+		blend 0.12
+state walk_f
+	clip animations/a_humanoid_walk_f.voxa
+	playback loop
+	to dodge_roll
+		on dodge_roll
+		blend 0.05
+	to dodge_dash
+		on dodge_dash
+		blend 0.03
+	to rise
+		when air_state == 1
+		blend 0.02
+	to fall
+		when air_state == 2
+		blend 0.15
+	to run
+		when stance == 0
+		when speed > 0
+		blend 0.15
+	to idle
+		when stance == 0
+		blend 0.15
+	to stance_idle
+		when speed == 0
+		blend 0.15
+	to walk_b
+		when dir_z < -0.75
+		blend 0.1
+	to walk_l
+		when dir_x < -0.75
+		blend 0.1
+	to walk_r
+		when dir_x > 0.75
+		blend 0.1
+state walk_b
+	clip animations/a_humanoid_walk_b.voxa
+	playback loop
+	to dodge_roll
+		on dodge_roll
+		blend 0.05
+	to dodge_dash
+		on dodge_dash
+		blend 0.03
+	to rise
+		when air_state == 1
+		blend 0.02
+	to fall
+		when air_state == 2
+		blend 0.15
+	to run
+		when stance == 0
+		when speed > 0
+		blend 0.15
+	to idle
+		when stance == 0
+		blend 0.15
+	to stance_idle
+		when speed == 0
+		blend 0.15
+	to walk_f
+		when dir_z > 0.75
+		blend 0.1
+	to walk_l
+		when dir_x < -0.75
+		blend 0.1
+	to walk_r
+		when dir_x > 0.75
+		blend 0.1
+state walk_l
+	clip animations/a_humanoid_walk_l.voxa
+	playback loop
+	rate 2
+	to dodge_roll
+		on dodge_roll
+		blend 0.05
+	to dodge_dash
+		on dodge_dash
+		blend 0.03
+	to rise
+		when air_state == 1
+		blend 0.02
+	to fall
+		when air_state == 2
+		blend 0.15
+	to run
+		when stance == 0
+		when speed > 0
+		blend 0.15
+	to idle
+		when stance == 0
+		blend 0.15
+	to stance_idle
+		when speed == 0
+		blend 0.15
+	to walk_f
+		when dir_z > 0.75
+		blend 0.1
+	to walk_b
+		when dir_z < -0.75
+		blend 0.1
+	to walk_r
+		when dir_x > 0.75
+		blend 0.1
+state walk_r
+	clip animations/a_humanoid_walk_r.voxa
+	playback loop
+	rate 2
+	to dodge_roll
+		on dodge_roll
+		blend 0.05
+	to dodge_dash
+		on dodge_dash
+		blend 0.03
+	to rise
+		when air_state == 1
+		blend 0.02
+	to fall
+		when air_state == 2
+		blend 0.15
+	to run
+		when stance == 0
+		when speed > 0
+		blend 0.15
+	to idle
+		when stance == 0
+		blend 0.15
+	to stance_idle
+		when speed == 0
+		blend 0.15
+	to walk_f
+		when dir_z > 0.75
+		blend 0.1
+	to walk_b
+		when dir_z < -0.75
+		blend 0.1
+	to walk_l
+		when dir_x < -0.75
 		blend 0.1

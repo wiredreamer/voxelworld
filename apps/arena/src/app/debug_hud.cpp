@@ -227,9 +227,15 @@ auto render_guard_tuning(ecs::world& world, ecs::entity player) -> void {
     auto& tuning  = players.tuning();
 
     ImGui::Text("Guard (hold RMB with the shield):");
-    ImGui::SliderFloat("guard speed", &tuning.guard_speed_scale, 0.2f, 1.0f, "%.2f");
+    ImGui::SliderFloat("guard speed forward", &tuning.guard_speed_scale, 0.2f, 1.0f, "%.2f");
+    ImGui::SliderFloat("guard speed back", &tuning.guard_back_speed_scale, 0.2f, 1.0f, "%.2f");
+    ImGui::SliderFloat("guard speed aside", &tuning.guard_side_speed_scale, 0.2f, 1.0f, "%.2f");
     ImGui::SliderFloat("guard turn, deg/s", &tuning.guard_turn_degrees_per_second, 90.0f, 1440.0f, "%.0f");
-    ImGui::Checkbox("step back plays the run in reverse", &tuning.guard_steps_back_in_reverse);
+    ImGui::SliderFloat("stance step pace, u/s", &tuning.stance_step_speed, 10.0f, 100.0f, "%.0f");
+    ImGui::SliderFloat("turn step after, deg", &tuning.stance_turn_step_degrees, 10.0f, 90.0f, "%.0f");
+    ImGui::SliderFloat("other foot follows after, deg", &tuning.stance_turn_follow_degrees, 0.0f, 45.0f, "%.0f");
+    ImGui::SliderFloat("turn step time, s", &tuning.stance_turn_step_seconds, 0.05f, 0.5f, "%.2f");
+    ImGui::SliderFloat("turn step lift", &tuning.stance_turn_step_lift, 0.0f, 4.0f, "%.1f");
 
     ImGui::BeginDisabled(!world.get<game::player_component>(player).is_guarding());
     if (ImGui::Button("hit the shield")) {
@@ -240,8 +246,14 @@ auto render_guard_tuning(ecs::world& world, ecs::entity player) -> void {
     if (ImGui::Button("defaults")) {
         const game::movement_tuning defaults{};
         tuning.guard_speed_scale             = defaults.guard_speed_scale;
+        tuning.guard_back_speed_scale        = defaults.guard_back_speed_scale;
+        tuning.guard_side_speed_scale        = defaults.guard_side_speed_scale;
         tuning.guard_turn_degrees_per_second = defaults.guard_turn_degrees_per_second;
-        tuning.guard_steps_back_in_reverse   = defaults.guard_steps_back_in_reverse;
+        tuning.stance_step_speed             = defaults.stance_step_speed;
+        tuning.stance_turn_step_degrees      = defaults.stance_turn_step_degrees;
+        tuning.stance_turn_follow_degrees    = defaults.stance_turn_follow_degrees;
+        tuning.stance_turn_step_seconds      = defaults.stance_turn_step_seconds;
+        tuning.stance_turn_step_lift         = defaults.stance_turn_step_lift;
     }
 }
 
@@ -255,6 +267,11 @@ auto render_fighter_state(ecs::world& world, ecs::entity player) -> void {
     ImGui::Text(
         "Shield: %s%s, blocked %u", fighter.has_shield() ? "equipped" : "none",
         fighter.is_guarding() ? ", GUARD" : "", fighter.get_blocked_hits()
+    );
+    ImGui::Text(
+        "Feet: twist %+.0f / %+.0f deg%s%s, turn steps %u", fighter.get_foot_twist_degrees(0),
+        fighter.get_foot_twist_degrees(1), fighter.is_foot_stepping(0) ? ", LEFT STEP" : "",
+        fighter.is_foot_stepping(1) ? ", RIGHT STEP" : "", fighter.get_turn_steps()
     );
     ImGui::Text(
         "Landings: soft %u, hard %u%s", fighter.get_soft_landings(), fighter.get_hard_landings(),
