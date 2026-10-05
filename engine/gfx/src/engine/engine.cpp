@@ -451,6 +451,7 @@ auto engine::render(
     stats_.world_update_ms = measure_ms([&] { world_->update(delta_time); });
 
     app_->update(delta_time);
+    renderer_->track(*world_);
 
     bool opened = false;
 

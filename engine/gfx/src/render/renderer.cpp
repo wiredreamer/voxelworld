@@ -381,6 +381,12 @@ auto renderer::get_render_mode() const -> render_mode {
     return current_render_mode_;
 }
 
+auto renderer::track(world_type& world) -> void {
+    const auto& changed = world.changed<model_component>();
+    changed_model_entities_.insert(changed_model_entities_.end(), changed.begin(), changed.end());
+    combined_buffer_pool_->track(world);
+}
+
 auto renderer::sync_meshes_(world_type& world) -> void {
     mesh_pool_.process_completed(combined_buffer_pool_->mesh_write_budget());
 
@@ -399,13 +405,19 @@ auto renderer::sync_meshes_(world_type& world) -> void {
         }
         if (mesh_pool_.has(comp.get_identity(), entity_lod_step(comp))) {
             it = pending_mesh_entities_.erase(it);
-            registry.notify_changed<model_component>(ent);
+            combined_buffer_pool_->mark_mesh_ready(ent);
         } else {
             ++it;
         }
     }
 
-    for (auto ent : registry.changed<model_component>()) {
+    std::sort(changed_model_entities_.begin(), changed_model_entities_.end());
+    changed_model_entities_.erase(
+        std::unique(changed_model_entities_.begin(), changed_model_entities_.end()),
+        changed_model_entities_.end()
+    );
+
+    for (auto ent : changed_model_entities_) {
         if (!registry.has<model_component>(ent)) continue;
         auto& comp = registry.get<model_component>(ent);
         if (!comp.has_model()) continue;
@@ -423,6 +435,7 @@ auto renderer::sync_meshes_(world_type& world) -> void {
             pending_mesh_entities_.insert(ent);
         }
     }
+    changed_model_entities_.clear();
 }
 
 auto renderer::render(

@@ -48,6 +48,29 @@ combined_buffer_pool::combined_buffer_pool(
     , descriptor_set_layout_(descriptor_set_layout)
     , compute_descriptor_set_layout_(compute_descriptor_set_layout) {}
 
+auto combined_buffer_pool::track(
+    world_type& world
+) -> void {
+    const auto& destroyed = world.destroyed();
+    destroyed_pending_entities_.insert(destroyed_pending_entities_.end(), destroyed.begin(), destroyed.end());
+
+    const auto& model_changed = world.changed<model_component>();
+    sorted_merge_range(mesh_pending_entities_, model_changed.begin(), model_changed.end());
+
+    const auto& transform_changed = world.changed<transform_component>();
+    sorted_merge_range(
+        transform_pending_entities_, transform_changed.begin(), transform_changed.end());
+}
+
+auto combined_buffer_pool::mark_mesh_ready(
+    entity ent
+) -> void {
+    const auto it = std::lower_bound(mesh_pending_entities_.begin(), mesh_pending_entities_.end(), ent);
+    if (it == mesh_pending_entities_.end() || *it != ent) {
+        mesh_pending_entities_.insert(it, ent);
+    }
+}
+
 auto combined_buffer_pool::update(
     world_type& world,
     const camera& camera,
@@ -83,7 +106,7 @@ const std::vector<std::unique_ptr<combined_buffer>>& combined_buffer_pool::get_b
 }
 
 auto combined_buffer_pool::process_destroyed_(world_type& world) -> void {
-    for (auto ent : world.destroyed()) {
+    for (auto ent : destroyed_pending_entities_) {
         hidden_entities_.erase(ent);
         if (auto* info = entity_buffer_infos_.get(ent)) {
             touched_bounds_.push_back(info->bounds);
@@ -104,6 +127,7 @@ auto combined_buffer_pool::process_destroyed_(world_type& world) -> void {
         sorted_erase(mesh_pending_entities_, ent);
         sorted_erase(transform_pending_entities_, ent);
     }
+    destroyed_pending_entities_.clear();
 }
 
 auto combined_buffer_pool::get_chunk_size_for_mesh(
@@ -190,9 +214,6 @@ auto combined_buffer_pool::mesh_write_budget() const -> uint32 {
 auto combined_buffer_pool::update_meshes_(
     world_type& world, const vec3f& camera_pos, mesh_pool& pool
 ) -> void {
-    auto& model_changed = world.changed<model_component>();
-    sorted_merge_range(mesh_pending_entities_, model_changed.begin(), model_changed.end());
-
     sort_keys_.clear();
     sort_keys_.reserve(mesh_pending_entities_.size());
     for (entity ent : mesh_pending_entities_) {
@@ -581,10 +602,6 @@ auto combined_buffer_pool::update_chunk_visibility_(
 auto combined_buffer_pool::update_transforms_(
     world_type& world
 ) -> void {
-    auto& transform_changed = world.changed<transform_component>();
-    sorted_merge_range(
-        transform_pending_entities_, transform_changed.begin(), transform_changed.end());
-
     entities_to_process_.assign(
         transform_pending_entities_.begin(), transform_pending_entities_.end());
 

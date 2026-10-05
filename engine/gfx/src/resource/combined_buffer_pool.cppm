@@ -83,6 +83,10 @@ public:
     combined_buffer_pool(combined_buffer_pool&&)                 = delete;
     auto operator=(combined_buffer_pool&&) -> combined_buffer_pool&      = delete;
 
+    auto track(world_type& world) -> void;
+
+    auto mark_mesh_ready(entity ent) -> void;
+
     auto update(
         world_type& world,
         const camera& camera,
@@ -143,6 +147,7 @@ private:
     vk::DescriptorSetLayout compute_descriptor_set_layout_  = nullptr;
 
     std::vector<entity> entities_to_process_;
+    std::vector<entity> destroyed_pending_entities_;
     std::vector<entity> mesh_pending_entities_;
     std::vector<entity> transform_pending_entities_;
     std::vector<entity> merge_buffer_;

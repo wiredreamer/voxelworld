@@ -46,6 +46,7 @@ public:
     renderer(renderer&&)            = delete;
     renderer& operator=(renderer&&) = delete;
 
+    auto track(world_type& world) -> void;
     [[nodiscard]] auto begin_frame() -> bool;
     auto render(world_type& world, camera& camera) -> void;
     auto end_frame() -> void;
@@ -336,6 +337,7 @@ private:
 
     mesh_pool mesh_pool_;
     std::unordered_set<entity> pending_mesh_entities_;
+    std::vector<entity> changed_model_entities_;
 
     deletion_queue deletion_queue_;
 
