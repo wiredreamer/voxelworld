@@ -59,6 +59,15 @@ private:
     transform rest_transform_;
 };
 
+struct fired_animation_event {
+    std::size_t layer = 0;
+    std::string clip;
+    std::string name;
+    std::string payload;
+
+    [[nodiscard]] auto operator==(const fired_animation_event& other) const -> bool = default;
+};
+
 struct animation_player_component final {
     [[nodiscard]] auto layer_count() const -> std::size_t {
         return layers_.size();
@@ -76,10 +85,15 @@ struct animation_player_component final {
         return std::ranges::any_of(layers_, [](const auto& layer) { return layer.is_active(); });
     }
 
+    [[nodiscard]] auto get_fired_events() const -> std::span<const fired_animation_event> {
+        return fired_events_;
+    }
+
 private:
     friend class animation_system;
 
     std::vector<asset::animation_layer> layers_;
+    std::vector<fired_animation_event> fired_events_;
 };
 
 struct animation_fsm_component final {

@@ -192,6 +192,121 @@ TEST_CASE("two layers override targets", "[animation_layer]") {
     REQUIRE(arm_pos.x > 0.0f);
 }
 
+namespace {
+
+auto fired_names(const animation_player_component& comp) -> std::vector<std::string> {
+    std::vector<std::string> names;
+    for (const auto& event : comp.get_fired_events()) {
+        names.push_back(event.name);
+    }
+    return names;
+}
+
+}  // namespace
+
+TEST_CASE("a fired event is handed out for exactly one tick", "[animation_layer][animation_events]") {
+    anim_test_fixture f;
+    auto root = f.create_root();
+    f.create_child(root, "body");
+
+    auto clip = f.make_clip("swing", {"body"});
+    clip->set_events({{0.0F, "start", ""}, {0.5F, "half", "left"}, {1.0F, "end", ""}});
+
+    auto layer = f.anim_sys.modify_player(root).layer(0);
+    layer.blend_to(clip);
+    layer.set_loop_mode(animation_loop_mode::once);
+    layer.play();
+    f.anim_sys.set_target_fps(60.0f);
+
+    const auto& comp = f.reg.get<animation_player_component>(root);
+
+    f.anim_sys.update(1.0f / 60.0f);
+    REQUIRE(comp.get_fired_events().size() == 1);
+    REQUIRE(comp.get_fired_events().front() == fired_animation_event{
+        .layer = 0, .clip = "swing", .name = "start", .payload = ""
+    });
+
+    f.anim_sys.update(1.0f / 60.0f);
+    REQUIRE(comp.get_fired_events().empty());
+
+    std::vector<std::string> later;
+    std::string half_payload;
+    for (int i = 0; i < 70; ++i) {
+        f.anim_sys.update(1.0f / 60.0f);
+        for (const auto& event : comp.get_fired_events()) {
+            later.push_back(event.name);
+            if (event.name == "half") {
+                half_payload = event.payload;
+            }
+        }
+    }
+
+    REQUIRE(later == std::vector<std::string>{"half", "end"});
+    REQUIRE(half_payload == "left");
+    REQUIRE_FALSE(comp.is_any_playing());
+    REQUIRE(comp.get_fired_events().empty());
+}
+
+TEST_CASE("a tick without an animation step still clears the events", "[animation_layer][animation_events]") {
+    anim_test_fixture f;
+    auto root = f.create_root();
+    f.create_child(root, "body");
+
+    auto clip = f.make_clip("swing", {"body"});
+    clip->set_events({{0.0F, "start", ""}});
+
+    auto layer = f.anim_sys.modify_player(root).layer(0);
+    layer.blend_to(clip);
+    layer.set_loop_mode(animation_loop_mode::loop);
+    layer.play();
+    f.anim_sys.set_target_fps(30.0f);
+
+    const auto& comp = f.reg.get<animation_player_component>(root);
+
+    f.anim_sys.update(1.0f / 30.0f);
+    REQUIRE(fired_names(comp) == std::vector<std::string>{"start"});
+
+    f.anim_sys.update(1.0f / 120.0f);
+    REQUIRE(comp.get_fired_events().empty());
+}
+
+TEST_CASE("a clip fading out in a crossfade fires nothing", "[animation_layer][animation_events]") {
+    anim_test_fixture f;
+    auto root = f.create_root();
+    f.create_child(root, "body");
+
+    auto outgoing = f.make_clip("outgoing", {"body"});
+    outgoing->set_events({{0.5F, "outgoing.half", ""}});
+    auto incoming = f.make_clip("incoming", {"body"});
+    incoming->set_events({{0.0F, "incoming.start", ""}});
+
+    auto layer = f.anim_sys.modify_player(root).layer(0);
+    layer.blend_to(outgoing);
+    layer.set_loop_mode(animation_loop_mode::loop);
+    layer.play();
+    f.anim_sys.set_target_fps(60.0f);
+
+    const auto& comp = f.reg.get<animation_player_component>(root);
+    for (int i = 0; i < 24; ++i) {
+        f.anim_sys.update(1.0f / 60.0f);
+        REQUIRE(comp.get_fired_events().empty());
+    }
+
+    transition crossfade;
+    crossfade.duration = 0.5F;
+    f.anim_sys.modify_player(root).layer(0).blend_to(incoming, crossfade);
+
+    std::vector<std::string> fired;
+    for (int i = 0; i < 30; ++i) {
+        f.anim_sys.update(1.0f / 60.0f);
+        for (const auto& name : fired_names(comp)) {
+            fired.push_back(name);
+        }
+    }
+
+    REQUIRE(fired == std::vector<std::string>{"incoming.start"});
+}
+
 TEST_CASE("is_any_playing reflects layer state", "[animation_layer]") {
     anim_test_fixture f;
     auto root = f.create_root();

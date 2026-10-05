@@ -61,6 +61,7 @@ add_executable(asset_tests
     asset/model_clip.test.cpp
     asset/model_rewrite.test.cpp
     asset/animation_fsm.test.cpp
+    asset/animation_events.test.cpp
     asset/animation_edit.test.cpp
     asset/voxf_format.test.cpp
     asset/voxf_problems.test.cpp

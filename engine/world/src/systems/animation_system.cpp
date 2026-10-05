@@ -26,6 +26,8 @@ auto animation_system::set_target_fps(
 auto animation_system::update(
     float32 delta_time
 ) -> void {
+    clear_fired_events_();
+
     accumulated_delta_time_ += delta_time;
 
     if (accumulated_delta_time_ < target_frame_time_) {
@@ -209,35 +211,40 @@ auto animation_system::get_cached_target_map(
 auto animation_system::update_layer_time(
     asset::animation_layer& layer, float32 delta_time
 ) -> void {
-    layer.time += delta_time * layer.playback_speed * layer.direction;
+    asset::advance_layer_time(layer, delta_time, crossed_events_);
+}
 
-    float32 duration = layer.clip->get_duration();
-
-    if (layer.loop_mode == asset::animation_loop_mode::once) {
-        if (layer.time >= duration) {
-            layer.time  = duration;
-            layer.state = asset::animation_state::stopped;
-        } else if (layer.time < 0.0f) {
-            layer.time  = 0.0f;
-            layer.state = asset::animation_state::stopped;
-        }
-    } else if (layer.loop_mode == asset::animation_loop_mode::loop) {
-        if (duration > 0.0f) {
-            if (layer.direction > 0.0f && layer.time >= duration) {
-                layer.time = 0.0f;
-            } else if (layer.direction < 0.0f && layer.time < 0.0f) {
-                layer.time = duration;
-            }
-        }
-    } else if (layer.loop_mode == asset::animation_loop_mode::ping_pong) {
-        if (layer.time >= duration) {
-            layer.direction = -1.0f;
-            layer.time      = duration;
-        } else if (layer.time <= 0.0f) {
-            layer.direction = 1.0f;
-            layer.time      = 0.0f;
+auto animation_system::clear_fired_events_() -> void {
+    auto& reg = world_->registry();
+    for (const entity ent : entities_with_fired_events_) {
+        if (reg.has<animation_player_component>(ent)) {
+            reg.get<animation_player_component>(ent).fired_events_.clear();
         }
     }
+    entities_with_fired_events_.clear();
+}
+
+auto animation_system::collect_fired_events_(
+    entity ent, animation_player_component& anim_comp, std::size_t layer_index
+) -> void {
+    if (crossed_events_.empty()) {
+        return;
+    }
+
+    if (anim_comp.fired_events_.empty()) {
+        entities_with_fired_events_.push_back(ent);
+    }
+
+    const auto& clip_name = anim_comp.layers_[layer_index].clip->get_name();
+    for (const auto* event : crossed_events_) {
+        anim_comp.fired_events_.push_back({
+            .layer   = layer_index,
+            .clip    = clip_name,
+            .name    = event->name,
+            .payload = event->payload,
+        });
+    }
+    crossed_events_.clear();
 }
 
 auto animation_system::process_layer(
@@ -382,7 +389,9 @@ auto animation_system::process_animation(
     entity ent, animation_player_component& anim_comp, float32 delta_time
 ) -> void {
     for (std::size_t i = 0; i < anim_comp.layers_.size(); ++i) {
+        crossed_events_.clear();
         process_layer(anim_comp.layers_[i], delta_time, i == 0);
+        collect_fired_events_(ent, anim_comp, i);
     }
 
     apply_animation(ent, anim_comp);

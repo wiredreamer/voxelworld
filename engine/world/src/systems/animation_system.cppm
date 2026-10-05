@@ -138,9 +138,13 @@ private:
 
     auto process_animation(entity ent, animation_player_component& anim_comp, float32 delta_time) -> void;
 
-    static auto update_layer_time(asset::animation_layer& layer, float32 delta_time) -> void;
+    auto update_layer_time(asset::animation_layer& layer, float32 delta_time) -> void;
 
     auto process_layer(asset::animation_layer& layer, float32 delta_time, bool is_base) -> void;
+    auto clear_fired_events_() -> void;
+    auto collect_fired_events_(
+        entity ent, animation_player_component& anim_comp, std::size_t layer_index
+    ) -> void;
     auto apply_animation(entity root_ent, const animation_player_component& anim_comp) -> void;
 
     [[nodiscard]] auto compute_layer_transform(const asset::animation_layer& layer,
@@ -163,6 +167,8 @@ private:
     std::vector<entity> to_remove_;
     std::vector<std::pair<entity, transform>> final_transforms_;
     std::vector<uint32> slot_by_entity_;
+    std::vector<const asset::animation_event*> crossed_events_;
+    std::vector<entity> entities_with_fired_events_;
     float32 accumulated_delta_time_ = 0.0F;
     float32 target_frame_time_      = 1.0F / 120.0F;
 

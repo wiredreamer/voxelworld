@@ -49,6 +49,10 @@ struct animation_layer {
     }
 };
 
+auto advance_layer_time(
+    animation_layer& layer, float32 delta_time, std::vector<const animation_event*>& crossed
+) -> void;
+
 class fsm_blackboard final {
 public:
     auto set(std::string_view name, float32 value) -> void;

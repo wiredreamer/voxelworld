@@ -308,6 +308,155 @@ auto find_problems(
     return problems;
 }
 
+namespace {
+
+constexpr int32 max_laps_per_step = 256;
+
+auto cross_forward(
+    const std::vector<animation_event>& events, float32 from, float32 to, bool include_to,
+    std::vector<const animation_event*>& crossed
+) -> void {
+    for (const auto& event : events) {
+        if (event.time >= from && (event.time < to || (include_to && event.time == to))) {
+            crossed.push_back(&event);
+        }
+    }
+}
+
+auto cross_backward(
+    const std::vector<animation_event>& events, float32 from, float32 to, bool include_to,
+    std::vector<const animation_event*>& crossed
+) -> void {
+    for (const auto& event : events | std::views::reverse) {
+        if (event.time <= from && (event.time > to || (include_to && event.time == to))) {
+            crossed.push_back(&event);
+        }
+    }
+}
+
+auto advance_once(
+    animation_layer& layer, float32 step, float32 duration,
+    std::vector<const animation_event*>& crossed
+) -> void {
+    const auto& events   = layer.clip->get_events();
+    const float32 target = layer.time + step;
+
+    if (step >= 0.0F) {
+        if (target >= duration) {
+            cross_forward(events, layer.time, duration, true, crossed);
+            layer.time  = duration;
+            layer.state = animation_state::stopped;
+            return;
+        }
+        cross_forward(events, layer.time, target, false, crossed);
+        layer.time = target;
+        return;
+    }
+
+    if (target <= 0.0F) {
+        cross_backward(events, layer.time, 0.0F, true, crossed);
+        layer.time  = 0.0F;
+        layer.state = animation_state::stopped;
+        return;
+    }
+    cross_backward(events, layer.time, target, false, crossed);
+    layer.time = target;
+}
+
+auto advance_loop(
+    animation_layer& layer, float32 step, float32 duration,
+    std::vector<const animation_event*>& crossed
+) -> void {
+    const auto& events = layer.clip->get_events();
+    float32 remaining  = std::abs(step);
+
+    for (int32 lap = 0; lap < max_laps_per_step && remaining > 0.0F; ++lap) {
+        if (step > 0.0F) {
+            const float32 target = layer.time + remaining;
+            if (target < duration) {
+                cross_forward(events, layer.time, target, false, crossed);
+                layer.time = target;
+                return;
+            }
+            cross_forward(events, layer.time, duration, true, crossed);
+            remaining -= duration - layer.time;
+            layer.time = 0.0F;
+        } else {
+            const float32 target = layer.time - remaining;
+            if (target > 0.0F) {
+                cross_backward(events, layer.time, target, false, crossed);
+                layer.time = target;
+                return;
+            }
+            cross_backward(events, layer.time, 0.0F, true, crossed);
+            remaining -= layer.time;
+            layer.time = duration;
+        }
+    }
+}
+
+auto advance_ping_pong(
+    animation_layer& layer, float32 step, float32 duration,
+    std::vector<const animation_event*>& crossed
+) -> void {
+    const auto& events = layer.clip->get_events();
+    float32 remaining  = std::abs(step);
+    bool forward       = step > 0.0F;
+
+    for (int32 lap = 0; lap < max_laps_per_step && remaining > 0.0F; ++lap) {
+        if (forward) {
+            const float32 target = layer.time + remaining;
+            if (target < duration) {
+                cross_forward(events, layer.time, target, false, crossed);
+                layer.time = target;
+                return;
+            }
+            cross_forward(events, layer.time, duration, false, crossed);
+            remaining -= duration - layer.time;
+            layer.time = duration;
+        } else {
+            const float32 target = layer.time - remaining;
+            if (target > 0.0F) {
+                cross_backward(events, layer.time, target, false, crossed);
+                layer.time = target;
+                return;
+            }
+            cross_backward(events, layer.time, 0.0F, false, crossed);
+            remaining -= layer.time;
+            layer.time = 0.0F;
+        }
+        forward         = !forward;
+        layer.direction = -layer.direction;
+    }
+}
+
+}  // namespace
+
+auto advance_layer_time(
+    animation_layer& layer, float32 delta_time, std::vector<const animation_event*>& crossed
+) -> void {
+    if (!layer.clip || layer.state != animation_state::playing) {
+        return;
+    }
+
+    const float32 step     = delta_time * layer.playback_speed * layer.direction;
+    const float32 duration = layer.clip->get_duration();
+
+    switch (layer.loop_mode) {
+        case animation_loop_mode::once: advance_once(layer, step, duration, crossed); return;
+        case animation_loop_mode::loop:
+            if (duration > 0.0F) {
+                advance_loop(layer, step, duration, crossed);
+            }
+            return;
+        case animation_loop_mode::ping_pong:
+            if (duration > 0.0F) {
+                advance_ping_pong(layer, step, duration, crossed);
+            }
+            return;
+    }
+}
+
 auto animation_clip_registry::create(std::string_view name) -> std::shared_ptr<animation_clip> {
     std::string name_str(name);
     auto clip                   = std::make_shared<animation_clip>(name_str);
