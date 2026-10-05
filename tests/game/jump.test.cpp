@@ -422,6 +422,105 @@ TEST_CASE("the roll centre moves smoothly when frames outpace animation", "[game
     REQUIRE(worst < 0.2F);
 }
 
+TEST_CASE("a roll is invulnerable for the window its clip marks", "[game][dodge]") {
+    grounded_world g;
+    REQUIRE(g.settle());
+    g.run_for(0.3F);
+    const auto& state  = g.world.get<game::player_component>(g.player);
+    const auto& tuning = g.world.system<game::player_system>().tuning();
+    auto& mapper       = g.world.system<game::input_system>().mapper();
+    REQUIRE_FALSE(state.is_invulnerable());
+
+    mapper.key(keys::W, true);
+    mapper.key(keys::LEFT_SHIFT, true);
+    g.tick();
+    mapper.key(keys::LEFT_SHIFT, false);
+    mapper.key(keys::W, false);
+    REQUIRE(state.is_rolling());
+
+    float32 elapsed        = 0.0F;
+    float32 first_iframe   = -1.0F;
+    float32 iframe_seconds = 0.0F;
+    while (state.is_rolling()) {
+        g.tick();
+        elapsed += g.tick_seconds;
+        if (state.is_invulnerable()) {
+            first_iframe = first_iframe < 0.0F ? elapsed : first_iframe;
+            iframe_seconds += g.tick_seconds;
+        }
+        REQUIRE(elapsed < tuning.roll_seconds + tuning.roll_recovery_seconds + 0.1F);
+    }
+    REQUIRE(first_iframe > 0.0F);
+    REQUIRE(first_iframe < 0.15F);
+    REQUIRE(iframe_seconds > 0.26F);
+    REQUIRE(iframe_seconds < 0.34F);
+    REQUIRE_FALSE(state.is_invulnerable());
+}
+
+TEST_CASE("a dodge spends its charge and gets it back after the recharge", "[game][dodge]") {
+    grounded_world g;
+    REQUIRE(g.settle());
+    g.run_for(0.3F);
+    const auto& state  = g.world.get<game::player_component>(g.player);
+    const auto& tuning = g.world.system<game::player_system>().tuning();
+    auto& mapper       = g.world.system<game::input_system>().mapper();
+    const auto press_dodge = [&] {
+        mapper.key(keys::LEFT_SHIFT, true);
+        g.tick();
+        mapper.key(keys::LEFT_SHIFT, false);
+    };
+
+    REQUIRE(state.get_dodge_charges() == tuning.dodge_charges);
+    mapper.key(keys::W, true);
+    press_dodge();
+    mapper.key(keys::W, false);
+    REQUIRE(state.get_dodge_count() == 1);
+    REQUIRE(state.get_dodge_charges() == tuning.dodge_charges - 1);
+    while (state.is_rolling()) {
+        g.tick();
+    }
+
+    press_dodge();
+    g.run_for(tuning.dodge_recharge_seconds - 0.2F);
+    REQUIRE(state.get_dodge_count() == 1);
+    REQUIRE_FALSE(state.is_rolling());
+    REQUIRE(state.get_dodge_recharge_left() > 0.0F);
+
+    g.run_for(0.3F);
+    REQUIRE(state.get_dodge_charges() == tuning.dodge_charges);
+    press_dodge();
+    REQUIRE(state.get_dodge_count() == 2);
+    REQUIRE(state.is_rolling());
+}
+
+TEST_CASE("a dodge pressed just before the charge returns is taken when it does", "[game][dodge]") {
+    grounded_world g;
+    REQUIRE(g.settle());
+    g.run_for(0.3F);
+    const auto& state  = g.world.get<game::player_component>(g.player);
+    const auto& tuning = g.world.system<game::player_system>().tuning();
+    auto& mapper       = g.world.system<game::input_system>().mapper();
+
+    mapper.key(keys::W, true);
+    mapper.key(keys::LEFT_SHIFT, true);
+    g.tick();
+    mapper.key(keys::LEFT_SHIFT, false);
+    mapper.key(keys::W, false);
+    while (state.is_rolling()) {
+        g.tick();
+    }
+    while (state.get_dodge_recharge_left() > tuning.input_buffer_seconds * 0.5F) {
+        g.tick();
+    }
+
+    mapper.key(keys::LEFT_SHIFT, true);
+    g.tick();
+    mapper.key(keys::LEFT_SHIFT, false);
+    REQUIRE(state.get_dodge_count() == 1);
+    g.run_for(tuning.input_buffer_seconds);
+    REQUIRE(state.get_dodge_count() == 2);
+}
+
 TEST_CASE("holding jump does not hop again", "[game][jump]") {
     grounded_world g;
     REQUIRE(g.settle());

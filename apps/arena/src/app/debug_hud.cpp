@@ -103,6 +103,13 @@ auto render_movement_tuning(ecs::world& world) -> void {
     ImGui::SliderFloat("roll dive lift", &tuning.roll_dive_lift, 0.0f, 8.0f, "%.1f");
     ImGui::SliderFloat("roll height up, s", &tuning.roll_height_rise_seconds, 0.0f, 0.2f, "%.3f");
     ImGui::SliderFloat("roll height down, s", &tuning.roll_height_fall_seconds, 0.0f, 0.3f, "%.3f");
+    constexpr uint32 fewest_dodge_charges = 1;
+    constexpr uint32 most_dodge_charges   = 4;
+    ImGui::SliderScalar(
+        "dodge charges", ImGuiDataType_U32, &tuning.dodge_charges, &fewest_dodge_charges,
+        &most_dodge_charges
+    );
+    ImGui::SliderFloat("dodge recharge, s", &tuning.dodge_recharge_seconds, 0.0f, 5.0f, "%.2f");
     ImGui::SliderFloat("lunge time, s", &tuning.lunge_seconds, 0.0f, 0.5f, "%.2f");
     ImGui::SliderFloat("lunge distance", &tuning.lunge_distance, 0.0f, 40.0f, "%.1f");
     if (ImGui::Button("defaults")) {
@@ -183,6 +190,12 @@ auto render_debug_hud(
             "Landings: soft %u, hard %u%s%s", fighter.get_soft_landings(),
             fighter.get_hard_landings(), fighter.is_body_locked() ? ", LOCKED" : "",
             fighter.is_rolling() ? ", ROLL" : ""
+        );
+        ImGui::Text(
+            "Dodge: charges %u/%u, recharge %.2f s, dodges %u%s", fighter.get_dodge_charges(),
+            world.system<game::player_system>().tuning().dodge_charges,
+            fighter.get_dodge_recharge_left(), fighter.get_dodge_count(),
+            fighter.is_invulnerable() ? ", IFRAME" : ""
         );
         ImGui::Text("Colliders: %s", show_colliders ? "visible" : "hidden");
     }

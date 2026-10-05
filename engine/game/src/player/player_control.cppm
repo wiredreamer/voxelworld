@@ -46,6 +46,8 @@ struct movement_tuning final {
     float32 roll_dive_lift                 = 1.5f;
     float32 roll_height_rise_seconds       = 0.02f;
     float32 roll_height_fall_seconds       = 0.06f;
+    uint32 dodge_charges                   = 1;
+    float32 dodge_recharge_seconds         = 1.2f;
     float32 lunge_seconds                  = 0.15f;
     float32 lunge_distance                 = 10.0f;
 };
@@ -127,6 +129,22 @@ struct player_component final {
         return roll_facing_;
     }
 
+    [[nodiscard]] auto is_invulnerable() const -> bool {
+        return invulnerable_;
+    }
+
+    [[nodiscard]] auto get_dodge_charges() const -> uint32 {
+        return dodge_charges_;
+    }
+
+    [[nodiscard]] auto get_dodge_recharge_left() const -> float32 {
+        return dodge_recharge_left_;
+    }
+
+    [[nodiscard]] auto get_dodge_count() const -> uint32 {
+        return dodge_count_;
+    }
+
 private:
     friend class player_system;
 
@@ -162,7 +180,11 @@ private:
     float32 roll_elapsed_         = 0.0f;
     float32 roll_height_          = 0.0f;
     float32 dodge_buffered_       = -1.0f;
+    float32 dodge_recharge_left_  = 0.0f;
+    uint32 dodge_charges_         = 1;
+    uint32 dodge_count_           = 0;
     bool rolling_                 = false;
+    bool invulnerable_            = false;
     bool attacking_     = false;
     bool swinging_      = false;
     bool swing_started_ = false;
@@ -201,6 +223,7 @@ private:
     ) const -> void;
     static auto read_action_events_(player_component& state, const ecs::animation_player_component& layers)
         -> void;
+    auto recharge_dodge_(player_component& state, float32 delta_time) const -> void;
     static auto end_swing_(player_component& state) -> void;
 
     ecs::world* world_;

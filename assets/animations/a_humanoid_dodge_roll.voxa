@@ -1,5 +1,7 @@
 # Voxa File Version 2.1
 rig humanoid
+event 0.08 iframe.start
+event 0.38 iframe.end
 
 track body 60
   channel position

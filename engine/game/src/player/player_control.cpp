@@ -142,6 +142,7 @@ auto player_system::spawn() -> ecs::entity {
     player.hand_left_  = create_body_part_(pose, "hand_left");
     player.foot_right_ = create_body_part_(pose, "foot_right");
     player.foot_left_  = create_body_part_(pose, "foot_left");
+    player.dodge_charges_ = tuning_.dodge_charges;
 
     attach_machines_(root);
 
@@ -410,6 +411,10 @@ auto player_system::read_action_events_(
                 state.body_locked_seconds_ = 0.0f;
             } else if (event.name == "control.unlock") {
                 state.body_locked_ = false;
+            } else if (event.name == "iframe.start" && state.rolling_) {
+                state.invulnerable_ = true;
+            } else if (event.name == "iframe.end") {
+                state.invulnerable_ = false;
             }
             continue;
         }
@@ -434,6 +439,24 @@ auto player_system::read_action_events_(
         } else if (event.name == "cancel.ok" && state.swinging_) {
             state.cancel_open_ = true;
         }
+    }
+}
+
+auto player_system::recharge_dodge_(
+    player_component& state, float32 delta_time
+) const -> void {
+    state.dodge_charges_ = std::min(state.dodge_charges_, tuning_.dodge_charges);
+    if (state.rolling_ || state.dodge_charges_ >= tuning_.dodge_charges) {
+        state.dodge_recharge_left_ = 0.0f;
+        return;
+    }
+    if (state.dodge_recharge_left_ <= 0.0f) {
+        state.dodge_recharge_left_ = tuning_.dodge_recharge_seconds;
+    }
+    state.dodge_recharge_left_ -= delta_time;
+    if (state.dodge_recharge_left_ <= 0.0f) {
+        state.dodge_recharge_left_ = 0.0f;
+        ++state.dodge_charges_;
     }
 }
 
@@ -498,9 +521,13 @@ auto player_system::update(
             }
 
             const bool dodge_allowed = !state.rolling_ && !state.body_locked_ &&
-                !state.hit_window_ && state.air_state_ == air_state::ground;
+                !state.hit_window_ && state.air_state_ == air_state::ground &&
+                state.dodge_charges_ > 0;
             if (state.dodge_buffered_ >= 0.0f && dodge_allowed) {
                 state.dodge_buffered_ = -1.0f;
+                --state.dodge_charges_;
+                ++state.dodge_count_;
+                state.invulnerable_ = false;
                 const auto facing = world_->get<ecs::transform_component>(ent).get_rotation();
                 const vec3f look  = rotated(facing, {0.0f, 0.0f, 1.0f});
                 state.roll_facing_ = moving ? move_dir : math::normalize(vec3f{look.x, 0.0f, look.z});
@@ -549,6 +576,7 @@ auto player_system::update(
                 state.roll_elapsed_ += delta_time;
                 state.rolling_ =
                     state.roll_elapsed_ < tuning_.roll_seconds + tuning_.roll_recovery_seconds;
+                state.invulnerable_ = state.invulnerable_ && state.rolling_;
             } else if (state.swinging_) {
                 const float32 lunge = state.lunging_
                     ? lunge_speed(tuning_, state.lunge_seconds_ + delta_time * 0.5f)
@@ -576,6 +604,8 @@ auto player_system::update(
                     controller.set_facing_direction(move_dir);
                 }
             }
+
+            recharge_dodge_(state, delta_time);
 
             const uint32 jump_count =
                 world_->get<ecs::character_controller_component>(ent).get_jump_count();
