@@ -20,8 +20,6 @@ struct movement_tuning final {
     float32 lean_back_degrees              = 4.0f;
     float32 lean_side_degrees              = 8.0f;
     float32 lean_follow_seconds            = 0.08f;
-    float32 attack_lock_seconds            = 0.25f;
-    float32 lunge_delay_seconds            = 0.05f;
     float32 lunge_seconds                  = 0.15f;
     float32 lunge_distance                 = 10.0f;
 };
@@ -37,6 +35,10 @@ struct player_component final {
 
     [[nodiscard]] auto is_swinging() const -> bool {
         return swinging_;
+    }
+
+    [[nodiscard]] auto is_hitting() const -> bool {
+        return hit_window_;
     }
 
     [[nodiscard]] auto get_attack_direction() const -> const vec3f& {
@@ -72,10 +74,15 @@ private:
     float32 lean_forward_degrees_ = 0.0f;
     float32 lean_right_degrees_   = 0.0f;
     float32 swing_seconds_        = 0.0f;
+    float32 lunge_seconds_        = 0.0f;
     int32 jump_counter_ = 0;
     bool jump_pending_  = false;
     bool attacking_     = false;
     bool swinging_      = false;
+    bool swing_started_ = false;
+    bool lunging_       = false;
+    bool lunged_        = false;
+    bool hit_window_    = false;
 };
 
 class player_system final {
@@ -99,6 +106,9 @@ private:
         -> ecs::entity;
     auto attach_machines_(ecs::entity root) const -> void;
     auto lean_(ecs::entity ent, player_component& state, float32 delta_time) const -> void;
+    static auto read_action_events_(player_component& state, const ecs::animation_player_component& layers)
+        -> void;
+    static auto end_swing_(player_component& state) -> void;
 
     ecs::world* world_;
     asset::asset_storage* assets_;

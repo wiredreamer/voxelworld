@@ -83,8 +83,6 @@ auto render_movement_tuning(ecs::world& world) -> void {
     ImGui::SliderFloat("lean back, deg", &tuning.lean_back_degrees, 0.0f, 20.0f, "%.1f");
     ImGui::SliderFloat("lean side, deg", &tuning.lean_side_degrees, 0.0f, 25.0f, "%.1f");
     ImGui::SliderFloat("lean follow, s", &tuning.lean_follow_seconds, 0.0f, 0.5f, "%.2f");
-    ImGui::SliderFloat("attack lock, s", &tuning.attack_lock_seconds, 0.0f, 1.0f, "%.2f");
-    ImGui::SliderFloat("lunge delay, s", &tuning.lunge_delay_seconds, 0.0f, 0.5f, "%.2f");
     ImGui::SliderFloat("lunge time, s", &tuning.lunge_seconds, 0.0f, 0.5f, "%.2f");
     ImGui::SliderFloat("lunge distance", &tuning.lunge_distance, 0.0f, 40.0f, "%.1f");
     if (ImGui::Button("defaults")) {
@@ -155,8 +153,11 @@ auto render_debug_hud(
         }
 
         ImGui::Separator();
-        const bool armed = world.get<game::player_component>(player_ent).has_weapon();
-        ImGui::Text("Sword: %s", armed ? "equipped" : "none");
+        const auto& fighter = world.get<game::player_component>(player_ent);
+        ImGui::Text(
+            "Sword: %s%s%s", fighter.has_weapon() ? "equipped" : "none",
+            fighter.is_swinging() ? ", swinging" : "", fighter.is_hitting() ? ", HIT" : ""
+        );
         ImGui::Text("Colliders: %s", show_colliders ? "visible" : "hidden");
     }
 

@@ -30,11 +30,13 @@ auto lean_degrees(float32 acceleration, float32 full_acceleration, float32 full_
     return math::clamp(acceleration / full_acceleration, -1.0f, 1.0f) * full_degrees;
 }
 
-auto lunge_speed(const movement_tuning& tuning, float32 seconds_into_swing) -> float32 {
+constexpr float32 longest_swing_seconds = 2.0f;
+
+auto lunge_speed(const movement_tuning& tuning, float32 seconds_into_lunge) -> float32 {
     if (tuning.lunge_seconds <= 0.0f) {
         return 0.0f;
     }
-    const float32 progress = (seconds_into_swing - tuning.lunge_delay_seconds) / tuning.lunge_seconds;
+    const float32 progress = seconds_into_lunge / tuning.lunge_seconds;
     if (progress < 0.0f || progress >= 1.0f) {
         return 0.0f;
     }
@@ -201,6 +203,40 @@ auto player_system::lean_(
     ));
 }
 
+auto player_system::read_action_events_(
+    player_component& state, const ecs::animation_player_component& layers
+) -> void {
+    for (const auto& event : layers.get_fired_events()) {
+        if (event.layer != action_layer) {
+            continue;
+        }
+
+        if (event.name == "control.lock") {
+            state.swing_started_ = true;
+        } else if (event.name == "control.unlock") {
+            end_swing_(state);
+        } else if (event.name == "move.start" && state.swinging_) {
+            state.lunging_       = true;
+            state.lunged_        = true;
+            state.lunge_seconds_ = 0.0f;
+        } else if (event.name == "move.end") {
+            state.lunging_ = false;
+        } else if (event.name == "hit.start" && state.swinging_) {
+            state.hit_window_ = true;
+        } else if (event.name == "hit.end") {
+            state.hit_window_ = false;
+        }
+    }
+}
+
+auto player_system::end_swing_(
+    player_component& state
+) -> void {
+    state.swinging_   = false;
+    state.lunging_    = false;
+    state.hit_window_ = false;
+}
+
 auto player_system::update(
     float32 delta_time
 ) -> void {
@@ -230,31 +266,48 @@ auto player_system::update(
             const bool action_playing =
                 layers.has_layer(action_layer) && layers.get_layer(action_layer).is_active();
 
+            read_action_events_(state, layers);
+            if (state.swinging_) {
+                state.swing_started_ = state.swing_started_ || action_playing;
+                const bool clip_gone = state.swing_started_ && !action_playing;
+                if (clip_gone || state.swing_seconds_ > longest_swing_seconds) {
+                    end_swing_(state);
+                }
+            }
+
             if (frame.was_pressed(input_action::attack) && state.weapon_.is_valid() &&
                 !action_playing && !state.swinging_) {
                 const auto facing = world_->get<ecs::transform_component>(ent).get_rotation();
                 const vec3f look  = rotated(facing, {0.0f, 0.0f, 1.0f});
                 state.attack_facing_ = moving ? move_dir : math::normalize(vec3f{look.x, 0.0f, look.z});
                 state.swinging_      = true;
+                state.swing_started_ = false;
                 state.swing_seconds_ = 0.0f;
+                state.lunging_       = false;
+                state.lunged_        = false;
+                state.hit_window_    = false;
                 machines.modify(ent).fire_trigger("attack");
             }
             state.attacking_ = action_playing || state.swinging_;
 
             auto controller = controllers.modify(ent);
             if (state.swinging_) {
-                const float32 lunge = lunge_speed(tuning_, state.swing_seconds_ + delta_time * 0.5f);
-                const bool before_lunge = state.swing_seconds_ < tuning_.lunge_delay_seconds;
+                const float32 lunge = state.lunging_
+                    ? lunge_speed(tuning_, state.lunge_seconds_ + delta_time * 0.5f)
+                    : 0.0f;
                 const float32 move_speed =
                     world_->get<ecs::character_controller_component>(ent).get_move_speed();
                 controller.set_move_input(state.attack_facing_ * (lunge / move_speed))
                     .set_acceleration_seconds(0.0f)
-                    .set_deceleration_seconds(before_lunge ? tuning_.deceleration_seconds : 0.0f)
+                    .set_deceleration_seconds(state.lunged_ ? 0.0f : tuning_.deceleration_seconds)
                     .set_facing_direction(state.attack_facing_)
                     .set_turn_degrees_per_second(tuning_.attack_turn_degrees_per_second);
 
                 state.swing_seconds_ += delta_time;
-                state.swinging_ = state.swing_seconds_ < tuning_.attack_lock_seconds;
+                if (state.lunging_) {
+                    state.lunge_seconds_ += delta_time;
+                    state.lunging_ = state.lunge_seconds_ < tuning_.lunge_seconds;
+                }
             } else {
                 controller.set_move_input(move_dir)
                     .set_acceleration_seconds(tuning_.acceleration_seconds)

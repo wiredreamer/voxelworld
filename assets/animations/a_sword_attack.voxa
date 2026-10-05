@@ -1,5 +1,12 @@
-# Voxa File Version 2.0
+# Voxa File Version 2.1
 rig humanoid
+event 0 control.lock
+event 0.1 move.start
+event 0.2 hit.start
+event 0.35 hit.end
+event 0.35 cancel.ok
+event 0.42 move.end
+event 0.45 control.unlock
 
 track hand_right 60
   channel origin

@@ -188,19 +188,29 @@ TEST_CASE("an attack while moving strikes along the move and steps into it", "[g
     float32 travelled_x = 0.0F;
     float32 travelled_z = 0.0F;
     int32 frames        = 0;
+    int32 hit_frames    = 0;
     do {
         g.world.update(0.016F);
         g.mapper().button(mouse::buttons::LEFT, false);
         const auto wish = g.world.get<ecs::movement_intent_component>(player).get_wish_velocity();
         travelled_x += wish.x * 0.016F;
         travelled_z += wish.z * 0.016F;
+        hit_frames += state.is_hitting() ? 1 : 0;
         ++frames;
     } while (state.is_swinging() && frames < 100);
 
+    const auto clip = asset::voxa_deserializer{}.deserialize(
+        std::filesystem::path{VW_ASSET_DIR} / "animations" / "a_sword_attack.voxa"
+    );
+    REQUIRE(clip.has_value());
+    constexpr float32 attack_rate = 2.0F;
+    const float32 swing_seconds   = (*clip)->get_duration() / attack_rate;
+
     REQUIRE(state.get_attack_direction().x == Catch::Approx(-1.0F));
     REQUIRE(state.get_attack_direction().z == Catch::Approx(0.0F).margin(1.0e-3F));
-    REQUIRE(static_cast<float32>(frames) * 0.016F ==
-            Catch::Approx(tuning.attack_lock_seconds).margin(0.02F));
+    REQUIRE(static_cast<float32>(frames) * 0.016F == Catch::Approx(swing_seconds).margin(0.04F));
+    REQUIRE(hit_frames > 0);
+    REQUIRE_FALSE(state.is_hitting());
     REQUIRE(-travelled_x == Catch::Approx(tuning.lunge_distance).margin(1.5F));
     REQUIRE(travelled_z == Catch::Approx(0.0F).margin(1.0e-3F));
 
