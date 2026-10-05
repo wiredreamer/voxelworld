@@ -242,7 +242,8 @@ auto player_system::toggle_weapon(
             world_->destroy(state->shield_);
             state->shield_ = ecs::invalid_entity;
         }
-        state->guarding_ = false;
+        state->guarding_  = false;
+        state->in_stance_ = false;
         return;
     }
 
@@ -708,14 +709,12 @@ auto player_system::update(
                 machines.modify(ent).fire_trigger("dodge");
             }
 
-            state.guarding_ = frame.is_held(input_action::block) && state.shield_.is_valid() &&
-                !state.dodging_ && !state.swinging_ && !state.body_locked_ &&
-                state.air_state_ == air_state::ground;
-            machines.modify(ent).set_parameter("block", state.guarding_ ? 1.0f : 0.0f);
-            machines.modify(ent).set_parameter("stance", state.guarding_ ? 1.0f : 0.0f);
+            state.in_stance_ = frame.is_held(input_action::block) && state.shield_.is_valid() &&
+                !state.dodging_ && state.air_state_ == air_state::ground;
+            const bool striking_from_guard = state.guarding_;
 
             const bool strike_allowed = !state.dodging_ && !state.body_locked_ &&
-                !state.guarding_ && (!state.swinging_ || state.cancel_open_);
+                (!state.swinging_ || state.cancel_open_);
             if (state.attack_buffered_ >= 0.0f && state.weapon_.is_valid() && strike_allowed) {
                 const bool chaining = state.swinging_ ||
                     state.since_swing_seconds_ <= tuning_.chain_reset_seconds;
@@ -726,7 +725,9 @@ auto player_system::update(
                 ++state.swing_count_;
                 const auto facing = world_->get<ecs::transform_component>(ent).get_rotation();
                 const vec3f look  = rotated(facing, {0.0f, 0.0f, 1.0f});
-                state.attack_facing_ = moving ? move_dir : math::normalize(vec3f{look.x, 0.0f, look.z});
+                state.attack_facing_ = striking_from_guard ? forward
+                    : moving                               ? move_dir
+                                                           : math::normalize(vec3f{look.x, 0.0f, look.z});
                 state.swinging_      = true;
                 state.swing_started_ = false;
                 state.swing_seconds_ = 0.0f;
@@ -739,6 +740,9 @@ auto player_system::update(
                 machines.modify(ent).fire_trigger("attack");
             }
             state.since_swing_seconds_ = state.swinging_ ? 0.0f : state.since_swing_seconds_ + delta_time;
+            state.guarding_ = state.in_stance_ && !state.swinging_ && !state.body_locked_;
+            machines.modify(ent).set_parameter("block", state.guarding_ ? 1.0f : 0.0f);
+            machines.modify(ent).set_parameter("stance", state.in_stance_ ? 1.0f : 0.0f);
             state.attacking_ = action_playing || state.swinging_;
 
             auto controller = controllers.modify(ent);

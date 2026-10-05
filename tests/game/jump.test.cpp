@@ -666,12 +666,6 @@ TEST_CASE("the shield comes with the sword and is raised while the block is held
     REQUIRE(s.state.is_guarding());
     REQUIRE(s.action_state() == "block");
 
-    s.mapper.button(mouse::buttons::LEFT, true);
-    s.g.tick();
-    s.mapper.button(mouse::buttons::LEFT, false);
-    s.g.run_for(0.2F);
-    REQUIRE(s.state.get_swing_count() == 0);
-
     s.mapper.button(mouse::buttons::RIGHT, false);
     s.g.run_for(0.3F);
     REQUIRE_FALSE(s.state.is_guarding());
@@ -824,4 +818,37 @@ TEST_CASE("the feet stay under the body however long the stance turns in place",
         farthest = std::max(farthest, foot_reach());
     }
     REQUIRE(farthest < 12.0F);
+}
+
+TEST_CASE("a strike leaves the guard at once, goes where the body looks and the guard comes back", "[game][guard]") {
+    guard_stand s;
+    const auto& layers = s.g.world.get<ecs::animation_player_component>(s.g.player);
+
+    s.mapper.cursor_at(0.0, 0.0);
+    s.mapper.button(mouse::buttons::RIGHT, true);
+    s.g.run_for(0.6F);
+    REQUIRE(s.state.is_guarding());
+
+    s.mapper.key(keys::D, true);
+    s.g.run_for(0.3F);
+    s.mapper.button(mouse::buttons::LEFT, true);
+    s.g.tick();
+    s.mapper.button(mouse::buttons::LEFT, false);
+
+    REQUIRE(s.state.is_swinging());
+    REQUIRE_FALSE(s.state.is_guarding());
+    REQUIRE(s.state.is_in_stance());
+    REQUIRE(s.action_state() == "attack_1");
+    REQUIRE(math::dot(s.state.get_attack_direction(), s.look()) > 0.99F);
+    REQUIRE(layers.get_layer(1).fade_influence > 0.99F);
+    s.mapper.key(keys::D, false);
+
+    for (int32 tick_index = 0; tick_index < 200 && s.state.is_swinging(); ++tick_index) {
+        s.g.tick();
+        REQUIRE(s.state.is_in_stance());
+    }
+    s.g.tick();
+    REQUIRE(s.state.is_guarding());
+    s.g.run_for(0.2F);
+    REQUIRE(s.action_state() == "block");
 }

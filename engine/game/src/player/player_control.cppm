@@ -86,6 +86,10 @@ struct player_component final {
         return guarding_;
     }
 
+    [[nodiscard]] auto is_in_stance() const -> bool {
+        return in_stance_;
+    }
+
     [[nodiscard]] auto get_blocked_hits() const -> uint32 {
         return blocked_hits_;
     }
@@ -261,6 +265,7 @@ private:
     bool dodging_                 = false;
     bool invulnerable_            = false;
     bool guarding_                = false;
+    bool in_stance_               = false;
     std::array<planted_foot, 2> feet_{};
     uint32 turn_steps_            = 0;
     uint32 blocked_hits_          = 0;

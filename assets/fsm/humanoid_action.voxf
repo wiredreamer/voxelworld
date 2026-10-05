@@ -90,6 +90,18 @@ state block
 	playback loop
 	fade_in 0.12
 	fade_out 0.15
+	to attack_1
+		on attack
+		when attack_chain == 1
+		blend 0.08
+	to attack_2
+		on attack
+		when attack_chain == 2
+		blend 0.08
+	to attack_3
+		on attack
+		when attack_chain == 3
+		blend 0.08
 	to none
 		on dodge
 		blend 0.05
@@ -104,6 +116,18 @@ state block_impact
 	playback once
 	fade_in 0.05
 	fade_out 0.15
+	to attack_1
+		on attack
+		when attack_chain == 1
+		blend 0.08
+	to attack_2
+		on attack
+		when attack_chain == 2
+		blend 0.08
+	to attack_3
+		on attack
+		when attack_chain == 3
+		blend 0.08
 	to none
 		on dodge
 		blend 0.05

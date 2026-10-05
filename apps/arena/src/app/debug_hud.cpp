@@ -265,8 +265,9 @@ auto render_fighter_state(ecs::world& world, ecs::entity player) -> void {
         fighter.can_cancel() ? ", cancel" : "", fighter.get_chain_step(), fighter.get_swing_count()
     );
     ImGui::Text(
-        "Shield: %s%s, blocked %u", fighter.has_shield() ? "equipped" : "none",
-        fighter.is_guarding() ? ", GUARD" : "", fighter.get_blocked_hits()
+        "Shield: %s%s%s, blocked %u", fighter.has_shield() ? "equipped" : "none",
+        fighter.is_in_stance() ? ", STANCE" : "", fighter.is_guarding() ? ", GUARD" : "",
+        fighter.get_blocked_hits()
     );
     ImGui::Text(
         "Feet: twist %+.0f / %+.0f deg%s%s, turn steps %u", fighter.get_foot_twist_degrees(0),
