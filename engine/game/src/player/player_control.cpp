@@ -387,8 +387,18 @@ auto player_system::update(
                 controller.request_jump();
             }
 
+            const auto& body = world_->get<ecs::rigid_body_component>(ent);
+            const auto& cc   = world_->get<ecs::character_controller_component>(ent);
+            if (body.is_grounded()) {
+                state.air_state_ = air_state::ground;
+            } else if (cc.left_ground_by_jump() && body.get_velocity().y > 0.0f) {
+                state.air_state_ = air_state::rising;
+            } else if (cc.left_ground_by_jump() ||
+                       cc.get_seconds_off_ground() > tuning_.fall_after_seconds) {
+                state.air_state_ = air_state::falling;
+            }
             machines.modify(ent).set_parameter(
-                "jump_count", static_cast<float32>(jump_count % 2)
+                "air_state", static_cast<float32>(std::to_underlying(state.air_state_))
             );
 
             age_buffer(state.attack_buffered_, delta_time);

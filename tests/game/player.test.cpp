@@ -359,9 +359,9 @@ TEST_CASE("a pinned parameter drives the machines against the game", "[game][pla
     REQUIRE(attack != declared.end());
     REQUIRE(attack->type == asset::voxf_param_type::trigger);
 
-    machines.modify(player).pin_parameter("grounded", 1.0F);
+    machines.modify(player).pin_parameter("air_state", 0.0F);
     g.world.update(0.016F);
-    REQUIRE(fsm.get_board().get("grounded") == 1.0F);
+    REQUIRE(fsm.get_board().get("air_state") == 0.0F);
     REQUIRE(fsm.get_machine(0).get_current_state() == "idle");
 
     machines.modify(player).pin_parameter("speed", 50.0F);
@@ -380,7 +380,9 @@ TEST_CASE("a pinned parameter drives the machines against the game", "[game][pla
 
     machines.modify(player).unpin_all_parameters();
     g.world.update(0.016F);
-    REQUIRE(fsm.get_board().get("grounded") == 0.0F);
+    REQUIRE(fsm.get_board().get("air_state") == 2.0F);
+    g.world.update(0.016F);
+    REQUIRE(fsm.get_machine(0).get_current_state() == "fall");
 }
 
 TEST_CASE("the weapon key takes the sword out and puts it away", "[game][player]") {

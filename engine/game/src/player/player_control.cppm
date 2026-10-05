@@ -11,6 +11,12 @@ export namespace vw::game {
 
 class player_system;
 
+enum class air_state : uint8 {
+    ground,
+    rising,
+    falling,
+};
+
 struct movement_tuning final {
     float32 run_turn_degrees_per_second    = 360.0f;
     float32 attack_turn_degrees_per_second = 2400.0f;
@@ -24,6 +30,7 @@ struct movement_tuning final {
     float32 head_follow_seconds            = 0.12f;
     float32 input_buffer_seconds           = 0.15f;
     float32 coyote_seconds                 = 0.1f;
+    float32 fall_after_seconds             = 0.1f;
     float32 lunge_seconds                  = 0.15f;
     float32 lunge_distance                 = 10.0f;
 };
@@ -77,6 +84,10 @@ struct player_component final {
         return head_;
     }
 
+    [[nodiscard]] auto get_air_state() const -> air_state {
+        return air_state_;
+    }
+
 private:
     friend class player_system;
 
@@ -100,6 +111,7 @@ private:
     float32 jump_buffered_        = -1.0f;
     uint32 seen_jump_count_       = 0;
     uint32 swing_count_           = 0;
+    air_state air_state_          = air_state::ground;
     bool attacking_     = false;
     bool swinging_      = false;
     bool swing_started_ = false;

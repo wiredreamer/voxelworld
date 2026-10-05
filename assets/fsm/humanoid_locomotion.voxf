@@ -2,49 +2,46 @@
 rig humanoid
 entry idle
 param speed float
-param grounded bool true
-param jump_count int
+param air_state int
 state idle
 	clip animations/a_humanoid_idle.voxa
 	playback loop
 	to run
 		when speed > 0
 		blend 0.15
-	to jump_left
-		when jump_count == 0
-		when grounded == false
+	to rise
+		when air_state == 1
+		blend 0.1
+	to fall
+		when air_state == 2
 		blend 0.15
-		wait blend
-	to jump_right
-		when jump_count == 1
-		when grounded == false
-		blend 0.15
-		wait blend
 state run
 	clip animations/a_humanoid_run_f.voxa
 	playback loop
 	to idle
 		when speed == 0
 		blend 0.15
-	to jump_left
-		when jump_count == 0
-		when grounded == false
+	to rise
+		when air_state == 1
+		blend 0.1
+	to fall
+		when air_state == 2
 		blend 0.15
-	to jump_right
-		when jump_count == 1
-		when grounded == false
-		blend 0.15
-state jump_left
+state rise
 	clip animations/a_jump_left.voxa
 	playback loop
+	to fall
+		when air_state == 2
+		blend 0.15
 	to idle
-		when grounded > false
-		blend 0.25
-		wait blend
-state jump_right
-	clip animations/a_jump_right.voxa
+		when air_state == 0
+		blend 0.2
+state fall
+	clip animations/a_jump_left.voxa
 	playback loop
+	to rise
+		when air_state == 1
+		blend 0.1
 	to idle
-		when grounded > false
-		blend 0.25
-		wait blend
+		when air_state == 0
+		blend 0.2

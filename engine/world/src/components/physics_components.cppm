@@ -133,6 +133,14 @@ struct character_controller_component final {
         return jump_count_;
     }
 
+    [[nodiscard]] auto left_ground_by_jump() const -> bool {
+        return left_ground_by_jump_;
+    }
+
+    [[nodiscard]] auto get_seconds_off_ground() const -> float32 {
+        return seconds_off_ground_;
+    }
+
 private:
     friend class character_controller_system;
 

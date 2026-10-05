@@ -187,6 +187,36 @@ TEST_CASE("every pressed jump lifts the body when frames outpace physics", "[gam
     }
 }
 
+TEST_CASE("a jump rises, falls and lands, a drop only falls", "[game][jump]") {
+    grounded_world g;
+    REQUIRE(g.settle());
+    g.run_for(0.3F);
+
+    const auto& state = g.world.get<game::player_component>(g.player);
+    const auto& fsm   = g.world.get<ecs::animation_fsm_component>(g.player);
+    const auto phases = [&](float32 seconds) {
+        std::vector<std::string> seen;
+        for (float32 elapsed = 0.0F; elapsed < seconds; elapsed += g.tick_seconds) {
+            g.tick();
+            const auto& current = fsm.get_machine(0).get_current_state();
+            if (seen.empty() || seen.back() != current) {
+                seen.push_back(current);
+            }
+        }
+        return seen;
+    };
+
+    REQUIRE(state.get_air_state() == game::air_state::ground);
+    REQUIRE(fsm.get_machine(0).get_current_state() == "idle");
+
+    g.press_jump();
+    REQUIRE(phases(2.0F) == std::vector<std::string>{"rise", "fall", "idle"});
+    REQUIRE(state.get_air_state() == game::air_state::ground);
+
+    g.lift(drop_height * 2.0F);
+    REQUIRE(phases(2.0F) == std::vector<std::string>{"idle", "fall", "idle"});
+}
+
 TEST_CASE("holding jump does not hop again", "[game][jump]") {
     grounded_world g;
     REQUIRE(g.settle());
