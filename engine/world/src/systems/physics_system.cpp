@@ -109,9 +109,8 @@ auto physics_system::step(
         if (const auto* col_ptr = reg.try_get<box_collider_component>(ent)) {
             const auto& col = *col_ptr;
             auto half = col.extents_ * 0.5f;
-            auto box_center = new_position + col.offset_;
 
-            if (!are_chunks_loaded(box_center, col.extents_)) {
+            if (!are_chunks_loaded(new_position + col.offset_, col.extents_)) {
                 rb.frozen_ = true;
                 rb.velocity_ = {0.0f, 0.0f, 0.0f};
                 rb.impulse_ = {0.0f, 0.0f, 0.0f};
@@ -120,17 +119,30 @@ auto physics_system::step(
 
             rb.frozen_ = false;
 
-            collision_result result{};
-            measure_into(detailed_active_, stats_.voxel_collision_ms, [&] {
-                result = resolve_box_voxel(box_center, half, rb.velocity_);
-            });
+            const auto voxel_size =
+                static_cast<float32>(world_->system<world_grid_system>().grid()->world_units_per_voxel());
+            const auto substeps = std::max(
+                1, static_cast<int32>(std::ceil(math::length(rb.velocity_ * dt) / (voxel_size * max_substep_voxels)))
+            );
+            const float32 sub_dt = dt / static_cast<float32>(substeps);
 
-            new_position = result.resolved_position - col.offset_;
-            rb.grounded_ = result.grounded;
+            new_position = position;
+            rb.grounded_ = false;
+            for (int32 sub = 0; sub < substeps; ++sub) {
+                new_position = new_position + rb.velocity_ * sub_dt;
 
-            measure_into(detailed_active_, stats_.entity_collision_ms, [&] {
-                resolve_entity_collisions(ent, new_position, rb.velocity_, half, col.offset_);
-            });
+                collision_result result{};
+                measure_into(detailed_active_, stats_.voxel_collision_ms, [&] {
+                    result = resolve_box_voxel(new_position + col.offset_, half, rb.velocity_);
+                });
+
+                new_position = result.resolved_position - col.offset_;
+                rb.grounded_ = rb.grounded_ || result.grounded;
+
+                measure_into(detailed_active_, stats_.entity_collision_ms, [&] {
+                    resolve_entity_collisions(ent, new_position, rb.velocity_, half, col.offset_);
+                });
+            }
         }
 
         world_->system<transform_system>().modify(ent).set_position(new_position);

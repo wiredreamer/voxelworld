@@ -497,6 +497,51 @@ TEST_CASE("a dash lunges one height without turning over and is invulnerable bri
     REQUIRE(state.get_dodge_charges() == tuning.dodge_charges - 1);
 }
 
+TEST_CASE("a dodge into a thin wall stops at it, neither through nor over it", "[game][dodge]") {
+    const auto kind          = GENERATE(game::dodge_kind::roll, game::dodge_kind::dash);
+    const float32 frame_rate = GENERATE(60.0F, 240.0F);
+    INFO("dash " << (kind == game::dodge_kind::dash) << ", frames a second " << frame_rate);
+    grounded_world g{1.0F / frame_rate};
+    REQUIRE(g.settle());
+    g.run_for(0.3F);
+    const auto& state = g.world.get<game::player_component>(g.player);
+    auto& tuning      = g.world.system<game::player_system>().tuning();
+    auto& mapper      = g.world.system<game::input_system>().mapper();
+    auto& grid        = *g.world.system<ecs::world_grid_system>().grid();
+    tuning.dodge      = kind;
+
+    const int32 unit  = grid.world_units_per_voxel();
+    const vec3f start = g.world.get<ecs::transform_component>(g.player).get_position();
+    const auto voxel_of = [unit](float32 at) {
+        return static_cast<int32>(std::floor(at / static_cast<float32>(unit)));
+    };
+    const int32 wall_z = voxel_of(start.z - 24.0F);
+    const int32 feet_y = voxel_of(start.y);
+    const int32 top_y  = feet_y + 8;
+    for (int32 x = voxel_of(start.x) - 4; x <= voxel_of(start.x) + 4; ++x) {
+        for (int32 y = feet_y - 3; y <= top_y; ++y) {
+            grid.set_voxel(vec3i{x, y, wall_z} * unit, voxels::gray[7]);
+        }
+    }
+
+    mapper.key(keys::W, true);
+    mapper.key(keys::LEFT_SHIFT, true);
+    g.tick();
+    mapper.key(keys::LEFT_SHIFT, false);
+    mapper.key(keys::W, false);
+    REQUIRE(state.is_dodging());
+    while (state.is_dodging()) {
+        g.tick();
+    }
+    g.run_for(0.2F);
+
+    const vec3f end = g.world.get<ecs::transform_component>(g.player).get_position();
+    const float32 wall_near_face = static_cast<float32>((wall_z + 1) * unit);
+    REQUIRE(end.z > wall_near_face);
+    REQUIRE(end.z < wall_near_face + 12.0F);
+    REQUIRE(end.y < static_cast<float32>(top_y * unit));
+}
+
 TEST_CASE("a dodge spends its charge and gets it back after the recharge", "[game][dodge]") {
     grounded_world g;
     REQUIRE(g.settle());
