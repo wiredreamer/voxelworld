@@ -264,6 +264,37 @@ struct swordsman {
 
 }  // namespace
 
+TEST_CASE("the head turns toward the look within its reach", "[game][player]") {
+    game_world g;
+    const auto player = g.spawn_controlled();
+    const auto& state = g.world.get<game::player_component>(player);
+    const float32 reach = g.world.system<game::player_system>().tuning().head_turn_degrees;
+
+    g.mapper().cursor_at(0.0, 0.0);
+    g.world.update(0.016F);
+    REQUIRE(state.get_head_yaw_degrees() == 0.0F);
+
+    g.mapper().cursor_at(1500.0, 0.0);
+    for (int32 tick = 0; tick < 60; ++tick) {
+        g.world.update(0.016F);
+    }
+    REQUIRE(state.get_head_yaw_degrees() == Catch::Approx(-30.0F).margin(0.5F));
+    const auto& adjustment = g.world.get<ecs::pose_adjustment_component>(state.get_head());
+    REQUIRE(adjustment.get_rotation().y == Catch::Approx(std::sin(math::radians(-15.0F))).margin(0.01F));
+
+    g.mapper().cursor_at(1100.0, 0.0);
+    for (int32 tick = 0; tick < 60; ++tick) {
+        g.world.update(0.016F);
+    }
+    REQUIRE(state.get_head_yaw_degrees() == Catch::Approx(-reach).margin(0.5F));
+
+    g.mapper().cursor_at(1800.0 + 1500.0, 0.0);
+    for (int32 tick = 0; tick < 60; ++tick) {
+        g.world.update(0.016F);
+    }
+    REQUIRE(state.get_head_yaw_degrees() == Catch::Approx(0.0F).margin(0.5F));
+}
+
 TEST_CASE("a strike pressed early in a swing is dropped", "[game][player]") {
     swordsman s;
     s.g.world.system<game::player_system>().tuning().input_buffer_seconds = 0.05F;

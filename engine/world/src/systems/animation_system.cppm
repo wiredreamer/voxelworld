@@ -111,8 +111,21 @@ public:
         rig_component* component_;
     };
 
+    class adjustment_modifier {
+    public:
+        auto set_rotation(const quat& rotation) const -> const adjustment_modifier&;
+        auto set_translation(const vec3f& translation) const -> const adjustment_modifier&;
+
+    private:
+        friend class animation_system;
+        explicit adjustment_modifier(pose_adjustment_component* component);
+
+        pose_adjustment_component* component_;
+    };
+
     auto modify_player(entity ent) -> player_modifier;
     auto modify_target(entity ent) -> target_modifier;
+    auto modify_adjustment(entity ent) -> adjustment_modifier;
     auto modify_rig(entity ent) -> rig_modifier;
 
     [[nodiscard]] auto collect_targets(entity root_ent) const -> std::vector<std::string>;

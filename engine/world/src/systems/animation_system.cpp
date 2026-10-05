@@ -528,6 +528,19 @@ auto animation_system::apply_animation(
         }
     }
 
+    for (const auto& [name, target] : *target_map) {
+        const auto* adjustment = reg.try_get<pose_adjustment_component>(target);
+        if (adjustment == nullptr) {
+            continue;
+        }
+        if (slot_of(target) == nullptr) {
+            add_slot(target, rest_of(target));
+        }
+        auto& adjusted = *slot_of(target);
+        adjusted.set_rotation(math::normalize(adjusted.get_rotation() * adjustment->get_rotation()));
+        adjusted.set_position(adjusted.get_position() + adjustment->get_translation());
+    }
+
     auto& transform_sys = world_->system<transform_system>();
     for (const auto& [target_ent, t] : final_transforms) {
         if (reg.try_get<transform_component>(target_ent) == nullptr) {
@@ -543,6 +556,34 @@ animation_system::player_modifier::player_modifier(
     animation_system* system, entity ent, animation_player_component* component
 )
     : system_(system), entity_(ent), component_(component) {}
+
+animation_system::adjustment_modifier::adjustment_modifier(
+    pose_adjustment_component* component
+)
+    : component_(component) {}
+
+auto animation_system::adjustment_modifier::set_rotation(
+    const quat& rotation
+) const -> const adjustment_modifier& {
+    component_->rotation_ = rotation;
+    return *this;
+}
+
+auto animation_system::adjustment_modifier::set_translation(
+    const vec3f& translation
+) const -> const adjustment_modifier& {
+    component_->translation_ = translation;
+    return *this;
+}
+
+auto animation_system::modify_adjustment(
+    entity ent
+) -> adjustment_modifier {
+    if (!world_->has<pose_adjustment_component>(ent)) {
+        world_->modify(ent).with<pose_adjustment_component>();
+    }
+    return adjustment_modifier(&world_->get<pose_adjustment_component>(ent));
+}
 
 auto animation_system::modify_player(
     entity ent

@@ -335,6 +335,45 @@ TEST_CASE("animation keeps real time when a tick is longer than its step", "[ani
     REQUIRE(std::abs(comp.get_layer(0).time - 1.0f) < 0.01f);
 }
 
+TEST_CASE("an adjustment lies on top of the pose and does not pile up", "[animation_layer][adjustment]") {
+    anim_test_fixture f;
+    auto root  = f.create_root();
+    auto body  = f.create_child(root, "body");
+    auto head  = f.create_child(root, "head");
+
+    transform head_rest;
+    head_rest.set_position(vec3f{0.0f, 22.0f, 0.0f});
+    f.anim_sys.modify_target(head).set_rest_transform(head_rest);
+
+    auto clip  = f.make_clip("walk", {"body"});
+    auto layer = f.anim_sys.modify_player(root).layer(0);
+    layer.blend_to(clip);
+    layer.set_loop_mode(animation_loop_mode::loop);
+    layer.play();
+
+    const quat quarter_turn{0.0f, std::sin(0.25f * 3.14159265f), 0.0f, std::cos(0.25f * 3.14159265f)};
+    f.anim_sys.modify_adjustment(body).set_rotation(quarter_turn).set_translation({1.0f, 0.0f, 0.0f});
+    f.anim_sys.modify_adjustment(head).set_rotation(quarter_turn);
+
+    for (int i = 0; i < 30; ++i) {
+        f.anim_sys.update(1.0f / 120.0f);
+    }
+
+    const auto& body_now = f.reg.get<transform_component>(body).get_transform();
+    REQUIRE(std::abs(std::abs(math::dot(body_now.get_rotation(), quarter_turn)) - 1.0f) < 1.0e-4f);
+    REQUIRE(std::abs(body_now.get_position().x - 1.0f) < 1.0e-4f);
+    REQUIRE(body_now.get_position().y > 0.0f);
+
+    const auto& head_now = f.reg.get<transform_component>(head).get_transform();
+    REQUIRE(std::abs(std::abs(math::dot(head_now.get_rotation(), quarter_turn)) - 1.0f) < 1.0e-4f);
+    REQUIRE(head_now.get_position().y == 22.0f);
+
+    f.anim_sys.modify_adjustment(head).set_rotation(quat{0.0f, 0.0f, 0.0f, 1.0f});
+    f.anim_sys.update(1.0f / 120.0f);
+    const auto& head_back = f.reg.get<transform_component>(head).get_transform();
+    REQUIRE(std::abs(std::abs(head_back.get_rotation().w) - 1.0f) < 1.0e-4f);
+}
+
 TEST_CASE("is_any_playing reflects layer state", "[animation_layer]") {
     anim_test_fixture f;
     auto root = f.create_root();

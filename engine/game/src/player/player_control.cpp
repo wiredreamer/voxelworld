@@ -30,7 +30,8 @@ auto lean_degrees(float32 acceleration, float32 full_acceleration, float32 full_
     return math::clamp(acceleration / full_acceleration, -1.0f, 1.0f) * full_degrees;
 }
 
-constexpr float32 longest_swing_seconds = 2.0f;
+constexpr float32 longest_swing_seconds      = 2.0f;
+constexpr float32 head_ignore_beyond_degrees = 110.0f;
 
 auto age_buffer(float32& seconds_left, float32 delta_time) -> void {
     if (seconds_left < 0.0f) {
@@ -213,6 +214,40 @@ auto player_system::lean_(
     ));
 }
 
+auto player_system::turn_head_(
+    ecs::entity ent, player_component& state, const vec3f& look, float32 delta_time
+) const -> void {
+    if (!state.head_.is_valid()) {
+        return;
+    }
+
+    const auto facing   = world_->get<ecs::transform_component>(ent).get_rotation();
+    const vec3f forward = rotated(facing, {0.0f, 0.0f, 1.0f});
+    const vec3f body{forward.x, 0.0f, forward.z};
+
+    float32 target = 0.0f;
+    if (math::length(body) > math::epsilon && math::length(look) > math::epsilon) {
+        const vec3f along   = math::normalize(body);
+        const vec3f towards = math::normalize(vec3f{look.x, 0.0f, look.z});
+        const float32 apart = math::degrees(
+            std::atan2(math::cross(along, towards).y, math::dot(along, towards))
+        );
+        if (std::abs(apart) <= head_ignore_beyond_degrees) {
+            target = math::clamp(apart, -tuning_.head_turn_degrees, tuning_.head_turn_degrees);
+        }
+    }
+
+    const float32 follow = tuning_.head_follow_seconds > 0.0f
+        ? 1.0f - std::exp(-delta_time / tuning_.head_follow_seconds)
+        : 1.0f;
+    state.head_yaw_degrees_ += (target - state.head_yaw_degrees_) * follow;
+
+    const float32 half = math::radians(state.head_yaw_degrees_) * 0.5f;
+    world_->system<ecs::animation_system>().modify_adjustment(state.head_).set_rotation(
+        quat{0.0f, std::sin(half), 0.0f, std::cos(half)}
+    );
+}
+
 auto player_system::read_action_events_(
     player_component& state, const ecs::animation_player_component& layers
 ) -> void {
@@ -364,6 +399,7 @@ auto player_system::update(
             }
 
             lean_(ent, state, delta_time);
+            turn_head_(ent, state, forward, delta_time);
         }
     );
 

@@ -59,6 +59,22 @@ private:
     transform rest_transform_;
 };
 
+struct pose_adjustment_component final {
+    [[nodiscard]] auto get_rotation() const -> const quat& {
+        return rotation_;
+    }
+
+    [[nodiscard]] auto get_translation() const -> const vec3f& {
+        return translation_;
+    }
+
+private:
+    friend class animation_system;
+
+    quat rotation_{0.0F, 0.0F, 0.0F, 1.0F};
+    vec3f translation_{0.0F, 0.0F, 0.0F};
+};
+
 struct fired_animation_event {
     std::size_t layer = 0;
     std::string clip;

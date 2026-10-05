@@ -20,6 +20,8 @@ struct movement_tuning final {
     float32 lean_back_degrees              = 4.0f;
     float32 lean_side_degrees              = 8.0f;
     float32 lean_follow_seconds            = 0.08f;
+    float32 head_turn_degrees              = 35.0f;
+    float32 head_follow_seconds            = 0.12f;
     float32 input_buffer_seconds           = 0.15f;
     float32 coyote_seconds                 = 0.1f;
     float32 lunge_seconds                  = 0.15f;
@@ -67,6 +69,14 @@ struct player_component final {
         return lean_right_degrees_;
     }
 
+    [[nodiscard]] auto get_head_yaw_degrees() const -> float32 {
+        return head_yaw_degrees_;
+    }
+
+    [[nodiscard]] auto get_head() const -> ecs::entity {
+        return head_;
+    }
+
 private:
     friend class player_system;
 
@@ -83,6 +93,7 @@ private:
     vec3f previous_planar_velocity_{0.0f, 0.0f, 0.0f};
     float32 lean_forward_degrees_ = 0.0f;
     float32 lean_right_degrees_   = 0.0f;
+    float32 head_yaw_degrees_     = 0.0f;
     float32 swing_seconds_        = 0.0f;
     float32 lunge_seconds_        = 0.0f;
     float32 attack_buffered_      = -1.0f;
@@ -119,6 +130,9 @@ private:
         -> ecs::entity;
     auto attach_machines_(ecs::entity root) const -> void;
     auto lean_(ecs::entity ent, player_component& state, float32 delta_time) const -> void;
+    auto turn_head_(
+        ecs::entity ent, player_component& state, const vec3f& look, float32 delta_time
+    ) const -> void;
     static auto read_action_events_(player_component& state, const ecs::animation_player_component& layers)
         -> void;
     static auto end_swing_(player_component& state) -> void;
