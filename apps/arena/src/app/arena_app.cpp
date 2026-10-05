@@ -173,6 +173,7 @@ auto arena_app::render(
 auto arena_app::load_assets() -> void {
     assets_.load_prefab("p_humanoid", asset::asset_ref{"prefabs/p_humanoid.vox"});
     assets_.load_prefab("p_sword", asset::asset_ref{"prefabs/p_sword.vox"});
+    assets_.load_prefab("p_shield", asset::asset_ref{"prefabs/p_shield.vox"});
 }
 
 auto arena_app::handle_key_press(

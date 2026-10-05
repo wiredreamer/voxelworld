@@ -11,8 +11,12 @@ namespace {
 
 constexpr std::string_view body_prefab   = "p_humanoid";
 constexpr std::string_view weapon_prefab = "p_sword";
-constexpr std::string_view weapon_node   = "root";
+constexpr std::string_view shield_prefab = "p_shield";
+constexpr std::string_view item_node     = "root";
 constexpr std::string_view weapon_socket = "hand_right";
+constexpr std::string_view shield_socket = "hand_left";
+constexpr std::string_view run_state     = "run";
+constexpr float32 guard_back_cosine      = 0.3f;
 
 constexpr std::size_t locomotion_layer = 0;
 constexpr std::size_t action_layer     = 1;
@@ -222,30 +226,84 @@ auto player_system::toggle_weapon(
         return;
     }
 
-    const auto hand = state->hand_right_;
-    auto& sockets   = world_->system<ecs::socket_system>();
+    auto& sockets = world_->system<ecs::socket_system>();
 
     if (state->weapon_.is_valid()) {
-        sockets.modify(hand).detach(std::string{weapon_socket});
+        sockets.modify(state->hand_right_).detach(std::string{weapon_socket});
         world_->destroy(state->weapon_);
         state->weapon_ = ecs::invalid_entity;
+        if (state->shield_.is_valid()) {
+            sockets.modify(state->hand_left_).detach(std::string{shield_socket});
+            world_->destroy(state->shield_);
+            state->shield_ = ecs::invalid_entity;
+        }
+        state->guarding_ = false;
         return;
     }
 
-    const auto weapon = world_->create()
+    const auto hand_right = state->hand_right_;
+    const auto hand_left  = state->hand_left_;
+    const auto weapon     = hold_in_socket_(hand_right, weapon_socket, weapon_prefab);
+    const auto shield =
+        hand_left.is_valid() ? hold_in_socket_(hand_left, shield_socket, shield_prefab) : ecs::invalid_entity;
+
+    auto& equipped   = world_->get<player_component>(player);
+    equipped.weapon_ = weapon;
+    equipped.shield_ = shield;
+}
+
+auto player_system::hold_in_socket_(
+    ecs::entity hand, std::string_view socket, std::string_view prefab
+) const -> ecs::entity {
+    const auto item = world_->create()
         .with<ecs::hierarchy_component>()
         .with<ecs::transform_component>()
         .with<ecs::spatial_component>()
         .with<ecs::model_component>()
         .get_entity();
 
-    world_->system<ecs::model_system>().modify(weapon).set_model(
-        assets_->get_model(weapon_prefab, weapon_node)
-    );
-    sockets.modify(hand).attach(std::string{weapon_socket}, weapon);
-    world_->system<ecs::spatial_system>().modify(weapon).set_layer(ecs::spatial_layer::character);
+    world_->system<ecs::model_system>().modify(item).set_model(assets_->get_model(prefab, item_node));
+    world_->system<ecs::socket_system>().modify(hand).attach(std::string{socket}, item);
+    world_->system<ecs::spatial_system>().modify(item).set_layer(ecs::spatial_layer::character);
+    return item;
+}
 
-    world_->get<player_component>(player).weapon_ = weapon;
+auto player_system::take_hit_on_shield(
+    ecs::entity player
+) -> bool {
+    auto* state = world_->try_get<player_component>(player);
+    if (state == nullptr || !state->guarding_) {
+        return false;
+    }
+    ++state->blocked_hits_;
+    world_->system<ecs::animation_fsm_system>().modify(player).fire_trigger("block_impact");
+    return true;
+}
+
+auto player_system::pace_guard_steps_(
+    ecs::entity ent, const player_component& state, const vec3f& move_dir, const vec3f& look
+) const -> void {
+    const auto& machines = world_->get<ecs::animation_fsm_component>(ent);
+    if (machines.machine_count() <= locomotion_layer) {
+        return;
+    }
+    const auto* running = machines.get_machine(locomotion_layer).get_current_state_node();
+    if (running == nullptr || running->name != run_state) {
+        return;
+    }
+
+    float32 rate = running->playback_speed;
+    if (state.guarding_) {
+        rate *= tuning_.guard_speed_scale;
+        const bool stepping_back = math::dot(move_dir, look) < -guard_back_cosine;
+        if (tuning_.guard_steps_back_in_reverse && stepping_back) {
+            rate = -rate;
+        }
+    }
+    world_->system<ecs::animation_system>()
+        .modify_player(ent)
+        .layer(locomotion_layer)
+        .set_playback_speed(rate);
 }
 
 auto player_system::lean_(
@@ -570,8 +628,13 @@ auto player_system::update(
                 machines.modify(ent).fire_trigger("dodge");
             }
 
+            state.guarding_ = frame.is_held(input_action::block) && state.shield_.is_valid() &&
+                !state.dodging_ && !state.swinging_ && !state.body_locked_ &&
+                state.air_state_ == air_state::ground;
+            machines.modify(ent).set_parameter("block", state.guarding_ ? 1.0f : 0.0f);
+
             const bool strike_allowed = !state.dodging_ && !state.body_locked_ &&
-                (!state.swinging_ || state.cancel_open_);
+                !state.guarding_ && (!state.swinging_ || state.cancel_open_);
             if (state.attack_buffered_ >= 0.0f && state.weapon_.is_valid() && strike_allowed) {
                 const bool chaining = state.swinging_ ||
                     state.since_swing_seconds_ <= tuning_.chain_reset_seconds;
@@ -637,6 +700,12 @@ auto player_system::update(
                         .layer(action_layer)
                         .set_playback_speed(tuning_.attack_playback_rate);
                 }
+            } else if (state.guarding_) {
+                controller.set_move_input(moving ? move_dir * tuning_.guard_speed_scale : vec3f{0.0f, 0.0f, 0.0f})
+                    .set_acceleration_seconds(tuning_.acceleration_seconds)
+                    .set_deceleration_seconds(tuning_.deceleration_seconds)
+                    .set_facing_direction(forward)
+                    .set_turn_degrees_per_second(tuning_.guard_turn_degrees_per_second);
             } else {
                 const bool steering = moving && !state.body_locked_;
                 controller.set_move_input(steering ? move_dir : vec3f{0.0f, 0.0f, 0.0f})
@@ -648,6 +717,7 @@ auto player_system::update(
                 }
             }
 
+            pace_guard_steps_(ent, state, move_dir, forward);
             recharge_dodge_(state, delta_time);
 
             const uint32 jump_count =

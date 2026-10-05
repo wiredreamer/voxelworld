@@ -173,9 +173,7 @@ auto render_strike_panel(game::movement_tuning& tuning) -> void {
     );
 }
 
-auto render_dodge_tuning(game::movement_tuning& tuning) -> void {
-    ImGui::Text("Dodge:");
-    ImGui::SameLine();
+auto render_dodge_panel(game::movement_tuning& tuning) -> void {
     if (ImGui::RadioButton("roll (light)", tuning.dodge == game::dodge_kind::roll)) {
         tuning.dodge = game::dodge_kind::roll;
     }
@@ -224,12 +222,39 @@ auto render_dodge_tuning(game::movement_tuning& tuning) -> void {
     }
 }
 
+auto render_guard_tuning(ecs::world& world, ecs::entity player) -> void {
+    auto& players = world.system<game::player_system>();
+    auto& tuning  = players.tuning();
+
+    ImGui::Text("Guard (hold RMB with the shield):");
+    ImGui::SliderFloat("guard speed", &tuning.guard_speed_scale, 0.2f, 1.0f, "%.2f");
+    ImGui::SliderFloat("guard turn, deg/s", &tuning.guard_turn_degrees_per_second, 90.0f, 1440.0f, "%.0f");
+    ImGui::Checkbox("step back plays the run in reverse", &tuning.guard_steps_back_in_reverse);
+
+    ImGui::BeginDisabled(!world.get<game::player_component>(player).is_guarding());
+    if (ImGui::Button("hit the shield")) {
+        static_cast<void>(players.take_hit_on_shield(player));
+    }
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    if (ImGui::Button("defaults")) {
+        const game::movement_tuning defaults{};
+        tuning.guard_speed_scale             = defaults.guard_speed_scale;
+        tuning.guard_turn_degrees_per_second = defaults.guard_turn_degrees_per_second;
+        tuning.guard_steps_back_in_reverse   = defaults.guard_steps_back_in_reverse;
+    }
+}
+
 auto render_fighter_state(ecs::world& world, ecs::entity player) -> void {
     const auto& fighter = world.get<game::player_component>(player);
     ImGui::Text(
         "Sword: %s%s%s%s  chain %u/3, swings %u", fighter.has_weapon() ? "equipped" : "none",
         fighter.is_swinging() ? ", swinging" : "", fighter.is_hitting() ? ", HIT" : "",
         fighter.can_cancel() ? ", cancel" : "", fighter.get_chain_step(), fighter.get_swing_count()
+    );
+    ImGui::Text(
+        "Shield: %s%s, blocked %u", fighter.has_shield() ? "equipped" : "none",
+        fighter.is_guarding() ? ", GUARD" : "", fighter.get_blocked_hits()
     );
     ImGui::Text(
         "Landings: soft %u, hard %u%s", fighter.get_soft_landings(), fighter.get_hard_landings(),
@@ -265,6 +290,7 @@ auto register_debug_panels(
     tool.add_panel(menu, "Lean and head", [&tuning] { render_lean_panel(tuning); });
     tool.add_panel(menu, "Jump", [&tuning] { render_jump_panel(tuning); });
     tool.add_panel(menu, "Strike", [&tuning] { render_strike_panel(tuning); });
+    tool.add_panel(menu, "Dodge", [&tuning] { render_dodge_panel(tuning); });
     tool.add_panel(menu, "Input", [&world, player] { render_input_panel(world, player); });
     tool.add_panel(menu, "Body", [&world, player, &camera_controller] {
         render_body_panel(world, player, camera_controller);
@@ -293,9 +319,8 @@ auto render_debug_hud(const gfx::engine& engine, ecs::entity player, bool show_c
     ImGui::Separator();
 
     auto& world = engine.get_world();
-    render_dodge_tuning(world.system<game::player_system>().tuning());
-
     if (!world.system<game::surface_placement_system>().is_waiting(player)) {
+        render_guard_tuning(world, player);
         ImGui::Separator();
         render_fighter_state(world, player);
     }

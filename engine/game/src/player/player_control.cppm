@@ -62,11 +62,26 @@ struct movement_tuning final {
     float32 finisher_lunge_distance        = 40.0f;
     float32 chain_reset_seconds            = 0.3f;
     float32 attack_playback_rate           = 0.75f;
+    float32 guard_speed_scale              = 0.5f;
+    float32 guard_turn_degrees_per_second  = 720.0f;
+    bool guard_steps_back_in_reverse       = true;
 };
 
 struct player_component final {
     [[nodiscard]] auto has_weapon() const -> bool {
         return weapon_.is_valid();
+    }
+
+    [[nodiscard]] auto has_shield() const -> bool {
+        return shield_.is_valid();
+    }
+
+    [[nodiscard]] auto is_guarding() const -> bool {
+        return guarding_;
+    }
+
+    [[nodiscard]] auto get_blocked_hits() const -> uint32 {
+        return blocked_hits_;
     }
 
     [[nodiscard]] auto is_attacking() const -> bool {
@@ -184,6 +199,7 @@ private:
     ecs::entity foot_right_;
     ecs::entity foot_left_;
     ecs::entity weapon_;
+    ecs::entity shield_;
 
     vec3f attack_facing_{0.0f, 0.0f, 0.0f};
     vec3f previous_planar_velocity_{0.0f, 0.0f, 0.0f};
@@ -216,6 +232,8 @@ private:
     uint32 dodge_count_           = 0;
     bool dodging_                 = false;
     bool invulnerable_            = false;
+    bool guarding_                = false;
+    uint32 blocked_hits_          = 0;
     bool attacking_     = false;
     bool swinging_      = false;
     bool swing_started_ = false;
@@ -237,6 +255,8 @@ public:
 
     auto toggle_weapon(ecs::entity player) -> void;
 
+    auto take_hit_on_shield(ecs::entity player) -> bool;
+
     [[nodiscard]] auto tuning() -> movement_tuning& {
         return tuning_;
     }
@@ -255,6 +275,12 @@ private:
     static auto read_action_events_(player_component& state, const ecs::animation_player_component& layers)
         -> void;
     auto recharge_dodge_(player_component& state, float32 delta_time) const -> void;
+    auto pace_guard_steps_(
+        ecs::entity ent, const player_component& state, const vec3f& move_dir, const vec3f& look
+    ) const -> void;
+    [[nodiscard]] auto hold_in_socket_(
+        ecs::entity hand, std::string_view socket, std::string_view prefab
+    ) const -> ecs::entity;
     static auto end_swing_(player_component& state) -> void;
 
     ecs::world* world_;

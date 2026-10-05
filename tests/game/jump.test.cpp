@@ -1,3 +1,4 @@
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
@@ -32,6 +33,7 @@ struct grounded_world {
     explicit grounded_world(float32 tick = display_tick_seconds) : tick_seconds{tick} {
         assets.load_prefab("p_humanoid", asset::asset_ref{"prefabs/p_humanoid.vox"});
         assets.load_prefab("p_sword", asset::asset_ref{"prefabs/p_sword.vox"});
+        assets.load_prefab("p_shield", asset::asset_ref{"prefabs/p_shield.vox"});
         game::install_systems(world, assets);
         start_streaming_();
 
@@ -614,4 +616,122 @@ TEST_CASE("holding jump does not hop again", "[game][jump]") {
     g.world.system<game::input_system>().mapper().key(keys::SPACE, true);
     g.run_for(2.0F);
     REQUIRE(g.jumps() == before + 1);
+}
+
+namespace {
+
+struct guard_stand {
+    grounded_world g;
+    const game::player_component& state = g.world.get<game::player_component>(g.player);
+    game::input_mapper& mapper          = g.world.system<game::input_system>().mapper();
+
+    guard_stand() {
+        static_cast<void>(g.settle());
+        mapper.key(keys::KEY_1, true);
+        g.tick();
+        mapper.key(keys::KEY_1, false);
+        g.run_for(0.3F);
+    }
+
+    [[nodiscard]] auto action_state() const -> const std::string& {
+        return g.world.get<ecs::animation_fsm_component>(g.player).get_machine(1).get_current_state();
+    }
+
+    [[nodiscard]] auto look() const -> vec3f {
+        return g.world.get<game::player_input_component>(g.player).get_frame().look_forward_flat();
+    }
+
+    [[nodiscard]] auto faces_the_look() const -> bool {
+        const auto rotation = g.world.get<ecs::transform_component>(g.player).get_rotation();
+        return std::abs(math::dot(rotation, math::quat_look_y(look()))) > 0.999F;
+    }
+
+    [[nodiscard]] auto planar_speed() const -> float32 {
+        const auto wish = g.world.get<ecs::movement_intent_component>(g.player).get_wish_velocity();
+        return std::sqrt(wish.x * wish.x + wish.z * wish.z);
+    }
+};
+
+}  // namespace
+
+TEST_CASE("the shield comes with the sword and is raised while the block is held", "[game][guard]") {
+    guard_stand s;
+    REQUIRE(s.g.grounded());
+    REQUIRE(s.state.has_weapon());
+    REQUIRE(s.state.has_shield());
+    REQUIRE_FALSE(s.state.is_guarding());
+
+    s.mapper.button(mouse::buttons::RIGHT, true);
+    s.g.run_for(0.2F);
+    REQUIRE(s.state.is_guarding());
+    REQUIRE(s.action_state() == "block");
+
+    s.mapper.button(mouse::buttons::LEFT, true);
+    s.g.tick();
+    s.mapper.button(mouse::buttons::LEFT, false);
+    s.g.run_for(0.2F);
+    REQUIRE(s.state.get_swing_count() == 0);
+
+    s.mapper.button(mouse::buttons::RIGHT, false);
+    s.g.run_for(0.3F);
+    REQUIRE_FALSE(s.state.is_guarding());
+    REQUIRE(s.action_state() == "none");
+}
+
+TEST_CASE("in the guard the body faces the look and walks at half speed", "[game][guard]") {
+    guard_stand s;
+    const auto& tuning = s.g.world.system<game::player_system>().tuning();
+    const float32 run_speed =
+        s.g.world.get<ecs::character_controller_component>(s.g.player).get_move_speed();
+
+    s.mapper.cursor_at(0.0, 0.0);
+    s.g.tick();
+    const vec3f look_before = s.look();
+    s.mapper.cursor_at(900.0, 0.0);
+    s.g.tick();
+    REQUIRE(math::dot(look_before, s.look()) < 0.5F);
+    REQUIRE_FALSE(s.faces_the_look());
+
+    s.mapper.button(mouse::buttons::RIGHT, true);
+    s.g.run_for(0.6F);
+    REQUIRE(s.faces_the_look());
+
+    s.mapper.key(keys::D, true);
+    s.g.run_for(0.6F);
+    REQUIRE(s.planar_speed() == Catch::Approx(run_speed * tuning.guard_speed_scale).epsilon(0.02));
+    REQUIRE(s.faces_the_look());
+}
+
+TEST_CASE("a step back in the guard plays the run backwards and slower", "[game][guard]") {
+    guard_stand s;
+    const auto& tuning = s.g.world.system<game::player_system>().tuning();
+    const auto& layers = s.g.world.get<ecs::animation_player_component>(s.g.player);
+
+    s.mapper.button(mouse::buttons::RIGHT, true);
+    s.mapper.key(keys::S, true);
+    s.g.run_for(0.6F);
+    REQUIRE(s.g.world.get<ecs::animation_fsm_component>(s.g.player).get_machine(0).get_current_state() == "run");
+    REQUIRE(layers.get_layer(0).playback_speed == Catch::Approx(-tuning.guard_speed_scale));
+
+    s.mapper.button(mouse::buttons::RIGHT, false);
+    s.g.run_for(0.1F);
+    REQUIRE(layers.get_layer(0).playback_speed == Catch::Approx(1.0F));
+}
+
+TEST_CASE("a hit on the shield plays the recoil only while guarding", "[game][guard]") {
+    guard_stand s;
+    auto& players = s.g.world.system<game::player_system>();
+
+    REQUIRE_FALSE(players.take_hit_on_shield(s.g.player));
+    REQUIRE(s.state.get_blocked_hits() == 0);
+
+    s.mapper.button(mouse::buttons::RIGHT, true);
+    s.g.run_for(0.2F);
+    REQUIRE(players.take_hit_on_shield(s.g.player));
+    s.g.tick();
+    REQUIRE(s.action_state() == "block_impact");
+    REQUIRE(s.state.get_blocked_hits() == 1);
+
+    s.g.run_for(0.6F);
+    REQUIRE(s.action_state() == "block");
 }

@@ -25,6 +25,7 @@ struct game_world {
     game_world() {
         assets.load_prefab("p_humanoid", asset::asset_ref{"prefabs/p_humanoid.vox"});
         assets.load_prefab("p_sword", asset::asset_ref{"prefabs/p_sword.vox"});
+        assets.load_prefab("p_shield", asset::asset_ref{"prefabs/p_shield.vox"});
         game::install_systems(world, assets);
     }
 
