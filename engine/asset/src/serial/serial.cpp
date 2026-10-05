@@ -286,6 +286,14 @@ auto voxa_serializer::write_header_(std::ofstream& file) -> void {
     if (!clip_->get_rig().empty()) {
         file << std::format("rig {}\n", clip_->get_rig());
     }
+
+    for (const auto& event : clip_->get_events()) {
+        if (event.payload.empty()) {
+            file << std::format("event {:.6g} {}\n", event.time, event.name);
+        } else {
+            file << std::format("event {:.6g} {} {}\n", event.time, event.name, event.payload);
+        }
+    }
 }
 
 auto voxa_serializer::write_track_(
@@ -410,6 +418,8 @@ auto voxa_deserializer::deserialize(
             process_channel_(iss);
         } else if (cmd == "k") {
             process_keyframe_(iss);
+        } else if (cmd == "event") {
+            process_event_(iss);
         } else {
             log::warn(detail::voxa_deserializer_lc, "unknown command: {}", cmd);
         }
@@ -452,6 +462,24 @@ auto voxa_deserializer::process_rig_(std::istringstream& iss) -> void {
         return;
     }
     rig_ = name;
+}
+
+auto voxa_deserializer::process_event_(std::istringstream& iss) -> void {
+    animation_event event;
+    iss >> event.time >> event.name;
+    if (iss.fail()) {
+        error_ = error_type::parse_error;
+        return;
+    }
+
+    iss >> event.payload;
+    std::string extra;
+    if (iss >> extra) {
+        error_ = error_type::parse_error;
+        return;
+    }
+
+    clip_->add_event(std::move(event));
 }
 
 auto voxa_deserializer::process_track_(std::istringstream& iss) -> void {

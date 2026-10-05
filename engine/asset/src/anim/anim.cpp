@@ -256,6 +256,58 @@ auto animation_clip::get_target_names() const -> std::unordered_set<std::string>
     return names;
 }
 
+auto animation_clip::add_event(
+    animation_event event
+) -> void {
+    const auto slot = std::ranges::upper_bound(events_, event.time, {}, &animation_event::time);
+    events_.insert(slot, std::move(event));
+}
+
+auto animation_clip::set_events(
+    std::vector<animation_event> events
+) -> void {
+    std::ranges::stable_sort(events, {}, &animation_event::time);
+    events_ = std::move(events);
+}
+
+namespace {
+
+auto has_whitespace(std::string_view text) -> bool {
+    return std::ranges::any_of(text, [](char c) {
+        return std::isspace(static_cast<unsigned char>(c)) != 0;
+    });
+}
+
+}  // namespace
+
+auto find_problems(
+    const animation_clip& clip
+) -> std::vector<std::string> {
+    std::vector<std::string> problems;
+    const float32 duration = clip.get_duration();
+
+    for (const auto& event : clip.get_events()) {
+        if (event.name.empty()) {
+            problems.push_back(std::format("an event at {:.3g} s has no name", event.time));
+        } else if (has_whitespace(event.name)) {
+            problems.push_back(std::format("event '{}' has whitespace in its name", event.name));
+        }
+        if (has_whitespace(event.payload)) {
+            problems.push_back(std::format("event '{}' has whitespace in its payload", event.name));
+        }
+        if (event.time < 0.0F) {
+            problems.push_back(std::format("event '{}' is before the clip starts", event.name));
+        } else if (event.time > duration) {
+            problems.push_back(std::format(
+                "event '{}' at {:.3g} s is past the end of the clip at {:.3g} s", event.name,
+                event.time, duration
+            ));
+        }
+    }
+
+    return problems;
+}
+
 auto animation_clip_registry::create(std::string_view name) -> std::shared_ptr<animation_clip> {
     std::string name_str(name);
     auto clip                   = std::make_shared<animation_clip>(name_str);

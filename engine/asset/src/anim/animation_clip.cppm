@@ -8,6 +8,14 @@ import :anim.channel;
 
 export namespace vw::asset {
 
+struct animation_event {
+    float32 time = 0.0F;
+    std::string name;
+    std::string payload;
+
+    [[nodiscard]] auto operator==(const animation_event& other) const -> bool = default;
+};
+
 class animation_clip final {
 public:
     explicit animation_clip(std::string name);
@@ -40,11 +48,21 @@ public:
 
     [[nodiscard]] auto get_target_names() const -> std::unordered_set<std::string>;
 
+    [[nodiscard]] auto get_events() const -> const std::vector<animation_event>& {
+        return events_;
+    }
+
+    auto add_event(animation_event event) -> void;
+    auto set_events(std::vector<animation_event> events) -> void;
+
 private:
     std::string name_;
     std::string rig_;
     std::vector<animation_track> tracks_;
+    std::vector<animation_event> events_;
 };
+
+[[nodiscard]] auto find_problems(const animation_clip& clip) -> std::vector<std::string>;
 
 class animation_clip_registry final {
 public:

@@ -346,6 +346,137 @@ TEST_CASE("a voxa file of the current version parses", "[serial]") {
     REQUIRE((*clip)->get_rig() == "humanoid");
 }
 
+TEST_CASE("a voxa 2.0 file without events still parses", "[serial]") {
+    const auto clip = parse_voxa(
+        "# Voxa File Version 2.0\n"
+        "rig humanoid\n"
+        "track body 60\n"
+        "  channel position\n"
+        "    k 0 0 0 0 linear 0 1\n"
+    );
+
+    REQUIRE(clip.has_value());
+    REQUIRE((*clip)->get_events().empty());
+    REQUIRE((*clip)->has_track("body"));
+}
+
+TEST_CASE("voxa events are read in time order with an optional payload", "[serial]") {
+    const auto clip = parse_voxa(
+        "# Voxa File Version 2.1\n"
+        "rig humanoid\n"
+        "event 0.4 footstep left\n"
+        "event 0.1 hit.start\n"
+        "track body 60\n"
+        "  channel position\n"
+        "    k 0 0 0 0 linear 0 1\n"
+        "event 0.2 hit.end\n"
+        "    k 1 0 1 0 linear 0 1\n"
+    );
+
+    REQUIRE(clip.has_value());
+    const auto& events = (*clip)->get_events();
+    REQUIRE(events == std::vector<asset::animation_event>{
+                          {0.1F, "hit.start", ""},
+                          {0.2F, "hit.end", ""},
+                          {0.4F, "footstep", "left"},
+                      });
+    REQUIRE((*clip)->get_track("body")->get_duration() == 1.0F);
+}
+
+TEST_CASE("a voxa event without a name or with a stray word is a parse error", "[serial]") {
+    const auto nameless = parse_voxa("event 0.1\n");
+    REQUIRE_FALSE(nameless.has_value());
+    REQUIRE(nameless.error() == asset::voxa_deserializer::error_type::parse_error);
+
+    const auto timeless = parse_voxa("event hit.start\n");
+    REQUIRE_FALSE(timeless.has_value());
+
+    const auto stray = parse_voxa("event 0.1 footstep left now\n");
+    REQUIRE_FALSE(stray.has_value());
+    REQUIRE(stray.error() == asset::voxa_deserializer::error_type::parse_error);
+}
+
+TEST_CASE("voxa events survive a round trip through a file", "[serial]") {
+    namespace fs = std::filesystem;
+
+    const auto dir = fs::temp_directory_path() / "vw_voxa_event_test";
+    fs::create_directories(dir);
+    const auto path = dir / "a_swing.voxa";
+
+    asset::animation_clip written{"a_swing"};
+    written.set_events({
+        {0.3F, "hit.end", ""},
+        {0.0F, "control.lock", ""},
+        {0.25F, "footstep", "right"},
+    });
+    REQUIRE(asset::voxa_serializer{written}.serialize(path).has_value());
+
+    {
+        std::ifstream file{path};
+        const std::string text{std::istreambuf_iterator<char>{file}, {}};
+        REQUIRE(text.starts_with(std::format("# Voxa File Version {}\n", asset::voxa_file_version)));
+    }
+
+    asset::voxa_deserializer deserializer;
+    const auto clip = deserializer.deserialize(path);
+
+    REQUIRE(clip.has_value());
+    REQUIRE((*clip)->get_events() == written.get_events());
+    REQUIRE(written.get_events().front().name == "control.lock");
+
+    fs::remove_all(dir);
+}
+
+TEST_CASE("a clip names events it cannot fire", "[serial]") {
+    const auto clip = parse_voxa(
+        "track body 60\n"
+        "  channel position\n"
+        "    k 0 0 0 0 linear 0 1\n"
+        "    k 0.5 0 1 0 linear 0 1\n"
+        "event 0 control.lock\n"
+        "event 0.5 control.unlock\n"
+    );
+    REQUIRE(clip.has_value());
+    REQUIRE(asset::find_problems(**clip).empty());
+
+    auto broken = **clip;
+    broken.add_event({0.75F, "hit.end", ""});
+    broken.add_event({-0.1F, "hit.start", ""});
+    broken.add_event({0.2F, "", ""});
+    broken.add_event({0.3F, "foot step", "left foot"});
+
+    const auto problems = asset::find_problems(broken);
+    REQUIRE(problems.size() == 5);
+    const auto mentions = [&problems](std::string_view text) {
+        return std::ranges::any_of(problems, [text](const std::string& problem) {
+            return problem.find(text) != std::string::npos;
+        });
+    };
+    REQUIRE(mentions("past the end"));
+    REQUIRE(mentions("before the clip starts"));
+    REQUIRE(mentions("has no name"));
+    REQUIRE(mentions("whitespace in its name"));
+    REQUIRE(mentions("whitespace in its payload"));
+}
+
+TEST_CASE("the clips shipped with the game have no event problems", "[serial]") {
+    namespace fs = std::filesystem;
+
+    int32 checked = 0;
+    for (const auto& entry : fs::directory_iterator{fs::path{VW_ASSET_DIR} / "animations"}) {
+        if (entry.path().extension() != ".voxa") {
+            continue;
+        }
+        asset::voxa_deserializer deserializer;
+        const auto clip = deserializer.deserialize(entry.path());
+        REQUIRE(clip.has_value());
+        INFO(entry.path().filename().string());
+        REQUIRE(asset::find_problems(**clip).empty());
+        ++checked;
+    }
+    REQUIRE(checked > 0);
+}
+
 TEST_CASE("a voxa file without a rig parses as one without a rig", "[serial]") {
     const auto clip = parse_voxa(
         "# Voxa File Version 2.0\n"
