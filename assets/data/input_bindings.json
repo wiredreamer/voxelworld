@@ -1,10 +1,10 @@
 {
   "actions": {
     "jump": ["space"],
-    "sprint": ["left_shift"],
+    "sprint": ["left_control"],
     "attack": ["mouse_left"],
     "block": ["mouse_right"],
-    "dodge": ["left_control"],
+    "dodge": ["left_shift"],
     "ability_1": ["q"],
     "ability_2": ["e"],
     "ability_3": ["r"],

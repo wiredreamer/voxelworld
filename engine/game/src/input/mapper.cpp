@@ -12,8 +12,8 @@ auto default_input_bindings() -> input_bindings {
         .key_actions =
             {
                 {keys::SPACE, input_action::jump},
-                {keys::LEFT_SHIFT, input_action::sprint},
-                {keys::LEFT_CONTROL, input_action::dodge},
+                {keys::LEFT_CONTROL, input_action::sprint},
+                {keys::LEFT_SHIFT, input_action::dodge},
                 {keys::Q, input_action::ability_1},
                 {keys::E, input_action::ability_2},
                 {keys::R, input_action::ability_3},

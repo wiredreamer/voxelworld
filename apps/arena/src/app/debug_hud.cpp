@@ -94,6 +94,15 @@ auto render_movement_tuning(ecs::world& world) -> void {
     ImGui::SliderFloat("stride trail toe, deg", &tuning.stride_trail_pitch_degrees, 0.0f, 60.0f, "%.0f");
     ImGui::SliderFloat("stride arms, voxels", &tuning.stride_arm_swing_voxels, 0.0f, 8.0f, "%.1f");
     ImGui::SliderFloat("stride follow, s", &tuning.stride_follow_seconds, 0.0f, 0.5f, "%.2f");
+    ImGui::SliderFloat("roll distance", &tuning.roll_distance, 10.0f, 120.0f, "%.0f");
+    ImGui::SliderFloat("roll time, s", &tuning.roll_seconds, 0.1f, 1.5f, "%.2f");
+    ImGui::SliderFloat("roll recovery, s", &tuning.roll_recovery_seconds, 0.0f, 0.6f, "%.2f");
+    ImGui::SliderFloat("roll pivot height", &tuning.roll_pivot_height, 0.0f, 25.0f, "%.1f");
+    ImGui::SliderFloat("roll dive, s", &tuning.roll_dive_seconds, 0.0f, 0.4f, "%.2f");
+    ImGui::SliderFloat("roll dive, deg", &tuning.roll_dive_degrees, 0.0f, 90.0f, "%.0f");
+    ImGui::SliderFloat("roll dive lift", &tuning.roll_dive_lift, 0.0f, 8.0f, "%.1f");
+    ImGui::SliderFloat("roll height up, s", &tuning.roll_height_rise_seconds, 0.0f, 0.2f, "%.3f");
+    ImGui::SliderFloat("roll height down, s", &tuning.roll_height_fall_seconds, 0.0f, 0.3f, "%.3f");
     ImGui::SliderFloat("lunge time, s", &tuning.lunge_seconds, 0.0f, 0.5f, "%.2f");
     ImGui::SliderFloat("lunge distance", &tuning.lunge_distance, 0.0f, 40.0f, "%.1f");
     if (ImGui::Button("defaults")) {
@@ -171,8 +180,9 @@ auto render_debug_hud(
             fighter.can_cancel() ? ", cancel" : "", fighter.get_swing_count()
         );
         ImGui::Text(
-            "Landings: soft %u, hard %u%s", fighter.get_soft_landings(),
-            fighter.get_hard_landings(), fighter.is_body_locked() ? ", LOCKED" : ""
+            "Landings: soft %u, hard %u%s%s", fighter.get_soft_landings(),
+            fighter.get_hard_landings(), fighter.is_body_locked() ? ", LOCKED" : "",
+            fighter.is_rolling() ? ", ROLL" : ""
         );
         ImGui::Text("Colliders: %s", show_colliders ? "visible" : "hidden");
     }

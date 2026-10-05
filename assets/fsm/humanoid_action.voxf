@@ -2,6 +2,7 @@
 rig humanoid
 entry none
 param attack trigger
+param dodge trigger
 state none
 	playback loop
 	to sword_attack
@@ -13,6 +14,9 @@ state sword_attack
 	rate 2
 	fade_in 0.25
 	fade_out 0.35
+	to none
+		on dodge
+		blend 0.05
 	to sword_attack
 		on attack
 		blend 0.1

@@ -62,6 +62,8 @@ auto animation_fsm_system::update(float32) -> void {
                 lm.set_fade_out(result->layer_blend_out);
 
                 lm.play(result->layer_blend_in);
+            } else if (layer.state == asset::animation_state::playing && !layer.fade_is_out) {
+                lm.stop(result->blend);
             }
 
             machine.apply_transition(*result);

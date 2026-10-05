@@ -344,6 +344,84 @@ TEST_CASE("a running jump splits the legs, the swing leg is the one not on the g
     REQUIRE(std::abs(state.get_stride()) < 0.05F);
 }
 
+TEST_CASE("a roll carries the body two heights and turns it over once", "[game][dodge]") {
+    grounded_world g;
+    REQUIRE(g.settle());
+    g.run_for(0.3F);
+
+    const auto& state   = g.world.get<game::player_component>(g.player);
+    const auto& tuning  = g.world.system<game::player_system>().tuning();
+    const auto pose     = state.get_pose();
+    const vec3f start   = g.world.get<ecs::transform_component>(g.player).get_position();
+    auto& mapper        = g.world.system<game::input_system>().mapper();
+
+    mapper.key(keys::W, true);
+    mapper.key(keys::LEFT_SHIFT, true);
+    g.tick();
+    mapper.key(keys::LEFT_SHIFT, false);
+    mapper.key(keys::W, false);
+    REQUIRE(state.is_rolling());
+    REQUIRE(state.get_roll_direction().z < -0.99F);
+
+    float32 most_upside_down = 1.0F;
+    float32 highest_centre   = 0.0F;
+    float32 lowest_centre    = 1.0e9F;
+    for (float32 elapsed = 0.0F; elapsed < tuning.roll_seconds; elapsed += g.tick_seconds) {
+        g.tick();
+        const auto& placed = g.world.get<ecs::transform_component>(pose);
+        const auto turn    = placed.get_rotation();
+        most_upside_down   = std::min(most_upside_down, 1.0F - 2.0F * turn.x * turn.x);
+
+        const float32 cosine = 1.0F - 2.0F * turn.x * turn.x;
+        const float32 centre = placed.get_position().y + tuning.roll_pivot_height * cosine;
+        highest_centre       = std::max(highest_centre, centre);
+        lowest_centre        = std::min(lowest_centre, centre);
+    }
+    REQUIRE(most_upside_down < -0.9F);
+    REQUIRE(highest_centre > tuning.roll_pivot_height + 2.0F);
+    REQUIRE(lowest_centre < tuning.roll_pivot_height - 4.0F);
+
+    g.run_for(tuning.roll_recovery_seconds + 0.05F);
+    REQUIRE_FALSE(state.is_rolling());
+
+    const vec3f end     = g.world.get<ecs::transform_component>(g.player).get_position();
+    const float32 moved = std::sqrt((end.x - start.x) * (end.x - start.x) + (end.z - start.z) * (end.z - start.z));
+    REQUIRE(moved > tuning.roll_distance * 0.85F);
+    REQUIRE(moved < tuning.roll_distance * 1.1F);
+
+    g.run_for(0.3F);
+    const auto& rest = g.world.get<ecs::transform_component>(pose);
+    REQUIRE(std::abs(rest.get_position().y) < 0.01F);
+    REQUIRE(std::abs(rest.get_position().z) < 0.01F);
+}
+
+TEST_CASE("the roll centre moves smoothly when frames outpace animation", "[game][dodge]") {
+    grounded_world g{1.0F / 240.0F};
+    REQUIRE(g.settle());
+    g.run_for(0.3F);
+    const auto& state  = g.world.get<game::player_component>(g.player);
+    const auto& tuning = g.world.system<game::player_system>().tuning();
+    auto& mapper       = g.world.system<game::input_system>().mapper();
+    mapper.key(keys::W, true);
+    mapper.key(keys::LEFT_SHIFT, true);
+    g.tick();
+    mapper.key(keys::LEFT_SHIFT, false);
+    mapper.key(keys::W, false);
+    std::vector<float32> heights;
+    for (int32 tail = 0; tail < 24; tail += state.is_rolling() ? 0 : 1) {
+        g.tick();
+        const auto& placed   = g.world.get<ecs::transform_component>(state.get_pose());
+        const auto turn      = placed.get_rotation();
+        const float32 cosine = 1.0F - 2.0F * turn.x * turn.x;
+        heights.push_back(placed.get_position().y + tuning.roll_pivot_height * cosine);
+    }
+    float32 worst = 0.0F;
+    for (std::size_t i = 2; i < heights.size(); ++i) {
+        worst = std::max(worst, std::abs(heights[i] - 2.0F * heights[i - 1] + heights[i - 2]));
+    }
+    REQUIRE(worst < 0.2F);
+}
+
 TEST_CASE("holding jump does not hop again", "[game][jump]") {
     grounded_world g;
     REQUIRE(g.settle());

@@ -37,6 +37,15 @@ struct movement_tuning final {
     float32 stride_trail_pitch_degrees     = 25.0f;
     float32 stride_arm_swing_voxels        = 3.0f;
     float32 stride_follow_seconds          = 0.1f;
+    float32 roll_distance                  = 100.0f;
+    float32 roll_seconds                   = 0.75f;
+    float32 roll_recovery_seconds          = 0.05f;
+    float32 roll_pivot_height              = 13.0f;
+    float32 roll_dive_seconds              = 0.2f;
+    float32 roll_dive_degrees              = 40.0f;
+    float32 roll_dive_lift                 = 1.5f;
+    float32 roll_height_rise_seconds       = 0.02f;
+    float32 roll_height_fall_seconds       = 0.06f;
     float32 lunge_seconds                  = 0.15f;
     float32 lunge_distance                 = 10.0f;
 };
@@ -110,6 +119,14 @@ struct player_component final {
         return stride_;
     }
 
+    [[nodiscard]] auto is_rolling() const -> bool {
+        return rolling_;
+    }
+
+    [[nodiscard]] auto get_roll_direction() const -> const vec3f& {
+        return roll_facing_;
+    }
+
 private:
     friend class player_system;
 
@@ -141,6 +158,11 @@ private:
     bool body_locked_             = false;
     float32 stride_               = 0.0f;
     bool pushed_with_left_        = true;
+    vec3f roll_facing_{0.0f, 0.0f, 1.0f};
+    float32 roll_elapsed_         = 0.0f;
+    float32 roll_height_          = 0.0f;
+    float32 dodge_buffered_       = -1.0f;
+    bool rolling_                 = false;
     bool attacking_     = false;
     bool swinging_      = false;
     bool swing_started_ = false;
@@ -172,6 +194,8 @@ private:
     auto attach_machines_(ecs::entity root) const -> void;
     auto lean_(ecs::entity ent, player_component& state, float32 delta_time) const -> void;
     auto swing_legs_(ecs::entity ent, player_component& state, float32 delta_time) const -> void;
+    [[nodiscard]] auto lowest_point_(const player_component& state, const quat& turn) const
+        -> float32;
     auto turn_head_(
         ecs::entity ent, player_component& state, const vec3f& look, float32 delta_time
     ) const -> void;

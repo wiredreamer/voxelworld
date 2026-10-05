@@ -55,6 +55,50 @@ auto lunge_speed(const movement_tuning& tuning, float32 seconds_into_lunge) -> f
     return 2.0f * tuning.lunge_distance / tuning.lunge_seconds * (1.0f - progress);
 }
 
+auto roll_progress(const movement_tuning& tuning, float32 seconds_into_roll) -> float32 {
+    if (tuning.roll_seconds <= 0.0f) {
+        return 1.0f;
+    }
+    const float32 u = math::clamp(seconds_into_roll / tuning.roll_seconds, 0.0f, 1.0f);
+    return 1.5f * (u - u * u * u / 3.0f);
+}
+
+auto roll_turn_radians(const movement_tuning& tuning, float32 seconds_into_roll) -> float32 {
+    const float32 full = 2.0f * std::numbers::pi_v<float32>;
+    const float32 dive = math::radians(tuning.roll_dive_degrees);
+    if (seconds_into_roll < tuning.roll_dive_seconds && tuning.roll_dive_seconds > 0.0f) {
+        return dive * seconds_into_roll / tuning.roll_dive_seconds;
+    }
+    const float32 start = roll_progress(tuning, tuning.roll_dive_seconds);
+    const float32 now   = roll_progress(tuning, seconds_into_roll);
+    const float32 rest  = start < 1.0f ? (now - start) / (1.0f - start) : 1.0f;
+    return dive + (full - dive) * math::clamp(rest, 0.0f, 1.0f);
+}
+
+auto roll_height_follow(const movement_tuning& tuning, bool rising, float32 delta_time) -> float32 {
+    const float32 seconds = rising ? tuning.roll_height_rise_seconds : tuning.roll_height_fall_seconds;
+    return seconds > 0.0f ? 1.0f - std::exp(-delta_time / seconds) : 1.0f;
+}
+
+auto roll_lift(const movement_tuning& tuning, float32 seconds_into_roll) -> float32 {
+    const float32 span = tuning.roll_dive_seconds * 1.6f;
+    if (span <= 0.0f || seconds_into_roll >= span) {
+        return 0.0f;
+    }
+    return tuning.roll_dive_lift * std::sin(std::numbers::pi_v<float32> * seconds_into_roll / span);
+}
+
+auto roll_speed(const movement_tuning& tuning, float32 seconds_into_roll) -> float32 {
+    if (tuning.roll_seconds <= 0.0f) {
+        return 0.0f;
+    }
+    const float32 u = seconds_into_roll / tuning.roll_seconds;
+    if (u < 0.0f || u >= 1.0f) {
+        return 0.0f;
+    }
+    return 1.5f * tuning.roll_distance / tuning.roll_seconds * (1.0f - u * u);
+}
+
 }  // namespace
 
 player_system::player_system(
@@ -207,12 +251,70 @@ auto player_system::lean_(
     const float32 follow = tuning_.lean_follow_seconds > 0.0f
         ? 1.0f - std::exp(-delta_time / tuning_.lean_follow_seconds)
         : 1.0f;
+    auto pose = world_->system<ecs::transform_system>().modify(state.pose_);
+
+    if (state.rolling_) {
+        state.lean_forward_degrees_ = 0.0f;
+        state.lean_right_degrees_   = 0.0f;
+
+        const float32 angle = roll_turn_radians(tuning_, state.roll_elapsed_);
+        const float32 half  = angle * 0.5f;
+        const quat turn{std::sin(half), 0.0f, 0.0f, std::cos(half)};
+        const vec3f pivot{0.0f, tuning_.roll_pivot_height, 0.0f};
+        const vec3f swung = pivot - rotated(turn, pivot);
+        const float32 rest_on_ground = -(swung.y + lowest_point_(state, turn));
+        const float32 target = rest_on_ground + roll_lift(tuning_, state.roll_elapsed_);
+        state.roll_height_  += (target - state.roll_height_) *
+            roll_height_follow(tuning_, target > state.roll_height_, delta_time);
+        pose.set_rotation(turn);
+        pose.set_position(swung + vec3f{0.0f, state.roll_height_, 0.0f});
+        return;
+    }
+
+    state.roll_height_ -= state.roll_height_ * roll_height_follow(tuning_, state.roll_height_ < 0.0f, delta_time);
+
     state.lean_forward_degrees_ += (target_forward - state.lean_forward_degrees_) * follow;
     state.lean_right_degrees_ += (target_right - state.lean_right_degrees_) * follow;
 
-    world_->system<ecs::transform_system>().modify(state.pose_).set_rotation(math::euler_to_quat(
+    pose.set_rotation(math::euler_to_quat(
         {math::radians(state.lean_forward_degrees_), 0.0f, -math::radians(state.lean_right_degrees_)}
     ));
+    pose.set_position({0.0f, state.roll_height_, 0.0f});
+}
+
+auto player_system::lowest_point_(
+    const player_component& state, const quat& turn
+) const -> float32 {
+    float32 lowest = std::numeric_limits<float32>::max();
+    for (const ecs::entity part : {state.body_, state.head_, state.hand_right_, state.hand_left_,
+                                   state.foot_right_, state.foot_left_}) {
+        if (!part.is_valid() || !world_->has<ecs::model_component>(part)) {
+            continue;
+        }
+        const auto& model = world_->get<ecs::model_component>(part).get_model();
+        if (!model) {
+            continue;
+        }
+
+        const auto& placed  = world_->get<ecs::transform_component>(part);
+        const float32 unit  = static_cast<float32>(model->world_units_per_voxel());
+        const vec3i size    = model->size();
+        const vec3f low     = model->pivot() * -unit;
+        const vec3f high    = vec3f{static_cast<float32>(size.x), static_cast<float32>(size.y),
+                                    static_cast<float32>(size.z)} * unit + low;
+        const vec3f& scale  = placed.get_scale();
+
+        for (const float32 x : {low.x, high.x}) {
+            for (const float32 y : {low.y, high.y}) {
+                for (const float32 z : {low.z, high.z}) {
+                    const vec3f corner{x * scale.x, y * scale.y, z * scale.z};
+                    const vec3f in_pose = placed.get_position() + rotated(placed.get_rotation(), corner);
+                    lowest = std::min(lowest, rotated(turn, in_pose).y);
+                }
+            }
+        }
+    }
+    return lowest == std::numeric_limits<float32>::max() ? 0.0f : lowest;
 }
 
 auto player_system::turn_head_(
@@ -391,9 +493,30 @@ auto player_system::update(
             if (frame.was_pressed(input_action::jump)) {
                 state.jump_buffered_ = tuning_.input_buffer_seconds;
             }
+            if (frame.was_pressed(input_action::dodge)) {
+                state.dodge_buffered_ = tuning_.input_buffer_seconds;
+            }
 
-            const bool strike_allowed =
-                !state.body_locked_ && (!state.swinging_ || state.cancel_open_);
+            const bool dodge_allowed = !state.rolling_ && !state.body_locked_ &&
+                !state.hit_window_ && state.air_state_ == air_state::ground;
+            if (state.dodge_buffered_ >= 0.0f && dodge_allowed) {
+                state.dodge_buffered_ = -1.0f;
+                const auto facing = world_->get<ecs::transform_component>(ent).get_rotation();
+                const vec3f look  = rotated(facing, {0.0f, 0.0f, 1.0f});
+                state.roll_facing_ = moving ? move_dir : math::normalize(vec3f{look.x, 0.0f, look.z});
+                state.rolling_      = true;
+                state.roll_elapsed_ = 0.0f;
+                state.roll_height_  = 0.0f;
+                state.attack_buffered_ = -1.0f;
+                if (state.swinging_) {
+                    end_swing_(state);
+                }
+                machines.modify(ent).fire_trigger("dodge_roll");
+                machines.modify(ent).fire_trigger("dodge");
+            }
+
+            const bool strike_allowed = !state.rolling_ && !state.body_locked_ &&
+                (!state.swinging_ || state.cancel_open_);
             if (state.attack_buffered_ >= 0.0f && state.weapon_.is_valid() && strike_allowed) {
                 state.attack_buffered_ = -1.0f;
                 state.cancel_open_     = false;
@@ -412,7 +535,21 @@ auto player_system::update(
             state.attacking_ = action_playing || state.swinging_;
 
             auto controller = controllers.modify(ent);
-            if (state.swinging_) {
+            if (state.rolling_) {
+                const float32 move_speed =
+                    world_->get<ecs::character_controller_component>(ent).get_move_speed();
+                const float32 roll =
+                    roll_speed(tuning_, state.roll_elapsed_ + delta_time * 0.5f);
+                controller.set_move_input(state.roll_facing_ * (roll / move_speed))
+                    .set_acceleration_seconds(0.0f)
+                    .set_deceleration_seconds(0.0f)
+                    .set_facing_direction(state.roll_facing_)
+                    .set_turn_degrees_per_second(tuning_.attack_turn_degrees_per_second);
+
+                state.roll_elapsed_ += delta_time;
+                state.rolling_ =
+                    state.roll_elapsed_ < tuning_.roll_seconds + tuning_.roll_recovery_seconds;
+            } else if (state.swinging_) {
                 const float32 lunge = state.lunging_
                     ? lunge_speed(tuning_, state.lunge_seconds_ + delta_time * 0.5f)
                     : 0.0f;
@@ -448,7 +585,7 @@ auto player_system::update(
             }
 
             controller.set_coyote_seconds(tuning_.coyote_seconds);
-            if (state.jump_buffered_ >= 0.0f && !state.body_locked_) {
+            if (state.jump_buffered_ >= 0.0f && !state.body_locked_ && !state.rolling_) {
                 controller.request_jump();
             }
 
@@ -483,6 +620,7 @@ auto player_system::update(
 
             age_buffer(state.attack_buffered_, delta_time);
             age_buffer(state.jump_buffered_, delta_time);
+            age_buffer(state.dodge_buffered_, delta_time);
 
             if (frame.was_pressed(input_action::toggle_weapon)) {
                 toggling_.push_back(ent);
