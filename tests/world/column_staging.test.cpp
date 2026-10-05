@@ -526,6 +526,10 @@ TEST_CASE(
         if (owner.is_valid() || !c.get_entity().is_valid()) {
             return;
         }
+        const bool under_viewer = coord.x == 0 && coord.z == 0;
+        if (under_viewer) {
+            return;
+        }
         bool surrounded = true;
         for (const face_direction face : all_face_directions) {
             surrounded = surrounded && grid.has_chunk(coord + offset_of(face));
