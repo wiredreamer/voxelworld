@@ -43,6 +43,14 @@ struct player_component final {
         return hit_window_;
     }
 
+    [[nodiscard]] auto can_cancel() const -> bool {
+        return cancel_open_;
+    }
+
+    [[nodiscard]] auto get_swing_count() const -> uint32 {
+        return swing_count_;
+    }
+
     [[nodiscard]] auto get_attack_direction() const -> const vec3f& {
         return attack_facing_;
     }
@@ -80,12 +88,14 @@ private:
     float32 attack_buffered_      = -1.0f;
     float32 jump_buffered_        = -1.0f;
     uint32 seen_jump_count_       = 0;
+    uint32 swing_count_           = 0;
     bool attacking_     = false;
     bool swinging_      = false;
     bool swing_started_ = false;
     bool lunging_       = false;
     bool lunged_        = false;
     bool hit_window_    = false;
+    bool cancel_open_   = false;
 };
 
 class player_system final {

@@ -235,6 +235,8 @@ auto player_system::read_action_events_(
             state.hit_window_ = true;
         } else if (event.name == "hit.end") {
             state.hit_window_ = false;
+        } else if (event.name == "cancel.ok" && state.swinging_) {
+            state.cancel_open_ = true;
         }
     }
 }
@@ -242,9 +244,10 @@ auto player_system::read_action_events_(
 auto player_system::end_swing_(
     player_component& state
 ) -> void {
-    state.swinging_   = false;
-    state.lunging_    = false;
-    state.hit_window_ = false;
+    state.swinging_    = false;
+    state.lunging_     = false;
+    state.hit_window_  = false;
+    state.cancel_open_ = false;
 }
 
 auto player_system::update(
@@ -291,8 +294,11 @@ auto player_system::update(
                 state.jump_buffered_ = tuning_.input_buffer_seconds;
             }
 
-            if (state.attack_buffered_ >= 0.0f && state.weapon_.is_valid() && !state.swinging_) {
+            const bool strike_allowed = !state.swinging_ || state.cancel_open_;
+            if (state.attack_buffered_ >= 0.0f && state.weapon_.is_valid() && strike_allowed) {
                 state.attack_buffered_ = -1.0f;
+                state.cancel_open_     = false;
+                ++state.swing_count_;
                 const auto facing = world_->get<ecs::transform_component>(ent).get_rotation();
                 const vec3f look  = rotated(facing, {0.0f, 0.0f, 1.0f});
                 state.attack_facing_ = moving ? move_dir : math::normalize(vec3f{look.x, 0.0f, look.z});

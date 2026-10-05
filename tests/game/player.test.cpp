@@ -222,58 +222,99 @@ TEST_CASE("an attack while moving strikes along the move and steps into it", "[g
     REQUIRE(-wish.x > 0.0F);
 }
 
-TEST_CASE("a strike pressed late in a swing follows it, one pressed early is dropped", "[game][player]") {
+namespace {
+
+struct swordsman {
     game_world g;
-    const auto player = g.spawn_controlled();
-    const auto& state = g.world.get<game::player_component>(player);
+    ecs::entity player = g.spawn_controlled();
+    const game::player_component& state = g.world.get<game::player_component>(player);
 
-    g.mapper().key(keys::KEY_1, true);
-    g.world.update(0.016F);
-    g.mapper().key(keys::KEY_1, false);
-    g.world.update(0.016F);
+    swordsman() {
+        g.mapper().key(keys::KEY_1, true);
+        tick();
+        g.mapper().key(keys::KEY_1, false);
+        tick();
+    }
 
-    const auto click = [&] {
-        g.mapper().button(mouse::buttons::LEFT, true);
+    auto tick() -> void {
         g.world.update(0.016F);
-        g.mapper().button(mouse::buttons::LEFT, false);
-    };
+    }
 
-    const auto swinging_ticks = [&] {
-        int32 ticks = 0;
-        for (int32 tick = 0; tick < 100; ++tick) {
-            g.world.update(0.016F);
-            ticks += state.is_swinging() ? 1 : 0;
+    auto ticks(int32 count) -> void {
+        for (int32 tick_index = 0; tick_index < count; ++tick_index) {
+            tick();
         }
-        return ticks;
-    };
-
-    click();
-    int32 one_swing = 1;
-    while (state.is_swinging() && one_swing < 100) {
-        g.world.update(0.016F);
-        ++one_swing;
-    }
-    for (int32 tick = 0; tick < 40; ++tick) {
-        g.world.update(0.016F);
     }
 
-    click();
-    for (int32 tick = 0; tick < 3; ++tick) {
-        g.world.update(0.016F);
+    auto click() -> void {
+        g.mapper().button(mouse::buttons::LEFT, true);
+        tick();
+        g.mapper().button(mouse::buttons::LEFT, false);
     }
-    click();
-    REQUIRE(swinging_ticks() < one_swing);
 
-    for (int32 tick = 0; tick < 40; ++tick) {
-        g.world.update(0.016F);
+    [[nodiscard]] auto ticks_until(const std::function<bool()>& done) -> int32 {
+        int32 count = 0;
+        while (!done() && count < 200) {
+            tick();
+            ++count;
+        }
+        return count;
     }
-    click();
-    for (int32 tick = 0; tick < one_swing - 5; ++tick) {
-        g.world.update(0.016F);
-    }
-    REQUIRE(state.is_swinging());
-    click();
-    REQUIRE(swinging_ticks() > one_swing);
+};
+
+}  // namespace
+
+TEST_CASE("a strike pressed early in a swing is dropped", "[game][player]") {
+    swordsman s;
+    s.g.world.system<game::player_system>().tuning().input_buffer_seconds = 0.05F;
+
+    s.click();
+    s.ticks(2);
+    s.click();
+    s.ticks(60);
+
+    REQUIRE(s.state.get_swing_count() == 1);
+    REQUIRE_FALSE(s.state.is_swinging());
+}
+
+TEST_CASE("a strike in the cancel window cuts the swing short and turns", "[game][player]") {
+    swordsman s;
+
+    s.click();
+    REQUIRE(s.state.get_swing_count() == 1);
+    REQUIRE(s.state.get_attack_direction().z == Catch::Approx(1.0F));
+
+    static_cast<void>(s.ticks_until([&] { return s.state.can_cancel() || !s.state.is_swinging(); }));
+    REQUIRE(s.state.can_cancel());
+    REQUIRE(s.state.is_swinging());
+
+    s.g.mapper().key(keys::D, true);
+    s.click();
+
+    REQUIRE(s.state.get_swing_count() == 2);
+    REQUIRE(s.state.is_swinging());
+    REQUIRE_FALSE(s.state.can_cancel());
+    REQUIRE(s.state.get_attack_direction().x == Catch::Approx(-1.0F));
+}
+
+TEST_CASE("a strike pressed just before the cancel window opens is taken when it opens", "[game][player]") {
+    swordsman s;
+
+    s.click();
+    const int32 to_cancel = s.ticks_until([&] { return s.state.can_cancel(); });
+    const int32 to_unlock = s.ticks_until([&] { return !s.state.is_swinging(); });
+    REQUIRE(to_cancel > 4);
+    REQUIRE(to_unlock > 0);
+    s.ticks(40);
+
+    s.click();
+    s.ticks(to_cancel - 4);
+    s.click();
+    const int32 waited = s.ticks_until([&] { return s.state.get_swing_count() == 3; });
+
+    REQUIRE(s.state.get_swing_count() == 3);
+    REQUIRE(waited < 3 + to_unlock);
+    REQUIRE(s.state.is_swinging());
 }
 
 TEST_CASE("a pinned parameter drives the machines against the game", "[game][player]") {

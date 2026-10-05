@@ -157,8 +157,9 @@ auto render_debug_hud(
         ImGui::Separator();
         const auto& fighter = world.get<game::player_component>(player_ent);
         ImGui::Text(
-            "Sword: %s%s%s", fighter.has_weapon() ? "equipped" : "none",
-            fighter.is_swinging() ? ", swinging" : "", fighter.is_hitting() ? ", HIT" : ""
+            "Sword: %s%s%s%s  swings %u", fighter.has_weapon() ? "equipped" : "none",
+            fighter.is_swinging() ? ", swinging" : "", fighter.is_hitting() ? ", HIT" : "",
+            fighter.can_cancel() ? ", cancel" : "", fighter.get_swing_count()
         );
         ImGui::Text("Colliders: %s", show_colliders ? "visible" : "hidden");
     }
