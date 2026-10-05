@@ -3,6 +3,8 @@ rig humanoid
 entry idle
 param speed float
 param air_state int
+param land trigger
+param land_hard trigger
 state idle
 	clip animations/a_humanoid_idle.voxa
 	playback loop
@@ -11,7 +13,7 @@ state idle
 		blend 0.15
 	to rise
 		when air_state == 1
-		blend 0.1
+		blend 0.02
 	to fall
 		when air_state == 2
 		blend 0.15
@@ -23,25 +25,55 @@ state run
 		blend 0.15
 	to rise
 		when air_state == 1
-		blend 0.1
+		blend 0.02
 	to fall
 		when air_state == 2
 		blend 0.15
 state rise
-	clip animations/a_jump_left.voxa
-	playback loop
+	clip animations/a_humanoid_jump_takeoff.voxa
+	playback once
+	to land_hard
+		on land_hard
+		blend 0.05
+	to land
+		on land
+		blend 0.05
 	to fall
 		when air_state == 2
-		blend 0.15
+		blend 0.1
 	to idle
 		when air_state == 0
-		blend 0.2
+		blend 0.15
 state fall
-	clip animations/a_jump_left.voxa
+	clip animations/a_humanoid_fall.voxa
 	playback loop
+	to land_hard
+		on land_hard
+		blend 0.05
+	to land
+		on land
+		blend 0.05
 	to rise
 		when air_state == 1
 		blend 0.1
 	to idle
 		when air_state == 0
 		blend 0.2
+state land
+	clip animations/a_humanoid_land.voxa
+	playback once
+	to rise
+		when air_state == 1
+		blend 0.05
+	to run
+		when speed > 0
+		blend 0.25
+	to idle
+		wait end
+		blend 0.1
+state land_hard
+	clip animations/a_humanoid_land_hard.voxa
+	playback once
+	to idle
+		wait end
+		blend 0.1

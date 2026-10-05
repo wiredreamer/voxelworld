@@ -31,6 +31,12 @@ struct movement_tuning final {
     float32 input_buffer_seconds           = 0.15f;
     float32 coyote_seconds                 = 0.1f;
     float32 fall_after_seconds             = 0.1f;
+    float32 hard_landing_speed             = 155.0f;
+    float32 stride_voxels                  = 5.0f;
+    float32 stride_lead_pitch_degrees      = 15.0f;
+    float32 stride_trail_pitch_degrees     = 25.0f;
+    float32 stride_arm_swing_voxels        = 3.0f;
+    float32 stride_follow_seconds          = 0.1f;
     float32 lunge_seconds                  = 0.15f;
     float32 lunge_distance                 = 10.0f;
 };
@@ -88,6 +94,22 @@ struct player_component final {
         return air_state_;
     }
 
+    [[nodiscard]] auto get_soft_landings() const -> uint32 {
+        return soft_landings_;
+    }
+
+    [[nodiscard]] auto get_hard_landings() const -> uint32 {
+        return hard_landings_;
+    }
+
+    [[nodiscard]] auto is_body_locked() const -> bool {
+        return body_locked_;
+    }
+
+    [[nodiscard]] auto get_stride() const -> float32 {
+        return stride_;
+    }
+
 private:
     friend class player_system;
 
@@ -112,6 +134,13 @@ private:
     uint32 seen_jump_count_       = 0;
     uint32 swing_count_           = 0;
     air_state air_state_          = air_state::ground;
+    float32 fall_speed_           = 0.0f;
+    float32 body_locked_seconds_  = 0.0f;
+    uint32 soft_landings_         = 0;
+    uint32 hard_landings_         = 0;
+    bool body_locked_             = false;
+    float32 stride_               = 0.0f;
+    bool pushed_with_left_        = true;
     bool attacking_     = false;
     bool swinging_      = false;
     bool swing_started_ = false;
@@ -142,6 +171,7 @@ private:
         -> ecs::entity;
     auto attach_machines_(ecs::entity root) const -> void;
     auto lean_(ecs::entity ent, player_component& state, float32 delta_time) const -> void;
+    auto swing_legs_(ecs::entity ent, player_component& state, float32 delta_time) const -> void;
     auto turn_head_(
         ecs::entity ent, player_component& state, const vec3f& look, float32 delta_time
     ) const -> void;

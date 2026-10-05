@@ -1,0 +1,62 @@
+# Voxa File Version 2.1
+rig humanoid
+
+track body 60
+  channel position
+    k 0 0 13 0 ease_in_out 0 1
+    k 0.3 0 13.3 0 ease_in_out 0 1
+    k 0.6 0 13 0 linear 0 1
+  channel rotation
+    k 0 -0.0348995 0 -0 0.999391 ease_in_out 0 1
+    k 0.3 -0.0436177 0.000380646 -0.00871823 0.99901 ease_in_out 0 1
+    k 0.6 -0.0348995 0 -0 0.999391 linear 0 1
+
+track head 60
+  channel position
+    k 0 0 22.5 -0.5 ease_in_out 0 1
+    k 0.3 0 22.8 -0.5 ease_in_out 0 1
+    k 0.6 0 22.5 -0.5 linear 0 1
+  channel rotation
+    k 0 0.052336 -0 0 0.99863 ease_in_out 0 1
+    k 0.3 0.0610485 -0 0 0.998135 ease_in_out 0 1
+    k 0.6 0.052336 -0 0 0.99863 linear 0 1
+
+track hand_right 60
+  channel position
+    k 0 12.5 19 0 ease_in_out 0 1
+    k 0.3 12.8 18.2 0.5 ease_in_out 0 1
+    k 0.6 12.5 19 0 linear 0 1
+  channel rotation
+    k 0 -0.766044 0 -0 0.642788 ease_in_out 0 1
+    k 0.3 -0.788011 0 -0 0.615662 ease_in_out 0 1
+    k 0.6 -0.766044 0 -0 0.642788 linear 0 1
+
+track hand_left 60
+  channel position
+    k 0 -12.8 18.2 -0.5 ease_in_out 0 1
+    k 0.3 -12.5 19 0 ease_in_out 0 1
+    k 0.6 -12.8 18.2 -0.5 linear 0 1
+  channel rotation
+    k 0 -0.743145 0 -0 0.669131 ease_in_out 0 1
+    k 0.3 -0.766044 0 -0 0.642788 ease_in_out 0 1
+    k 0.6 -0.743145 0 -0 0.669131 linear 0 1
+
+track foot_right 60
+  channel position
+    k 0 5 3 1.5 ease_in_out 0 1
+    k 0.3 5 3.6 -1 ease_in_out 0 1
+    k 0.6 5 3 1.5 linear 0 1
+  channel rotation
+    k 0 0.0871557 -0 0 0.996195 ease_in_out 0 1
+    k 0.3 0.0348995 -0 0 0.999391 ease_in_out 0 1
+    k 0.6 0.0871557 -0 0 0.996195 linear 0 1
+
+track foot_left 60
+  channel position
+    k 0 -5 3.6 -1 ease_in_out 0 1
+    k 0.3 -5 3 1.5 ease_in_out 0 1
+    k 0.6 -5 3.6 -1 linear 0 1
+  channel rotation
+    k 0 0.0348995 -0 0 0.999391 ease_in_out 0 1
+    k 0.3 0.0871557 -0 0 0.996195 ease_in_out 0 1
+    k 0.6 0.0348995 -0 0 0.999391 linear 0 1

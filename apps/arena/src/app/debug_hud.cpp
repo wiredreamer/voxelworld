@@ -88,6 +88,12 @@ auto render_movement_tuning(ecs::world& world) -> void {
     ImGui::SliderFloat("input buffer, s", &tuning.input_buffer_seconds, 0.0f, 0.5f, "%.2f");
     ImGui::SliderFloat("coyote time, s", &tuning.coyote_seconds, 0.0f, 0.5f, "%.2f");
     ImGui::SliderFloat("fall after, s", &tuning.fall_after_seconds, 0.0f, 0.5f, "%.2f");
+    ImGui::SliderFloat("hard landing, u/s", &tuning.hard_landing_speed, 50.0f, 400.0f, "%.0f");
+    ImGui::SliderFloat("stride, voxels", &tuning.stride_voxels, 0.0f, 10.0f, "%.1f");
+    ImGui::SliderFloat("stride lead toe, deg", &tuning.stride_lead_pitch_degrees, 0.0f, 45.0f, "%.0f");
+    ImGui::SliderFloat("stride trail toe, deg", &tuning.stride_trail_pitch_degrees, 0.0f, 60.0f, "%.0f");
+    ImGui::SliderFloat("stride arms, voxels", &tuning.stride_arm_swing_voxels, 0.0f, 8.0f, "%.1f");
+    ImGui::SliderFloat("stride follow, s", &tuning.stride_follow_seconds, 0.0f, 0.5f, "%.2f");
     ImGui::SliderFloat("lunge time, s", &tuning.lunge_seconds, 0.0f, 0.5f, "%.2f");
     ImGui::SliderFloat("lunge distance", &tuning.lunge_distance, 0.0f, 40.0f, "%.1f");
     if (ImGui::Button("defaults")) {
@@ -163,6 +169,10 @@ auto render_debug_hud(
             "Sword: %s%s%s%s  swings %u", fighter.has_weapon() ? "equipped" : "none",
             fighter.is_swinging() ? ", swinging" : "", fighter.is_hitting() ? ", HIT" : "",
             fighter.can_cancel() ? ", cancel" : "", fighter.get_swing_count()
+        );
+        ImGui::Text(
+            "Landings: soft %u, hard %u%s", fighter.get_soft_landings(),
+            fighter.get_hard_landings(), fighter.is_body_locked() ? ", LOCKED" : ""
         );
         ImGui::Text("Colliders: %s", show_colliders ? "visible" : "hidden");
     }

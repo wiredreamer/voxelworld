@@ -1,4 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 import std;
 
@@ -65,7 +66,7 @@ struct grounded_world {
             tick();
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
-        for (int32 frame = 0; frame < 200 && !grounded(); ++frame) {
+        for (float32 waited = 0.0F; waited < 3.0F && !grounded(); waited += tick_seconds) {
             tick();
         }
         run_for(0.1F);
@@ -188,18 +189,18 @@ TEST_CASE("every pressed jump lifts the body when frames outpace physics", "[gam
 }
 
 TEST_CASE("a jump rises, falls and lands, a drop only falls", "[game][jump]") {
-    grounded_world g;
+    grounded_world g{GENERATE(display_tick_seconds, 1.0F / 240.0F)};
     REQUIRE(g.settle());
     g.run_for(0.3F);
 
     const auto& state = g.world.get<game::player_component>(g.player);
     const auto& fsm   = g.world.get<ecs::animation_fsm_component>(g.player);
     const auto phases = [&](float32 seconds) {
-        std::vector<std::string> seen;
+        std::vector<std::string> seen{"idle"};
         for (float32 elapsed = 0.0F; elapsed < seconds; elapsed += g.tick_seconds) {
             g.tick();
             const auto& current = fsm.get_machine(0).get_current_state();
-            if (seen.empty() || seen.back() != current) {
+            if (seen.back() != current) {
                 seen.push_back(current);
             }
         }
@@ -210,11 +211,137 @@ TEST_CASE("a jump rises, falls and lands, a drop only falls", "[game][jump]") {
     REQUIRE(fsm.get_machine(0).get_current_state() == "idle");
 
     g.press_jump();
-    REQUIRE(phases(2.0F) == std::vector<std::string>{"rise", "fall", "idle"});
+    REQUIRE(phases(2.0F) == std::vector<std::string>{"idle", "rise", "fall", "land", "idle"});
     REQUIRE(state.get_air_state() == game::air_state::ground);
 
     g.lift(drop_height * 2.0F);
-    REQUIRE(phases(2.0F) == std::vector<std::string>{"idle", "fall", "idle"});
+    REQUIRE(phases(2.0F) == std::vector<std::string>{"idle", "fall", "land", "idle"});
+
+    g.lift(drop_height * 8.0F);
+    REQUIRE(phases(3.0F) == std::vector<std::string>{"idle", "fall", "land_hard", "idle"});
+}
+
+TEST_CASE("a hard landing takes control away until its clip gives it back", "[game][jump]") {
+    grounded_world g{GENERATE(display_tick_seconds, 1.0F / 240.0F)};
+    REQUIRE(g.settle());
+    g.run_for(0.3F);
+
+    const auto& state = g.world.get<game::player_component>(g.player);
+    g.lift(drop_height * 8.0F);
+    for (int32 tick = 0; tick < 400 && state.get_hard_landings() == 0; ++tick) {
+        g.tick();
+    }
+    REQUIRE(state.get_hard_landings() == 1);
+
+    g.world.system<game::input_system>().mapper().key(keys::W, true);
+    float32 locked_for = 0.0F;
+    for (float32 elapsed = 0.0F; elapsed < 0.9F; elapsed += g.tick_seconds) {
+        g.tick();
+        if (state.is_body_locked()) {
+            locked_for += g.tick_seconds;
+            const auto& wish = g.world.get<ecs::movement_intent_component>(g.player).get_wish_velocity();
+            REQUIRE(std::abs(wish.z) < 5.0F);
+        }
+    }
+
+    REQUIRE(locked_for > 0.5F);
+    REQUIRE(locked_for < 0.7F);
+    REQUIRE_FALSE(state.is_body_locked());
+    const auto& wish = g.world.get<ecs::movement_intent_component>(g.player).get_wish_velocity();
+    REQUIRE(std::abs(wish.z) > 90.0F);
+}
+
+TEST_CASE("a landing is soft from a jump or a short drop and hard from a tall one", "[game][jump]") {
+    grounded_world g{GENERATE(display_tick_seconds, 1.0F / 240.0F)};
+    REQUIRE(g.settle());
+    g.run_for(0.3F);
+
+    const auto& state = g.world.get<game::player_component>(g.player);
+    const uint32 soft = state.get_soft_landings();
+    const uint32 hard = state.get_hard_landings();
+
+    g.press_jump();
+    g.run_for(0.1F);
+    REQUIRE(g.settle());
+    REQUIRE(state.get_soft_landings() == soft + 1);
+    REQUIRE(state.get_hard_landings() == hard);
+
+    g.lift(drop_height * 2.0F);
+    g.run_for(0.15F);
+    REQUIRE(g.settle());
+    REQUIRE(state.get_soft_landings() == soft + 2);
+
+    g.lift(drop_height * 8.0F);
+    g.run_for(0.15F);
+    REQUIRE(g.settle());
+    REQUIRE(state.get_soft_landings() == soft + 2);
+    REQUIRE(state.get_hard_landings() == hard + 1);
+}
+
+TEST_CASE("a jump rises through its takeoff and cannot jump again when frames outpace physics", "[game][jump]") {
+    constexpr float32 fast_tick = 1.0F / 240.0F;
+    grounded_world g{fast_tick};
+    REQUIRE(g.settle());
+    g.run_for(0.3F);
+
+    const auto& fsm = g.world.get<ecs::animation_fsm_component>(g.player);
+    const uint32 before = g.jumps();
+
+    g.press_jump();
+    bool rose = false;
+    for (float32 elapsed = 0.0F; elapsed < 0.2F; elapsed += fast_tick) {
+        g.tick();
+        rose = rose || fsm.get_machine(0).get_current_state() == "rise";
+    }
+    REQUIRE(rose);
+
+    g.run_for(0.02F);
+    g.press_jump();
+    g.run_for(0.1F);
+    REQUIRE(g.jumps() == before + 1);
+}
+
+TEST_CASE("a running jump splits the legs, the swing leg is the one not on the ground", "[game][jump]") {
+    grounded_world g;
+    REQUIRE(g.settle());
+    g.run_for(0.3F);
+
+    const auto& state  = g.world.get<game::player_component>(g.player);
+    const auto& layers = g.world.get<ecs::animation_player_component>(g.player);
+
+    g.press_jump();
+    g.run_for(0.3F);
+    REQUIRE(std::abs(state.get_stride()) < 0.05F);
+    REQUIRE(g.settle());
+    g.run_for(0.5F);
+
+    std::string planted;
+    g.world.system<game::input_system>().mapper().key(keys::W, true);
+    for (float32 elapsed = 0.0F; elapsed < 0.45F; elapsed += g.tick_seconds) {
+        g.tick();
+        for (const auto& event : layers.get_fired_events()) {
+            if (event.name == "footstep") {
+                planted = event.payload;
+            }
+        }
+    }
+    REQUIRE_FALSE(planted.empty());
+
+    g.lift(drop_height * 2.0F);
+    float32 widest = 0.0F;
+    for (float32 elapsed = 0.0F; elapsed < 0.4F; elapsed += g.tick_seconds) {
+        g.tick();
+        if (std::abs(state.get_stride()) > std::abs(widest)) {
+            widest = state.get_stride();
+        }
+    }
+    const float32 expected = planted == "left" ? 1.0F : -1.0F;
+    REQUIRE(widest * expected > 0.6F);
+
+    g.world.system<game::input_system>().mapper().key(keys::W, false);
+    REQUIRE(g.settle());
+    g.run_for(0.6F);
+    REQUIRE(std::abs(state.get_stride()) < 0.05F);
 }
 
 TEST_CASE("holding jump does not hop again", "[game][jump]") {

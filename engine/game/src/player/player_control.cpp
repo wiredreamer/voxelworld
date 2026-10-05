@@ -14,7 +14,8 @@ constexpr std::string_view weapon_prefab = "p_sword";
 constexpr std::string_view weapon_node   = "root";
 constexpr std::string_view weapon_socket = "hand_right";
 
-constexpr std::size_t action_layer = 1;
+constexpr std::size_t locomotion_layer = 0;
+constexpr std::size_t action_layer     = 1;
 
 auto rotated(const quat& q, const vec3f& v) -> vec3f {
     const vec3f axis{q.x, q.y, q.z};
@@ -248,10 +249,68 @@ auto player_system::turn_head_(
     );
 }
 
+auto player_system::swing_legs_(
+    ecs::entity ent, player_component& state, float32 delta_time
+) const -> void {
+    float32 target = 0.0f;
+    if (state.air_state_ != air_state::ground) {
+        const auto& body      = world_->get<ecs::rigid_body_component>(ent);
+        const float32 speed   = world_->get<ecs::character_controller_component>(ent).get_move_speed();
+        const vec3f velocity  = body.get_velocity();
+        const float32 planar  = math::length(vec3f{velocity.x, 0.0f, velocity.z});
+        const float32 reach   = speed > 0.0f ? math::clamp(planar / speed, 0.0f, 1.0f) : 0.0f;
+        const float32 leading = state.pushed_with_left_ ? 1.0f : -1.0f;
+        target                = leading * reach;
+    }
+
+    const float32 follow = tuning_.stride_follow_seconds > 0.0f
+        ? 1.0f - std::exp(-delta_time / tuning_.stride_follow_seconds)
+        : 1.0f;
+    state.stride_ += (target - state.stride_) * follow;
+
+    const auto pitch = [this](float32 lead) {
+        const float32 degrees = lead >= 0.0f ? -lead * tuning_.stride_lead_pitch_degrees
+                                             : -lead * tuning_.stride_trail_pitch_degrees;
+        const float32 half = math::radians(degrees) * 0.5f;
+        return quat{std::sin(half), 0.0f, 0.0f, std::cos(half)};
+    };
+
+    auto& animation = world_->system<ecs::animation_system>();
+    const float32 step = state.stride_ * tuning_.stride_voxels;
+    const float32 arm  = state.stride_ * tuning_.stride_arm_swing_voxels;
+    if (state.foot_right_.is_valid()) {
+        animation.modify_adjustment(state.foot_right_)
+            .set_translation({0.0f, 0.0f, step})
+            .set_rotation(pitch(state.stride_));
+    }
+    if (state.foot_left_.is_valid()) {
+        animation.modify_adjustment(state.foot_left_)
+            .set_translation({0.0f, 0.0f, -step})
+            .set_rotation(pitch(-state.stride_));
+    }
+    if (state.hand_right_.is_valid()) {
+        animation.modify_adjustment(state.hand_right_).set_translation({0.0f, 0.0f, -arm});
+    }
+    if (state.hand_left_.is_valid()) {
+        animation.modify_adjustment(state.hand_left_).set_translation({0.0f, 0.0f, arm});
+    }
+}
+
 auto player_system::read_action_events_(
     player_component& state, const ecs::animation_player_component& layers
 ) -> void {
     for (const auto& event : layers.get_fired_events()) {
+        if (event.layer == locomotion_layer) {
+            if (event.name == "footstep") {
+                state.pushed_with_left_ = event.payload == "left";
+            } else if (event.name == "control.lock") {
+                state.body_locked_         = true;
+                state.body_locked_seconds_ = 0.0f;
+            } else if (event.name == "control.unlock") {
+                state.body_locked_ = false;
+            }
+            continue;
+        }
         if (event.layer != action_layer) {
             continue;
         }
@@ -321,6 +380,10 @@ auto player_system::update(
                     end_swing_(state);
                 }
             }
+            if (state.body_locked_) {
+                state.body_locked_seconds_ += delta_time;
+                state.body_locked_ = state.body_locked_seconds_ <= longest_swing_seconds;
+            }
 
             if (frame.was_pressed(input_action::attack)) {
                 state.attack_buffered_ = tuning_.input_buffer_seconds;
@@ -329,7 +392,8 @@ auto player_system::update(
                 state.jump_buffered_ = tuning_.input_buffer_seconds;
             }
 
-            const bool strike_allowed = !state.swinging_ || state.cancel_open_;
+            const bool strike_allowed =
+                !state.body_locked_ && (!state.swinging_ || state.cancel_open_);
             if (state.attack_buffered_ >= 0.0f && state.weapon_.is_valid() && strike_allowed) {
                 state.attack_buffered_ = -1.0f;
                 state.cancel_open_     = false;
@@ -366,11 +430,12 @@ auto player_system::update(
                     state.lunging_ = state.lunge_seconds_ < tuning_.lunge_seconds;
                 }
             } else {
-                controller.set_move_input(move_dir)
+                const bool steering = moving && !state.body_locked_;
+                controller.set_move_input(steering ? move_dir : vec3f{0.0f, 0.0f, 0.0f})
                     .set_acceleration_seconds(tuning_.acceleration_seconds)
                     .set_deceleration_seconds(tuning_.deceleration_seconds)
                     .set_turn_degrees_per_second(tuning_.run_turn_degrees_per_second);
-                if (moving) {
+                if (steering) {
                     controller.set_facing_direction(move_dir);
                 }
             }
@@ -383,12 +448,13 @@ auto player_system::update(
             }
 
             controller.set_coyote_seconds(tuning_.coyote_seconds);
-            if (state.jump_buffered_ >= 0.0f) {
+            if (state.jump_buffered_ >= 0.0f && !state.body_locked_) {
                 controller.request_jump();
             }
 
-            const auto& body = world_->get<ecs::rigid_body_component>(ent);
-            const auto& cc   = world_->get<ecs::character_controller_component>(ent);
+            const auto& body        = world_->get<ecs::rigid_body_component>(ent);
+            const auto& cc          = world_->get<ecs::character_controller_component>(ent);
+            const air_state before  = state.air_state_;
             if (body.is_grounded()) {
                 state.air_state_ = air_state::ground;
             } else if (cc.left_ground_by_jump() && body.get_velocity().y > 0.0f) {
@@ -401,6 +467,20 @@ auto player_system::update(
                 "air_state", static_cast<float32>(std::to_underlying(state.air_state_))
             );
 
+            if (state.air_state_ != air_state::ground) {
+                state.fall_speed_ = std::max(state.fall_speed_, -body.get_velocity().y);
+            } else if (before != air_state::ground) {
+                const bool hard   = state.fall_speed_ >= tuning_.hard_landing_speed;
+                state.fall_speed_ = 0.0f;
+                if (hard) {
+                    ++state.hard_landings_;
+                    machines.modify(ent).fire_trigger("land_hard");
+                } else {
+                    ++state.soft_landings_;
+                    machines.modify(ent).fire_trigger("land");
+                }
+            }
+
             age_buffer(state.attack_buffered_, delta_time);
             age_buffer(state.jump_buffered_, delta_time);
 
@@ -410,6 +490,7 @@ auto player_system::update(
 
             lean_(ent, state, delta_time);
             turn_head_(ent, state, forward, delta_time);
+            swing_legs_(ent, state, delta_time);
         }
     );
 
