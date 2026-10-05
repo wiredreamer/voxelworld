@@ -56,16 +56,18 @@ auto character_controller_system::update(float32 delta_time) -> void {
         mi.wish_velocity_.z = planar_next.z;
         mi.wish_axes_ = static_cast<axis_flags>(axis_flag::xz | (mi.wish_axes_ & axis_flag::y));
 
+        const bool jump_waiting_for_physics = (mi.wish_axes_ & axis_flag::y) != 0;
         if (rb.is_grounded()) {
-            cc.seconds_off_ground_  = 0.0f;
-            cc.left_ground_by_jump_ = false;
+            cc.seconds_off_ground_ = 0.0f;
+            if (!jump_waiting_for_physics) {
+                cc.left_ground_by_jump_ = false;
+            }
         } else if (cc.seconds_off_ground_ < std::numeric_limits<float32>::max()) {
             cc.seconds_off_ground_ += delta_time;
         }
 
         const bool within_coyote =
             !cc.left_ground_by_jump_ && cc.seconds_off_ground_ <= cc.coyote_seconds_;
-        const bool jump_waiting_for_physics = (mi.wish_axes_ & axis_flag::y) != 0;
         if (cc.jump_requested_ && !jump_waiting_for_physics && (rb.is_grounded() || within_coyote)) {
             mi.wish_velocity_.y = cc.jump_impulse_;
             mi.wish_axes_ = axis_flag::xz | axis_flag::y;
