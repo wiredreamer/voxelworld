@@ -18,11 +18,13 @@ debug_window::debug_window(
     : engine_(&engine) {}
 
 auto debug_window::render(
-    [[maybe_unused]] float32 delta_time
+    float32 delta_time
 ) -> void {
     if (!visible_) {
         return;
     }
+
+    collect_animation_events_(delta_time);
 
     render_main_window();
     render_panels();

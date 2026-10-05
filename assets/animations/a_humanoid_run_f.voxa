@@ -1,5 +1,7 @@
-# Voxa File Version 2.0
+# Voxa File Version 2.1
 rig humanoid
+event 0 footstep left
+event 0.4 footstep right
 
 track body 60
   channel position

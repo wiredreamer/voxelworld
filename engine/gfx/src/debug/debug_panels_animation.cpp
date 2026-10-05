@@ -40,6 +40,70 @@ auto clip_name(const std::shared_ptr<asset::animation_clip>& clip) -> const char
 
 }  // namespace
 
+auto debug_window::collect_animation_events_(
+    float32 delta_time
+) -> void {
+    debug_clock_seconds_ += delta_time;
+
+    auto& world = engine_->get_world();
+    for (auto [ent, player] : world.view<ecs::animation_player_component>()) {
+        for (const auto& event : player.get_fired_events()) {
+            animation_event_log_.push_back({
+                .entity  = ent,
+                .seconds = debug_clock_seconds_,
+                .layer   = event.layer,
+                .clip    = event.clip,
+                .name    = event.name,
+                .payload = event.payload,
+            });
+        }
+    }
+
+    while (animation_event_log_.size() > animation_event_log_capacity_) {
+        animation_event_log_.pop_front();
+    }
+}
+
+auto debug_window::render_animation_event_log_() -> void {
+    ImGui::SeparatorText("events");
+
+    if (ImGui::SmallButton("clear")) {
+        std::erase_if(animation_event_log_, [this](const logged_animation_event& logged) {
+            return logged.entity == animation_entity_;
+        });
+    }
+
+    constexpr ImGuiChildFlags log_flags = ImGuiChildFlags_Borders;
+    if (!ImGui::BeginChild("##animation_events", ImVec2(420.0f, 160.0f), log_flags)) {
+        ImGui::EndChild();
+        return;
+    }
+
+    bool any = false;
+    for (const auto& logged : animation_event_log_ | std::views::reverse) {
+        if (logged.entity != animation_entity_) {
+            continue;
+        }
+        any = true;
+
+        const auto text = std::format(
+            "{:8.2f}s  L{}  {:<18} {} {}", logged.seconds, logged.layer, logged.name,
+            logged.payload, logged.clip
+        );
+        if (debug_clock_seconds_ - logged.seconds < fresh_event_seconds_) {
+            ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.3f, 1.0f), "%s", text.c_str());
+        } else {
+            ImGui::TextUnformatted(text.c_str());
+        }
+    }
+
+    if (!any) {
+        ImGui::TextDisabled("no events yet");
+    }
+
+    ImGui::EndChild();
+}
+
 auto debug_window::render_animation_panel() -> void {
     auto& world = engine_->get_world();
 
@@ -108,6 +172,8 @@ auto debug_window::render_animation_panel() -> void {
 
         ImGui::Text("%-10s %zu targets", "mask", layer.mask.size());
     }
+
+    render_animation_event_log_();
 
     ImGui::SeparatorText("parameters");
 

@@ -79,6 +79,8 @@ private:
     auto render_buffers_panel() -> void;
     auto render_world_panel() -> void;
     auto render_animation_panel() -> void;
+    auto render_animation_event_log_() -> void;
+    auto collect_animation_events_(float32 delta_time) -> void;
 
     auto render_view_panel() -> void;
     auto render_lighting_panel() -> void;
@@ -95,6 +97,21 @@ private:
     bool show_colliders_ = false;
 
     ecs::entity animation_entity_;
+
+    struct logged_animation_event {
+        ecs::entity entity;
+        float64 seconds = 0.0;
+        std::size_t layer = 0;
+        std::string clip;
+        std::string name;
+        std::string payload;
+    };
+
+    static constexpr std::size_t animation_event_log_capacity_ = 64;
+    static constexpr float64 fresh_event_seconds_              = 0.5;
+
+    std::deque<logged_animation_event> animation_event_log_;
+    float64 debug_clock_seconds_ = 0.0;
 
     std::unordered_map<std::string, float32> metric_max_;
 
