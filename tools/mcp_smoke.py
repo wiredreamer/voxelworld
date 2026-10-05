@@ -955,6 +955,29 @@ def run_clip_scenario(probe):
     ok, removed = tool(probe, "clip_remove_keys", {"target": "body"})
     probe.check("removing every key removes the track", ok and removed.get("track_count") == 1 and removed.get("key_count") == 2, str(removed))
 
+    ok, evented = tool(
+        probe,
+        "clip_set_events",
+        {"events": [{"time": 0.5, "name": "hit.end"}, {"time": 0, "name": "footstep", "payload": "left"}]},
+    )
+    probe.check(
+        "clip_set_events puts events in the order of time",
+        ok and evented.get("event_count") == 2
+        and evented.get("events") == [{"time": 0, "name": "footstep", "payload": "left"}, {"time": 0.5, "name": "hit.end"}],
+        str(evented),
+    )
+
+    ok, text = tool(probe, "clip_set_events", {"events": [{"time": 5, "name": "late"}]})
+    probe.check("an event past the end of the clip is refused", not ok and "past the end" in text, str(text))
+
+    ok, text = tool(probe, "clip_set_events", {"events": [{"time": 0, "name": "two words"}]})
+    probe.check("an event name with a space is refused", not ok and "whitespace" in text, str(text))
+
+    tool(probe, "undo")
+    ok, undone = tool(probe, "clip_get")
+    probe.check("undo takes back the events", ok and undone.get("event_count") == 0, str(undone.get("events")))
+    tool(probe, "redo")
+
     ok, saved = tool(probe, "clip_save")
     clip_file = asset_root / "animations" / f"{SCRATCH_CLIP}.voxa"
     probe.check(
@@ -978,7 +1001,8 @@ def run_clip_scenario(probe):
     ok, from_disk = tool(probe, "clip_get")
     probe.check(
         "the saved clip reads back the same from disk",
-        ok and close_to(from_disk.get("tracks"), in_memory.get("tracks")) and from_disk.get("rig") == "humanoid",
+        ok and close_to(from_disk.get("tracks"), in_memory.get("tracks")) and from_disk.get("rig") == "humanoid"
+        and from_disk.get("events") == in_memory.get("events") and from_disk.get("event_count") == 2,
         json.dumps(from_disk.get("tracks")),
     )
 

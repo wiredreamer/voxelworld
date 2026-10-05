@@ -900,6 +900,21 @@ private:
 
     auto render_keyframe_context_menu_() -> void;
 
+    auto render_event_row_(
+        const asset::animation_clip& clip, float track_area_width, float clip_duration,
+        float scroll_offset
+    ) -> void;
+    auto render_event_problems_(const asset::animation_clip& clip) const -> void;
+    auto update_event_drag_(const asset::animation_clip& clip, float clip_duration) -> void;
+    auto render_event_menu_(const asset::animation_clip& clip) -> void;
+    auto render_event_editor_(const asset::animation_clip& clip) -> void;
+    auto open_event_editor_(std::optional<std::size_t> index, const asset::animation_event& event)
+        -> void;
+    auto apply_events_(
+        const asset::animation_clip& clip, std::vector<asset::animation_event> events,
+        const asset::animation_event& to_select
+    ) -> clip_service::outcome;
+
     auto render_playback_controls(const std::shared_ptr<asset::animation_clip>& clip) -> void;
     auto render_clip_blend_controls_() const -> void;
     auto handle_play(ecs::entity root, const std::shared_ptr<asset::animation_clip>& clip) const -> void;
@@ -944,6 +959,17 @@ private:
     uint32 drag_key_id_   = asset::invalid_keyframe_id;
     float32 drag_key_time_ = 0.f;
     std::string drag_key_track_;
+
+    std::optional<std::size_t> selected_event_;
+    bool event_drag_             = false;
+    bool event_drag_moved_       = false;
+    std::size_t drag_event_      = 0;
+    float32 drag_event_time_     = 0.f;
+    bool need_event_menu_        = false;
+    bool need_event_editor_      = false;
+    std::optional<std::size_t> edited_event_;
+    asset::animation_event event_draft_;
+    std::string event_draft_error_;
     asset::animation_property drag_key_property_ = asset::animation_property::position;
     std::string prev_clip_name_;
 };

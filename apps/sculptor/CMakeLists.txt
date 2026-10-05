@@ -56,6 +56,7 @@ target_sources(${PROJECT_NAME}
         src/operations/remove_voxel_operation.cpp
         src/operations/set_socket_transform_operation.cpp
         src/operations/set_clip_tracks_operation.cpp
+        src/operations/set_clip_events_operation.cpp
         src/operations/set_pivot_operation.cpp
         src/operations/set_rig_operation.cpp
         src/operations/add_variant_slot_operation.cpp
@@ -126,6 +127,7 @@ target_sources(${PROJECT_NAME}
         src/ui/socket_panel.cpp
         src/ui/startup_modal.cpp
         src/ui/timeline_panel.cpp
+        src/ui/timeline_events.cpp
         src/ui/tool_panel.cpp
         src/ui/ui_utils.cpp
 )

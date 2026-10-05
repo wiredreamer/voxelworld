@@ -74,6 +74,7 @@ public:
     auto save(std::string_view name) -> outcome;
     auto close(std::string_view name, bool discard_unsaved) -> outcome;
     auto set_tracks(std::string_view name, std::vector<asset::animation_track> tracks) -> outcome;
+    auto set_events(std::string_view name, std::vector<asset::animation_event> events) -> outcome;
     auto retarget(std::string_view name, std::string_view from, std::string_view to) -> outcome;
     auto show_pose(std::string_view name, float32 time) -> outcome;
     auto play(std::string_view name, const clip_playback& how) -> outcome;

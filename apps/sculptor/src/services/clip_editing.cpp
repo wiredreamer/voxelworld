@@ -276,6 +276,34 @@ auto clip_service::set_tracks(std::string_view name, std::vector<asset::animatio
     return {};
 }
 
+auto clip_service::set_events(std::string_view name, std::vector<asset::animation_event> events)
+    -> outcome {
+    const auto clip = find(name);
+    if (!clip) {
+        return refuse(clip.error());
+    }
+
+    asset::animation_clip checked = **clip;
+    checked.set_events(events);
+    if (const auto problems = asset::find_problems(checked); !problems.empty()) {
+        return refuse(std::format(
+            "{}; an event name is one word such as hit.start, its payload one word or empty, "
+            "and its time within the clip, 0 to {:.3g} s",
+            joined(problems), (*clip)->get_duration()
+        ));
+    }
+
+    if (auto selected = select((*clip)->get_name()); !selected) {
+        return selected;
+    }
+
+    op_manager_->execute(std::make_unique<set_clip_events_operation>(
+        *engine_, *state_,
+        set_clip_events_params{.clip_name = (*clip)->get_name(), .events = std::move(events)}
+    ));
+    return {};
+}
+
 auto clip_service::retarget(std::string_view name, std::string_view from, std::string_view to)
     -> outcome {
     const auto root = root_();

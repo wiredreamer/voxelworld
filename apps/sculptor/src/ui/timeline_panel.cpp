@@ -86,6 +86,11 @@ auto timeline_panel::render(
     const bool clip_changed = prev_clip_name_ != state_->anim.selected_clip_name;
     if (clip_changed) {
         prev_clip_name_ = state_->anim.selected_clip_name;
+        selected_event_.reset();
+        event_drag_ = false;
+    }
+    if (selected_event_ && *selected_event_ >= clip->get_events().size()) {
+        selected_event_.reset();
     }
 
     if (is_current_layer_playing()) {
@@ -142,9 +147,13 @@ auto timeline_panel::render(
 
     render_toolbar(clip_duration);
     ImGui::Separator();
+    render_event_problems_(*clip);
     render_tracks();
     update_key_drag_(clip_duration);
+    update_event_drag_(*clip, clip_duration);
     render_keyframe_context_menu_();
+    render_event_menu_(*clip);
+    render_event_editor_(*clip);
 
     create_kf_modal_.render(delta_time);
     delete_track_modal_.render(delta_time);
@@ -492,6 +501,8 @@ auto timeline_panel::render_tracks() -> void {
     auto* draw_list = ImGui::GetWindowDrawList();
     draw_list->ChannelsSplit(2);
     draw_list->ChannelsSetCurrent(1);
+
+    render_event_row_(*clip, usable_track_width, clip_duration, scroll_offset_);
 
     const auto rows = collect_rows_();
     for (const auto& entry : rows) {
@@ -1145,7 +1156,8 @@ auto timeline_panel::render_playhead(
     }
 
     ImVec2 mouse = ImGui::GetMousePos();
-    if (!keyframe_clicked_ && !key_drag_ && ImGui::IsWindowHovered(ImGuiHoveredFlags_None) &&
+    if (!keyframe_clicked_ && !key_drag_ && !event_drag_ &&
+        ImGui::IsWindowHovered(ImGuiHoveredFlags_None) &&
         mouse.x >= track_area_x && mouse.x <= track_area_x + track_width &&
         mouse.y >= area_top && mouse.y <= area_bottom) {
         if (ImGui::IsMouseDragging(ImGuiMouseButton_Left) ||

@@ -79,6 +79,29 @@ constexpr std::string_view set_keys_schema = R"({
     "additionalProperties": false
 })";
 
+constexpr std::string_view set_events_schema = R"({
+    "type": "object",
+    "properties": {
+        "clip": {"type": "string", "description": "Name of an open clip. Defaults to the clip selected in the editor."},
+        "events": {
+            "type": "array",
+            "description": "The whole list of events of the clip; it replaces the one the clip has. An empty list removes every event. Read the current list with clip_get, change it, send it back.",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "time": {"type": "number", "minimum": 0, "description": "Seconds from the start of the clip, at most its length."},
+                    "name": {"type": "string", "description": "One word, such as hit.start, hit.end, cancel.ok, footstep."},
+                    "payload": {"type": "string", "description": "Optional word handed out with the event, such as left for a footstep. Default empty."}
+                },
+                "required": ["time", "name"],
+                "additionalProperties": false
+            }
+        }
+    },
+    "required": ["events"],
+    "additionalProperties": false
+})";
+
 constexpr std::string_view remove_keys_schema = R"({
     "type": "object",
     "properties": {
@@ -352,6 +375,7 @@ template <typename T>
         {"duration", json_of(clip.get_duration())},
         {"track_count", clip.get_tracks().size()},
         {"key_count", key_count},
+        {"event_count", clip.get_events().size()},
         {"unsaved", anim.has_unsaved_clip(clip.get_name())},
         {"selected", anim.selected_clip_name == clip.get_name()},
         {"playback", describe_playback(bindings, clip.get_name())},
@@ -363,8 +387,68 @@ template <typename T>
             tracks.push_back(describe_track(track));
         }
         described.set("tracks", std::move(tracks));
+
+        json::array events;
+        for (const asset::animation_event& event : clip.get_events()) {
+            json::object entry{{"time", json_of(event.time)}, {"name", event.name}};
+            if (!event.payload.empty()) {
+                entry.set("payload", event.payload);
+            }
+            events.emplace_back(std::move(entry));
+        }
+        described.set("events", std::move(events));
+    }
+
+    if (const auto problems = asset::find_problems(clip); !problems.empty()) {
+        json::array listed;
+        for (const std::string& problem : problems) {
+            listed.emplace_back(problem);
+        }
+        described.set("problems", std::move(listed));
     }
     return described;
+}
+
+[[nodiscard]] auto set_events(const editor_bindings& bindings, const json::value& arguments)
+    -> tool_outcome {
+    argument_reader in{arguments};
+    in.allow({"clip", "events"});
+    const std::string clip_name = clip_name_of(bindings, in);
+    if (in.failed()) {
+        return tool_failure(in.error());
+    }
+
+    const auto entries = in.at("events").elements();
+    if (!entries) {
+        return tool_failure(json::describe(entries.error()));
+    }
+
+    std::vector<asset::animation_event> events;
+    for (const json::cursor& entry : *entries) {
+        argument_reader event{entry};
+        event.allow({"time", "name", "payload"});
+        const auto time          = event.at("time").number();
+        const std::string name   = event.text("name");
+        const std::string payload = event.optional_text("payload").value_or(std::string{});
+        if (!time) {
+            event.fail(json::describe(time.error()));
+        }
+        if (event.failed()) {
+            return tool_failure(event.error());
+        }
+        events.push_back({.time = static_cast<float32>(*time), .name = name, .payload = payload});
+    }
+
+    const auto applied = bindings.clips->set_events(clip_name, std::move(events));
+    if (!applied) {
+        return tool_failure(applied.error());
+    }
+
+    const auto clip = bindings.clips->find(clip_name);
+    if (!clip) {
+        return tool_failure(clip.error());
+    }
+    return tool_success(describe_clip(bindings, **clip, true));
 }
 
 [[nodiscard]] auto answer_with_clip(
@@ -617,9 +701,11 @@ auto append_clip_tools(std::vector<tool>& tools, const editor_bindings& bindings
     tools.push_back(tool{
         .name = "clip_get",
         .description =
-            "Read an open clip: its rig, its length in seconds and, for every animated target, "
-            "its keys in the order of time. A key carries any of position, rotation_degrees and "
-            "scale, the node's transform relative to its parent at that time.",
+            "Read an open clip: its rig, its length in seconds, for every animated target its "
+            "keys in the order of time, and its events. A key carries any of position, "
+            "rotation_degrees and scale, the node's transform relative to its parent at that "
+            "time. An event is a named moment game code reacts to, such as hit.start. "
+            "'problems' lists events the clip cannot fire.",
         .input_schema = clip_only_schema,
         .run =
             [bindings](const json::value& arguments) -> tool_outcome {
@@ -649,6 +735,23 @@ auto append_clip_tools(std::vector<tool>& tools, const editor_bindings& bindings
             bindings,
             [bindings](const json::value& arguments) -> tool_outcome {
                 return set_keys(bindings, arguments);
+            }
+        ),
+    });
+
+    tools.push_back(tool{
+        .name = "clip_set_events",
+        .description =
+            "Replace the events of an open clip as one undo step. An event is a named moment "
+            "the game reacts to: hit.start and hit.end bound a strike, cancel.ok opens a cancel, "
+            "footstep marks a sole touching the ground. Events do not lengthen the clip; each "
+            "must lie between 0 and its last key. Opens the clip in the editor; clip_save "
+            "writes it.",
+        .input_schema = set_events_schema,
+        .run          = when_idle(
+            bindings,
+            [bindings](const json::value& arguments) -> tool_outcome {
+                return set_events(bindings, arguments);
             }
         ),
     });
