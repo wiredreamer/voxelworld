@@ -44,6 +44,18 @@ auto debug_window::is_visible() const -> bool {
     return visible_;
 }
 
+auto debug_window::add_panel(
+    std::string menu, std::string name, std::function<void()> body
+) -> void {
+    std::string title = std::format("Debug Tool - {}", name);
+    app_panels_.push_back(app_panel{
+        .menu  = std::move(menu),
+        .name  = std::move(name),
+        .title = std::move(title),
+        .body  = std::move(body),
+    });
+}
+
 auto debug_window::render_main_window() -> void {
     ImGuiWindowFlags window_flags =          //
         ImGuiWindowFlags_NoResize |          //
@@ -96,6 +108,23 @@ auto debug_window::render_menu_bar() -> void {
     if (ImGui::BeginMenu("Settings")) {
         for (std::size_t i = first_settings_panel; i < panel_count; ++i) {
             ImGui::MenuItem(panel_names[i], nullptr, &panel_open_[i]);
+        }
+        ImGui::EndMenu();
+    }
+
+    for (std::size_t first = 0; first < app_panels_.size(); ++first) {
+        const auto& menu  = app_panels_[first].menu;
+        const auto opened = std::ranges::find(app_panels_, menu, &app_panel::menu);
+        if (opened != app_panels_.begin() + static_cast<std::ptrdiff_t>(first)) {
+            continue;
+        }
+        if (!ImGui::BeginMenu(menu.c_str())) {
+            continue;
+        }
+        for (auto& listed : app_panels_) {
+            if (listed.menu == menu) {
+                ImGui::MenuItem(listed.name.c_str(), nullptr, &listed.open);
+            }
         }
         ImGui::EndMenu();
     }
@@ -167,6 +196,16 @@ auto debug_window::render_panels() -> void {
 
         if (ImGui::Begin(panel_titles[i], &panel_open_[i], window_flags)) {
             render_panel_body(static_cast<panel>(i));
+        }
+        ImGui::End();
+    }
+
+    for (auto& listed : app_panels_) {
+        if (!listed.open) {
+            continue;
+        }
+        if (ImGui::Begin(listed.title.c_str(), &listed.open, window_flags)) {
+            listed.body();
         }
         ImGui::End();
     }

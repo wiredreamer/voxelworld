@@ -6,12 +6,16 @@ param air_state int
 param land trigger
 param land_hard trigger
 param dodge_roll trigger
+param dodge_dash trigger
 state idle
 	clip animations/a_humanoid_idle.voxa
 	playback loop
 	to dodge_roll
 		on dodge_roll
 		blend 0.05
+	to dodge_dash
+		on dodge_dash
+		blend 0.03
 	to run
 		when speed > 0
 		blend 0.15
@@ -27,6 +31,9 @@ state run
 	to dodge_roll
 		on dodge_roll
 		blend 0.05
+	to dodge_dash
+		on dodge_dash
+		blend 0.03
 	to idle
 		when speed == 0
 		blend 0.15
@@ -72,6 +79,9 @@ state land
 	to dodge_roll
 		on dodge_roll
 		blend 0.05
+	to dodge_dash
+		on dodge_dash
+		blend 0.03
 	to rise
 		when air_state == 1
 		blend 0.05
@@ -89,6 +99,16 @@ state land_hard
 		blend 0.1
 state dodge_roll
 	clip animations/a_humanoid_dodge_roll.voxa
+	playback once
+	to run
+		when speed > 0
+		wait end
+		blend 0.1
+	to idle
+		wait end
+		blend 0.1
+state dodge_dash
+	clip animations/a_humanoid_dodge_dash.voxa
 	playback once
 	to run
 		when speed > 0

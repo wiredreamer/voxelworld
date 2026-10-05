@@ -79,11 +79,12 @@ private:
 
 export namespace vw::arena {
 
-auto render_debug_hud(
-    const gfx::engine& engine,
+auto register_debug_panels(
+    gfx::engine& engine,
     ecs::entity player,
-    const gfx::third_person_camera_controller& camera_controller,
-    bool show_colliders
+    const gfx::third_person_camera_controller& camera_controller
 ) -> void;
+
+auto render_debug_hud(const gfx::engine& engine, ecs::entity player, bool show_colliders) -> void;
 
 }  // namespace vw::arena

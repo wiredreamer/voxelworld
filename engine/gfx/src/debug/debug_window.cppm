@@ -29,7 +29,17 @@ public:
 
     [[nodiscard]] auto is_visible() const -> bool;
 
+    auto add_panel(std::string menu, std::string name, std::function<void()> body) -> void;
+
 private:
+    struct app_panel {
+        std::string menu;
+        std::string name;
+        std::string title;
+        std::function<void()> body;
+        bool open = false;
+    };
+
     enum class panel : uint8 {
         systems,
         render,
@@ -93,6 +103,7 @@ private:
 
     bool visible_ = false;
     std::array<bool, panel_count> panel_open_{};
+    std::vector<app_panel> app_panels_;
 
     bool show_colliders_ = false;
 

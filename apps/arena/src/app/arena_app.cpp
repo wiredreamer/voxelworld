@@ -51,6 +51,7 @@ arena_app::arena_app(
     world.system<ecs::transform_system>().modify(player_).set_position({0.0f, 500.0f, 0.0f});
     world.system<game::surface_placement_system>().place(player_, {0.0f, 0.0f});
     world.system<game::input_system>().control_locally(player_);
+    register_debug_panels(get_engine(), player_, camera_controller_);
 
     constexpr int32 enemy_count   = 10;
     constexpr float32 spawn_range = 400.0f;
@@ -166,7 +167,7 @@ auto arena_app::render(
         get_engine().get_renderer().draw_colliders(world);
     }
 
-    render_debug_hud(get_engine(), player_, camera_controller_, show_colliders_);
+    render_debug_hud(get_engine(), player_, show_colliders_);
 }
 
 auto arena_app::load_assets() -> void {

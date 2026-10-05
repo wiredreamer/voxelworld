@@ -361,7 +361,7 @@ TEST_CASE("a roll carries the body two heights and turns it over once", "[game][
     mapper.key(keys::LEFT_SHIFT, false);
     mapper.key(keys::W, false);
     REQUIRE(state.is_rolling());
-    REQUIRE(state.get_roll_direction().z < -0.99F);
+    REQUIRE(state.get_dodge_direction().z < -0.99F);
 
     float32 most_upside_down = 1.0F;
     float32 highest_centre   = 0.0F;
@@ -455,6 +455,46 @@ TEST_CASE("a roll is invulnerable for the window its clip marks", "[game][dodge]
     REQUIRE(iframe_seconds > 0.26F);
     REQUIRE(iframe_seconds < 0.34F);
     REQUIRE_FALSE(state.is_invulnerable());
+}
+
+TEST_CASE("a dash lunges one height without turning over and is invulnerable briefly", "[game][dodge]") {
+    grounded_world g;
+    REQUIRE(g.settle());
+    g.run_for(0.3F);
+    const auto& state = g.world.get<game::player_component>(g.player);
+    auto& tuning      = g.world.system<game::player_system>().tuning();
+    auto& mapper      = g.world.system<game::input_system>().mapper();
+    tuning.dodge      = game::dodge_kind::dash;
+    const vec3f start = g.world.get<ecs::transform_component>(g.player).get_position();
+
+    mapper.key(keys::W, true);
+    mapper.key(keys::LEFT_SHIFT, true);
+    g.tick();
+    mapper.key(keys::LEFT_SHIFT, false);
+    mapper.key(keys::W, false);
+    REQUIRE(state.is_dashing());
+    REQUIRE_FALSE(state.is_rolling());
+
+    float32 elapsed        = 0.0F;
+    float32 iframe_seconds = 0.0F;
+    float32 most_tilted    = 1.0F;
+    while (state.is_dodging()) {
+        g.tick();
+        elapsed += g.tick_seconds;
+        iframe_seconds += state.is_invulnerable() ? g.tick_seconds : 0.0F;
+        const auto turn = g.world.get<ecs::transform_component>(state.get_pose()).get_rotation();
+        most_tilted     = std::min(most_tilted, 1.0F - 2.0F * turn.x * turn.x);
+        REQUIRE(elapsed < tuning.dash_seconds + tuning.dash_recovery_seconds + 0.1F);
+    }
+    REQUIRE(most_tilted > 0.9F);
+    REQUIRE(iframe_seconds > 0.08F);
+    REQUIRE(iframe_seconds < 0.16F);
+
+    const vec3f end     = g.world.get<ecs::transform_component>(g.player).get_position();
+    const float32 moved = std::sqrt((end.x - start.x) * (end.x - start.x) + (end.z - start.z) * (end.z - start.z));
+    REQUIRE(moved > tuning.dash_distance * 0.85F);
+    REQUIRE(moved < tuning.dash_distance * 1.15F);
+    REQUIRE(state.get_dodge_charges() == tuning.dodge_charges - 1);
 }
 
 TEST_CASE("a dodge spends its charge and gets it back after the recharge", "[game][dodge]") {

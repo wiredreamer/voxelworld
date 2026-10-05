@@ -17,6 +17,11 @@ enum class air_state : uint8 {
     falling,
 };
 
+enum class dodge_kind : uint8 {
+    roll,
+    dash,
+};
+
 struct movement_tuning final {
     float32 run_turn_degrees_per_second    = 360.0f;
     float32 attack_turn_degrees_per_second = 2400.0f;
@@ -46,6 +51,10 @@ struct movement_tuning final {
     float32 roll_dive_lift                 = 1.5f;
     float32 roll_height_rise_seconds       = 0.02f;
     float32 roll_height_fall_seconds       = 0.06f;
+    dodge_kind dodge                       = dodge_kind::roll;
+    float32 dash_distance                  = 75.0f;
+    float32 dash_seconds                   = 0.25f;
+    float32 dash_recovery_seconds          = 0.05f;
     uint32 dodge_charges                   = 1;
     float32 dodge_recharge_seconds         = 1.2f;
     float32 lunge_seconds                  = 0.15f;
@@ -121,12 +130,24 @@ struct player_component final {
         return stride_;
     }
 
-    [[nodiscard]] auto is_rolling() const -> bool {
-        return rolling_;
+    [[nodiscard]] auto is_dodging() const -> bool {
+        return dodging_;
     }
 
-    [[nodiscard]] auto get_roll_direction() const -> const vec3f& {
-        return roll_facing_;
+    [[nodiscard]] auto is_rolling() const -> bool {
+        return dodging_ && dodge_kind_ == dodge_kind::roll;
+    }
+
+    [[nodiscard]] auto is_dashing() const -> bool {
+        return dodging_ && dodge_kind_ == dodge_kind::dash;
+    }
+
+    [[nodiscard]] auto get_dodge_kind() const -> dodge_kind {
+        return dodge_kind_;
+    }
+
+    [[nodiscard]] auto get_dodge_direction() const -> const vec3f& {
+        return dodge_facing_;
     }
 
     [[nodiscard]] auto is_invulnerable() const -> bool {
@@ -176,14 +197,15 @@ private:
     bool body_locked_             = false;
     float32 stride_               = 0.0f;
     bool pushed_with_left_        = true;
-    vec3f roll_facing_{0.0f, 0.0f, 1.0f};
-    float32 roll_elapsed_         = 0.0f;
+    vec3f dodge_facing_{0.0f, 0.0f, 1.0f};
+    float32 dodge_elapsed_        = 0.0f;
+    dodge_kind dodge_kind_        = dodge_kind::roll;
     float32 roll_height_          = 0.0f;
     float32 dodge_buffered_       = -1.0f;
     float32 dodge_recharge_left_  = 0.0f;
     uint32 dodge_charges_         = 1;
     uint32 dodge_count_           = 0;
-    bool rolling_                 = false;
+    bool dodging_                 = false;
     bool invulnerable_            = false;
     bool attacking_     = false;
     bool swinging_      = false;

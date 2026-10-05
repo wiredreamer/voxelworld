@@ -88,15 +88,31 @@ auto roll_lift(const movement_tuning& tuning, float32 seconds_into_roll) -> floa
     return tuning.roll_dive_lift * std::sin(std::numbers::pi_v<float32> * seconds_into_roll / span);
 }
 
-auto roll_speed(const movement_tuning& tuning, float32 seconds_into_roll) -> float32 {
-    if (tuning.roll_seconds <= 0.0f) {
+auto dodge_travel_seconds(const movement_tuning& tuning, dodge_kind kind) -> float32 {
+    return kind == dodge_kind::roll ? tuning.roll_seconds : tuning.dash_seconds;
+}
+
+auto dodge_total_seconds(const movement_tuning& tuning, dodge_kind kind) -> float32 {
+    return kind == dodge_kind::roll ? tuning.roll_seconds + tuning.roll_recovery_seconds
+                                    : tuning.dash_seconds + tuning.dash_recovery_seconds;
+}
+
+auto dodge_speed(const movement_tuning& tuning, dodge_kind kind, float32 seconds_into_dodge)
+    -> float32 {
+    const float32 seconds  = dodge_travel_seconds(tuning, kind);
+    const float32 distance = kind == dodge_kind::roll ? tuning.roll_distance : tuning.dash_distance;
+    if (seconds <= 0.0f) {
         return 0.0f;
     }
-    const float32 u = seconds_into_roll / tuning.roll_seconds;
+    const float32 u = seconds_into_dodge / seconds;
     if (u < 0.0f || u >= 1.0f) {
         return 0.0f;
     }
-    return 1.5f * tuning.roll_distance / tuning.roll_seconds * (1.0f - u * u);
+    return 1.5f * distance / seconds * (1.0f - u * u);
+}
+
+auto dodge_trigger(dodge_kind kind) -> std::string_view {
+    return kind == dodge_kind::roll ? "dodge_roll" : "dodge_dash";
 }
 
 }  // namespace
@@ -254,17 +270,17 @@ auto player_system::lean_(
         : 1.0f;
     auto pose = world_->system<ecs::transform_system>().modify(state.pose_);
 
-    if (state.rolling_) {
+    if (state.is_rolling()) {
         state.lean_forward_degrees_ = 0.0f;
         state.lean_right_degrees_   = 0.0f;
 
-        const float32 angle = roll_turn_radians(tuning_, state.roll_elapsed_);
+        const float32 angle = roll_turn_radians(tuning_, state.dodge_elapsed_);
         const float32 half  = angle * 0.5f;
         const quat turn{std::sin(half), 0.0f, 0.0f, std::cos(half)};
         const vec3f pivot{0.0f, tuning_.roll_pivot_height, 0.0f};
         const vec3f swung = pivot - rotated(turn, pivot);
         const float32 rest_on_ground = -(swung.y + lowest_point_(state, turn));
-        const float32 target = rest_on_ground + roll_lift(tuning_, state.roll_elapsed_);
+        const float32 target = rest_on_ground + roll_lift(tuning_, state.dodge_elapsed_);
         state.roll_height_  += (target - state.roll_height_) *
             roll_height_follow(tuning_, target > state.roll_height_, delta_time);
         pose.set_rotation(turn);
@@ -411,7 +427,7 @@ auto player_system::read_action_events_(
                 state.body_locked_seconds_ = 0.0f;
             } else if (event.name == "control.unlock") {
                 state.body_locked_ = false;
-            } else if (event.name == "iframe.start" && state.rolling_) {
+            } else if (event.name == "iframe.start" && state.dodging_) {
                 state.invulnerable_ = true;
             } else if (event.name == "iframe.end") {
                 state.invulnerable_ = false;
@@ -446,7 +462,7 @@ auto player_system::recharge_dodge_(
     player_component& state, float32 delta_time
 ) const -> void {
     state.dodge_charges_ = std::min(state.dodge_charges_, tuning_.dodge_charges);
-    if (state.rolling_ || state.dodge_charges_ >= tuning_.dodge_charges) {
+    if (state.dodging_ || state.dodge_charges_ >= tuning_.dodge_charges) {
         state.dodge_recharge_left_ = 0.0f;
         return;
     }
@@ -520,7 +536,7 @@ auto player_system::update(
                 state.dodge_buffered_ = tuning_.input_buffer_seconds;
             }
 
-            const bool dodge_allowed = !state.rolling_ && !state.body_locked_ &&
+            const bool dodge_allowed = !state.dodging_ && !state.body_locked_ &&
                 !state.hit_window_ && state.air_state_ == air_state::ground &&
                 state.dodge_charges_ > 0;
             if (state.dodge_buffered_ >= 0.0f && dodge_allowed) {
@@ -530,19 +546,20 @@ auto player_system::update(
                 state.invulnerable_ = false;
                 const auto facing = world_->get<ecs::transform_component>(ent).get_rotation();
                 const vec3f look  = rotated(facing, {0.0f, 0.0f, 1.0f});
-                state.roll_facing_ = moving ? move_dir : math::normalize(vec3f{look.x, 0.0f, look.z});
-                state.rolling_      = true;
-                state.roll_elapsed_ = 0.0f;
-                state.roll_height_  = 0.0f;
+                state.dodge_facing_ = moving ? move_dir : math::normalize(vec3f{look.x, 0.0f, look.z});
+                state.dodge_kind_    = tuning_.dodge;
+                state.dodging_       = true;
+                state.dodge_elapsed_ = 0.0f;
+                state.roll_height_   = 0.0f;
                 state.attack_buffered_ = -1.0f;
                 if (state.swinging_) {
                     end_swing_(state);
                 }
-                machines.modify(ent).fire_trigger("dodge_roll");
+                machines.modify(ent).fire_trigger(dodge_trigger(state.dodge_kind_));
                 machines.modify(ent).fire_trigger("dodge");
             }
 
-            const bool strike_allowed = !state.rolling_ && !state.body_locked_ &&
+            const bool strike_allowed = !state.dodging_ && !state.body_locked_ &&
                 (!state.swinging_ || state.cancel_open_);
             if (state.attack_buffered_ >= 0.0f && state.weapon_.is_valid() && strike_allowed) {
                 state.attack_buffered_ = -1.0f;
@@ -562,21 +579,22 @@ auto player_system::update(
             state.attacking_ = action_playing || state.swinging_;
 
             auto controller = controllers.modify(ent);
-            if (state.rolling_) {
+            if (state.dodging_) {
                 const float32 move_speed =
                     world_->get<ecs::character_controller_component>(ent).get_move_speed();
-                const float32 roll =
-                    roll_speed(tuning_, state.roll_elapsed_ + delta_time * 0.5f);
-                controller.set_move_input(state.roll_facing_ * (roll / move_speed))
+                const float32 dodge = dodge_speed(
+                    tuning_, state.dodge_kind_, state.dodge_elapsed_ + delta_time * 0.5f
+                );
+                controller.set_move_input(state.dodge_facing_ * (dodge / move_speed))
                     .set_acceleration_seconds(0.0f)
                     .set_deceleration_seconds(0.0f)
-                    .set_facing_direction(state.roll_facing_)
+                    .set_facing_direction(state.dodge_facing_)
                     .set_turn_degrees_per_second(tuning_.attack_turn_degrees_per_second);
 
-                state.roll_elapsed_ += delta_time;
-                state.rolling_ =
-                    state.roll_elapsed_ < tuning_.roll_seconds + tuning_.roll_recovery_seconds;
-                state.invulnerable_ = state.invulnerable_ && state.rolling_;
+                state.dodge_elapsed_ += delta_time;
+                state.dodging_ =
+                    state.dodge_elapsed_ < dodge_total_seconds(tuning_, state.dodge_kind_);
+                state.invulnerable_ = state.invulnerable_ && state.dodging_;
             } else if (state.swinging_) {
                 const float32 lunge = state.lunging_
                     ? lunge_speed(tuning_, state.lunge_seconds_ + delta_time * 0.5f)
@@ -615,7 +633,7 @@ auto player_system::update(
             }
 
             controller.set_coyote_seconds(tuning_.coyote_seconds);
-            if (state.jump_buffered_ >= 0.0f && !state.body_locked_ && !state.rolling_) {
+            if (state.jump_buffered_ >= 0.0f && !state.body_locked_ && !state.dodging_) {
                 controller.request_jump();
             }
 
