@@ -222,6 +222,60 @@ TEST_CASE("an attack while moving strikes along the move and steps into it", "[g
     REQUIRE(-wish.x > 0.0F);
 }
 
+TEST_CASE("a strike pressed late in a swing follows it, one pressed early is dropped", "[game][player]") {
+    game_world g;
+    const auto player = g.spawn_controlled();
+    const auto& state = g.world.get<game::player_component>(player);
+
+    g.mapper().key(keys::KEY_1, true);
+    g.world.update(0.016F);
+    g.mapper().key(keys::KEY_1, false);
+    g.world.update(0.016F);
+
+    const auto click = [&] {
+        g.mapper().button(mouse::buttons::LEFT, true);
+        g.world.update(0.016F);
+        g.mapper().button(mouse::buttons::LEFT, false);
+    };
+
+    const auto swinging_ticks = [&] {
+        int32 ticks = 0;
+        for (int32 tick = 0; tick < 100; ++tick) {
+            g.world.update(0.016F);
+            ticks += state.is_swinging() ? 1 : 0;
+        }
+        return ticks;
+    };
+
+    click();
+    int32 one_swing = 1;
+    while (state.is_swinging() && one_swing < 100) {
+        g.world.update(0.016F);
+        ++one_swing;
+    }
+    for (int32 tick = 0; tick < 40; ++tick) {
+        g.world.update(0.016F);
+    }
+
+    click();
+    for (int32 tick = 0; tick < 3; ++tick) {
+        g.world.update(0.016F);
+    }
+    click();
+    REQUIRE(swinging_ticks() < one_swing);
+
+    for (int32 tick = 0; tick < 40; ++tick) {
+        g.world.update(0.016F);
+    }
+    click();
+    for (int32 tick = 0; tick < one_swing - 5; ++tick) {
+        g.world.update(0.016F);
+    }
+    REQUIRE(state.is_swinging());
+    click();
+    REQUIRE(swinging_ticks() > one_swing);
+}
+
 TEST_CASE("a pinned parameter drives the machines against the game", "[game][player]") {
     game_world g;
     const auto player = g.spawn_controlled();

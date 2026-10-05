@@ -13,6 +13,9 @@ state sword_attack
 	rate 2
 	fade_in 0.25
 	fade_out 0.35
+	to sword_attack
+		on attack
+		blend 0.1
 	to none
 		wait end
 		wait blend

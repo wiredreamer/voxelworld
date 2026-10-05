@@ -166,6 +166,7 @@ add_executable(game_tests
     game/input.test.cpp
     game/input_bindings.test.cpp
     game/player.test.cpp
+    game/jump.test.cpp
 )
 
 target_link_libraries(game_tests PRIVATE

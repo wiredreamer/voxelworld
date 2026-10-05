@@ -32,6 +32,16 @@ auto lean_degrees(float32 acceleration, float32 full_acceleration, float32 full_
 
 constexpr float32 longest_swing_seconds = 2.0f;
 
+auto age_buffer(float32& seconds_left, float32 delta_time) -> void {
+    if (seconds_left < 0.0f) {
+        return;
+    }
+    seconds_left -= delta_time;
+    if (seconds_left < 0.0f) {
+        seconds_left = -1.0f;
+    }
+}
+
 auto lunge_speed(const movement_tuning& tuning, float32 seconds_into_lunge) -> float32 {
     if (tuning.lunge_seconds <= 0.0f) {
         return 0.0f;
@@ -252,7 +262,6 @@ auto player_system::update(
             }
 
             const auto& frame = input.get_frame();
-            const auto& body  = world_->get<ecs::rigid_body_component>(ent);
 
             const vec3f forward = frame.look_forward_flat();
             const vec3f right   = frame.look_right_flat();
@@ -275,8 +284,15 @@ auto player_system::update(
                 }
             }
 
-            if (frame.was_pressed(input_action::attack) && state.weapon_.is_valid() &&
-                !action_playing && !state.swinging_) {
+            if (frame.was_pressed(input_action::attack)) {
+                state.attack_buffered_ = tuning_.input_buffer_seconds;
+            }
+            if (frame.was_pressed(input_action::jump)) {
+                state.jump_buffered_ = tuning_.input_buffer_seconds;
+            }
+
+            if (state.attack_buffered_ >= 0.0f && state.weapon_.is_valid() && !state.swinging_) {
+                state.attack_buffered_ = -1.0f;
                 const auto facing = world_->get<ecs::transform_component>(ent).get_rotation();
                 const vec3f look  = rotated(facing, {0.0f, 0.0f, 1.0f});
                 state.attack_facing_ = moving ? move_dir : math::normalize(vec3f{look.x, 0.0f, look.z});
@@ -318,21 +334,24 @@ auto player_system::update(
                 }
             }
 
-            const bool jump = frame.is_held(input_action::jump);
-            if (jump) {
+            const uint32 jump_count =
+                world_->get<ecs::character_controller_component>(ent).get_jump_count();
+            if (jump_count != state.seen_jump_count_) {
+                state.seen_jump_count_ = jump_count;
+                state.jump_buffered_   = -1.0f;
+            }
+
+            controller.set_coyote_seconds(tuning_.coyote_seconds);
+            if (state.jump_buffered_ >= 0.0f) {
                 controller.request_jump();
-            }
-            if (jump && body.is_grounded()) {
-                state.jump_pending_ = true;
-            }
-            if (state.jump_pending_ && !body.is_grounded()) {
-                state.jump_counter_ = (state.jump_counter_ + 1) % 2;
-                state.jump_pending_ = false;
             }
 
             machines.modify(ent).set_parameter(
-                "jump_count", static_cast<float32>(state.jump_counter_)
+                "jump_count", static_cast<float32>(jump_count % 2)
             );
+
+            age_buffer(state.attack_buffered_, delta_time);
+            age_buffer(state.jump_buffered_, delta_time);
 
             if (frame.was_pressed(input_action::toggle_weapon)) {
                 toggling_.push_back(ent);

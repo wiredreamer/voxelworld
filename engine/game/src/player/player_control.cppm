@@ -20,6 +20,8 @@ struct movement_tuning final {
     float32 lean_back_degrees              = 4.0f;
     float32 lean_side_degrees              = 8.0f;
     float32 lean_follow_seconds            = 0.08f;
+    float32 input_buffer_seconds           = 0.15f;
+    float32 coyote_seconds                 = 0.1f;
     float32 lunge_seconds                  = 0.15f;
     float32 lunge_distance                 = 10.0f;
 };
@@ -75,8 +77,9 @@ private:
     float32 lean_right_degrees_   = 0.0f;
     float32 swing_seconds_        = 0.0f;
     float32 lunge_seconds_        = 0.0f;
-    int32 jump_counter_ = 0;
-    bool jump_pending_  = false;
+    float32 attack_buffered_      = -1.0f;
+    float32 jump_buffered_        = -1.0f;
+    uint32 seen_jump_count_       = 0;
     bool attacking_     = false;
     bool swinging_      = false;
     bool swing_started_ = false;

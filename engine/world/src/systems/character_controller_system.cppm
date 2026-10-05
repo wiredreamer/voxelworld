@@ -31,6 +31,7 @@ public:
         auto set_deceleration_seconds(float32 seconds) -> controller_modifier&;
         auto set_jump_impulse(float32 impulse) -> controller_modifier&;
         auto set_turn_degrees_per_second(float32 degrees_per_second) -> controller_modifier&;
+        auto set_coyote_seconds(float32 seconds) -> controller_modifier&;
         auto request_jump() -> controller_modifier&;
 
     private:

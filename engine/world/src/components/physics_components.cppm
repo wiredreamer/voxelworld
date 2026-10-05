@@ -125,6 +125,14 @@ struct character_controller_component final {
         return facing_direction_;
     }
 
+    [[nodiscard]] auto get_coyote_seconds() const -> float32 {
+        return coyote_seconds_;
+    }
+
+    [[nodiscard]] auto get_jump_count() const -> uint32 {
+        return jump_count_;
+    }
+
 private:
     friend class character_controller_system;
 
@@ -135,6 +143,10 @@ private:
     float32 deceleration_seconds_    = 0.15F;
     float32 jump_impulse_            = 150.0F;
     float32 turn_degrees_per_second_ = 900.0F;
+    float32 coyote_seconds_          = 0.1F;
+    float32 seconds_off_ground_      = std::numeric_limits<float32>::max();
+    uint32 jump_count_               = 0;
+    bool left_ground_by_jump_        = false;
     bool jump_requested_             = false;
 };
 

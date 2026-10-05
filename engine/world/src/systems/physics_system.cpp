@@ -81,12 +81,15 @@ auto physics_system::step(
 
         rb.velocity_.y += gravity_ * rb.gravity_scale_ * dt;
 
-        if (const auto* mi_ptr = reg.try_get<movement_intent_component>(ent)) {
-            const auto& mi = *mi_ptr;
+        if (auto* mi_ptr = reg.try_get<movement_intent_component>(ent)) {
+            auto& mi = *mi_ptr;
             auto axes = mi.wish_axes_;
 
             if (axes & axis_flag::x) { rb.velocity_.x = mi.wish_velocity_.x; }
-            if (axes & axis_flag::y) { rb.velocity_.y = mi.wish_velocity_.y; }
+            if (axes & axis_flag::y) {
+                rb.velocity_.y = mi.wish_velocity_.y;
+                mi.wish_axes_  = static_cast<axis_flags>(axes & ~axis_flag::y);
+            }
             if (axes & axis_flag::z) { rb.velocity_.z = mi.wish_velocity_.z; }
         }
 

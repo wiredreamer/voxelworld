@@ -54,11 +54,23 @@ auto character_controller_system::update(float32 delta_time) -> void {
 
         mi.wish_velocity_.x = planar_next.x;
         mi.wish_velocity_.z = planar_next.z;
-        mi.wish_axes_ = axis_flag::xz;
+        mi.wish_axes_ = static_cast<axis_flags>(axis_flag::xz | (mi.wish_axes_ & axis_flag::y));
 
-        if (cc.jump_requested_ && rb.is_grounded()) {
+        if (rb.is_grounded()) {
+            cc.seconds_off_ground_  = 0.0f;
+            cc.left_ground_by_jump_ = false;
+        } else if (cc.seconds_off_ground_ < std::numeric_limits<float32>::max()) {
+            cc.seconds_off_ground_ += delta_time;
+        }
+
+        const bool within_coyote =
+            !cc.left_ground_by_jump_ && cc.seconds_off_ground_ <= cc.coyote_seconds_;
+        const bool jump_waiting_for_physics = (mi.wish_axes_ & axis_flag::y) != 0;
+        if (cc.jump_requested_ && !jump_waiting_for_physics && (rb.is_grounded() || within_coyote)) {
             mi.wish_velocity_.y = cc.jump_impulse_;
             mi.wish_axes_ = axis_flag::xz | axis_flag::y;
+            cc.left_ground_by_jump_ = true;
+            ++cc.jump_count_;
         }
 
         auto facing_len = math::length(cc.facing_direction_);
@@ -178,6 +190,18 @@ auto character_controller_system::controller_modifier::set_turn_degrees_per_seco
     }
     auto& comp = reg.get<character_controller_component>(entity_);
     comp.turn_degrees_per_second_ = degrees_per_second;
+    return *this;
+}
+
+auto character_controller_system::controller_modifier::set_coyote_seconds(
+    float32 seconds
+) -> controller_modifier& {
+    auto& reg = system_->world_->registry();
+    if (!reg.has<character_controller_component>(entity_)) {
+        return *this;
+    }
+    auto& comp = reg.get<character_controller_component>(entity_);
+    comp.coyote_seconds_ = seconds;
     return *this;
 }
 
