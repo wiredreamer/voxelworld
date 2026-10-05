@@ -7,7 +7,7 @@ param jump_count int
 state idle
 	clip animations/a_humanoid_idle.voxa
 	playback loop
-	to walk
+	to run
 		when speed > 0
 		blend 0.15
 	to jump_left
@@ -20,8 +20,8 @@ state idle
 		when grounded == false
 		blend 0.15
 		wait blend
-state walk
-	clip animations/a_humanoid_walk_f.voxa
+state run
+	clip animations/a_humanoid_run_f.voxa
 	playback loop
 	to idle
 		when speed == 0

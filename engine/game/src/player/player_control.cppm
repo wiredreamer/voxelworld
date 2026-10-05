@@ -11,6 +11,21 @@ export namespace vw::game {
 
 class player_system;
 
+struct movement_tuning final {
+    float32 run_turn_degrees_per_second    = 360.0f;
+    float32 attack_turn_degrees_per_second = 2400.0f;
+    float32 acceleration_seconds           = 0.15f;
+    float32 deceleration_seconds           = 0.2f;
+    float32 lean_forward_degrees           = 5.0f;
+    float32 lean_back_degrees              = 4.0f;
+    float32 lean_side_degrees              = 8.0f;
+    float32 lean_follow_seconds            = 0.08f;
+    float32 attack_lock_seconds            = 0.25f;
+    float32 lunge_delay_seconds            = 0.05f;
+    float32 lunge_seconds                  = 0.15f;
+    float32 lunge_distance                 = 10.0f;
+};
+
 struct player_component final {
     [[nodiscard]] auto has_weapon() const -> bool {
         return weapon_.is_valid();
@@ -20,9 +35,30 @@ struct player_component final {
         return attacking_;
     }
 
+    [[nodiscard]] auto is_swinging() const -> bool {
+        return swinging_;
+    }
+
+    [[nodiscard]] auto get_attack_direction() const -> const vec3f& {
+        return attack_facing_;
+    }
+
+    [[nodiscard]] auto get_pose() const -> ecs::entity {
+        return pose_;
+    }
+
+    [[nodiscard]] auto get_lean_forward_degrees() const -> float32 {
+        return lean_forward_degrees_;
+    }
+
+    [[nodiscard]] auto get_lean_right_degrees() const -> float32 {
+        return lean_right_degrees_;
+    }
+
 private:
     friend class player_system;
 
+    ecs::entity pose_;
     ecs::entity body_;
     ecs::entity head_;
     ecs::entity hand_right_;
@@ -32,9 +68,14 @@ private:
     ecs::entity weapon_;
 
     vec3f attack_facing_{0.0f, 0.0f, 0.0f};
+    vec3f previous_planar_velocity_{0.0f, 0.0f, 0.0f};
+    float32 lean_forward_degrees_ = 0.0f;
+    float32 lean_right_degrees_   = 0.0f;
+    float32 swing_seconds_        = 0.0f;
     int32 jump_counter_ = 0;
     bool jump_pending_  = false;
     bool attacking_     = false;
+    bool swinging_      = false;
 };
 
 class player_system final {
@@ -49,14 +90,20 @@ public:
 
     auto toggle_weapon(ecs::entity player) -> void;
 
+    [[nodiscard]] auto tuning() -> movement_tuning& {
+        return tuning_;
+    }
+
 private:
-    [[nodiscard]] auto create_body_part_(ecs::entity root, std::string_view part_name) const
+    [[nodiscard]] auto create_body_part_(ecs::entity parent, std::string_view part_name) const
         -> ecs::entity;
     auto attach_machines_(ecs::entity root) const -> void;
+    auto lean_(ecs::entity ent, player_component& state, float32 delta_time) const -> void;
 
     ecs::world* world_;
     asset::asset_storage* assets_;
     std::vector<ecs::entity> toggling_;
+    movement_tuning tuning_;
 };
 
 }  // namespace vw::game

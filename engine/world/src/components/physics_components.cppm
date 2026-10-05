@@ -105,12 +105,20 @@ struct character_controller_component final {
         return move_speed_;
     }
 
+    [[nodiscard]] auto get_acceleration_seconds() const -> float32 {
+        return acceleration_seconds_;
+    }
+
+    [[nodiscard]] auto get_deceleration_seconds() const -> float32 {
+        return deceleration_seconds_;
+    }
+
     [[nodiscard]] auto get_jump_impulse() const -> float32 {
         return jump_impulse_;
     }
 
-    [[nodiscard]] auto get_rotation_speed() const -> float32 {
-        return rotation_speed_;
+    [[nodiscard]] auto get_turn_degrees_per_second() const -> float32 {
+        return turn_degrees_per_second_;
     }
 
     [[nodiscard]] auto get_facing_direction() const -> const vec3f& {
@@ -122,10 +130,12 @@ private:
 
     vec3f move_input_{0.0F, 0.0F, 0.0F};
     vec3f facing_direction_{0.0F, 0.0F, 1.0F};
-    float32 move_speed_     = 100.0F;
-    float32 jump_impulse_   = 150.0F;
-    float32 rotation_speed_ = 5.0F;
-    bool jump_requested_    = false;
+    float32 move_speed_              = 100.0F;
+    float32 acceleration_seconds_    = 0.1F;
+    float32 deceleration_seconds_    = 0.15F;
+    float32 jump_impulse_            = 150.0F;
+    float32 turn_degrees_per_second_ = 900.0F;
+    bool jump_requested_             = false;
 };
 
 }  // namespace vw::ecs

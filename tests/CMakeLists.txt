@@ -144,6 +144,7 @@ add_executable(world_tests
     world/variant.test.cpp
     world/variant_subtree.test.cpp
     world/rig.test.cpp
+    world/character_controller.test.cpp
 )
 
 target_link_libraries(world_tests PRIVATE

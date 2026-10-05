@@ -227,7 +227,7 @@ def run_prefab_scenario(probe):
     probe.check("prefab_get gives the rig and two machines", prefab.get("rig") == "humanoid" and len(prefab.get("machines", [])) == 2, str(prefab.get("machines")))
     probe.check(
         "prefab_get places the head",
-        head.get("parent") == "root" and head.get("position") == [0, 9.5, 0] and head.get("scale") == [1, 1, 1],
+        head.get("parent") == "root" and head.get("position") == [0, 22, 0] and head.get("scale") == [1, 1, 1],
         str(head),
     )
     probe.check(
@@ -870,7 +870,7 @@ def run_clip_scenario(probe):
     head_keys = keys_of(idle, "head") if ok else None
     probe.check(
         "clip_get lists the keys of a target in the order of time",
-        head_keys is not None and head_keys[0].get("time") == 0 and head_keys[0].get("position") == [0, 9.5, 0]
+        head_keys is not None and head_keys[0].get("time") == 0 and head_keys[0].get("position") == [0, 22, 0]
         and [key["time"] for key in head_keys] == sorted(key["time"] for key in head_keys) and close_to(idle.get("duration"), 4.8),
         str(head_keys),
     )
@@ -885,7 +885,7 @@ def run_clip_scenario(probe):
     ok, text = tool(probe, "clip_create", {"name": SCRATCH_CLIP})
     probe.check("clip_create refuses a clip that is open", not ok and "already open" in text, str(text))
 
-    ok, text = tool(probe, "clip_create", {"name": "a_humanoid_walk_f"})
+    ok, text = tool(probe, "clip_create", {"name": "a_humanoid_run_f"})
     probe.check("clip_create refuses an existing file", not ok and "overwrite: true" in text, str(text))
 
     ok, keyed = tool(
@@ -970,7 +970,7 @@ def run_clip_scenario(probe):
     ok, state = tool(probe, "editor_state")
     probe.check(
         "closing the selected clip returns to the prefab and its rest pose",
-        ok and state.get("context") == "prefab" and close_to(head_position(probe), [0, 9.5, 0]),
+        ok and state.get("context") == "prefab" and close_to(head_position(probe), [0, 22, 0]),
         f"{state.get('context')} {head_position(probe)}",
     )
 
@@ -997,7 +997,7 @@ def run_clip_scenario(probe):
     ok, state = tool(probe, "editor_state")
     probe.check(
         "a node tool leaves the clip and restores the rest pose first",
-        ok and state.get("context") == "prefab" and not close_to(posed_head, [0, 9.5, 0]) and close_to(head_position(probe), [0, 9.5, 0]),
+        ok and state.get("context") == "prefab" and not close_to(posed_head, [0, 22, 0]) and close_to(head_position(probe), [0, 22, 0]),
         f"{state.get('context')} posed {posed_head} now {head_position(probe)}",
     )
 
@@ -1008,7 +1008,7 @@ def run_clip_scenario(probe):
 
 
 def run_playback_checks(probe):
-    ok, opened = tool(probe, "clip_open", {"name": "a_humanoid_walk_f"})
+    ok, opened = tool(probe, "clip_open", {"name": "a_humanoid_run_f"})
     probe.check(
         "an opened clip is not playing",
         ok and opened.get("playback", {}).get("state") == "stopped",
@@ -1066,7 +1066,7 @@ def run_playback_checks(probe):
     ok, text = tool(probe, "clip_play", {"clip": "nope"})
     probe.check("clip_play refuses a clip that is not open", not ok and "is not open" in text, str(text))
 
-    tool(probe, "clip_close", {"clip": "a_humanoid_walk_f", "discard_unsaved": True})
+    tool(probe, "clip_close", {"clip": "a_humanoid_run_f", "discard_unsaved": True})
 
 
 def machine_payload(machine):
@@ -1124,7 +1124,7 @@ def run_fsm_scenario(probe):
     )
     probe.check(
         "conditions read as parameter, operator and value",
-        idle.get("transitions", [{}])[0] == {"to": "walk", "when": [{"param": "speed", "op": ">", "value": 0}], "blend": 0.15}
+        idle.get("transitions", [{}])[0] == {"to": "run", "when": [{"param": "speed", "op": ">", "value": 0}], "blend": 0.15}
         and {"param": "grounded", "op": "==", "value": False} in idle["transitions"][1].get("when", []),
         str(idle.get("transitions")),
     )
@@ -1175,7 +1175,7 @@ def run_fsm_scenario(probe):
             },
             {
                 "name": "walk",
-                "clip": "animations/a_humanoid_walk_f.voxa",
+                "clip": "animations/a_humanoid_run_f.voxa",
                 "rate": 1.5,
                 "fade_in": {"duration": 0.3, "interp": "ease_in"},
                 "transitions": [{"to": "idle", "when": [{"param": "armed", "op": "==", "value": False}], "wait_end": True}],
@@ -1722,13 +1722,13 @@ def run_machine_scenario(probe):
     ok, walking = tool(probe, "fsm_drive", {"set": {"speed": 1.0}})
     probe.check(
         "a parameter takes the machine to another state",
-        ok and walking["layers"][0].get("state") == "walk" and walking["layers"][0].get("clip") == "a_humanoid_walk_f" and walking["parameters"].get("speed") == 1.0,
+        ok and walking["layers"][0].get("state") == "run" and walking["layers"][0].get("clip") == "a_humanoid_run_f" and walking["parameters"].get("speed") == 1.0,
         str(walking),
     )
     ok, struck = tool(probe, "fsm_drive", {"fire": ["attack"]})
     probe.check(
         "a trigger moves the machine of another layer and leaves the first alone",
-        ok and struck["layers"][1].get("state") == "sword_attack" and struck["layers"][0].get("state") == "walk",
+        ok and struck["layers"][1].get("state") == "sword_attack" and struck["layers"][0].get("state") == "run",
         str(struck.get("layers")),
     )
     probe.check("a running machine moves the nodes", nodes_of(probe) != rest, "the nodes are where they rest")
@@ -1746,14 +1746,14 @@ def run_machine_scenario(probe):
     tool(probe, "fsm_drive", {"set": {"grounded": True, "jump_count": 0, "speed": 1.0}})
     ok, locomotion = tool(probe, "fsm_get", {"machine": "humanoid_locomotion"})
     edited = json.loads(json.dumps(machine_payload(locomotion)))
-    next(state for state in edited["states"] if state["name"] == "walk")["rate"] = 0.5
+    next(state for state in edited["states"] if state["name"] == "run")["rate"] = 0.5
     ok, changed = tool(probe, "fsm_set", edited)
     time.sleep(0.2)
     ok_status, live = tool(probe, "fsm_status")
     probe.check(
         "fsm_set reaches machines that are running and keeps their state and parameters",
         ok and changed.get("unsaved") is True and ok_status and live.get("running") is True
-        and live["layers"][0].get("state") == "walk" and live["parameters"].get("speed") == 1.0,
+        and live["layers"][0].get("state") == "run" and live["parameters"].get("speed") == 1.0,
         str(live),
     )
     tool(probe, "undo")
@@ -1762,7 +1762,7 @@ def run_machine_scenario(probe):
     ok_machine, back = tool(probe, "fsm_get", {"machine": "humanoid_locomotion"})
     probe.check(
         "undo of the edit reaches them too",
-        ok_status and live.get("running") is True and live["layers"][0].get("state") == "walk"
+        ok_status and live.get("running") is True and live["layers"][0].get("state") == "run"
         and ok_machine and machine_payload(back) == machine_payload(locomotion),
         str(live),
     )
@@ -1808,11 +1808,11 @@ def run_machine_scenario(probe):
     tool(probe, "undo")
 
     tool(probe, "fsm_run")
-    ok, opened = tool(probe, "clip_open", {"name": "a_humanoid_walk_f"})
+    ok, opened = tool(probe, "clip_open", {"name": "a_humanoid_run_f"})
     ok_status, status = tool(probe, "fsm_status")
     probe.check("opening a clip stops the machines", ok and ok_status and status.get("running") is False, str(status))
 
-    tool(probe, "clip_close", {"clip": "a_humanoid_walk_f", "discard_unsaved": True})
+    tool(probe, "clip_close", {"clip": "a_humanoid_run_f", "discard_unsaved": True})
     tool(probe, "clip_close", {"clip": "a_humanoid_idle", "discard_unsaved": True})
     tool(probe, "prefab_close", {"discard_unsaved": True})
 

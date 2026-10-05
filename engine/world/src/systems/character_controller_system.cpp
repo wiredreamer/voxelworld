@@ -5,6 +5,31 @@ import vw.core;
 
 namespace vw::ecs {
 
+namespace {
+
+auto approach(const vec3f& from, const vec3f& to, float32 max_step) -> vec3f {
+    const vec3f gap          = to - from;
+    const float32 gap_length = math::length(gap);
+    if (gap_length <= max_step) {
+        return to;
+    }
+    return from + gap * (max_step / gap_length);
+}
+
+auto planar_step(
+    const character_controller_component& cc, const vec3f& from, const vec3f& to, float32 dt
+) -> float32 {
+    const bool slowing = math::length_squared(to) < math::length_squared(from);
+    const float32 seconds =
+        slowing ? cc.get_deceleration_seconds() : cc.get_acceleration_seconds();
+    if (seconds <= 0.0f) {
+        return std::numeric_limits<float32>::max();
+    }
+    return cc.get_move_speed() / seconds * dt;
+}
+
+}  // namespace
+
 character_controller_system::character_controller_system(world& w)
     : world_(&w) {}
 
@@ -19,8 +44,16 @@ auto character_controller_system::update(float32 delta_time) -> void {
             continue;
         }
 
-        mi.wish_velocity_.x = cc.move_input_.x * cc.move_speed_;
-        mi.wish_velocity_.z = cc.move_input_.z * cc.move_speed_;
+        const vec3f planar_now{mi.wish_velocity_.x, 0.0f, mi.wish_velocity_.z};
+        const vec3f planar_goal{
+            cc.move_input_.x * cc.move_speed_, 0.0f, cc.move_input_.z * cc.move_speed_
+        };
+        const vec3f planar_next = approach(
+            planar_now, planar_goal, planar_step(cc, planar_now, planar_goal, delta_time)
+        );
+
+        mi.wish_velocity_.x = planar_next.x;
+        mi.wish_velocity_.z = planar_next.z;
         mi.wish_axes_ = axis_flag::xz;
 
         if (cc.jump_requested_ && rb.is_grounded()) {
@@ -31,10 +64,21 @@ auto character_controller_system::update(float32 delta_time) -> void {
         auto facing_len = math::length(cc.facing_direction_);
         if (facing_len > 0.001f && reg.has<transform_component>(ent)) {
             const auto& tc = reg.get<transform_component>(ent);
-            auto target = math::quat_look_y(cc.facing_direction_);
-            auto current = tc.get_rotation();
-            float32 t = math::clamp(cc.rotation_speed_ * delta_time, 0.0f, 1.0f);
-            world_->system<transform_system>().modify(ent).set_rotation(math::slerp(current, target, t));
+            const auto target  = math::quat_look_y(cc.facing_direction_);
+            const auto current = tc.get_rotation();
+            const float32 alignment =
+                math::clamp(std::abs(math::dot(current, target)), 0.0f, 1.0f);
+            const float32 remaining_radians = 2.0f * std::acos(alignment);
+            const float32 step_radians =
+                math::radians(cc.turn_degrees_per_second_) * delta_time;
+
+            if (remaining_radians > step_radians) {
+                world_->system<transform_system>().modify(ent).set_rotation(
+                    math::slerp(current, target, step_radians / remaining_radians)
+                );
+            } else if (remaining_radians > 0.0f) {
+                world_->system<transform_system>().modify(ent).set_rotation(target);
+            }
         }
 
         cc.jump_requested_ = false;
@@ -89,6 +133,30 @@ auto character_controller_system::controller_modifier::set_move_speed(
     return *this;
 }
 
+auto character_controller_system::controller_modifier::set_acceleration_seconds(
+    float32 seconds
+) -> controller_modifier& {
+    auto& reg = system_->world_->registry();
+    if (!reg.has<character_controller_component>(entity_)) {
+        return *this;
+    }
+    auto& comp = reg.get<character_controller_component>(entity_);
+    comp.acceleration_seconds_ = seconds;
+    return *this;
+}
+
+auto character_controller_system::controller_modifier::set_deceleration_seconds(
+    float32 seconds
+) -> controller_modifier& {
+    auto& reg = system_->world_->registry();
+    if (!reg.has<character_controller_component>(entity_)) {
+        return *this;
+    }
+    auto& comp = reg.get<character_controller_component>(entity_);
+    comp.deceleration_seconds_ = seconds;
+    return *this;
+}
+
 auto character_controller_system::controller_modifier::set_jump_impulse(
     float32 impulse
 ) -> controller_modifier& {
@@ -101,15 +169,15 @@ auto character_controller_system::controller_modifier::set_jump_impulse(
     return *this;
 }
 
-auto character_controller_system::controller_modifier::set_rotation_speed(
-    float32 speed
+auto character_controller_system::controller_modifier::set_turn_degrees_per_second(
+    float32 degrees_per_second
 ) -> controller_modifier& {
     auto& reg = system_->world_->registry();
     if (!reg.has<character_controller_component>(entity_)) {
         return *this;
     }
     auto& comp = reg.get<character_controller_component>(entity_);
-    comp.rotation_speed_ = speed;
+    comp.turn_degrees_per_second_ = degrees_per_second;
     return *this;
 }
 

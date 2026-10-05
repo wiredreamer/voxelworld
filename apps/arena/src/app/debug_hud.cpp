@@ -69,6 +69,29 @@ auto render_input_state(ecs::world& world, ecs::entity player) -> void {
     }
 }
 
+auto render_movement_tuning(ecs::world& world) -> void {
+    auto& tuning = world.system<game::player_system>().tuning();
+
+    ImGui::Text("Movement tuning:");
+    ImGui::SliderFloat("turn, deg/s", &tuning.run_turn_degrees_per_second, 90.0f, 1440.0f, "%.0f");
+    ImGui::SliderFloat(
+        "attack turn, deg/s", &tuning.attack_turn_degrees_per_second, 360.0f, 4000.0f, "%.0f"
+    );
+    ImGui::SliderFloat("acceleration, s", &tuning.acceleration_seconds, 0.0f, 1.0f, "%.2f");
+    ImGui::SliderFloat("deceleration, s", &tuning.deceleration_seconds, 0.0f, 1.0f, "%.2f");
+    ImGui::SliderFloat("lean forward, deg", &tuning.lean_forward_degrees, 0.0f, 20.0f, "%.1f");
+    ImGui::SliderFloat("lean back, deg", &tuning.lean_back_degrees, 0.0f, 20.0f, "%.1f");
+    ImGui::SliderFloat("lean side, deg", &tuning.lean_side_degrees, 0.0f, 25.0f, "%.1f");
+    ImGui::SliderFloat("lean follow, s", &tuning.lean_follow_seconds, 0.0f, 0.5f, "%.2f");
+    ImGui::SliderFloat("attack lock, s", &tuning.attack_lock_seconds, 0.0f, 1.0f, "%.2f");
+    ImGui::SliderFloat("lunge delay, s", &tuning.lunge_delay_seconds, 0.0f, 0.5f, "%.2f");
+    ImGui::SliderFloat("lunge time, s", &tuning.lunge_seconds, 0.0f, 0.5f, "%.2f");
+    ImGui::SliderFloat("lunge distance", &tuning.lunge_distance, 0.0f, 40.0f, "%.1f");
+    if (ImGui::Button("defaults")) {
+        tuning = game::movement_tuning{};
+    }
+}
+
 }  // namespace
 
 auto render_debug_hud(
@@ -102,6 +125,9 @@ auto render_debug_hud(
     auto& world = engine.get_world();
 
     render_input_state(world, player);
+    ImGui::Separator();
+
+    render_movement_tuning(world);
     ImGui::Separator();
 
     if (!world.system<game::surface_placement_system>().is_waiting(player)) {

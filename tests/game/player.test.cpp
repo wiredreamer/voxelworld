@@ -49,7 +49,9 @@ TEST_CASE("a spawned player is a controllable character without a weapon", "[gam
     REQUIRE(g.world.has<ecs::character_controller_component>(player));
     REQUIRE(g.world.has<ecs::animation_fsm_component>(player));
     REQUIRE(g.world.get<ecs::animation_fsm_component>(player).machine_count() > 0);
-    REQUIRE(g.world.get<ecs::hierarchy_component>(player).get_children().size() == 6);
+    const auto pose = g.world.get<game::player_component>(player).get_pose();
+    REQUIRE(g.world.get<ecs::hierarchy_component>(player).get_children().size() == 1);
+    REQUIRE(g.world.get<ecs::hierarchy_component>(pose).get_children().size() == 6);
     REQUIRE_FALSE(g.world.get<game::player_component>(player).has_weapon());
 }
 
@@ -57,22 +59,157 @@ TEST_CASE("the player walks where the look points", "[game][player]") {
     game_world g;
     const auto player = g.spawn_controlled();
 
+    const auto run_for = [&](float32 seconds) {
+        for (float32 elapsed = 0.0F; elapsed < seconds; elapsed += 0.016F) {
+            g.world.update(0.016F);
+        }
+    };
+
     g.mapper().key(keys::W, true);
     g.world.update(0.016F);
 
     const float32 speed = g.world.get<ecs::character_controller_component>(player).get_move_speed();
     auto wish           = g.world.get<ecs::movement_intent_component>(player).get_wish_velocity();
+    REQUIRE(-wish.z > 0.0F);
+    REQUIRE(-wish.z < speed * 0.5F);
+
+    run_for(0.6F);
+    wish = g.world.get<ecs::movement_intent_component>(player).get_wish_velocity();
 
     REQUIRE(wish.z == Catch::Approx(-speed));
     REQUIRE(wish.x == Catch::Approx(0.0F).margin(1.0e-3F));
 
     g.mapper().key(keys::W, false);
     g.mapper().key(keys::D, true);
-    g.world.update(0.016F);
+    run_for(0.6F);
 
     wish = g.world.get<ecs::movement_intent_component>(player).get_wish_velocity();
     REQUIRE(wish.x == Catch::Approx(-speed));
     REQUIRE(wish.z == Catch::Approx(0.0F).margin(1.0e-3F));
+}
+
+TEST_CASE("the body leans the way the player gathers speed", "[game][player]") {
+    game_world g;
+    const auto player = g.spawn_controlled();
+    const auto& state = g.world.get<game::player_component>(player);
+
+    const auto run_for = [&](float32 seconds) {
+        for (float32 elapsed = 0.0F; elapsed < seconds; elapsed += 0.016F) {
+            g.world.update(0.016F);
+        }
+    };
+
+    g.mapper().key(keys::W, true);
+    run_for(1.0F);
+    g.mapper().key(keys::W, false);
+    run_for(1.0F);
+
+    g.mapper().key(keys::W, true);
+    run_for(0.1F);
+    REQUIRE(state.get_lean_forward_degrees() > 1.0F);
+    REQUIRE(state.get_lean_right_degrees() == Catch::Approx(0.0F).margin(0.1F));
+
+    run_for(1.0F);
+    REQUIRE(state.get_lean_forward_degrees() == Catch::Approx(0.0F).margin(0.1F));
+
+    g.mapper().key(keys::W, false);
+    run_for(0.1F);
+    REQUIRE(state.get_lean_forward_degrees() < -1.0F);
+
+    run_for(1.0F);
+    g.mapper().key(keys::W, true);
+    run_for(1.0F);
+    g.mapper().key(keys::W, false);
+    g.mapper().key(keys::D, true);
+    run_for(0.05F);
+    REQUIRE(state.get_lean_right_degrees() > 1.0F);
+
+    const auto pose_rotation = g.world.get<ecs::transform_component>(state.get_pose()).get_rotation();
+    REQUIRE_FALSE(math::approx_equal(pose_rotation, quat{0.0F, 0.0F, 0.0F, 1.0F}));
+}
+
+TEST_CASE("a standing attack strikes where the body faces, not where the camera looks", "[game][player]") {
+    game_world g;
+    const auto player = g.spawn_controlled();
+    const auto& state = g.world.get<game::player_component>(player);
+
+    const auto run_for = [&](float32 seconds) {
+        for (float32 elapsed = 0.0F; elapsed < seconds; elapsed += 0.016F) {
+            g.world.update(0.016F);
+        }
+    };
+
+    g.mapper().key(keys::KEY_1, true);
+    g.mapper().key(keys::W, true);
+    run_for(1.0F);
+    g.mapper().key(keys::KEY_1, false);
+    g.mapper().key(keys::W, false);
+    run_for(1.0F);
+    REQUIRE(state.has_weapon());
+
+    g.mapper().cursor_at(0.0, 0.0);
+    g.world.update(0.016F);
+    g.mapper().cursor_at(900.0, 0.0);
+    g.mapper().button(mouse::buttons::LEFT, true);
+    g.world.update(0.016F);
+    g.mapper().button(mouse::buttons::LEFT, false);
+
+    REQUIRE(state.is_swinging());
+    REQUIRE(state.get_attack_direction().x == Catch::Approx(0.0F).margin(1.0e-3F));
+    REQUIRE(state.get_attack_direction().z == Catch::Approx(-1.0F));
+
+    run_for(0.3F);
+    REQUIRE_FALSE(state.is_swinging());
+    const auto rotation = g.world.get<ecs::transform_component>(player).get_rotation();
+    const auto facing_back = math::quat_look_y({0.0F, 0.0F, -1.0F});
+    REQUIRE(std::abs(math::dot(rotation, facing_back)) == Catch::Approx(1.0F).margin(1.0e-4F));
+}
+
+TEST_CASE("an attack while moving strikes along the move and steps into it", "[game][player]") {
+    game_world g;
+    const auto player = g.spawn_controlled();
+    const auto& state = g.world.get<game::player_component>(player);
+    const auto& tuning = g.world.system<game::player_system>().tuning();
+
+    const auto run_for = [&](float32 seconds) {
+        for (float32 elapsed = 0.0F; elapsed < seconds; elapsed += 0.016F) {
+            g.world.update(0.016F);
+        }
+    };
+
+    g.mapper().key(keys::KEY_1, true);
+    g.world.update(0.016F);
+    g.mapper().key(keys::KEY_1, false);
+    run_for(0.5F);
+
+    g.mapper().key(keys::D, true);
+    g.mapper().button(mouse::buttons::LEFT, true);
+
+    float32 travelled_x = 0.0F;
+    float32 travelled_z = 0.0F;
+    int32 frames        = 0;
+    do {
+        g.world.update(0.016F);
+        g.mapper().button(mouse::buttons::LEFT, false);
+        const auto wish = g.world.get<ecs::movement_intent_component>(player).get_wish_velocity();
+        travelled_x += wish.x * 0.016F;
+        travelled_z += wish.z * 0.016F;
+        ++frames;
+    } while (state.is_swinging() && frames < 100);
+
+    REQUIRE(state.get_attack_direction().x == Catch::Approx(-1.0F));
+    REQUIRE(state.get_attack_direction().z == Catch::Approx(0.0F).margin(1.0e-3F));
+    REQUIRE(static_cast<float32>(frames) * 0.016F ==
+            Catch::Approx(tuning.attack_lock_seconds).margin(0.02F));
+    REQUIRE(-travelled_x == Catch::Approx(tuning.lunge_distance).margin(1.5F));
+    REQUIRE(travelled_z == Catch::Approx(0.0F).margin(1.0e-3F));
+
+    const auto rotation = g.world.get<ecs::transform_component>(player).get_rotation();
+    REQUIRE(math::approx_equal(rotation, math::quat_look_y({-1.0F, 0.0F, 0.0F})));
+
+    run_for(0.6F);
+    const auto wish = g.world.get<ecs::movement_intent_component>(player).get_wish_velocity();
+    REQUIRE(-wish.x > 0.0F);
 }
 
 TEST_CASE("the weapon key takes the sword out and puts it away", "[game][player]") {

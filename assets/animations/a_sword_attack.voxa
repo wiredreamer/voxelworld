@@ -4,10 +4,10 @@ rig humanoid
 track hand_right 60
   channel origin
   channel position
-    k 0 10 2 0 linear 0 1
-    k 0.2 9.5 8 10 linear 0 1
-    k 0.35 -1.8 0 11 linear 0 1
-    k 0.45 -5.483 -2.888 10.0985 linear 0 1
+    k 0 10 14.5 0 linear 0 1
+    k 0.2 9.5 20.5 10 linear 0 1
+    k 0.35 -1.8 12.5 11 linear 0 1
+    k 0.45 -5.483 9.612 10.0985 linear 0 1
   channel rotation
     k 0 -0.707107 0 0 0.707107 linear 0 1
     k 0.199775 -0.561339 0.103061 -0.13775 0.809507 linear 0 1
@@ -17,10 +17,10 @@ track hand_right 60
 track hand_left 60
   channel origin
   channel position
-    k 0 -10 2 0 linear 0 1
-    k 0.199807 -11 2 -3.4 linear 0 1
-    k 0.35 -7.8889 2 -7.7222 linear 0 1
-    k 0.44971 -6.5 2 -9 linear 0 1
+    k 0 -10 14.5 0 linear 0 1
+    k 0.199807 -11 14.5 -3.4 linear 0 1
+    k 0.35 -7.8889 14.5 -7.7222 linear 0 1
+    k 0.44971 -6.5 14.5 -9 linear 0 1
   channel rotation
     k 0 -0.707107 0 0 0.707107 linear 0 1
     k 0.199807 -0.704416 -0.0616284 -0.0616284 0.704416 linear 0 1

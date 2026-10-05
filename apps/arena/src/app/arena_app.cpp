@@ -27,7 +27,7 @@ arena_app::arena_app(
               .arm_length     = 80.0f,
               .arm_length_min = 10.0f,
               .arm_length_max = 200.0f,
-              .target_offset  = {0.0f, 24.0f, 0.0f},
+              .target_offset  = {0.0f, 36.5f, 0.0f},
               .zoom_speed     = 5.0f,
               .collision_skin = 2.0f
           }
