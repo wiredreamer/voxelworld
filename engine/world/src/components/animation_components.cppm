@@ -99,14 +99,25 @@ struct animation_fsm_component final {
         return board_;
     }
 
+    [[nodiscard]] auto get_declared_parameters() const -> std::span<const asset::voxf_param> {
+        return declared_;
+    }
+
+    [[nodiscard]] auto is_pinned(std::string_view name) const -> bool {
+        return std::ranges::contains(pinned_, name, &pinned_parameter::first);
+    }
+
 private:
     friend class animation_fsm_system;
 
-    using trigger_set = asset::animation_fsm::trigger_set;
+    using trigger_set      = asset::animation_fsm::trigger_set;
+    using pinned_parameter = std::pair<std::string, float32>;
 
     std::vector<asset::animation_fsm> machines_;
     trigger_set triggers_;
     asset::fsm_blackboard board_;
+    std::vector<asset::voxf_param> declared_;
+    std::vector<pinned_parameter> pinned_;
 };
 
 }  // namespace vw::ecs

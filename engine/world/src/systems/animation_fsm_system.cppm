@@ -32,6 +32,10 @@ public:
 
         auto declare_parameters(const asset::voxf_data& data) const -> void;
 
+        auto pin_parameter(std::string_view name, float32 value) const -> void;
+        auto unpin_parameter(std::string_view name) const -> void;
+        auto unpin_all_parameters() const -> void;
+
     private:
         friend class animation_fsm_system;
         explicit modifier(animation_fsm_component* component);

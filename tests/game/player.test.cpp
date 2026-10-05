@@ -212,6 +212,41 @@ TEST_CASE("an attack while moving strikes along the move and steps into it", "[g
     REQUIRE(-wish.x > 0.0F);
 }
 
+TEST_CASE("a pinned parameter drives the machines against the game", "[game][player]") {
+    game_world g;
+    const auto player = g.spawn_controlled();
+    const auto& fsm   = g.world.get<ecs::animation_fsm_component>(player);
+    auto& machines    = g.world.system<ecs::animation_fsm_system>();
+
+    const auto declared = fsm.get_declared_parameters();
+    const auto attack   = std::ranges::find(declared, "attack", &asset::voxf_param::name);
+    REQUIRE(attack != declared.end());
+    REQUIRE(attack->type == asset::voxf_param_type::trigger);
+
+    machines.modify(player).pin_parameter("grounded", 1.0F);
+    g.world.update(0.016F);
+    REQUIRE(fsm.get_board().get("grounded") == 1.0F);
+    REQUIRE(fsm.get_machine(0).get_current_state() == "idle");
+
+    machines.modify(player).pin_parameter("speed", 50.0F);
+    REQUIRE(fsm.is_pinned("speed"));
+    g.world.update(0.016F);
+    g.world.update(0.016F);
+    REQUIRE(fsm.get_board().get("speed") == 50.0F);
+    REQUIRE(fsm.get_machine(0).get_current_state() == "run");
+
+    machines.modify(player).unpin_parameter("speed");
+    REQUIRE_FALSE(fsm.is_pinned("speed"));
+    g.world.update(0.016F);
+    g.world.update(0.016F);
+    REQUIRE(fsm.get_board().get("speed") == 0.0F);
+    REQUIRE(fsm.get_machine(0).get_current_state() == "idle");
+
+    machines.modify(player).unpin_all_parameters();
+    g.world.update(0.016F);
+    REQUIRE(fsm.get_board().get("grounded") == 0.0F);
+}
+
 TEST_CASE("the weapon key takes the sword out and puts it away", "[game][player]") {
     game_world g;
     const auto player = g.spawn_controlled();

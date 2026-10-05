@@ -111,14 +111,76 @@ auto debug_window::render_animation_panel() -> void {
 
     ImGui::SeparatorText("parameters");
 
-    const auto entries = fsm.get_board().entries();
+    const auto machines = world.system<ecs::animation_fsm_system>().modify(animation_entity_);
+    const auto declared = fsm.get_declared_parameters();
+    const auto entries  = fsm.get_board().entries();
+
+    bool any_trigger = false;
+    for (const auto& param : declared) {
+        if (param.type != asset::voxf_param_type::trigger) {
+            continue;
+        }
+        if (ImGui::Button(param.name.c_str())) {
+            machines.fire_trigger(param.name);
+        }
+        ImGui::SameLine();
+        any_trigger = true;
+    }
+    if (any_trigger) {
+        ImGui::NewLine();
+    }
+
     if (entries.empty()) {
         ImGui::TextUnformatted("none declared");
         return;
     }
 
+    ImGui::TextDisabled("pin holds the value against the game");
     for (const auto& [name, value] : entries) {
-        ImGui::Text("%-14s %8.3f", name.c_str(), value);
+        ImGui::PushID(name.c_str());
+
+        bool pinned = fsm.is_pinned(name);
+        if (ImGui::Checkbox("##pin", &pinned)) {
+            if (pinned) {
+                machines.pin_parameter(name, value);
+            } else {
+                machines.unpin_parameter(name);
+            }
+        }
+        ImGui::SameLine();
+
+        const auto param = std::ranges::find(declared, name, &asset::voxf_param::name);
+        const auto type  = param != declared.end() ? param->type : asset::voxf_param_type::real;
+        switch (type) {
+            case asset::voxf_param_type::boolean: {
+                bool on = value != 0.0F;
+                if (ImGui::Checkbox(name.c_str(), &on)) {
+                    machines.pin_parameter(name, on ? 1.0F : 0.0F);
+                }
+                break;
+            }
+            case asset::voxf_param_type::integer: {
+                int32 number = static_cast<int32>(value);
+                if (ImGui::InputInt(name.c_str(), &number)) {
+                    machines.pin_parameter(name, static_cast<float32>(number));
+                }
+                break;
+            }
+            case asset::voxf_param_type::real:
+            case asset::voxf_param_type::trigger: {
+                float32 number = value;
+                if (ImGui::DragFloat(name.c_str(), &number, 0.5F)) {
+                    machines.pin_parameter(name, number);
+                }
+                break;
+            }
+        }
+
+        ImGui::PopID();
+    }
+
+    if (ImGui::Button("unpin all")) {
+        machines.unpin_all_parameters();
     }
 }
 

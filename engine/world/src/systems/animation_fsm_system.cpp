@@ -16,6 +16,9 @@ auto animation_fsm_system::update(float32) -> void {
 
     for (auto [ent, fsm_comp, player_comp] : view) {
         fill_builtins_(ent, fsm_comp.board_);
+        for (const auto& [name, value] : fsm_comp.pinned_) {
+            fsm_comp.board_.set(name, value);
+        }
 
         auto& triggers = fsm_comp.triggers_;
         for (std::size_t i = 0; i < fsm_comp.machine_count(); ++i) {
@@ -114,6 +117,37 @@ auto animation_fsm_system::modifier::declare_parameters(
     const asset::voxf_data& data
 ) const -> void {
     asset::apply_defaults(data, component_->board_);
+
+    auto& declared = component_->declared_;
+    for (const auto& param : data.params) {
+        if (!std::ranges::contains(declared, param.name, &asset::voxf_param::name)) {
+            declared.push_back(param);
+        }
+    }
+}
+
+auto animation_fsm_system::modifier::pin_parameter(
+    std::string_view name, float32 value
+) const -> void {
+    component_->board_.set(name, value);
+
+    auto& pinned    = component_->pinned_;
+    const auto slot = std::ranges::find(pinned, name, &animation_fsm_component::pinned_parameter::first);
+    if (slot != pinned.end()) {
+        slot->second = value;
+        return;
+    }
+    pinned.emplace_back(std::string{name}, value);
+}
+
+auto animation_fsm_system::modifier::unpin_parameter(
+    std::string_view name
+) const -> void {
+    std::erase_if(component_->pinned_, [name](const auto& entry) { return entry.first == name; });
+}
+
+auto animation_fsm_system::modifier::unpin_all_parameters() const -> void {
+    component_->pinned_.clear();
 }
 
 animation_fsm_system::sources_modifier::sources_modifier(
