@@ -158,7 +158,7 @@ TEST_CASE("a standing attack strikes where the body faces, not where the camera 
     REQUIRE(state.get_attack_direction().x == Catch::Approx(0.0F).margin(1.0e-3F));
     REQUIRE(state.get_attack_direction().z == Catch::Approx(-1.0F));
 
-    run_for(0.3F);
+    run_for(0.8F);
     REQUIRE_FALSE(state.is_swinging());
     const auto rotation = g.world.get<ecs::transform_component>(player).get_rotation();
     const auto facing_back = math::quat_look_y({0.0F, 0.0F, -1.0F});
@@ -200,11 +200,13 @@ TEST_CASE("an attack while moving strikes along the move and steps into it", "[g
     } while (state.is_swinging() && frames < 100);
 
     const auto clip = asset::voxa_deserializer{}.deserialize(
-        std::filesystem::path{VW_ASSET_DIR} / "animations" / "a_sword_attack.voxa"
+        std::filesystem::path{VW_ASSET_DIR} / "animations" / "a_humanoid_attack_1.voxa"
     );
     REQUIRE(clip.has_value());
-    constexpr float32 attack_rate = 2.0F;
-    const float32 swing_seconds   = (*clip)->get_duration() / attack_rate;
+    const auto& events = (*clip)->get_events();
+    const auto unlock  = std::ranges::find(events, "control.unlock", &asset::animation_event::name);
+    REQUIRE(unlock != events.end());
+    const float32 swing_seconds = unlock->time / tuning.attack_playback_rate;
 
     REQUIRE(state.get_attack_direction().x == Catch::Approx(-1.0F));
     REQUIRE(state.get_attack_direction().z == Catch::Approx(0.0F).margin(1.0e-3F));
@@ -346,6 +348,99 @@ TEST_CASE("a strike pressed just before the cancel window opens is taken when it
     REQUIRE(s.state.get_swing_count() == 3);
     REQUIRE(waited < 3 + to_unlock);
     REQUIRE(s.state.is_swinging());
+}
+
+TEST_CASE("strikes taken in the cancel window run the chain of three and start over", "[game][player]") {
+    swordsman s;
+    const auto& fsm = s.g.world.get<ecs::animation_fsm_component>(s.player);
+    const auto action_state = [&] { return fsm.get_machine(1).get_current_state(); };
+
+    for (const uint32 step : {1U, 2U, 3U, 1U}) {
+        s.click();
+        s.tick();
+        REQUIRE(s.state.get_chain_step() == step);
+        REQUIRE(action_state() == std::format("attack_{}", step));
+        static_cast<void>(s.ticks_until([&] { return s.state.can_cancel() || !s.state.is_swinging(); }));
+        REQUIRE(s.state.can_cancel());
+    }
+}
+
+TEST_CASE("the sword hand flows from strike to strike without a jump", "[game][player]") {
+    swordsman s;
+    ecs::entity hand = ecs::invalid_entity;
+    s.g.world.for_each<ecs::animation_target_component>(
+        [&](ecs::entity ent, const ecs::animation_target_component& target) {
+            if (target.get_name() == "hand_right") {
+                hand = ent;
+            }
+        }
+    );
+    REQUIRE(hand.is_valid());
+
+    const auto hand_position = [&] {
+        return s.g.world.get<ecs::transform_component>(hand).get_position();
+    };
+
+    vec3f last                = hand_position();
+    uint32 last_step          = s.state.get_chain_step();
+    int32 ticks_since_switch  = 100;
+    uint32 switches           = 0;
+    float32 longest_seam_hop  = 0.0F;
+    for (int32 tick_index = 0; tick_index < 90; ++tick_index) {
+        s.g.mapper().button(mouse::buttons::LEFT, tick_index % 6 == 0);
+        s.tick();
+        const vec3f now = hand_position();
+        if (s.state.get_chain_step() != last_step && last_step != 0) {
+            ticks_since_switch = 0;
+            ++switches;
+        }
+        if (ticks_since_switch < 5) {
+            longest_seam_hop = std::max(longest_seam_hop, math::length(now - last));
+        }
+        ++ticks_since_switch;
+        last_step = s.state.get_chain_step();
+        last      = now;
+    }
+
+    REQUIRE(switches == 2);
+    REQUIRE(longest_seam_hop < 3.0F);
+}
+
+TEST_CASE("a strike long after the last one starts the chain anew", "[game][player]") {
+    swordsman s;
+    const auto& tuning = s.g.world.system<game::player_system>().tuning();
+
+    s.click();
+    static_cast<void>(s.ticks_until([&] { return !s.state.is_swinging(); }));
+    s.click();
+    REQUIRE(s.state.get_chain_step() == 2);
+
+    static_cast<void>(s.ticks_until([&] { return !s.state.is_swinging(); }));
+    s.ticks(static_cast<int32>(tuning.chain_reset_seconds / 0.016F) + 2);
+    s.click();
+    REQUIRE(s.state.get_chain_step() == 1);
+}
+
+TEST_CASE("the thrust that ends the chain steps further than the slashes", "[game][player]") {
+    swordsman s;
+    const auto& tuning = s.g.world.system<game::player_system>().tuning();
+    const auto step_length = [&] {
+        float32 travelled = 0.0F;
+        do {
+            s.tick();
+            const auto wish = s.g.world.get<ecs::movement_intent_component>(s.player).get_wish_velocity();
+            travelled += std::sqrt(wish.x * wish.x + wish.z * wish.z) * 0.016F;
+        } while (!s.state.can_cancel() && s.state.is_swinging());
+        return travelled;
+    };
+
+    s.click();
+    REQUIRE(step_length() == Catch::Approx(tuning.lunge_distance).margin(1.5F));
+    s.click();
+    REQUIRE(step_length() == Catch::Approx(tuning.lunge_distance).margin(1.5F));
+    s.click();
+    REQUIRE(s.state.get_chain_step() == 3);
+    REQUIRE(step_length() == Catch::Approx(tuning.finisher_lunge_distance).margin(2.0F));
 }
 
 TEST_CASE("a pinned parameter drives the machines against the game", "[game][player]") {

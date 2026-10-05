@@ -142,13 +142,9 @@ description: Создание и правка контента voxelworld чер
 |---|---|---|
 | префаб | `p_<имя>` | `p_humanoid`, `p_sword` |
 | файл объёма | `models/p_<префаб>/m_<имя>.voxm` | `models/p_humanoid/m_head.voxm`, `models/p_sword/m_root.voxm` |
-| клип | `a_<риг>_<имя>` | `a_humanoid_wave`, `a_humanoid_sword_attack` |
+| клип | `a_<риг>_<имя>` | `a_humanoid_wave`, `a_humanoid_attack_1` |
 | машина состояний | `<rig>_<роль>` | `humanoid_locomotion` |
 | узлы | `snake_case`, стороны словом | `hand_right`, `foot_left` |
-
-Клип, сделанный до правила, назван без рига: `a_sword_attack` — для рига
-`humanoid`, на него ссылается машина `humanoid_action`; переименовывать его без
-просьбы не нужно, новые клипы называй по правилу.
 
 Файл объёма получает имя при первом `prefab_save`:
 `models/<префаб>/m_<узел>.voxm`. Другое имя даёт `volume_rename` — приставку

@@ -44,15 +44,26 @@ auto age_buffer(float32& seconds_left, float32 delta_time) -> void {
     }
 }
 
-auto lunge_speed(const movement_tuning& tuning, float32 seconds_into_lunge) -> float32 {
-    if (tuning.lunge_seconds <= 0.0f) {
+constexpr uint32 chain_length = 3;
+
+auto lunge_travel_seconds(const movement_tuning& tuning) -> float32 {
+    return tuning.attack_playback_rate > 0.0f ? tuning.lunge_seconds / tuning.attack_playback_rate
+                                              : 0.0f;
+}
+
+auto lunge_speed(const movement_tuning& tuning, uint32 chain_step, float32 seconds_into_lunge)
+    -> float32 {
+    const float32 seconds = lunge_travel_seconds(tuning);
+    if (seconds <= 0.0f) {
         return 0.0f;
     }
-    const float32 progress = seconds_into_lunge / tuning.lunge_seconds;
+    const float32 progress = seconds_into_lunge / seconds;
     if (progress < 0.0f || progress >= 1.0f) {
         return 0.0f;
     }
-    return 2.0f * tuning.lunge_distance / tuning.lunge_seconds * (1.0f - progress);
+    const float32 distance =
+        chain_step == chain_length ? tuning.finisher_lunge_distance : tuning.lunge_distance;
+    return 2.0f * distance / seconds * (1.0f - progress);
 }
 
 auto roll_progress(const movement_tuning& tuning, float32 seconds_into_roll) -> float32 {
@@ -562,6 +573,10 @@ auto player_system::update(
             const bool strike_allowed = !state.dodging_ && !state.body_locked_ &&
                 (!state.swinging_ || state.cancel_open_);
             if (state.attack_buffered_ >= 0.0f && state.weapon_.is_valid() && strike_allowed) {
+                const bool chaining = state.swinging_ ||
+                    state.since_swing_seconds_ <= tuning_.chain_reset_seconds;
+                state.chain_step_ =
+                    chaining && state.chain_step_ < chain_length ? state.chain_step_ + 1 : 1;
                 state.attack_buffered_ = -1.0f;
                 state.cancel_open_     = false;
                 ++state.swing_count_;
@@ -574,8 +589,12 @@ auto player_system::update(
                 state.lunging_       = false;
                 state.lunged_        = false;
                 state.hit_window_    = false;
+                machines.modify(ent).set_parameter(
+                    "attack_chain", static_cast<float32>(state.chain_step_)
+                );
                 machines.modify(ent).fire_trigger("attack");
             }
+            state.since_swing_seconds_ = state.swinging_ ? 0.0f : state.since_swing_seconds_ + delta_time;
             state.attacking_ = action_playing || state.swinging_;
 
             auto controller = controllers.modify(ent);
@@ -597,7 +616,7 @@ auto player_system::update(
                 state.invulnerable_ = state.invulnerable_ && state.dodging_;
             } else if (state.swinging_) {
                 const float32 lunge = state.lunging_
-                    ? lunge_speed(tuning_, state.lunge_seconds_ + delta_time * 0.5f)
+                    ? lunge_speed(tuning_, state.chain_step_, state.lunge_seconds_ + delta_time * 0.5f)
                     : 0.0f;
                 const float32 move_speed =
                     world_->get<ecs::character_controller_component>(ent).get_move_speed();
@@ -610,7 +629,13 @@ auto player_system::update(
                 state.swing_seconds_ += delta_time;
                 if (state.lunging_) {
                     state.lunge_seconds_ += delta_time;
-                    state.lunging_ = state.lunge_seconds_ < tuning_.lunge_seconds;
+                    state.lunging_ = state.lunge_seconds_ < lunge_travel_seconds(tuning_);
+                }
+                if (action_playing) {
+                    world_->system<ecs::animation_system>()
+                        .modify_player(ent)
+                        .layer(action_layer)
+                        .set_playback_speed(tuning_.attack_playback_rate);
                 }
             } else {
                 const bool steering = moving && !state.body_locked_;

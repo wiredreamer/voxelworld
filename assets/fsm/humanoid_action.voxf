@@ -3,23 +3,71 @@ rig humanoid
 entry none
 param attack trigger
 param dodge trigger
+param attack_chain int
 state none
 	playback loop
-	to sword_attack
+	to attack_1
 		on attack
-		blend 0.15
-state sword_attack
-	clip animations/a_sword_attack.voxa
+		when attack_chain == 1
+		blend 0.08
+	to attack_2
+		on attack
+		when attack_chain == 2
+		blend 0.08
+	to attack_3
+		on attack
+		when attack_chain == 3
+		blend 0.08
+state attack_1
+	clip animations/a_humanoid_attack_1.voxa
 	playback once
-	rate 2
-	fade_in 0.25
-	fade_out 0.35
+	fade_in 0.06
+	fade_out 0.2
 	to none
 		on dodge
 		blend 0.05
-	to sword_attack
+	to attack_2
 		on attack
-		blend 0.1
+		when attack_chain == 2
+		blend 0.08
+	to attack_1
+		on attack
+		when attack_chain == 1
+		blend 0.08
+	to none
+		wait end
+		wait blend
+state attack_2
+	clip animations/a_humanoid_attack_2.voxa
+	playback once
+	fade_in 0.06
+	fade_out 0.2
+	to none
+		on dodge
+		blend 0.05
+	to attack_3
+		on attack
+		when attack_chain == 3
+		blend 0.08
+	to attack_1
+		on attack
+		when attack_chain == 1
+		blend 0.08
+	to none
+		wait end
+		wait blend
+state attack_3
+	clip animations/a_humanoid_attack_3.voxa
+	playback once
+	fade_in 0.06
+	fade_out 0.2
+	to none
+		on dodge
+		blend 0.05
+	to attack_1
+		on attack
+		when attack_chain == 1
+		blend 0.08
 	to none
 		wait end
 		wait blend

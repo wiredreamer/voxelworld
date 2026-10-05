@@ -155,15 +155,21 @@ auto render_jump_panel(game::movement_tuning& tuning) -> void {
 }
 
 auto render_strike_panel(game::movement_tuning& tuning) -> void {
+    ImGui::SliderFloat("attack speed", &tuning.attack_playback_rate, 0.3f, 1.5f, "%.2f");
     ImGui::SliderFloat(
         "attack turn, deg/s", &tuning.attack_turn_degrees_per_second, 360.0f, 4000.0f, "%.0f"
     );
     ImGui::SliderFloat("lunge time, s", &tuning.lunge_seconds, 0.0f, 0.5f, "%.2f");
     ImGui::SliderFloat("lunge distance", &tuning.lunge_distance, 0.0f, 40.0f, "%.1f");
+    ImGui::SliderFloat("thrust lunge distance", &tuning.finisher_lunge_distance, 0.0f, 60.0f, "%.1f");
+    ImGui::SliderFloat("chain reset, s", &tuning.chain_reset_seconds, 0.0f, 1.0f, "%.2f");
     defaults_button(
         tuning,
-        {&game::movement_tuning::attack_turn_degrees_per_second,
-         &game::movement_tuning::lunge_seconds, &game::movement_tuning::lunge_distance}
+        {&game::movement_tuning::attack_playback_rate,
+         &game::movement_tuning::attack_turn_degrees_per_second,
+         &game::movement_tuning::lunge_seconds, &game::movement_tuning::lunge_distance,
+         &game::movement_tuning::finisher_lunge_distance,
+         &game::movement_tuning::chain_reset_seconds}
     );
 }
 
@@ -221,9 +227,9 @@ auto render_dodge_tuning(game::movement_tuning& tuning) -> void {
 auto render_fighter_state(ecs::world& world, ecs::entity player) -> void {
     const auto& fighter = world.get<game::player_component>(player);
     ImGui::Text(
-        "Sword: %s%s%s%s  swings %u", fighter.has_weapon() ? "equipped" : "none",
+        "Sword: %s%s%s%s  chain %u/3, swings %u", fighter.has_weapon() ? "equipped" : "none",
         fighter.is_swinging() ? ", swinging" : "", fighter.is_hitting() ? ", HIT" : "",
-        fighter.can_cancel() ? ", cancel" : "", fighter.get_swing_count()
+        fighter.can_cancel() ? ", cancel" : "", fighter.get_chain_step(), fighter.get_swing_count()
     );
     ImGui::Text(
         "Landings: soft %u, hard %u%s", fighter.get_soft_landings(), fighter.get_hard_landings(),

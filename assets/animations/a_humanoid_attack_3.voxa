@@ -1,0 +1,42 @@
+# Voxa File Version 2.1
+rig humanoid
+event 0 control.lock
+event 0.15 move.start
+event 0.17 hit.start
+event 0.25 push
+event 0.3 hit.end
+event 0.33 move.end
+event 0.45 cancel.ok
+event 0.48 control.unlock
+
+track hand_right 60
+  channel position
+    k 0 12 21 2 ease_out 0 1
+    k 0.13 10 15 -7 ease_in 0 1
+    k 0.17 8 15 4 linear 0 1
+    k 0.21 5 15 13 linear 0 1
+    k 0.25 4 15 17 ease_out 0 1
+    k 0.36 4 15 15.5 ease_in_out 0 1
+    k 0.45 8.5 14.7 6 ease_in_out 0 1
+    k 0.54 10 14.5 0 linear 0 1
+  channel rotation
+    k 0 0.0616284 0.704416 0.541675 0.454519 ease_out 0 1
+    k 0.13 -0.0696901 -0.0435131 -0.00304273 0.996615 ease_in 0 1
+    k 0.17 -0.026168 -0.026168 -0.000685233 0.999315 linear 0 1
+    k 0.21 -0 0 -0 1 linear 0 1
+    k 0.25 -0 0 -0 1 ease_out 0 1
+    k 0.36 -0 0 -0 1 ease_in_out 0 1
+    k 0.45 -0.382683 0 -0 0.92388 ease_in_out 0 1
+    k 0.54 -0.707107 0 -0 0.707107 linear 0 1
+
+track hand_left 60
+  channel position
+    k 0 -10 15 4 ease_out 0 1
+    k 0.13 -8 15.5 7 ease_in 0 1
+    k 0.25 -11 14.5 -6 ease_in_out 0 1
+    k 0.54 -10 14.5 0 linear 0 1
+  channel rotation
+    k 0 -0.573576 0 -0 0.819152 ease_out 0 1
+    k 0.13 -0.5 0 -0 0.866025 ease_in 0 1
+    k 0.25 -0.793353 0 -0 0.608761 ease_in_out 0 1
+    k 0.54 -0.707107 0 -0 0.707107 linear 0 1

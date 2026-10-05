@@ -1116,19 +1116,21 @@ def run_fsm_scenario(probe):
     probe.check(
         "fsm_get reads a machine from its file",
         ok and action.get("machine") == "fsm/humanoid_action.voxf" and action.get("entry") == "none" and action.get("layer") is None
-        and action.get("params") == [{"name": "attack", "type": "trigger"}],
+        and action.get("params")
+        == [{"name": "attack", "type": "trigger"}, {"name": "dodge", "type": "trigger"}, {"name": "attack_chain", "type": "int", "value": 0}],
         str(action),
     )
     probe.check(
         "a state carries its clip, rate and fades",
-        states.get("sword_attack", {}).get("clip") == "animations/a_sword_attack.voxa" and states["sword_attack"].get("playback") == "once"
-        and states["sword_attack"].get("rate") == 2 and states["sword_attack"].get("fade_in") == 0.25 and states["none"].get("clip") is None,
-        str(states.get("sword_attack")),
+        states.get("attack_1", {}).get("clip") == "animations/a_humanoid_attack_1.voxa" and states["attack_1"].get("playback") == "once"
+        and states["attack_1"].get("rate") == 1 and states["attack_1"].get("fade_in") == 0.06 and states["none"].get("clip") is None,
+        str(states.get("attack_1")),
     )
     probe.check(
-        "transitions carry triggers, blends and waits",
-        states.get("none", {}).get("transitions") == [{"to": "sword_attack", "on": "attack", "blend": 0.15}]
-        and states.get("sword_attack", {}).get("transitions") == [{"to": "none", "wait_end": True, "wait_blend": True}],
+        "transitions carry triggers, conditions, blends and waits",
+        states.get("none", {}).get("transitions", [{}])[0]
+        == {"to": "attack_1", "on": "attack", "when": [{"param": "attack_chain", "op": "==", "value": 1}], "blend": 0.08}
+        and states.get("attack_1", {}).get("transitions", [{}])[-1] == {"to": "none", "wait_end": True, "wait_blend": True},
         str(states.get("none")),
     )
 
@@ -1142,14 +1144,14 @@ def run_fsm_scenario(probe):
     probe.check(
         "fsm_get types parameter values",
         ok and locomotion.get("layer") == 0
-        and {"name": "grounded", "type": "bool", "value": True} in locomotion.get("params", [])
-        and {"name": "jump_count", "type": "int", "value": 0} in locomotion.get("params", []),
+        and {"name": "speed", "type": "float", "value": 0.0} in locomotion.get("params", [])
+        and {"name": "air_state", "type": "int", "value": 0} in locomotion.get("params", []),
         str(locomotion.get("params")),
     )
     probe.check(
         "conditions read as parameter, operator and value",
-        idle.get("transitions", [{}])[0] == {"to": "run", "when": [{"param": "speed", "op": ">", "value": 0}], "blend": 0.15}
-        and {"param": "grounded", "op": "==", "value": False} in idle["transitions"][1].get("when", []),
+        {"to": "run", "when": [{"param": "speed", "op": ">", "value": 0}], "blend": 0.15} in idle.get("transitions", [])
+        and {"to": "rise", "when": [{"param": "air_state", "op": "==", "value": 1}], "blend": 0.02} in idle["transitions"],
         str(idle.get("transitions")),
     )
 
@@ -1667,7 +1669,7 @@ def run_paint_scenario(probe):
     remove_scratch_assets(asset_root)
 
     tool(probe, "prefab_open", {"name": "p_humanoid"})
-    tool(probe, "clip_open", {"name": "a_sword_attack"})
+    tool(probe, "clip_open", {"name": "a_humanoid_attack_1"})
     tool(probe, "view_set", {"from": "iso", "projection": "perspective"})
 
     ok, text = tool(probe, "clip_filmstrip", {"frames": 40})
@@ -1705,7 +1707,7 @@ def run_paint_scenario(probe):
             str(clip.get("playback")),
         )
 
-    tool(probe, "clip_close", {"clip": "a_sword_attack", "discard_unsaved": True})
+    tool(probe, "clip_close", {"clip": "a_humanoid_attack_1", "discard_unsaved": True})
     tool(probe, "prefab_close", {"discard_unsaved": True})
 
 
@@ -1729,7 +1731,7 @@ def run_machine_scenario(probe):
         "fsm_run starts every machine of the prefab at its entry state",
         ok and started.get("running") is True and [layer.get("machine") for layer in layers] == ["humanoid_locomotion", "humanoid_action"]
         and [layer.get("state") for layer in layers] == ["idle", "none"]
-        and started.get("parameters") == {"speed": 0.0, "grounded": True, "jump_count": 0},
+        and started.get("parameters") == {"speed": 0.0, "air_state": 0, "attack_chain": 0},
         str(started),
     )
     ok, state = tool(probe, "editor_state")
@@ -1749,10 +1751,10 @@ def run_machine_scenario(probe):
         ok and walking["layers"][0].get("state") == "run" and walking["layers"][0].get("clip") == "a_humanoid_run_f" and walking["parameters"].get("speed") == 1.0,
         str(walking),
     )
-    ok, struck = tool(probe, "fsm_drive", {"fire": ["attack"]})
+    ok, struck = tool(probe, "fsm_drive", {"set": {"attack_chain": 1}, "fire": ["attack"]})
     probe.check(
         "a trigger moves the machine of another layer and leaves the first alone",
-        ok and struck["layers"][1].get("state") == "sword_attack" and struck["layers"][0].get("state") == "run",
+        ok and struck["layers"][1].get("state") == "attack_1" and struck["layers"][0].get("state") == "run",
         str(struck.get("layers")),
     )
     probe.check("a running machine moves the nodes", nodes_of(probe) != rest, "the nodes are where they rest")
@@ -1760,14 +1762,15 @@ def run_machine_scenario(probe):
     time.sleep(1.5)
     ok, done = tool(probe, "fsm_status")
     probe.check("a state that waits for its clip leaves when the clip ends", ok and done["layers"][1].get("state") == "none", str(done.get("layers")))
-    ok, jumped = tool(probe, "fsm_drive", {"set": {"grounded": False, "jump_count": 1}})
+    ok, jumped = tool(probe, "fsm_drive", {"set": {"air_state": 1}})
     probe.check(
-        "bool and int parameters are set by their kind",
-        ok and jumped["parameters"].get("grounded") is False and jumped["parameters"].get("jump_count") == 1 and jumped["layers"][0].get("state") == "jump_right",
+        "an int parameter is set by its kind",
+        ok and jumped["parameters"].get("air_state") == 1 and jumped["layers"][0].get("state") == "rise",
         str(jumped),
     )
 
-    tool(probe, "fsm_drive", {"set": {"grounded": True, "jump_count": 0, "speed": 1.0}})
+    tool(probe, "fsm_drive", {"set": {"air_state": 0, "speed": 1.0}})
+    time.sleep(0.6)
     ok, locomotion = tool(probe, "fsm_get", {"machine": "humanoid_locomotion"})
     edited = json.loads(json.dumps(machine_payload(locomotion)))
     next(state for state in edited["states"] if state["name"] == "run")["rate"] = 0.5
@@ -1792,12 +1795,10 @@ def run_machine_scenario(probe):
     )
 
     ok, text = tool(probe, "fsm_drive", {"set": {"stamina": 1}})
-    probe.check("fsm_drive names the parameters for an unknown one", not ok and "speed, grounded, jump_count" in text, str(text))
+    probe.check("fsm_drive names the parameters for an unknown one", not ok and "speed, air_state, attack_chain" in text, str(text))
     ok, text = tool(probe, "fsm_drive", {"fire": ["speed"]})
-    probe.check("fsm_drive refuses to fire a value", not ok and "they are: attack" in text, str(text))
-    ok, text = tool(probe, "fsm_drive", {"set": {"grounded": 0.5}})
-    probe.check("fsm_drive refuses a number for a bool", not ok and "give true or false" in text, str(text))
-    ok, text = tool(probe, "fsm_drive", {"set": {"jump_count": 0.5}})
+    probe.check("fsm_drive refuses to fire a value", not ok and "they are: land" in text and "attack" in text, str(text))
+    ok, text = tool(probe, "fsm_drive", {"set": {"air_state": 0.5}})
     probe.check("fsm_drive refuses a fraction for an int", not ok and "is an int" in text, str(text))
     ok, text = tool(probe, "fsm_drive", {})
     probe.check("fsm_drive asks for something to do", not ok and "at least one of set and fire" in text, str(text))

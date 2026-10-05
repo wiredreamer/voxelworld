@@ -56,12 +56,16 @@ auto animation_fsm_system::update(float32) -> void {
             }
 
             if (result->clip) {
+                const bool shown =
+                    layer.state == asset::animation_state::playing && !layer.fade_is_out;
                 lm.blend_to(result->clip, result->blend);
                 lm.set_loop_mode(result->loop_mode);
                 lm.set_playback_speed(result->playback_speed);
                 lm.set_fade_out(result->layer_blend_out);
 
-                lm.play(result->layer_blend_in);
+                if (!shown) {
+                    lm.play(result->layer_blend_in);
+                }
             } else if (layer.state == asset::animation_state::playing && !layer.fade_is_out) {
                 lm.stop(result->blend);
             }

@@ -427,12 +427,15 @@ Claude Code берёт адрес из `.mcp.json` в корне репозит�
 
 ```json
 {"machine": "fsm/humanoid_action.voxf", "rig": "humanoid", "entry": "none",
- "params": [{"name": "attack", "type": "trigger"}],
+ "params": [{"name": "attack", "type": "trigger"},
+            {"name": "attack_chain", "type": "int", "value": 0}],
  "states": [
    {"name": "none", "clip": null, "playback": "loop", "rate": 1,
-    "transitions": [{"to": "sword_attack", "on": "attack", "blend": 0.15}]},
-   {"name": "sword_attack", "clip": "animations/a_sword_attack.voxa",
-    "playback": "once", "rate": 2, "fade_in": 0.25, "fade_out": 0.35,
+    "transitions": [{"to": "attack_1", "on": "attack",
+                     "when": [{"param": "attack_chain", "op": "==", "value": 1}],
+                     "blend": 0.08}]},
+   {"name": "attack_1", "clip": "animations/a_humanoid_attack_1.voxa",
+    "playback": "once", "rate": 1, "fade_in": 0.06, "fade_out": 0.2,
     "transitions": [{"to": "none", "wait_end": true, "wait_blend": true}]}],
  "any": []}
 ```
