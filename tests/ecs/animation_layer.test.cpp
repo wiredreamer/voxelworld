@@ -307,6 +307,34 @@ TEST_CASE("a clip fading out in a crossfade fires nothing", "[animation_layer][a
     REQUIRE(fired == std::vector<std::string>{"incoming.start"});
 }
 
+TEST_CASE("animation keeps real time when a tick is longer than its step", "[animation_layer]") {
+    anim_test_fixture f;
+    auto root = f.create_root();
+    f.create_child(root, "body");
+
+    auto clip = f.make_clip("walk", {"body"});
+    clip->add_track([] {
+        animation_track track("tail", 60.0f);
+        auto ch = make_animation_channel<animation_property::position>();
+        ch.add({0.0f, vec3f{0.0f, 0.0f, 0.0f}});
+        ch.add({4.0f, vec3f{0.0f, 0.0f, 0.0f}});
+        track.add<animation_property::position>(std::move(ch));
+        return track;
+    }());
+
+    auto layer = f.anim_sys.modify_player(root).layer(0);
+    layer.blend_to(clip);
+    layer.set_loop_mode(animation_loop_mode::once);
+    layer.play();
+
+    for (int i = 0; i < 60; ++i) {
+        f.anim_sys.update(1.0f / 60.0f);
+    }
+
+    const auto& comp = f.reg.get<animation_player_component>(root);
+    REQUIRE(std::abs(comp.get_layer(0).time - 1.0f) < 0.01f);
+}
+
 TEST_CASE("is_any_playing reflects layer state", "[animation_layer]") {
     anim_test_fixture f;
     auto root = f.create_root();

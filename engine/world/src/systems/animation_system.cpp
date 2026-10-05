@@ -30,15 +30,17 @@ auto animation_system::update(
 
     accumulated_delta_time_ += delta_time;
 
-    if (accumulated_delta_time_ < target_frame_time_) {
+    uint32 steps = 0;
+    while (accumulated_delta_time_ >= target_frame_time_ && steps < max_steps_per_update_) {
+        accumulated_delta_time_ -= target_frame_time_;
+        ++steps;
+    }
+    if (steps == 0) {
         return;
     }
+    accumulated_delta_time_ = std::min(accumulated_delta_time_, target_frame_time_);
 
-    float32 effective_delta = target_frame_time_;
-    accumulated_delta_time_ -= target_frame_time_;
-    if (accumulated_delta_time_ > target_frame_time_) {
-        accumulated_delta_time_ = target_frame_time_;
-    }
+    const float32 effective_delta = target_frame_time_ * static_cast<float32>(steps);
 
     to_remove_.clear();
 

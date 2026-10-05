@@ -169,6 +169,8 @@ private:
     std::vector<uint32> slot_by_entity_;
     std::vector<const asset::animation_event*> crossed_events_;
     std::vector<entity> entities_with_fired_events_;
+    static constexpr uint32 max_steps_per_update_ = 8;
+
     float32 accumulated_delta_time_ = 0.0F;
     float32 target_frame_time_      = 1.0F / 120.0F;
 
