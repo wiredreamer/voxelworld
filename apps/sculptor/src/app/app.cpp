@@ -184,9 +184,9 @@ auto app::render(
     camera_controller_.update(delta_time);
 
     auto& renderer = get_engine().get_renderer();
-    renderer.draw_line(vec3f{0, 0, 0}, vec3f{100, 0, 0}, colors::blue_4);
-    renderer.draw_line(vec3f{0, 0, 0}, vec3f{0, 100, 0}, colors::green_4);
-    renderer.draw_line(vec3f{0, 0, 0}, vec3f{0, 0, 100}, colors::red_4);
+    renderer.draw_line(vec3f{0, 0, 0}, vec3f{100, 0, 0}, colors::blue_8);
+    renderer.draw_line(vec3f{0, 0, 0}, vec3f{0, 100, 0}, colors::green_8);
+    renderer.draw_line(vec3f{0, 0, 0}, vec3f{0, 0, 100}, colors::red_8);
 
     render_volume_overlay_();
 
@@ -706,7 +706,7 @@ auto app::render_volume_overlay_() -> void {
                 static_cast<float32>(size.y),
                 static_cast<float32>(size.z),
             },
-            colors::amber_4
+            colors::amber_8
         );
     }
 
@@ -734,9 +734,9 @@ auto app::render_volume_overlay_() -> void {
     const auto node       = transform_comp.get_world_matrix();
     constexpr float32 arm = 1.5f;
 
-    renderer.draw_line(node * vec3f{-arm, 0.f, 0.f}, node * vec3f{arm, 0.f, 0.f}, colors::purple_4);
-    renderer.draw_line(node * vec3f{0.f, -arm, 0.f}, node * vec3f{0.f, arm, 0.f}, colors::purple_4);
-    renderer.draw_line(node * vec3f{0.f, 0.f, -arm}, node * vec3f{0.f, 0.f, arm}, colors::purple_4);
+    renderer.draw_line(node * vec3f{-arm, 0.f, 0.f}, node * vec3f{arm, 0.f, 0.f}, colors::purple_8);
+    renderer.draw_line(node * vec3f{0.f, -arm, 0.f}, node * vec3f{0.f, arm, 0.f}, colors::purple_8);
+    renderer.draw_line(node * vec3f{0.f, 0.f, -arm}, node * vec3f{0.f, 0.f, arm}, colors::purple_8);
 }
 
 auto app::init_asset_dirs_() -> void {

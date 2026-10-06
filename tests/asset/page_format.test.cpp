@@ -22,7 +22,7 @@ TEST_CASE("compaction packs one material and air into the binary class", "[asset
     asset::page_pool pages;
 
     asset::model m{ids, pages, side, side, side};
-    const auto stone = voxels::gray[4];
+    const auto stone = voxels::gray[8];
 
     asset::model_writer writer{m};
     for (int32 x = 0; x < side; ++x) {
@@ -67,7 +67,7 @@ TEST_CASE("a second material spills the page into the dense class", "[asset][pag
     asset::page_pool pages;
 
     asset::model m{ids, pages, side, side, side};
-    const auto stone = voxels::gray[4];
+    const auto stone = voxels::gray[8];
     const auto dirt  = voxels::brown[0];
 
     asset::model_writer writer{m};
@@ -108,7 +108,7 @@ TEST_CASE("digging a solid page leaves it binary, not dense", "[asset][pages]") 
     asset::page_pool pages;
 
     asset::model m{ids, pages, side, side, side};
-    m.fill(voxels::gray[4]);
+    m.fill(voxels::gray[8]);
 
     REQUIRE(m.get_page_mode(0, 0, 0) == asset::page_mode::uniform);
 
@@ -117,8 +117,8 @@ TEST_CASE("digging a solid page leaves it binary, not dense", "[asset][pages]") 
     REQUIRE(m.get_page_mode(0, 0, 0) == asset::page_mode::binary);
     REQUIRE(pages.dense_count() == 0);
     REQUIRE(m.get_voxel(2, 2, 2) == voxels::air);
-    REQUIRE(m.get_voxel(2, 2, 3) == voxels::gray[4]);
-    REQUIRE(m.get_voxel(3, 2, 2) == voxels::gray[4]);
+    REQUIRE(m.get_voxel(2, 2, 3) == voxels::gray[8]);
+    REQUIRE(m.get_voxel(3, 2, 2) == voxels::gray[8]);
 }
 
 TEST_CASE("compaction moves a dense page down to its tightest class", "[asset][pages]") {
@@ -126,7 +126,7 @@ TEST_CASE("compaction moves a dense page down to its tightest class", "[asset][p
     asset::page_pool pages;
 
     asset::model m{ids, pages, side, side, side};
-    const auto stone = voxels::gray[4];
+    const auto stone = voxels::gray[8];
     const auto dirt  = voxels::brown[0];
 
     asset::model_writer writer{m};
@@ -153,12 +153,12 @@ TEST_CASE("compaction retires a binary page that lost its air", "[asset][pages]"
     asset::page_pool pages;
 
     asset::model m{ids, pages, side, side, side};
-    m.fill(voxels::gray[4]);
+    m.fill(voxels::gray[8]);
     m.set_voxel(2, 2, 2, voxels::air);
 
     REQUIRE(m.get_page_mode(0, 0, 0) == asset::page_mode::binary);
 
-    m.set_voxel(2, 2, 2, voxels::gray[4]);
+    m.set_voxel(2, 2, 2, voxels::gray[8]);
 
     REQUIRE(m.compact_pages() == 1);
     REQUIRE(m.get_page_mode(0, 0, 0) == asset::page_mode::uniform);
@@ -172,7 +172,7 @@ TEST_CASE("a model hands every slot of both classes back", "[asset][pages]") {
 
     {
         asset::model m{ids, pages, side, side, side};
-        m.fill(voxels::gray[4]);
+        m.fill(voxels::gray[8]);
         m.set_voxel(9, 9, 9, voxels::air);
 
         asset::model_writer writer{m};
@@ -190,7 +190,7 @@ TEST_CASE("a clone carries both page classes without sharing slots", "[asset][pa
     asset::page_pool pages;
 
     asset::model source{ids, pages, side, side, side};
-    source.fill(voxels::gray[4]);
+    source.fill(voxels::gray[8]);
     source.set_voxel(9, 9, 9, voxels::air);
     {
         asset::model_writer writer{source};
@@ -208,11 +208,11 @@ TEST_CASE("a clone carries both page classes without sharing slots", "[asset][pa
 
     copy.set_voxel(9, 9, 8, voxels::air);
 
-    REQUIRE(source.get_voxel(9, 9, 8) == voxels::gray[4]);
+    REQUIRE(source.get_voxel(9, 9, 8) == voxels::gray[8]);
     REQUIRE(copy.get_voxel(9, 9, 8) == voxels::air);
     REQUIRE(copy.get_voxel(9, 9, 9) == voxels::air);
     REQUIRE(copy.get_voxel(0, 0, 0) == voxels::brown[0]);
-    REQUIRE(copy.get_voxel(1, 0, 0) == voxels::gray[4]);
+    REQUIRE(copy.get_voxel(1, 0, 0) == voxels::gray[8]);
 }
 
 TEST_CASE("compaction packs three materials into the palette class", "[asset][pages]") {
@@ -220,7 +220,7 @@ TEST_CASE("compaction packs three materials into the palette class", "[asset][pa
     asset::page_pool pages;
 
     asset::model m{ids, pages, side, side, side};
-    const std::array shades{voxels::gray[4], voxels::brown[0], voxels::green[2]};
+    const std::array shades{voxels::gray[8], voxels::brown[0], voxels::green[4]};
 
     {
         asset::model_writer writer{m};
@@ -290,23 +290,23 @@ TEST_CASE("a write reopens a palette page into the dense class", "[asset][pages]
     asset::model m{ids, pages, side, side, side};
     {
         asset::model_writer writer{m};
-        writer.set(0, 0, 0, voxels::gray[4]);
+        writer.set(0, 0, 0, voxels::gray[8]);
         writer.set(1, 0, 0, voxels::brown[0]);
-        writer.set(2, 0, 0, voxels::green[2]);
+        writer.set(2, 0, 0, voxels::green[4]);
     }
 
     REQUIRE(m.compact_pages() == 1);
     REQUIRE(m.get_page_mode(0, 0, 0) == asset::page_mode::palette);
 
-    m.set_voxel(3, 0, 0, voxels::blue[1]);
+    m.set_voxel(3, 0, 0, voxels::blue[2]);
 
     REQUIRE(m.get_page_mode(0, 0, 0) == asset::page_mode::dense);
     REQUIRE(pages.palette_count() == 0);
 
-    REQUIRE(m.get_voxel(0, 0, 0) == voxels::gray[4]);
+    REQUIRE(m.get_voxel(0, 0, 0) == voxels::gray[8]);
     REQUIRE(m.get_voxel(1, 0, 0) == voxels::brown[0]);
-    REQUIRE(m.get_voxel(2, 0, 0) == voxels::green[2]);
-    REQUIRE(m.get_voxel(3, 0, 0) == voxels::blue[1]);
+    REQUIRE(m.get_voxel(2, 0, 0) == voxels::green[4]);
+    REQUIRE(m.get_voxel(3, 0, 0) == voxels::blue[2]);
     REQUIRE(m.get_voxel(4, 0, 0) == voxels::air);
 }
 
@@ -319,7 +319,7 @@ TEST_CASE("a palette page reports the same rows as a dense one", "[asset][pages]
     asset::model packed{ids, pages, chunk, chunk, chunk};
     asset::model loose{ids, pages, chunk, chunk, chunk};
 
-    const std::array shades{voxels::gray[4], voxels::brown[0], voxels::green[2]};
+    const std::array shades{voxels::gray[8], voxels::brown[0], voxels::green[4]};
 
     {
         asset::model_writer to_packed{packed};
@@ -363,9 +363,9 @@ TEST_CASE("a model hands its palette slots back", "[asset][pages]") {
         asset::model m{ids, pages, side, side, side};
         {
             asset::model_writer writer{m};
-            writer.set(0, 0, 0, voxels::gray[4]);
+            writer.set(0, 0, 0, voxels::gray[8]);
             writer.set(1, 0, 0, voxels::brown[0]);
-            writer.set(2, 0, 0, voxels::green[2]);
+            writer.set(2, 0, 0, voxels::green[4]);
         }
         REQUIRE(m.compact_pages() == 1);
         REQUIRE(pages.palette_count() == 1);
@@ -381,9 +381,9 @@ TEST_CASE("a clone carries a palette page without sharing its slot", "[asset][pa
     asset::model source{ids, pages, side, side, side};
     {
         asset::model_writer writer{source};
-        writer.set(0, 0, 0, voxels::gray[4]);
+        writer.set(0, 0, 0, voxels::gray[8]);
         writer.set(1, 0, 0, voxels::brown[0]);
-        writer.set(2, 0, 0, voxels::green[2]);
+        writer.set(2, 0, 0, voxels::green[4]);
     }
     REQUIRE(source.compact_pages() == 1);
     REQUIRE(source.get_page_mode(0, 0, 0) == asset::page_mode::palette);
@@ -393,10 +393,10 @@ TEST_CASE("a clone carries a palette page without sharing its slot", "[asset][pa
 
     REQUIRE(pages.palette_count() == 2);
 
-    copy.set_voxel(1, 0, 0, voxels::blue[1]);
+    copy.set_voxel(1, 0, 0, voxels::blue[2]);
 
     REQUIRE(source.get_voxel(1, 0, 0) == voxels::brown[0]);
-    REQUIRE(copy.get_voxel(1, 0, 0) == voxels::blue[1]);
-    REQUIRE(copy.get_voxel(0, 0, 0) == voxels::gray[4]);
-    REQUIRE(copy.get_voxel(2, 0, 0) == voxels::green[2]);
+    REQUIRE(copy.get_voxel(1, 0, 0) == voxels::blue[2]);
+    REQUIRE(copy.get_voxel(0, 0, 0) == voxels::gray[8]);
+    REQUIRE(copy.get_voxel(2, 0, 0) == voxels::green[4]);
 }

@@ -386,7 +386,7 @@ TEST_CASE("greedy meshing agrees with per-voxel meshing", "[mesh]") {
 
     SECTION("single voxel") {
         model_fixture fixture{16};
-        fixture.get()->set_voxel(4, 5, 6, voxels::amber[3]);
+        fixture.get()->set_voxel(4, 5, 6, voxels::amber[6]);
 
         const auto greedy = fixture.greedy();
         REQUIRE(greedy.quads.size() == 6);
@@ -395,13 +395,13 @@ TEST_CASE("greedy meshing agrees with per-voxel meshing", "[mesh]") {
 
     SECTION("voxel in the corner") {
         model_fixture fixture{16};
-        fixture.get()->set_voxel(0, 0, 0, voxels::gray[5]);
+        fixture.get()->set_voxel(0, 0, 0, voxels::gray[10]);
         REQUIRE(to_face_cells(fixture.greedy()) == to_face_cells(fixture.simple()));
     }
 
     SECTION("solid block merges into six quads") {
         model_fixture fixture{16};
-        fixture.get()->fill(voxels::green[2]);
+        fixture.get()->fill(voxels::green[4]);
 
         const auto greedy = fixture.greedy();
         REQUIRE(greedy.quads.size() == 6);
@@ -414,7 +414,7 @@ TEST_CASE("greedy meshing agrees with per-voxel meshing", "[mesh]") {
             for (int32 y = 0; y < fixture.size(); ++y) {
                 for (int32 z = 0; z < fixture.size(); ++z) {
                     if (((x + y + z) % 2) == 0) {
-                        fixture.get()->set_voxel(x, y, z, voxels::blue[4]);
+                        fixture.get()->set_voxel(x, y, z, voxels::blue[8]);
                     }
                 }
             }
@@ -427,7 +427,7 @@ TEST_CASE("greedy meshing agrees with per-voxel meshing", "[mesh]") {
         for (int32 x = 0; x < fixture.size(); ++x) {
             for (int32 y = 0; y < 4; ++y) {
                 for (int32 z = 0; z < fixture.size(); ++z) {
-                    const voxel id = (x < 8) ? voxels::brown[2] : voxels::gray[2];
+                    const voxel id = (x < 8) ? voxels::brown[4] : voxels::gray[4];
                     fixture.get()->set_voxel(x, y, z, id);
                 }
             }
@@ -443,7 +443,7 @@ TEST_CASE("greedy meshing agrees with per-voxel meshing", "[mesh]") {
                 state = (state * 1664525U) + 1013904223U;
                 const int32 height = 8 + static_cast<int32>((state >> 26) % 24);
                 for (int32 y = 0; y < height; ++y) {
-                    fixture.get()->set_voxel(x, y, z, voxels::brown[3]);
+                    fixture.get()->set_voxel(x, y, z, voxels::brown[6]);
                 }
             }
         }
@@ -470,7 +470,7 @@ TEST_CASE("greedy meshing agrees with per-voxel meshing", "[mesh]") {
 
     SECTION("full-size chunk, solid") {
         model_fixture fixture{64};
-        fixture.get()->fill(voxels::gray[6]);
+        fixture.get()->fill(voxels::gray[12]);
 
         const auto greedy = fixture.greedy();
         REQUIRE(greedy.quads.size() == 6);
@@ -502,8 +502,8 @@ TEST_CASE("boundary faces close the seam between chunks", "[mesh]") {
     auto left  = std::make_shared<asset::model>(identity_pool, pages, size, size, size);
     auto right = std::make_shared<asset::model>(identity_pool, pages, size, size, size);
 
-    left->fill(voxels::gray[4]);
-    right->fill(voxels::gray[4]);
+    left->fill(voxels::gray[8]);
+    right->fill(voxels::gray[8]);
 
     asset::chunk_volume left_chunk{left};
 
@@ -542,7 +542,7 @@ TEST_CASE("ambient occlusion keeps all four levels", "[mesh]") {
 
     for (int32 x = 0; x < 8; ++x) {
         for (int32 z = 0; z < 8; ++z) {
-            fixture.get()->set_voxel(x, 4, z, voxels::gray[5]);
+            fixture.get()->set_voxel(x, 4, z, voxels::gray[10]);
         }
     }
 
@@ -551,9 +551,9 @@ TEST_CASE("ambient occlusion keeps all four levels", "[mesh]") {
     }
 
     SECTION("three voxels are enough to produce every level") {
-        fixture.get()->set_voxel(2, 5, 1, voxels::amber[3]);
-        fixture.get()->set_voxel(2, 5, 2, voxels::amber[3]);
-        fixture.get()->set_voxel(1, 5, 3, voxels::amber[3]);
+        fixture.get()->set_voxel(2, 5, 1, voxels::amber[6]);
+        fixture.get()->set_voxel(2, 5, 2, voxels::amber[6]);
+        fixture.get()->set_voxel(1, 5, 3, voxels::amber[6]);
 
         REQUIRE(ao_levels(fixture.simple(), 2) == std::set<uint8>{0, 1, 2, 3});
         REQUIRE(ao_levels(fixture.greedy(), 2) == std::set<uint8>{0, 1, 2, 3});
@@ -566,7 +566,7 @@ TEST_CASE("a bent trench has no point lighter than its surroundings", "[mesh]") 
     for (int32 x = 0; x < 32; ++x) {
         for (int32 z = 0; z < 32; ++z) {
             for (int32 y = 0; y < 10; ++y) {
-                fixture.get()->set_voxel(x, y, z, voxels::gray[5]);
+                fixture.get()->set_voxel(x, y, z, voxels::gray[10]);
             }
         }
     }
@@ -640,12 +640,12 @@ TEST_CASE("occlusion reaches exactly one cell from a wall", "[mesh]") {
 
     for (int32 x = 0; x < 16; ++x) {
         for (int32 z = 0; z < 16; ++z) {
-            fixture.get()->set_voxel(x, 4, z, voxels::gray[5]);
+            fixture.get()->set_voxel(x, 4, z, voxels::gray[10]);
         }
     }
 
     for (int32 z = 0; z < 16; ++z) {
-        fixture.get()->set_voxel(4, 5, z, voxels::amber[3]);
+        fixture.get()->set_voxel(4, 5, z, voxels::amber[6]);
     }
 
     std::map<int32, std::set<uint8>> by_column;
@@ -681,7 +681,7 @@ TEST_CASE("packed occlusion matches the model at every corner", "[mesh]") {
             for (int32 z = 2; z < 14; ++z) {
                 state = (state * 1664525U) + 1013904223U;
                 if (((state >> 28) & 7U) < 4U) {
-                    fixture.get()->set_voxel(x, y, z, voxels::gray[5]);
+                    fixture.get()->set_voxel(x, y, z, voxels::gray[10]);
                 }
             }
         }
@@ -734,7 +734,7 @@ TEST_CASE("packed sky light matches the field at every corner", "[mesh]") {
     for (int32 y = 0; y < 40; ++y) {
         for (int32 z = 0; z < 64; ++z) {
             for (int32 x = 0; x < 64; ++x) {
-                writer.set(x, y, z, voxels::gray[5]);
+                writer.set(x, y, z, voxels::gray[10]);
             }
         }
     }
@@ -756,7 +756,7 @@ TEST_CASE("packed sky light matches the field at every corner", "[mesh]") {
     for (int32 y = 40; y < 64; ++y) {
         for (int32 z = 50; z < 54; ++z) {
             for (int32 x = 50; x < 54; ++x) {
-                writer.set(x, y, z, voxels::gray[5]);
+                writer.set(x, y, z, voxels::gray[10]);
             }
         }
     }
@@ -834,7 +834,7 @@ TEST_CASE("packed block light matches the field at every corner", "[mesh]") {
     for (int32 y = 0; y < 64; ++y) {
         for (int32 z = 0; z < 64; ++z) {
             for (int32 x = 0; x < 64; ++x) {
-                writer.set(x, y, z, voxels::gray[5]);
+                writer.set(x, y, z, voxels::gray[10]);
             }
         }
     }
@@ -936,11 +936,11 @@ TEST_CASE("ambient occlusion reads across the chunk seam", "[mesh]") {
 
     for (int32 x = 0; x < 64; ++x) {
         for (int32 z = 0; z < 64; ++z) {
-            left.get()->set_voxel(x, 4, z, voxels::gray[5]);
+            left.get()->set_voxel(x, 4, z, voxels::gray[10]);
         }
     }
 
-    right.get()->set_voxel(0, 5, 8, voxels::amber[3]);
+    right.get()->set_voxel(0, 5, 8, voxels::amber[6]);
 
     const auto seam_corners = [](const gfx::mesh& m) -> std::optional<std::array<uint8, 4>> {
         for (const auto& q : m.quads) {
@@ -982,7 +982,7 @@ TEST_CASE("greedy meshing output is stable", "[mesh]") {
             state = (state * 1664525U) + 1013904223U;
             const int32 height = 4 + static_cast<int32>((state >> 27) % 8);
             for (int32 y = 0; y < height; ++y) {
-                fixture.get()->set_voxel(x, y, z, voxels::green[3]);
+                fixture.get()->set_voxel(x, y, z, voxels::green[6]);
             }
         }
     }
@@ -993,8 +993,8 @@ TEST_CASE("greedy meshing output is stable", "[mesh]") {
     const auto digest = hash_mesh(mesh);
     INFO("mesh digest: " << digest << ", quads: " << mesh.quads.size());
     REQUIRE(mesh.quads.size() == 5490);
-    REQUIRE(quad_carries(mesh, voxels::green[3]));
-    REQUIRE(digest == 10824956038327822692ULL);
+    REQUIRE(quad_carries(mesh, voxels::green[6]));
+    REQUIRE(digest == 10517084246836154400ULL);
 }
 
 TEST_CASE("full-size greedy meshing output is stable", "[mesh]") {
@@ -1006,7 +1006,7 @@ TEST_CASE("full-size greedy meshing output is stable", "[mesh]") {
             state = (state * 1664525U) + 1013904223U;
             const int32 height = 6 + static_cast<int32>((state >> 26) % 20);
             for (int32 y = 0; y < height; ++y) {
-                fixture.get()->set_voxel(x, y, z, voxels::green[3]);
+                fixture.get()->set_voxel(x, y, z, voxels::green[6]);
             }
         }
     }
@@ -1015,8 +1015,8 @@ TEST_CASE("full-size greedy meshing output is stable", "[mesh]") {
     const auto digest = hash_mesh(mesh);
     INFO("full-size digest: " << digest << ", quads: " << mesh.quads.size());
     REQUIRE(mesh.quads.size() == 29276);
-    REQUIRE(quad_carries(mesh, voxels::green[3]));
-    REQUIRE(digest == 17958077031956241466ULL);
+    REQUIRE(quad_carries(mesh, voxels::green[6]));
+    REQUIRE(digest == 15672987081679080006ULL);
 }
 
 
@@ -1029,7 +1029,7 @@ TEST_CASE("packed convexity matches the model at every corner", "[mesh]") {
             state = (state * 1664525U) + 1013904223U;
             const int32 height = 3 + static_cast<int32>((state >> 28) % 6);
             for (int32 y = 2; y < 2 + height; ++y) {
-                fixture.get()->set_voxel(x, y, z, voxels::gray[5]);
+                fixture.get()->set_voxel(x, y, z, voxels::gray[10]);
             }
         }
     }
@@ -1080,7 +1080,7 @@ TEST_CASE("a model without neighbours has no rim", "[mesh]") {
     for (int32 x = 0; x < 16; ++x) {
         for (int32 z = 0; z < 16; ++z) {
             for (int32 y = 0; y < 8; ++y) {
-                fixture.get()->set_voxel(x, y, z, voxels::gray[5]);
+                fixture.get()->set_voxel(x, y, z, voxels::gray[10]);
             }
         }
     }
@@ -1101,7 +1101,7 @@ TEST_CASE("a model without neighbours has no rim", "[mesh]") {
 
 TEST_CASE("a coarse step inflates a lone voxel to a whole cell", "[mesh][lod]") {
     model_fixture fixture{64};
-    fixture.get()->set_voxel(10, 10, 10, voxels::gray[4]);
+    fixture.get()->set_voxel(10, 10, 10, voxels::gray[8]);
 
     const auto fine = fixture.greedy();
     REQUIRE(fine.quads.size() == 6);
@@ -1133,13 +1133,13 @@ TEST_CASE("a coarse cell wears the material of its top voxel", "[mesh][lod]") {
     for (int32 x = 10; x < 12; ++x) {
         for (int32 y = 10; y < 12; ++y) {
             for (int32 z = 10; z < 12; ++z) {
-                fixture.get()->set_voxel(x, y, z, voxels::gray[4]);
+                fixture.get()->set_voxel(x, y, z, voxels::gray[8]);
             }
         }
     }
     for (int32 x = 10; x < 12; ++x) {
         for (int32 z = 10; z < 12; ++z) {
-            fixture.get()->set_voxel(x, 11, z, voxels::green[3]);
+            fixture.get()->set_voxel(x, 11, z, voxels::green[6]);
         }
     }
 
@@ -1164,7 +1164,7 @@ TEST_CASE("a coarse step flattens detail the fine mesh keeps", "[mesh][lod]") {
         for (int32 z = 0; z < 64; ++z) {
             const int32 height = 8 + ((x + z) % 2);
             for (int32 y = 0; y < height; ++y) {
-                fixture.get()->set_voxel(x, y, z, voxels::green[3]);
+                fixture.get()->set_voxel(x, y, z, voxels::green[6]);
             }
         }
     }
@@ -1192,11 +1192,11 @@ TEST_CASE("a coarse step reads the neighbour at its own resolution", "[mesh][lod
     auto right = std::make_shared<asset::model>(
         identity_pool, pages, size, size, size);
 
-    left->fill(voxels::gray[4]);
+    left->fill(voxels::gray[8]);
     for (int32 x = 0; x < size; ++x) {
         for (int32 y = 0; y < size; ++y) {
             for (int32 z = 0; z < half; ++z) {
-                right->set_voxel(x, y, z, voxels::gray[4]);
+                right->set_voxel(x, y, z, voxels::gray[8]);
             }
         }
     }
@@ -1242,7 +1242,7 @@ TEST_CASE("a coarse step keeps the roof flat across the chunk seam", "[mesh][lod
         for (int32 x = 0; x < size; ++x) {
             for (int32 z = 0; z < size; ++z) {
                 for (int32 y = 0; y <= surface; ++y) {
-                    built->set_voxel(x, y, z, voxels::gray[4]);
+                    built->set_voxel(x, y, z, voxels::gray[8]);
                 }
             }
         }
@@ -1303,7 +1303,7 @@ TEST_CASE("a diagonal neighbour shades the corner it touches", "[mesh][seam]") {
         for (int32 y = 0; y <= surface; ++y) {
             for (int32 z = 0; z < size; ++z) {
                 for (int32 x = 0; x < size; ++x) {
-                    built->set_voxel(x, y, z, voxels::gray[4]);
+                    built->set_voxel(x, y, z, voxels::gray[8]);
                 }
             }
         }
@@ -1314,7 +1314,7 @@ TEST_CASE("a diagonal neighbour shades the corner it touches", "[mesh][seam]") {
     const auto pillar = flat();
     const auto notch  = flat();
 
-    pillar->set_voxel(last, surface + 1, 0, voxels::gray[4]);
+    pillar->set_voxel(last, surface + 1, 0, voxels::gray[8]);
     notch->set_voxel(0, surface, last, voxels::air);
 
     asset::chunk_volume chunk{flat()};
@@ -1386,7 +1386,7 @@ TEST_CASE("the corner where four chunks meet keeps the sky it sees", "[mesh][sea
         for (int32 y = 0; y <= surface; ++y) {
             for (int32 z = 0; z < size; ++z) {
                 for (int32 x = 0; x < size; ++x) {
-                    built->set_voxel(x, y, z, voxels::gray[4]);
+                    built->set_voxel(x, y, z, voxels::gray[8]);
                 }
             }
         }
@@ -1398,7 +1398,7 @@ TEST_CASE("the corner where four chunks meet keeps the sky it sees", "[mesh][sea
         for (int32 y = 0; y < size; ++y) {
             for (int32 z = 0; z < size; ++z) {
                 for (int32 x = 0; x < size; ++x) {
-                    built->set_voxel(x, y, z, voxels::gray[4]);
+                    built->set_voxel(x, y, z, voxels::gray[8]);
                 }
             }
         }
@@ -1504,14 +1504,14 @@ TEST_CASE("a coarse cell takes the brightest sky it holds", "[mesh][lod]") {
         for (int32 y = 0; y < floor_top; ++y) {
             for (int32 z = 0; z < side; ++z) {
                 for (int32 x = 0; x < side; ++x) {
-                    writer.set(x, y, z, voxels::gray[5]);
+                    writer.set(x, y, z, voxels::gray[10]);
                 }
             }
         }
         for (int32 y = slab_from; y < slab_to; ++y) {
             for (int32 z = 0; z < side; ++z) {
                 for (int32 x = opening; x < side; ++x) {
-                    writer.set(x, y, z, voxels::gray[5]);
+                    writer.set(x, y, z, voxels::gray[10]);
                 }
             }
         }
@@ -1575,7 +1575,7 @@ TEST_CASE("every coarse step costs fewer quads than the one before", "[mesh][lod
             state = (state * 1664525U) + 1013904223U;
             const int32 height = 6 + static_cast<int32>((state >> 26) % 20);
             for (int32 y = 0; y < height; ++y) {
-                fixture.get()->set_voxel(x, y, z, voxels::green[3]);
+                fixture.get()->set_voxel(x, y, z, voxels::green[6]);
             }
         }
     }
@@ -1599,7 +1599,7 @@ TEST_CASE("every coarse step costs fewer quads than the one before", "[mesh][lod
 TEST_CASE("a mesh reports the step it was actually built with", "[mesh][lod]") {
     SECTION("a chunk-sized model takes the step it was asked for") {
         model_fixture fixture{64};
-        fixture.get()->set_voxel(10, 10, 10, voxels::gray[4]);
+        fixture.get()->set_voxel(10, 10, 10, voxels::gray[8]);
 
         for (const int32 step : {1, 2, 4, 8}) {
             const auto built = fixture.greedy({.lod_step = step});
@@ -1611,7 +1611,7 @@ TEST_CASE("a mesh reports the step it was actually built with", "[mesh][lod]") {
 
     SECTION("a model the occupancy cannot describe stays at full detail") {
         model_fixture fixture{32};
-        fixture.get()->set_voxel(10, 10, 10, voxels::gray[4]);
+        fixture.get()->set_voxel(10, 10, 10, voxels::gray[8]);
 
         const auto built = fixture.greedy({.lod_step = 4});
         REQUIRE(built.lod_step == 1);
@@ -1646,11 +1646,11 @@ TEST_CASE("a coarse chunk hides nothing a neighbour only half covers", "[mesh][l
     auto right = std::make_shared<asset::model>(
         identity_pool, pages, size, size, size);
 
-    left->fill(voxels::gray[4]);
+    left->fill(voxels::gray[8]);
     for (int32 x = 0; x < size; ++x) {
         for (int32 y = 0; y < size; y += 2) {
             for (int32 z = 0; z < size; ++z) {
-                right->set_voxel(x, y, z, voxels::gray[4]);
+                right->set_voxel(x, y, z, voxels::gray[8]);
             }
         }
     }
@@ -1701,7 +1701,7 @@ TEST_CASE("the coarse side closes the step its own inflation made", "[mesh][lod]
         for (int32 x = 0; x < size; ++x) {
             for (int32 y = 0; y <= top; ++y) {
                 for (int32 z = 0; z < size; ++z) {
-                    ground->set_voxel(x, y, z, voxels::green[3]);
+                    ground->set_voxel(x, y, z, voxels::green[6]);
                 }
             }
         }
@@ -1796,7 +1796,7 @@ TEST_CASE("a coarse mesh has a face wherever the coarse grid needs one", "[mesh]
             state = (state * 1664525U) + 1013904223U;
             const int32 height = 6 + static_cast<int32>((state >> 26) % 20);
             for (int32 y = 0; y < height; ++y) {
-                fixture.get()->set_voxel(x, y, z, voxels::green[3]);
+                fixture.get()->set_voxel(x, y, z, voxels::green[6]);
             }
         }
     }
@@ -1833,7 +1833,7 @@ TEST_CASE("the plane between two levels is closed from one side or the other", "
                 state = (state * 1664525U) + 1013904223U;
                 const int32 height = 10 + static_cast<int32>((state >> 26) % 24);
                 for (int32 y = 0; y < height; ++y) {
-                    m->set_voxel(x, y, z, voxels::green[3]);
+                    m->set_voxel(x, y, z, voxels::green[6]);
                 }
             }
         }
@@ -1906,7 +1906,7 @@ TEST_CASE("a coarse face lands on the cell boundary the shader draws it at", "[m
             state = (state * 1664525U) + 1013904223U;
             const int32 height = 8 + static_cast<int32>((state >> 26) % 24);
             for (int32 y = 0; y < height; ++y) {
-                fixture.get()->set_voxel(x, y, z, voxels::green[3]);
+                fixture.get()->set_voxel(x, y, z, voxels::green[6]);
             }
         }
     }

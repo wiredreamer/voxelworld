@@ -63,7 +63,7 @@ auto dummy_enemy::get_entity() const -> ecs::entity {
 auto dummy_enemy::create_model() -> std::shared_ptr<asset::model> {
     auto& model_reg = engine_.get_world().resource<asset::model_registry>();
     auto model      = model_reg.create_unnamed(16, 32, 16);
-    model->fill(voxels::red[3]);
+    model->fill(voxels::red[6]);
     model->set_pivot({8.0f, 16.0f, 8.0f});
     return model;
 }

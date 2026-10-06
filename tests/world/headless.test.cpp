@@ -15,7 +15,7 @@ namespace {
 
 auto make_cube(world& w, asset::model_registry& models, const char* name) -> entity {
     auto model = models.create(name, 4, 4, 4);
-    model->fill(voxels::green[2]);
+    model->fill(voxels::green[4]);
 
     const auto ent = w.create().with<transform_component>().with<model_component>().get_entity();
     w.system<model_system>().modify(ent).set_model(std::move(model));
@@ -88,7 +88,7 @@ TEST_CASE("chunk occupancy matches the voxel volume bit for bit", "[world][occup
     for (int32 x = 0; x < 8; ++x) {
         for (int32 y = 0; y < 8; ++y) {
             for (int32 z = 0; z < 8; ++z) {
-                writer.set(x, y, z, voxels::gray[3]);
+                writer.set(x, y, z, voxels::gray[6]);
             }
         }
     }
@@ -99,7 +99,7 @@ TEST_CASE("chunk occupancy matches the voxel volume bit for bit", "[world][occup
         const int32 x = static_cast<int32>((state >> 8) % side);
         const int32 y = static_cast<int32>((state >> 14) % side);
         const int32 z = static_cast<int32>((state >> 20) % side);
-        writer.set(x, y, z, voxels::amber[2]);
+        writer.set(x, y, z, voxels::amber[4]);
     }
 
     asset::chunk_occupancy occupancy;
@@ -169,7 +169,7 @@ TEST_CASE("voxel scale reaches the bounds once", "[world]") {
         models.get_identity_pool(), models.get_page_pool(), side,
         side, side, world_units_per_voxel
     );
-    model->fill(voxels::green[2]);
+    model->fill(voxels::green[4]);
 
     const auto ent = w.create().with<transform_component>().with<model_component>().get_entity();
     w.system<model_system>().modify(ent).set_model(std::move(model));

@@ -16,7 +16,7 @@ constexpr float32 base = 100.0F;
 
 auto place(world& w, asset::model_registry& models, const char* name, vec3f at) -> entity {
     auto model = models.create(name, 4, 4, 4);
-    model->fill(voxels::green[2]);
+    model->fill(voxels::green[4]);
 
     const auto ent = w.create()
                          .with<transform_component>()
@@ -243,7 +243,7 @@ TEST_CASE("a model without the component keeps its full detail", "[world][lod]")
     place_viewer(w, vec3f{0.0F, 0.0F, 0.0F});
 
     auto model = models.create("prop", 4, 4, 4);
-    model->fill(voxels::green[2]);
+    model->fill(voxels::green[4]);
 
     const auto prop =
         w.create().with<transform_component>().with<model_component>().get_entity();

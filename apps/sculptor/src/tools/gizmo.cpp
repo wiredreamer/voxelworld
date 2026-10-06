@@ -103,13 +103,13 @@ auto axis_index(gizmo_handle axis) -> std::size_t {
 auto axis_color(gizmo_handle axis, bool highlighted) -> color {
     const auto base = [axis]() -> color {
         switch (axis) {
-            case gizmo_handle::y: return colors::green_4;
-            case gizmo_handle::z: return colors::red_4;
-            default: return colors::blue_4;
+            case gizmo_handle::y: return colors::green_8;
+            case gizmo_handle::z: return colors::red_8;
+            default: return colors::blue_8;
         }
     }();
 
-    return highlighted ? colors::amber_5 : base;
+    return highlighted ? colors::amber_10 : base;
 }
 
 auto ray_plane(

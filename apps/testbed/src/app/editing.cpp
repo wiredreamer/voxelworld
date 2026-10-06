@@ -114,7 +114,7 @@ auto testbed_app::draw_hover_() -> void {
     outline(hovered_->solid_voxel_pos, colors::white);
 
     if (tool_ == edit_tool::place && hovered_->empty_voxel_pos != hovered_->solid_voxel_pos) {
-        outline(hovered_->empty_voxel_pos, colors::green_4);
+        outline(hovered_->empty_voxel_pos, colors::green_8);
     }
 }
 

@@ -586,9 +586,9 @@ auto perlin_terrain_generator::rock_voxel_at(
         return terrain::stone_deep[0];
     }
     if (wy < params_.rock_deep_y) {
-        return terrain::stone_deep[1];
+        return terrain::stone_deep[2];
     }
-    return terrain::stone_deep[2];
+    return terrain::stone_deep[4];
 }
 
 auto perlin_terrain_generator::voxel_at(
@@ -599,7 +599,7 @@ auto perlin_terrain_generator::voxel_at(
     }
 
     if (wy == stone_top && surface_top == stone_top) {
-        return wy > params_.snow_line ? terrain::snow[1] : terrain::stone[1];
+        return wy > params_.snow_line ? terrain::snow[2] : terrain::stone[2];
     }
     if ((stone_top - wy) < params_.rock_skin) {
         return terrain::stone[0];

@@ -13,7 +13,7 @@ TEST_CASE("the emission table mirrors the registry", "[emission]") {
     const asset::emission_table table = asset::build_emission_table(registry);
 
     REQUIRE(table[voxels::air.value] == 0);
-    REQUIRE(table[voxels::green[5].value] == 0);
+    REQUIRE(table[voxels::green[10].value] == 0);
     REQUIRE(table[voxels::lamp_amber.value] == 14);
     REQUIRE(table[voxels::fire_red.value] == 15);
 

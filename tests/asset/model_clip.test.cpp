@@ -15,10 +15,10 @@ auto make_block(asset::model_registry& registry) -> std::shared_ptr<asset::model
     auto m = registry.create_unnamed(block_size);
     {
         asset::model_writer writer{*m};
-        writer.set(1, 1, 1, voxels::gray[4]);
-        writer.set(2, 1, 1, voxels::gray[7]);
-        writer.set(2, 2, 1, voxels::gray[2]);
-        writer.set(5, 4, 3, voxels::gray[9]);
+        writer.set(1, 1, 1, voxels::gray[8]);
+        writer.set(2, 1, 1, voxels::gray[14]);
+        writer.set(2, 2, 1, voxels::gray[4]);
+        writer.set(5, 4, 3, voxels::gray[18]);
     }
     m->set_pivot(vec3f{3.f, 2.5f, 2.f});
     return m;
@@ -58,9 +58,9 @@ TEST_CASE("a copy holds the voxels of its region and the air between them", "[cl
     const auto clip = asset::copied(*source, {.min = {1, 1, 1}, .max = {2, 2, 1}});
 
     REQUIRE(clip.size == vec3i{2, 2, 1});
-    REQUIRE(clip.at({0, 0, 0}) == voxels::gray[4]);
-    REQUIRE(clip.at({1, 0, 0}) == voxels::gray[7]);
-    REQUIRE(clip.at({1, 1, 0}) == voxels::gray[2]);
+    REQUIRE(clip.at({0, 0, 0}) == voxels::gray[8]);
+    REQUIRE(clip.at({1, 0, 0}) == voxels::gray[14]);
+    REQUIRE(clip.at({1, 1, 0}) == voxels::gray[4]);
     REQUIRE(clip.at({0, 1, 0}).is_empty());
 }
 
@@ -93,8 +93,8 @@ TEST_CASE("erasing clears the region and keeps the rest", "[clip]") {
     REQUIRE(cleared->pivot() == source->pivot());
     REQUIRE(cleared->is_empty(1, 1, 1));
     REQUIRE(cleared->is_empty(2, 1, 1));
-    REQUIRE(cleared->get_voxel(2, 2, 1) == voxels::gray[2]);
-    REQUIRE(cleared->get_voxel(5, 4, 3) == voxels::gray[9]);
+    REQUIRE(cleared->get_voxel(2, 2, 1) == voxels::gray[4]);
+    REQUIRE(cleared->get_voxel(5, 4, 3) == voxels::gray[18]);
     REQUIRE(solid_count(*source) == 4);
 }
 
@@ -103,16 +103,16 @@ TEST_CASE("filling every cell turns the region into a solid block", "[clip]") {
     const auto source = make_block(registry);
 
     const auto block = asset::filled(
-        *source, {.min = {1, 1, 1}, .max = {2, 2, 2}}, voxels::gray[1],
+        *source, {.min = {1, 1, 1}, .max = {2, 2, 2}}, voxels::gray[2],
         asset::fill_scope::every_cell, registry
     );
 
     REQUIRE(block->size() == block_size);
     REQUIRE(block->pivot() == source->pivot());
-    REQUIRE(block->get_voxel(1, 1, 1) == voxels::gray[1]);
-    REQUIRE(block->get_voxel(1, 2, 2) == voxels::gray[1]);
-    REQUIRE(block->get_voxel(2, 2, 1) == voxels::gray[1]);
-    REQUIRE(block->get_voxel(5, 4, 3) == voxels::gray[9]);
+    REQUIRE(block->get_voxel(1, 1, 1) == voxels::gray[2]);
+    REQUIRE(block->get_voxel(1, 2, 2) == voxels::gray[2]);
+    REQUIRE(block->get_voxel(2, 2, 1) == voxels::gray[2]);
+    REQUIRE(block->get_voxel(5, 4, 3) == voxels::gray[18]);
     REQUIRE(solid_count(*block) == 9);
     REQUIRE(solid_count(*source) == 4);
 }
@@ -122,15 +122,15 @@ TEST_CASE("filling only the solid cells recolours the shape and keeps its air", 
     const auto source = make_block(registry);
 
     const auto painted = asset::filled(
-        *source, {.min = {1, 1, 1}, .max = {2, 2, 2}}, voxels::gray[1],
+        *source, {.min = {1, 1, 1}, .max = {2, 2, 2}}, voxels::gray[2],
         asset::fill_scope::solid_only, registry
     );
 
-    REQUIRE(painted->get_voxel(1, 1, 1) == voxels::gray[1]);
-    REQUIRE(painted->get_voxel(2, 1, 1) == voxels::gray[1]);
-    REQUIRE(painted->get_voxel(2, 2, 1) == voxels::gray[1]);
+    REQUIRE(painted->get_voxel(1, 1, 1) == voxels::gray[2]);
+    REQUIRE(painted->get_voxel(2, 1, 1) == voxels::gray[2]);
+    REQUIRE(painted->get_voxel(2, 2, 1) == voxels::gray[2]);
     REQUIRE(painted->is_empty(1, 2, 1));
-    REQUIRE(painted->get_voxel(5, 4, 3) == voxels::gray[9]);
+    REQUIRE(painted->get_voxel(5, 4, 3) == voxels::gray[18]);
     REQUIRE(solid_count(*painted) == 4);
 }
 
@@ -139,13 +139,13 @@ TEST_CASE("a fill reaching past the volume stops at its edge", "[clip]") {
     const auto source = make_block(registry);
 
     const auto block = asset::filled(
-        *source, {.min = {4, 3, 2}, .max = {9, 9, 9}}, voxels::gray[1],
+        *source, {.min = {4, 3, 2}, .max = {9, 9, 9}}, voxels::gray[2],
         asset::fill_scope::every_cell, registry
     );
 
     REQUIRE(block->size() == block_size);
-    REQUIRE(block->get_voxel(5, 4, 3) == voxels::gray[1]);
-    REQUIRE(block->get_voxel(4, 3, 2) == voxels::gray[1]);
+    REQUIRE(block->get_voxel(5, 4, 3) == voxels::gray[2]);
+    REQUIRE(block->get_voxel(4, 3, 2) == voxels::gray[2]);
     REQUIRE(solid_count(*block) == 3 + 8);
 }
 
@@ -171,10 +171,10 @@ TEST_CASE("a paste inside the volume keeps its size and pivot", "[clip]") {
 
     REQUIRE(result->size() == block_size);
     REQUIRE(result->pivot() == source->pivot());
-    REQUIRE(result->get_voxel(3, 2, 2) == voxels::gray[4]);
-    REQUIRE(result->get_voxel(4, 2, 2) == voxels::gray[7]);
-    REQUIRE(result->get_voxel(4, 3, 2) == voxels::gray[2]);
-    REQUIRE(result->get_voxel(1, 1, 1) == voxels::gray[4]);
+    REQUIRE(result->get_voxel(3, 2, 2) == voxels::gray[8]);
+    REQUIRE(result->get_voxel(4, 2, 2) == voxels::gray[14]);
+    REQUIRE(result->get_voxel(4, 3, 2) == voxels::gray[4]);
+    REQUIRE(result->get_voxel(1, 1, 1) == voxels::gray[8]);
     REQUIRE(solid_count(*result) == 7);
 }
 
@@ -186,8 +186,8 @@ TEST_CASE("the air of a clip spares the target unless the paste replaces", "[cli
     auto target = registry.create_unnamed(block_size);
     {
         asset::model_writer writer{*target};
-        writer.set(1, 2, 1, voxels::gray[5]);
-        writer.set(1, 1, 1, voxels::gray[5]);
+        writer.set(1, 2, 1, voxels::gray[10]);
+        writer.set(1, 1, 1, voxels::gray[10]);
     }
 
     const auto kept =
@@ -195,9 +195,9 @@ TEST_CASE("the air of a clip spares the target unless the paste replaces", "[cli
     const auto replaced =
         asset::pasted(*target, clip, {1, 1, 1}, asset::paste_mode::replace, registry);
 
-    REQUIRE(kept->get_voxel(1, 1, 1) == voxels::gray[4]);
-    REQUIRE(kept->get_voxel(1, 2, 1) == voxels::gray[5]);
-    REQUIRE(replaced->get_voxel(1, 1, 1) == voxels::gray[4]);
+    REQUIRE(kept->get_voxel(1, 1, 1) == voxels::gray[8]);
+    REQUIRE(kept->get_voxel(1, 2, 1) == voxels::gray[10]);
+    REQUIRE(replaced->get_voxel(1, 1, 1) == voxels::gray[8]);
     REQUIRE(replaced->is_empty(1, 2, 1));
 }
 
@@ -211,11 +211,11 @@ TEST_CASE("a paste past the edge grows the volume and moves the pivot", "[clip]"
 
     REQUIRE(result->size() == vec3i{8, 6, 4});
     REQUIRE(result->pivot() == vec3f{5.f, 2.5f, 2.f});
-    REQUIRE(result->get_voxel(0, 4, 3) == voxels::gray[4]);
-    REQUIRE(result->get_voxel(1, 4, 3) == voxels::gray[7]);
-    REQUIRE(result->get_voxel(1, 5, 3) == voxels::gray[2]);
-    REQUIRE(result->get_voxel(3, 1, 1) == voxels::gray[4]);
-    REQUIRE(result->get_voxel(7, 4, 3) == voxels::gray[9]);
+    REQUIRE(result->get_voxel(0, 4, 3) == voxels::gray[8]);
+    REQUIRE(result->get_voxel(1, 4, 3) == voxels::gray[14]);
+    REQUIRE(result->get_voxel(1, 5, 3) == voxels::gray[4]);
+    REQUIRE(result->get_voxel(3, 1, 1) == voxels::gray[8]);
+    REQUIRE(result->get_voxel(7, 4, 3) == voxels::gray[18]);
     REQUIRE(solid_count(*result) == 7);
 }
 
@@ -228,9 +228,9 @@ TEST_CASE("the air rim of a clip does not grow the volume", "[clip]") {
         asset::pasted(*source, clip, {-1, -1, -1}, asset::paste_mode::replace, registry);
 
     REQUIRE(result->size() == block_size);
-    REQUIRE(result->get_voxel(0, 0, 0) == voxels::gray[4]);
-    REQUIRE(result->get_voxel(1, 0, 0) == voxels::gray[7]);
-    REQUIRE(result->get_voxel(1, 1, 0) == voxels::gray[2]);
+    REQUIRE(result->get_voxel(0, 0, 0) == voxels::gray[8]);
+    REQUIRE(result->get_voxel(1, 0, 0) == voxels::gray[14]);
+    REQUIRE(result->get_voxel(1, 1, 0) == voxels::gray[4]);
     REQUIRE(result->is_empty(1, 1, 1));
 }
 
@@ -256,9 +256,9 @@ TEST_CASE("a mirrored clip keeps its box and swaps its sides", "[clip]") {
 
     REQUIRE(mirror.size == clip.size);
     REQUIRE(mirror.corner_from_pivot == clip.corner_from_pivot);
-    REQUIRE(mirror.at({1, 0, 0}) == voxels::gray[4]);
-    REQUIRE(mirror.at({0, 0, 0}) == voxels::gray[7]);
-    REQUIRE(mirror.at({0, 1, 0}) == voxels::gray[2]);
+    REQUIRE(mirror.at({1, 0, 0}) == voxels::gray[8]);
+    REQUIRE(mirror.at({0, 0, 0}) == voxels::gray[14]);
+    REQUIRE(mirror.at({0, 1, 0}) == voxels::gray[4]);
     REQUIRE(mirror.at({1, 1, 0}).is_empty());
 }
 
@@ -273,9 +273,9 @@ TEST_CASE("a turned clip swaps its sizes and stays around its centre", "[clip]")
     REQUIRE(clip.size == vec3i{4, 2, 1});
     REQUIRE(turned.size == vec3i{2, 4, 1});
     REQUIRE(turned.corner_from_pivot == clip.corner_from_pivot + vec3f{1.f, -1.f, 0.f});
-    REQUIRE(turned.at({1, 0, 0}) == voxels::gray[4]);
-    REQUIRE(turned.at({1, 1, 0}) == voxels::gray[7]);
-    REQUIRE(turned.at({0, 1, 0}) == voxels::gray[2]);
+    REQUIRE(turned.at({1, 0, 0}) == voxels::gray[8]);
+    REQUIRE(turned.at({1, 1, 0}) == voxels::gray[14]);
+    REQUIRE(turned.at({0, 1, 0}) == voxels::gray[4]);
 }
 
 TEST_CASE("a clip pasted back where it was copied changes nothing", "[clip]") {
@@ -291,5 +291,5 @@ TEST_CASE("a clip pasted back where it was copied changes nothing", "[clip]") {
     REQUIRE(result->size() == block_size);
     REQUIRE(result->pivot() == source->pivot());
     REQUIRE(solid_count(*result) == 4);
-    REQUIRE(result->get_voxel(5, 4, 3) == voxels::gray[9]);
+    REQUIRE(result->get_voxel(5, 4, 3) == voxels::gray[18]);
 }

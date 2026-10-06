@@ -8,7 +8,7 @@ import :serial.version;
 
 export namespace vw::asset {
 
-inline constexpr std::string_view voxm_file_version = "3.0";
+inline constexpr std::string_view voxm_file_version = "4.0";
 
 enum class voxm_encoding : uint8 { rle };
 

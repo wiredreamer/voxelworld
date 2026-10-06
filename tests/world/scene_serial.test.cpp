@@ -289,7 +289,7 @@ TEST_CASE("moving the pivot reports a transform change", "[scene]") {
     auto& models = w.resource<asset::model_registry>();
 
     auto model = models.create_unnamed(vec3i{4, 4, 4});
-    model->fill(voxels::green[2]);
+    model->fill(voxels::green[4]);
 
     const auto ent = w.create()
         .with<transform_component>()

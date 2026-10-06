@@ -531,7 +531,7 @@ def run_volume_scenario(probe):
         str(empty),
     )
 
-    ok, floor = tool(probe, "volume_write", {"node": "box", "boxes": [{"min": [0, 0, 0], "max": [3, 0, 1], "voxel": "gray_5"}]})
+    ok, floor = tool(probe, "volume_write", {"node": "box", "boxes": [{"min": [0, 0, 0], "max": [3, 0, 1], "voxel": "gray_10"}]})
     probe.check("volume_write fills a box", ok and floor.get("voxel_count") == 8 and floor.get("cells_written") == 8, str(floor))
 
     ok, state = tool(probe, "editor_state")
@@ -541,13 +541,13 @@ def run_volume_scenario(probe):
         str(state.get("context_stack")),
     )
 
-    ok, dotted = tool(probe, "volume_write", {"node": "box", "points": [{"voxel": "red_2", "at": [[1, 1, 0], [2, 1, 0]]}]})
+    ok, dotted = tool(probe, "volume_write", {"node": "box", "points": [{"voxel": "red_4", "at": [[1, 1, 0], [2, 1, 0]]}]})
     probe.check("volume_write sets points", ok and dotted.get("voxel_count") == 10, str(dotted))
 
     ok, read = tool(probe, "volume_get", {"node": "box"})
     layers = read.get("layers", {}) if ok else {}
     probe.check("volume_get bounds the occupied voxels", ok and read.get("occupied") == {"min": [0, 0, 0], "max": [3, 1, 1]}, str(read.get("occupied")))
-    probe.check("the legend puts the most common voxel first", layers.get("legend") == {"a": "gray_5", "b": "red_2"}, str(layers.get("legend")))
+    probe.check("the legend puts the most common voxel first", layers.get("legend") == {"a": "gray_10", "b": "red_4"}, str(layers.get("legend")))
     probe.check(
         "layers are slices of y, rows of z, characters of x",
         layers.get("origin") == [0, 0, 0] and layers.get("slices") == [["aaaa", "aaaa"], [".bb.", "...."]],
@@ -576,7 +576,7 @@ def run_volume_scenario(probe):
     ok, text = tool(probe, "volume_write", {"node": "box", "layers": {"legend": {}, "slices": [["...."]], "air": "keep"}})
     probe.check("air kept writes nothing", not ok and "nothing to write" in text, str(text))
 
-    ok, erased = tool(probe, "volume_write", {"node": "box", "layers": {"legend": {"g": "gray_5"}, "slices": [[".ggg"]]}})
+    ok, erased = tool(probe, "volume_write", {"node": "box", "layers": {"legend": {"g": "gray_10"}, "slices": [[".ggg"]]}})
     probe.check("air erases by default", ok and erased.get("voxel_count") == 11, str(erased))
 
     ok, text = tool(probe, "volume_write", {"node": "box", "points": [{"voxel": "white", "at": [[4, 0, 0]]}]})
@@ -716,7 +716,7 @@ def run_view_scenario(probe):
     tool(probe, "prefab_new", {"name": scratch})
     tool(probe, "node_create", {"name": "root"})
     tool(probe, "node_create", {"name": "cube", "parent": "root", "position": [10, 0, 0], "volume": {"size": [4, 4, 4]}})
-    tool(probe, "volume_write", {"node": "cube", "boxes": [{"min": [0, 0, 0], "max": [3, 3, 3], "voxel": "red_3"}]})
+    tool(probe, "volume_write", {"node": "cube", "boxes": [{"min": [0, 0, 0], "max": [3, 3, 3], "voxel": "red_6"}]})
 
     ok, view = tool(probe, "view_set", {"node": "cube", "from": "+x"})
     probe.check(
@@ -807,7 +807,7 @@ def run_view_scenario(probe):
         f"{width}x{height} {info}",
     )
 
-    tool(probe, "volume_write", {"node": "cube", "boxes": [{"min": [0, 0, 0], "max": [3, 3, 3], "voxel": "green_3"}]})
+    tool(probe, "volume_write", {"node": "cube", "boxes": [{"min": [0, 0, 0], "max": [3, 3, 3], "voxel": "green_6"}]})
     repainted, _ = picture(probe, {"max_size": 256})
     probe.check("a picture taken right after a write shows the write", repainted is not None and repainted != data, "the two pictures are equal")
 
@@ -1427,7 +1427,7 @@ def run_copy_scenario(probe):
         },
     )
     tool(probe, "node_create", {"name": "hand_r", "parent": "arm_r", "position": [1, -3, 1], "volume": {"size": [2, 2, 2]}})
-    tool(probe, "volume_write", {"node": "arm_r", "boxes": [{"min": [0, 0, 0], "max": [0, 0, 0], "voxel": "red_3"}]})
+    tool(probe, "volume_write", {"node": "arm_r", "boxes": [{"min": [0, 0, 0], "max": [0, 0, 0], "voxel": "red_6"}]})
     tool(probe, "node_create", {"name": "spare", "parent": "root", "anim_target": "ghost"})
     before = nodes_of(probe)
 
@@ -1528,7 +1528,7 @@ def run_copy_scenario(probe):
         and forked.get("voxel_count") == shared.get("voxel_count"),
         str({k: v for k, v in forked.items() if k != "layers"}),
     )
-    tool(probe, "volume_write", {"node": "twin", "boxes": [{"min": [1, 3, 1], "max": [1, 3, 1], "voxel": "green_3"}]})
+    tool(probe, "volume_write", {"node": "twin", "boxes": [{"min": [1, 3, 1], "max": [1, 3, 1], "voxel": "green_6"}]})
     ok, original = tool(probe, "volume_get", {"node": "arm_r"})
     probe.check("a write to the fork leaves the original alone", ok and original.get("voxel_count") == 1 and "shared_with" not in original, str(original.get("voxel_count")))
 
@@ -1600,7 +1600,7 @@ def run_paint_scenario(probe):
     tool(probe, "node_create", {"name": "root"})
     tool(probe, "node_create", {"name": "plate", "parent": "root", "volume": {"size": [6, 2, 2]}})
 
-    ok, drawn = tool(probe, "volume_write", {"node": "plate", "symmetry": "x", "boxes": [{"min": [0, 0, 0], "max": [1, 0, 0], "voxel": "red_3"}]})
+    ok, drawn = tool(probe, "volume_write", {"node": "plate", "symmetry": "x", "boxes": [{"min": [0, 0, 0], "max": [1, 0, 0], "voxel": "red_6"}]})
     probe.check(
         "symmetry draws the mirror image across the pivot",
         ok and drawn.get("cells_written") == 4 and drawn.get("voxel_count") == 4
@@ -1612,35 +1612,35 @@ def run_paint_scenario(probe):
     probe.check("both halves are one undo step", ok and empty.get("voxel_count") == 0, str(empty.get("voxel_count")))
     tool(probe, "redo")
 
-    ok, painted = tool(probe, "volume_write", {"node": "plate", "recolor": [{"from": "red_3", "to": "blue_3", "min": [0, 0, 0], "max": [2, 1, 1]}]})
+    ok, painted = tool(probe, "volume_write", {"node": "plate", "recolor": [{"from": "red_6", "to": "blue_6", "min": [0, 0, 0], "max": [2, 1, 1]}]})
     layers = layers_of(probe, "plate")
     probe.check(
         "recolor repaints one kind of voxel inside a region and keeps the shape",
         ok and painted.get("cells_written") == 2 and painted.get("voxel_count") == 4
-        and sorted(layers.get("legend", {}).values()) == ["blue_3", "red_3"] and len(set(layers.get("slices", [[""]])[0][0])) == 3,
+        and sorted(layers.get("legend", {}).values()) == ["blue_6", "red_6"] and len(set(layers.get("slices", [[""]])[0][0])) == 3,
         f"{painted.get('cells_written')} {layers}",
     )
-    ok, whole = tool(probe, "volume_write", {"node": "plate", "recolor": [{"from": "red_3", "to": "blue_3"}]})
+    ok, whole = tool(probe, "volume_write", {"node": "plate", "recolor": [{"from": "red_6", "to": "blue_6"}]})
     probe.check(
         "recolor without a region repaints the whole volume",
-        ok and whole.get("cells_written") == 2 and list(layers_of(probe, "plate").get("legend", {}).values()) == ["blue_3"],
+        ok and whole.get("cells_written") == 2 and list(layers_of(probe, "plate").get("legend", {}).values()) == ["blue_6"],
         str(layers_of(probe, "plate")),
     )
-    ok, nothing = tool(probe, "volume_write", {"node": "plate", "recolor": [{"from": "green_3", "to": "red_3"}]})
+    ok, nothing = tool(probe, "volume_write", {"node": "plate", "recolor": [{"from": "green_6", "to": "red_6"}]})
     probe.check("recolor of a voxel that is not there says so", ok and nothing.get("cells_written") == 0 and "nothing matched" in nothing.get("note", ""), str(nothing.get("note")))
-    ok, text = tool(probe, "volume_write", {"node": "plate", "recolor": [{"from": "air", "to": "red_3"}]})
+    ok, text = tool(probe, "volume_write", {"node": "plate", "recolor": [{"from": "air", "to": "red_6"}]})
     probe.check("recolor refuses air", not ok and "air cannot be repainted" in text, str(text))
-    ok, text = tool(probe, "volume_write", {"node": "plate", "symmetry": "w", "boxes": [{"min": [0, 0, 0], "max": [0, 0, 0], "voxel": "red_3"}]})
+    ok, text = tool(probe, "volume_write", {"node": "plate", "symmetry": "w", "boxes": [{"min": [0, 0, 0], "max": [0, 0, 0], "voxel": "red_6"}]})
     probe.check("symmetry refuses an unknown axis", not ok and "arguments.symmetry" in text, str(text))
 
     tool(probe, "volume_set_pivot", {"node": "plate", "pivot": [2.3, 1, 1]})
-    ok, text = tool(probe, "volume_write", {"node": "plate", "symmetry": "x", "boxes": [{"min": [0, 0, 0], "max": [0, 0, 0], "voxel": "red_3"}]})
+    ok, text = tool(probe, "volume_write", {"node": "plate", "symmetry": "x", "boxes": [{"min": [0, 0, 0], "max": [0, 0, 0], "voxel": "red_6"}]})
     probe.check("symmetry refuses a pivot between cell boundaries", not ok and "multiple of 0.5" in text, str(text))
     tool(probe, "volume_set_pivot", {"node": "plate", "pivot": [2, 1, 1]})
-    ok, text = tool(probe, "volume_write", {"node": "plate", "symmetry": "x", "boxes": [{"min": [5, 0, 0], "max": [5, 0, 0], "voxel": "red_3"}]})
+    ok, text = tool(probe, "volume_write", {"node": "plate", "symmetry": "x", "boxes": [{"min": [5, 0, 0], "max": [5, 0, 0], "voxel": "red_6"}]})
     probe.check("symmetry refuses a mirror image outside the volume", not ok and "outside the volume" in text, str(text))
     tool(probe, "volume_set_pivot", {"node": "plate", "pivot": [2.5, 1, 1]})
-    ok, odd = tool(probe, "volume_write", {"node": "plate", "symmetry": "x", "boxes": [{"min": [0, 1, 0], "max": [0, 1, 0], "voxel": "red_3"}]})
+    ok, odd = tool(probe, "volume_write", {"node": "plate", "symmetry": "x", "boxes": [{"min": [0, 1, 0], "max": [0, 1, 0], "voxel": "red_6"}]})
     probe.check(
         "a pivot in the middle of a cell mirrors about that cell",
         ok and odd.get("cells_written") == 2 and layers_of(probe, "plate").get("slices", [[], [""]])[1][0].startswith("b...b"),

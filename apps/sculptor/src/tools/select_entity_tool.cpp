@@ -23,7 +23,7 @@ auto select_entity_tool::render(
 
     if (has_selected) {
         const auto selected_ent = state_->scene.name_to_entity[state_->scene.selected_name];
-        draw_entity_box_(selected_ent, colors::green_4);
+        draw_entity_box_(selected_ent, colors::green_8);
         gizmo_.render(selected_ent);
     }
 

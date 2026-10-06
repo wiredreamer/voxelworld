@@ -227,7 +227,7 @@ Claude Code берёт адрес из `.mcp.json` в корне репозит�
 ```json
 "layers": {
   "origin": [0, 0, 0],
-  "legend": {"a": "gray_5", "b": "red_2"},
+  "legend": {"a": "gray_10", "b": "red_4"},
   "slices": [["aaaa", "aaaa"], [".bb.", "...."]]
 }
 ```

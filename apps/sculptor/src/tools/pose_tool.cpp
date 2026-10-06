@@ -25,7 +25,7 @@ auto pose_tool::render(
         return;
     }
 
-    draw_entity_box_(it->second, colors::green_4);
+    draw_entity_box_(it->second, colors::green_8);
     gizmo_.render(it->second);
 }
 

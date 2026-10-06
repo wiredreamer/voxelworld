@@ -86,26 +86,26 @@ public:
         return storage_descriptor_set_layout_;
     }
 
-    auto draw_line(const vec3f& a, const vec3f& b, color col = colors::red_4) -> void;
+    auto draw_line(const vec3f& a, const vec3f& b, color col = colors::red_8) -> void;
 
-    auto draw_box(const mat4f& matrix, const vec3f& size, color col = colors::red_4) -> void;
-    auto draw_box(const transform& transform, const vec3f& size, color col = colors::red_4) -> void;
-    auto draw_box(const vec3f& position, const vec3f& size, color col = colors::red_4) -> void;
+    auto draw_box(const mat4f& matrix, const vec3f& size, color col = colors::red_8) -> void;
+    auto draw_box(const transform& transform, const vec3f& size, color col = colors::red_8) -> void;
+    auto draw_box(const vec3f& position, const vec3f& size, color col = colors::red_8) -> void;
 
-    auto draw_triangle(const vec3f& a, const vec3f& b, const vec3f& c, color col = colors::red_4)
+    auto draw_triangle(const vec3f& a, const vec3f& b, const vec3f& c, color col = colors::red_8)
         -> void;
     auto draw_quad(
-        const vec3f& a, const vec3f& b, const vec3f& c, const vec3f& d, color col = colors::red_4
+        const vec3f& a, const vec3f& b, const vec3f& c, const vec3f& d, color col = colors::red_8
     ) -> void;
 
     auto draw_grid(
-        const mat4f& matrix, float cell_size, int cols, int rows, color clr = colors::red_4
+        const mat4f& matrix, float cell_size, int cols, int rows, color clr = colors::red_8
     ) -> void;
     auto draw_grid(
-        const transform& transform, float cell_size, int cols, int rows, color clr = colors::red_4
+        const transform& transform, float cell_size, int cols, int rows, color clr = colors::red_8
     ) -> void;
     auto draw_grid(
-        const vec3f& position, float cell_size, int cols, int rows, color clr = colors::red_4
+        const vec3f& position, float cell_size, int cols, int rows, color clr = colors::red_8
     ) -> void;
 
     [[nodiscard]] auto get_directional_light_settings() -> directional_light_settings&;
@@ -147,7 +147,7 @@ public:
         return combined_buffer_pool_->is_chunk_cull_enabled();
     }
 
-    auto draw_colliders(world_type& w, color col = colors::green_4) -> void;
+    auto draw_colliders(world_type& w, color col = colors::green_8) -> void;
 
     [[nodiscard]] auto get_shadow_map_texture_id(uint32 cascade_index = 0) const -> void*;
 

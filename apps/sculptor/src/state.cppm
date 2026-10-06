@@ -275,7 +275,7 @@ struct tool_state {
     tools selected_tool     = tools::add_voxel;
     tools tool_before_paste = tools::add_voxel;
     gizmo_mode gizmo        = gizmo_mode::translate;
-    voxel selected_voxel = voxels::gray[9];
+    voxel selected_voxel = voxels::gray[18];
 };
 
 struct clip_settings {

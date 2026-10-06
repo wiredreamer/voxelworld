@@ -24,7 +24,7 @@ public:
             for (int32 z = 0; z < 64; ++z) {
                 const int32 height = 8 + ((x + z) % 3);
                 for (int32 y = 0; y < height; ++y) {
-                    model_->set_voxel(x, y, z, voxels::green[3]);
+                    model_->set_voxel(x, y, z, voxels::green[6]);
                 }
             }
         }
@@ -109,7 +109,7 @@ TEST_CASE("editing the model retires every level it had", "[mesh][lod]") {
     REQUIRE(fixture.pool().get_gen_stats().held == 2);
 
     const auto before = fixture.identity();
-    fixture.voxels().set_voxel(0, 40, 0, voxels::gray[4]);
+    fixture.voxels().set_voxel(0, 40, 0, voxels::gray[8]);
     const auto after = fixture.identity();
     REQUIRE(before.generation != after.generation);
 
@@ -131,7 +131,7 @@ TEST_CASE("the pool keys by the level asked for, the mesh by the one it got", "[
     auto small = std::make_shared<asset::model>(
         identity_pool, pages, 32, 32, 32
     );
-    small->set_voxel(4, 4, 4, voxels::gray[4]);
+    small->set_voxel(4, 4, 4, voxels::gray[8]);
 
     pool.request_mesh(small, nullptr, gfx::mesh_options{.lod_step = 4});
     jobs.drain(job_lane::mesh);

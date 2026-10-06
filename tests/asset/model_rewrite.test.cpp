@@ -15,10 +15,10 @@ auto make_block(asset::model_registry& registry) -> std::shared_ptr<asset::model
     auto m = registry.create_unnamed(block_size);
     {
         asset::model_writer writer{*m};
-        writer.set(1, 1, 1, voxels::gray[4]);
-        writer.set(2, 1, 1, voxels::gray[7]);
-        writer.set(2, 2, 1, voxels::gray[2]);
-        writer.set(5, 4, 3, voxels::gray[9]);
+        writer.set(1, 1, 1, voxels::gray[8]);
+        writer.set(2, 1, 1, voxels::gray[14]);
+        writer.set(2, 2, 1, voxels::gray[4]);
+        writer.set(5, 4, 3, voxels::gray[18]);
     }
     m->set_pivot(vec3f{3.f, 2.5f, 2.f});
     return m;
@@ -53,8 +53,8 @@ TEST_CASE("edits set, repaint and erase voxels in a new volume", "[rewrite]") {
     const auto source = make_block(registry);
 
     const std::array edits{
-        asset::voxel_edit{.position = {0, 0, 0}, .value = voxels::gray[1]},
-        asset::voxel_edit{.position = {1, 1, 1}, .value = voxels::gray[8]},
+        asset::voxel_edit{.position = {0, 0, 0}, .value = voxels::gray[2]},
+        asset::voxel_edit{.position = {1, 1, 1}, .value = voxels::gray[16]},
         asset::voxel_edit{.position = {2, 2, 1}, .value = voxel{}},
     };
 
@@ -63,11 +63,11 @@ TEST_CASE("edits set, repaint and erase voxels in a new volume", "[rewrite]") {
     REQUIRE(result != nullptr);
     CHECK(result->size() == block_size);
     CHECK(result->pivot() == source->pivot());
-    CHECK(result->get_voxel(0, 0, 0) == voxels::gray[1]);
-    CHECK(result->get_voxel(1, 1, 1) == voxels::gray[8]);
+    CHECK(result->get_voxel(0, 0, 0) == voxels::gray[2]);
+    CHECK(result->get_voxel(1, 1, 1) == voxels::gray[16]);
     CHECK(result->is_empty(2, 2, 1));
-    CHECK(result->get_voxel(2, 1, 1) == voxels::gray[7]);
-    CHECK(result->get_voxel(5, 4, 3) == voxels::gray[9]);
+    CHECK(result->get_voxel(2, 1, 1) == voxels::gray[14]);
+    CHECK(result->get_voxel(5, 4, 3) == voxels::gray[18]);
     CHECK(solid_count(*result) == 4);
 }
 
@@ -79,7 +79,7 @@ TEST_CASE("edits leave the source volume as it was", "[rewrite]") {
     const auto result = asset::edited(*source, edits, registry);
 
     CHECK(result.get() != source.get());
-    CHECK(source->get_voxel(1, 1, 1) == voxels::gray[4]);
+    CHECK(source->get_voxel(1, 1, 1) == voxels::gray[8]);
     CHECK(solid_count(*source) == 4);
 }
 
@@ -88,13 +88,13 @@ TEST_CASE("a later edit of one cell wins over an earlier one", "[rewrite]") {
     const auto source = make_block(registry);
 
     const std::array edits{
-        asset::voxel_edit{.position = {3, 3, 3}, .value = voxels::gray[1]},
-        asset::voxel_edit{.position = {3, 3, 3}, .value = voxels::gray[5]},
+        asset::voxel_edit{.position = {3, 3, 3}, .value = voxels::gray[2]},
+        asset::voxel_edit{.position = {3, 3, 3}, .value = voxels::gray[10]},
     };
 
     const auto result = asset::edited(*source, edits, registry);
 
-    CHECK(result->get_voxel(3, 3, 3) == voxels::gray[5]);
+    CHECK(result->get_voxel(3, 3, 3) == voxels::gray[10]);
 }
 
 TEST_CASE("an edit outside the volume is dropped", "[rewrite]") {
@@ -102,9 +102,9 @@ TEST_CASE("an edit outside the volume is dropped", "[rewrite]") {
     const auto source = make_block(registry);
 
     const std::array edits{
-        asset::voxel_edit{.position = {6, 0, 0}, .value = voxels::gray[1]},
-        asset::voxel_edit{.position = {0, -1, 0}, .value = voxels::gray[1]},
-        asset::voxel_edit{.position = {0, 0, 40}, .value = voxels::gray[1]},
+        asset::voxel_edit{.position = {6, 0, 0}, .value = voxels::gray[2]},
+        asset::voxel_edit{.position = {0, -1, 0}, .value = voxels::gray[2]},
+        asset::voxel_edit{.position = {0, 0, 40}, .value = voxels::gray[2]},
     };
 
     const auto result = asset::edited(*source, edits, registry);
@@ -121,10 +121,10 @@ TEST_CASE("growing at the low side shifts the voxels and the pivot with them", "
     REQUIRE(result != nullptr);
     CHECK(result->size() == vec3i{8, 8, 5});
     CHECK(result->pivot() == vec3f{5.f, 2.5f, 3.f});
-    CHECK(result->get_voxel(3, 1, 2) == voxels::gray[4]);
-    CHECK(result->get_voxel(4, 1, 2) == voxels::gray[7]);
-    CHECK(result->get_voxel(4, 2, 2) == voxels::gray[2]);
-    CHECK(result->get_voxel(7, 4, 4) == voxels::gray[9]);
+    CHECK(result->get_voxel(3, 1, 2) == voxels::gray[8]);
+    CHECK(result->get_voxel(4, 1, 2) == voxels::gray[14]);
+    CHECK(result->get_voxel(4, 2, 2) == voxels::gray[4]);
+    CHECK(result->get_voxel(7, 4, 4) == voxels::gray[18]);
     CHECK(solid_count(*result) == 4);
 }
 
@@ -137,8 +137,8 @@ TEST_CASE("growing at the high side leaves every voxel where it was", "[rewrite]
     REQUIRE(result != nullptr);
     CHECK(result->size() == vec3i{10, 9, 8});
     CHECK(result->pivot() == source->pivot());
-    CHECK(result->get_voxel(1, 1, 1) == voxels::gray[4]);
-    CHECK(result->get_voxel(5, 4, 3) == voxels::gray[9]);
+    CHECK(result->get_voxel(1, 1, 1) == voxels::gray[8]);
+    CHECK(result->get_voxel(5, 4, 3) == voxels::gray[18]);
     CHECK(solid_count(*result) == 4);
 }
 
@@ -151,9 +151,9 @@ TEST_CASE("shrinking cuts off the voxels that no longer fit", "[rewrite]") {
     REQUIRE(result != nullptr);
     CHECK(result->size() == vec3i{3, 3, 2});
     CHECK(result->pivot() == vec3f{2.f, 1.5f, 1.f});
-    CHECK(result->get_voxel(0, 0, 0) == voxels::gray[4]);
-    CHECK(result->get_voxel(1, 0, 0) == voxels::gray[7]);
-    CHECK(result->get_voxel(1, 1, 0) == voxels::gray[2]);
+    CHECK(result->get_voxel(0, 0, 0) == voxels::gray[8]);
+    CHECK(result->get_voxel(1, 0, 0) == voxels::gray[14]);
+    CHECK(result->get_voxel(1, 1, 0) == voxels::gray[4]);
     CHECK(solid_count(*result) == 3);
 }
 

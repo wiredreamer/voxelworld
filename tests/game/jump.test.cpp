@@ -522,7 +522,7 @@ TEST_CASE("a dodge into a thin wall stops at it, neither through nor over it", "
     const int32 top_y  = feet_y + 8;
     for (int32 x = voxel_of(start.x) - 4; x <= voxel_of(start.x) + 4; ++x) {
         for (int32 y = feet_y - 3; y <= top_y; ++y) {
-            grid.set_voxel(vec3i{x, y, wall_z} * unit, voxels::gray[7]);
+            grid.set_voxel(vec3i{x, y, wall_z} * unit, voxels::gray[14]);
         }
     }
 

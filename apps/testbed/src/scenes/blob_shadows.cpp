@@ -33,7 +33,7 @@ auto blob_shadows_scene::spawn_() -> void {
 
     if (!seeded_) {
         model_ = registry.create("blob_body", 16, 40, 16);
-        model_->fill(voxels::red[4]);
+        model_->fill(voxels::red[8]);
 
         pending_.reserve(static_cast<std::size_t>(count));
         for (int32 i = 0; i < count; ++i) {

@@ -538,10 +538,10 @@ TEST_CASE("a voxm volume survives a round trip", "[serial]") {
 
     const auto source = registry.create_unnamed(vec3i{6, 4, 3});
     source->set_pivot(vec3f{2.5F, 1.5F, 0.5F});
-    source->set_voxel(vec3i{0, 0, 0}, voxels::gray[7]);
-    source->set_voxel(vec3i{1, 0, 0}, voxels::gray[7]);
-    source->set_voxel(vec3i{2, 0, 0}, voxels::gray[8]);
-    source->set_voxel(vec3i{5, 3, 2}, voxels::gray[9]);
+    source->set_voxel(vec3i{0, 0, 0}, voxels::gray[14]);
+    source->set_voxel(vec3i{1, 0, 0}, voxels::gray[14]);
+    source->set_voxel(vec3i{2, 0, 0}, voxels::gray[16]);
+    source->set_voxel(vec3i{5, 3, 2}, voxels::gray[18]);
 
     const auto restored = parse_voxm(registry, write_voxm(*source));
 
@@ -565,7 +565,7 @@ TEST_CASE("a voxm run collapses a row of equal voxels", "[serial]") {
 
     const auto source = registry.create_unnamed(vec3i{8, 1, 1});
     for (int32 x = 0; x < 8; ++x) {
-        source->set_voxel(vec3i{x, 0, 0}, voxels::green[2]);
+        source->set_voxel(vec3i{x, 0, 0}, voxels::green[4]);
     }
 
     const auto text = write_voxm(*source);
@@ -600,6 +600,20 @@ TEST_CASE("a voxm file of an unsupported major version is rejected", "[serial]")
         registry,
         "# Voxm File Version 99.0\n"
         "size 2 2 2\n"
+    );
+
+    REQUIRE_FALSE(restored.has_value());
+    REQUIRE(restored.error() == asset::voxm_deserializer::error_type::unsupported_version);
+}
+
+TEST_CASE("a voxm file numbered by the six shade palette is rejected", "[serial]") {
+    asset::model_registry registry;
+
+    const auto restored = parse_voxm(
+        registry,
+        "# Voxm File Version 3.0\n"
+        "size 2 2 2\n"
+        "r 0 0 0 1 41\n"
     );
 
     REQUIRE_FALSE(restored.has_value());

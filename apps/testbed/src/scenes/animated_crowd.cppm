@@ -61,13 +61,13 @@ private:
 
     static constexpr std::array<body_part, 4> parts{{
         {.target = "body", .model = "crowd_body", .size = {6, 12, 4},
-         .rest = {-3.0f, 0.0f, -2.0f}, .fill = voxels::blue[2], .lift = 1.0f, .peak = 0.30f},
+         .rest = {-3.0f, 0.0f, -2.0f}, .fill = voxels::blue[4], .lift = 1.0f, .peak = 0.30f},
         {.target = "head", .model = "crowd_head", .size = {6, 6, 6},
-         .rest = {-3.0f, 13.0f, -3.0f}, .fill = voxels::brown[2], .lift = 2.0f, .peak = 0.45f},
+         .rest = {-3.0f, 13.0f, -3.0f}, .fill = voxels::brown[4], .lift = 2.0f, .peak = 0.45f},
         {.target = "hand_left", .model = "crowd_hand", .size = {3, 8, 3},
-         .rest = {-7.0f, 2.0f, -1.5f}, .fill = voxels::green[4], .lift = 6.0f, .peak = 0.15f},
+         .rest = {-7.0f, 2.0f, -1.5f}, .fill = voxels::green[8], .lift = 6.0f, .peak = 0.15f},
         {.target = "hand_right", .model = "crowd_hand", .size = {3, 8, 3},
-         .rest = {4.0f, 2.0f, -1.5f}, .fill = voxels::green[4], .lift = 6.0f, .peak = 0.60f},
+         .rest = {4.0f, 2.0f, -1.5f}, .fill = voxels::green[8], .lift = 6.0f, .peak = 0.60f},
     }};
 
     struct body {

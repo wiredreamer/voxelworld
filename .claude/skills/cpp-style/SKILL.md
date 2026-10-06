@@ -149,7 +149,7 @@ observed_components = ecs::component_list<…>;` плюс шаблонные `on
 `engine/asset/src/serial/`). Версия — константа `<формат>_file_version`:
 `vox_file_version` и `voxa_file_version` в `vox_format.cppm`,
 `voxm_file_version` в `voxm_format.cppm`, `voxf_file_version` в
-`voxf_format.cppm`. Писатель ставит её в шапку (`# Voxm File Version 2.0`).
+`voxf_format.cppm`. Писатель ставит её в шапку (`# Voxm File Version 4.0`).
 Читатель через `detail::major_version_differs` (`version.cppm`) сверяет только
 мажор: минор не проверяется, файл без шапки читается без проверки.
 - Добавил команду или поле, которые старый разборщик пропустит (неизвестную

@@ -16,7 +16,7 @@ auto fill_block(asset::model& m, vec3i from, vec3i to) -> void {
     for (int32 x = from.x; x <= to.x; ++x) {
         for (int32 y = from.y; y <= to.y; ++y) {
             for (int32 z = from.z; z <= to.z; ++z) {
-                writer.set(x, y, z, voxels::gray[4]);
+                writer.set(x, y, z, voxels::gray[8]);
             }
         }
     }
@@ -53,8 +53,8 @@ TEST_CASE("trim cuts the empty rim down to the voxels", "[trim]") {
 
     REQUIRE(cut != nullptr);
     REQUIRE(cut->size() == vec3i{3, 3, 3});
-    REQUIRE(cut->get_voxel(0, 0, 0) == voxels::gray[4]);
-    REQUIRE(cut->get_voxel(2, 2, 2) == voxels::gray[4]);
+    REQUIRE(cut->get_voxel(0, 0, 0) == voxels::gray[8]);
+    REQUIRE(cut->get_voxel(2, 2, 2) == voxels::gray[8]);
 }
 
 TEST_CASE("trim moves the pivot by what it cut", "[trim]") {
@@ -74,13 +74,13 @@ TEST_CASE("trim keeps the voxels of the source", "[trim]") {
     auto m = registry.create_unnamed(vec3i{side, side, side});
     {
         asset::model_writer writer{*m};
-        writer.set(1, 1, 1, voxels::gray[7]);
+        writer.set(1, 1, 1, voxels::gray[14]);
     }
 
     const auto cut = asset::trimmed(*m, registry);
 
     REQUIRE(cut != nullptr);
-    REQUIRE(cut->get_voxel(0, 0, 0) == voxels::gray[7]);
+    REQUIRE(cut->get_voxel(0, 0, 0) == voxels::gray[14]);
     REQUIRE(cut->size() == vec3i{1, 1, 1});
 }
 

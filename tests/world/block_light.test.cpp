@@ -98,7 +98,7 @@ TEST_CASE("lava carries one voxel further than a lamp", "[block_light]") {
 TEST_CASE("a wall stops block light", "[block_light]") {
     column_fixture fixture{1};
     fixture.set(32, 32, 32, voxels::lamp_amber);
-    fixture.fill(vec3i{34, 0, 0}, vec3i{34, side - 1, side - 1}, voxels::gray[4]);
+    fixture.fill(vec3i{34, 0, 0}, vec3i{34, side - 1, side - 1}, voxels::gray[8]);
 
     const ecs::light_column light = fixture.light();
 
@@ -109,7 +109,7 @@ TEST_CASE("a wall stops block light", "[block_light]") {
 
 TEST_CASE("a world with no emitters has no block light at all", "[block_light]") {
     column_fixture fixture{1};
-    fixture.fill(vec3i{0, 0, 0}, vec3i{side - 1, 20, side - 1}, voxels::gray[4]);
+    fixture.fill(vec3i{0, 0, 0}, vec3i{side - 1, 20, side - 1}, voxels::gray[8]);
 
     const ecs::light_column light = fixture.light();
 

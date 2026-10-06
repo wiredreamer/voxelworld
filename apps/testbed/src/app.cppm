@@ -31,11 +31,11 @@ struct voxel_choice {
 constexpr std::array<voxel_choice, 8> voxel_menu{{
     {"glowstone (emits 14)", voxels::lamp_amber},
     {"lava (emits 15)", voxels::fire_red},
-    {"stone", voxels::gray[5]},
-    {"dark stone", voxels::gray[2]},
-    {"grass", voxels::green[5]},
-    {"dirt", voxels::brown[2]},
-    {"sand", voxels::brown[4]},
+    {"stone", voxels::gray[10]},
+    {"dark stone", voxels::gray[4]},
+    {"grass", voxels::green[10]},
+    {"dirt", voxels::brown[4]},
+    {"sand", voxels::brown[8]},
     {"white", voxels::white},
 }};
 

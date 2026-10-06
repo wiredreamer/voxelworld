@@ -478,10 +478,10 @@ TEST_CASE("math interpolate vec3", "[math]") {
 
 TEST_CASE("math interpolate color", "[math]") {
     SECTION("step") {
-        auto r = math::interpolate(colors::red_3, colors::blue_3, 0.5f, math::interpolation_type::step);
-        REQUIRE(r == colors::red_3);
-        auto r2 = math::interpolate(colors::red_3, colors::blue_3, 1.0f, math::interpolation_type::step);
-        REQUIRE(r2 == colors::blue_3);
+        auto r = math::interpolate(colors::red_6, colors::blue_6, 0.5f, math::interpolation_type::step);
+        REQUIRE(r == colors::red_6);
+        auto r2 = math::interpolate(colors::red_6, colors::blue_6, 1.0f, math::interpolation_type::step);
+        REQUIRE(r2 == colors::blue_6);
     }
 
     SECTION("linear midpoint") {

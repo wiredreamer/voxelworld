@@ -14,7 +14,7 @@ constexpr int32 side = 64;
 auto solid_cube(asset::model_identity_pool& ids, asset::page_pool& pages)
     -> std::unique_ptr<asset::model> {
     auto m = std::make_unique<asset::model>(ids, pages, side, side, side);
-    m->fill(voxels::gray[4]);
+    m->fill(voxels::gray[8]);
     return m;
 }
 
@@ -27,13 +27,13 @@ TEST_CASE("the page table says what a volume is made of", "[model]") {
     asset::model m{ids, pages, side, side, side};
     REQUIRE(m.scan_fill() == asset::model_fill::air);
 
-    m.fill(voxels::gray[4]);
+    m.fill(voxels::gray[8]);
     REQUIRE(m.scan_fill() == asset::model_fill::solid);
 
     m.set_voxel(3, 3, 3, voxels::air);
     REQUIRE(m.scan_fill() == asset::model_fill::mixed);
 
-    m.set_voxel(3, 3, 3, voxels::gray[4]);
+    m.set_voxel(3, 3, 3, voxels::gray[8]);
     REQUIRE(m.compact_pages() == 1);
     REQUIRE(m.scan_fill() == asset::model_fill::solid);
 }
@@ -43,7 +43,7 @@ TEST_CASE("six solid neighbours leave nothing to draw", "[model]") {
     asset::page_pool pages;
 
     auto voxels = std::make_shared<asset::model>(ids, pages, side, side, side);
-    voxels->fill(voxels::gray[4]);
+    voxels->fill(voxels::gray[8]);
     asset::chunk_volume center{voxels};
 
     per_face<std::unique_ptr<asset::model>> neighbors;
@@ -89,7 +89,7 @@ TEST_CASE("a face plane comes out of the page table", "[model]") {
     REQUIRE(m.extract_face(face_direction::pos_x, face));
     REQUIRE(std::ranges::all_of(face.rows, [](uint64 row) -> bool { return row == 0; }));
 
-    m.fill(voxels::gray[4]);
+    m.fill(voxels::gray[8]);
     REQUIRE(m.extract_face(face_direction::pos_x, face));
     REQUIRE(std::ranges::all_of(face.rows, [](uint64 row) -> bool { return row == ~uint64{0}; }));
 

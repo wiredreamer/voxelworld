@@ -75,7 +75,7 @@ auto settled_params() -> perlin_terrain_generator::params {
 }
 
 auto column_has_turf(const sampled_column& column, int32 x, int32 z) -> bool {
-    return column.id_at(x, column.surface_of(x, z), z) == voxels::green[2];
+    return column.id_at(x, column.surface_of(x, z), z) == voxels::green[4];
 }
 
 }  // namespace
@@ -110,17 +110,17 @@ TEST_CASE("ground is layers, not paint", "[world][surface]") {
 
             const auto crown = column.id_at(x, surface, z);
 
-            if (crown == voxels::green[2]) {
+            if (crown == voxels::green[4]) {
                 ++with_soil;
 
-                REQUIRE(column.id_at(x, surface - 1, z) != voxels::green[2]);
+                REQUIRE(column.id_at(x, surface - 1, z) != voxels::green[4]);
                 const auto under = column.id_at(x, surface - 1, z);
-                REQUIRE((under == voxels::brown[0] || under == voxels::gray[4]));
+                REQUIRE((under == voxels::brown[0] || under == voxels::gray[8]));
                 continue;
             }
 
-            REQUIRE((crown == voxels::gray[5] || crown == voxels::gray[9]));
-            if (crown == voxels::gray[9]) {
+            REQUIRE((crown == voxels::gray[10] || crown == voxels::gray[18]));
+            if (crown == voxels::gray[18]) {
                 REQUIRE(surface > p.snow_line);
             }
             ++bare_rock;
@@ -151,11 +151,11 @@ TEST_CASE("rock changes with absolute depth", "[world][surface]") {
     for (const auto& [wy, expected] : {
              probe{p.world_bottom_y, voxels::gray[0]},
              probe{p.world_bottom_y + p.bedrock_thickness - 1, voxels::gray[0]},
-             probe{p.world_bottom_y + p.bedrock_thickness, voxels::gray[1]},
-             probe{p.rock_bottom_y - 1, voxels::gray[1]},
-             probe{p.rock_bottom_y, voxels::gray[2]},
-             probe{p.rock_deep_y - 1, voxels::gray[2]},
-             probe{p.rock_deep_y, voxels::gray[3]},
+             probe{p.world_bottom_y + p.bedrock_thickness, voxels::gray[2]},
+             probe{p.rock_bottom_y - 1, voxels::gray[2]},
+             probe{p.rock_bottom_y, voxels::gray[4]},
+             probe{p.rock_deep_y - 1, voxels::gray[4]},
+             probe{p.rock_deep_y, voxels::gray[6]},
          }) {
         INFO("at height " << wy);
         REQUIRE(column.id_at(0, wy, 0) == expected);

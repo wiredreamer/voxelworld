@@ -217,7 +217,7 @@ auto select_box_tool::render(
 
             const bool lit = active_handle_ ? handle == *active_handle_
                                             : hovered_handle_ && handle == *hovered_handle_;
-            draw_handle_box(*engine_, grip->center, grip->half, lit ? colors::amber_5 : colors::white);
+            draw_handle_box(*engine_, grip->center, grip->half, lit ? colors::amber_10 : colors::white);
         }
     }
 

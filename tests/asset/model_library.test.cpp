@@ -42,7 +42,7 @@ TEST_CASE("a model survives a round trip through the library", "[library]") {
     asset::model_library library{registry, voxel_types, root.path()};
 
     auto source = registry.create_unnamed(vec3i{4, 4, 4});
-    source->set_voxel(1, 2, 3, voxels::green[2]);
+    source->set_voxel(1, 2, 3, voxels::green[4]);
     source->set_pivot(vec3f{1.5F, 2.5F, 3.5F});
 
     const asset::asset_ref ref{"models/m_human/body.voxm"};
@@ -56,7 +56,7 @@ TEST_CASE("a model survives a round trip through the library", "[library]") {
     const auto restored = other.load(ref);
     REQUIRE(restored.has_value());
     REQUIRE((*restored)->size() == vec3i{4, 4, 4});
-    REQUIRE((*restored)->get_voxel(1, 2, 3) == voxels::green[2]);
+    REQUIRE((*restored)->get_voxel(1, 2, 3) == voxels::green[4]);
     REQUIRE((*restored)->pivot() == vec3f{1.5F, 2.5F, 3.5F});
 }
 
@@ -119,7 +119,7 @@ TEST_CASE("a forgotten model is read from disk again", "[library]") {
     REQUIRE(library.save(ref, *saved).has_value());
 
     auto edited = registry.create_unnamed(vec3i{2, 2, 2});
-    edited->set_voxel(0, 0, 0, voxels::green[2]);
+    edited->set_voxel(0, 0, 0, voxels::green[4]);
     library.adopt(ref, edited);
 
     library.forget(ref);

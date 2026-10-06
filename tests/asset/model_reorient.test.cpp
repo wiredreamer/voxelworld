@@ -17,10 +17,10 @@ auto make_slab(asset::model_registry& registry) -> std::shared_ptr<asset::model>
     auto m = registry.create_unnamed(slab_size);
     {
         asset::model_writer writer{*m};
-        writer.set(1, 2, 3, voxels::gray[4]);
-        writer.set(0, 0, 0, voxels::gray[7]);
-        writer.set(3, 4, 5, voxels::gray[2]);
-        writer.set(2, 0, 4, voxels::gray[9]);
+        writer.set(1, 2, 3, voxels::gray[8]);
+        writer.set(0, 0, 0, voxels::gray[14]);
+        writer.set(3, 4, 5, voxels::gray[4]);
+        writer.set(2, 0, 4, voxels::gray[18]);
     }
     m->set_pivot(vec3f{1.5f, 2.f, 0.5f});
     return m;
@@ -80,10 +80,10 @@ TEST_CASE("a mirror moves every voxel to the opposite side of its axis", "[reori
     );
 
     REQUIRE(mirror->size() == slab_size);
-    REQUIRE(mirror->get_voxel(2, 2, 3) == voxels::gray[4]);
-    REQUIRE(mirror->get_voxel(3, 0, 0) == voxels::gray[7]);
-    REQUIRE(mirror->get_voxel(0, 4, 5) == voxels::gray[2]);
-    REQUIRE(mirror->get_voxel(1, 0, 4) == voxels::gray[9]);
+    REQUIRE(mirror->get_voxel(2, 2, 3) == voxels::gray[8]);
+    REQUIRE(mirror->get_voxel(3, 0, 0) == voxels::gray[14]);
+    REQUIRE(mirror->get_voxel(0, 4, 5) == voxels::gray[4]);
+    REQUIRE(mirror->get_voxel(1, 0, 4) == voxels::gray[18]);
     REQUIRE(solid_count(*mirror) == 4);
 }
 
@@ -143,10 +143,10 @@ TEST_CASE("a quarter turn about y carries x onto minus z and z onto x", "[reorie
         *source, asset::rotated_orientation(asset::voxel_axis::y, 1), registry
     );
 
-    REQUIRE(turned->get_voxel(3, 2, 2) == voxels::gray[4]);
-    REQUIRE(turned->get_voxel(0, 0, 3) == voxels::gray[7]);
-    REQUIRE(turned->get_voxel(5, 4, 0) == voxels::gray[2]);
-    REQUIRE(turned->get_voxel(4, 0, 1) == voxels::gray[9]);
+    REQUIRE(turned->get_voxel(3, 2, 2) == voxels::gray[8]);
+    REQUIRE(turned->get_voxel(0, 0, 3) == voxels::gray[14]);
+    REQUIRE(turned->get_voxel(5, 4, 0) == voxels::gray[4]);
+    REQUIRE(turned->get_voxel(4, 0, 1) == voxels::gray[18]);
     REQUIRE(solid_count(*turned) == 4);
     REQUIRE(turned->pivot() == vec3f{0.5f, 2.f, 2.5f});
 }
@@ -224,5 +224,5 @@ TEST_CASE("reorienting leaves the source untouched", "[reorient]") {
 
     REQUIRE(source->get_identity() == before);
     REQUIRE(turned->get_identity() != before);
-    REQUIRE(source->get_voxel(1, 2, 3) == voxels::gray[4]);
+    REQUIRE(source->get_voxel(1, 2, 3) == voxels::gray[8]);
 }

@@ -56,26 +56,26 @@ TEST_CASE("color is_empty", "[color]") {
 TEST_CASE("color comparison", "[color]") {
     REQUIRE(color{0xFF0000FFU} == color{0xFF0000FFU});
     REQUIRE(color{0xFF0000FFU} != color{0x00FF00FFU});
-    REQUIRE(colors::red_3 == colors::red_3);
-    REQUIRE(colors::red_3 != colors::blue_3);
+    REQUIRE(colors::red_6 == colors::red_6);
+    REQUIRE(colors::red_6 != colors::blue_6);
 }
 
 TEST_CASE("color palette constants", "[color]") {
     REQUIRE(colors::white.value == 0xFFFFFFFFU);
     REQUIRE(colors::black.value == 0x000000FFU);
 
-    REQUIRE(colors::all.size() == 48U);
+    REQUIRE(colors::all.size() == 87U);
     REQUIRE(colors::all.front() == colors::blue_0);
     REQUIRE(colors::all.back() == colors::black);
-    REQUIRE(colors::all[23] == colors::amber_5);
+    REQUIRE(colors::all[43] == colors::amber_10);
 
     const auto luma = [](const color& c) -> uint32 {
         return static_cast<uint32>(c.r()) + static_cast<uint32>(c.g()) + static_cast<uint32>(c.b());
     };
-    REQUIRE(luma(colors::blue_0) < luma(colors::blue_3));
-    REQUIRE(luma(colors::blue_3) < luma(colors::blue_5));
-    REQUIRE(luma(colors::gray_0) < luma(colors::gray_9));
-    REQUIRE(luma(colors::amber_0) < luma(colors::amber_5));
+    REQUIRE(luma(colors::blue_0) < luma(colors::blue_6));
+    REQUIRE(luma(colors::blue_6) < luma(colors::blue_10));
+    REQUIRE(luma(colors::gray_0) < luma(colors::gray_18));
+    REQUIRE(luma(colors::amber_0) < luma(colors::amber_10));
 }
 
 TEST_CASE("color round-trip packing", "[color]") {
