@@ -17,6 +17,7 @@ struct render_timing_stats {
     float32 compute_cull_ms         = 0.0f;
 
     float32 light_gather_ms         = 0.0f;
+    float32 grass_prepare_ms        = 0.0f;
     float32 light_cull_ms           = 0.0f;
 
     float32 shadow_pass_ms          = 0.0f;

@@ -93,4 +93,13 @@ struct fog_settings {
     bool enabled{true};
 };
 
+struct grass_settings {
+    bool enabled             = true;
+    int32 radius_columns     = 2;
+    float32 fade_share       = 0.7F;
+    vec2f wind_direction     = {0.8F, 0.6F};
+    float32 wind_strength    = 1.5F;
+    float32 wind_speed       = 1.6F;
+};
+
 }  // namespace vw::gfx

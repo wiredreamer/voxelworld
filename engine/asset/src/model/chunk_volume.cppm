@@ -5,13 +5,15 @@ import std;
 import vw.core;
 import :model.occupancy;
 import :model.light_field;
+import :model.cover;
 import :model.volume;
 
 export namespace vw::asset {
 
 class chunk_volume {
 public:
-    explicit chunk_volume(std::shared_ptr<model> voxels) : voxels_{std::move(voxels)} {}
+    explicit chunk_volume(std::shared_ptr<model> voxels, cover_layer cover = {})
+        : voxels_{std::move(voxels)}, cover_{std::move(cover)} {}
 
     [[nodiscard]] auto voxels() -> model& {
         return *voxels_;
@@ -98,8 +100,17 @@ public:
         return block_ != nullptr;
     }
 
+    [[nodiscard]] auto cover() -> cover_layer& {
+        return cover_;
+    }
+
+    [[nodiscard]] auto cover() const -> const cover_layer& {
+        return cover_;
+    }
+
 private:
     std::shared_ptr<model> voxels_;
+    cover_layer cover_;
     std::shared_ptr<model_boundary> boundary_;
     std::shared_ptr<light_field> sky_;
     std::shared_ptr<light_field> block_;

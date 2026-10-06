@@ -97,6 +97,9 @@ auto world_grid::set_voxel(
     const auto lc = world_to_local_coord(world_pos) / world_units_per_voxel_;
     it->second->set_voxel(lc, v);
 
+    const vec3i at = (cc * chunk::size) + lc;
+    set_cover_(v.is_empty() ? at : at - vec3i{0, 1, 0}, 0);
+
     mark_light_dirty_(cc, lc);
     refresh_chunk(cc);
 
@@ -105,6 +108,114 @@ auto world_grid::set_voxel(
             refresh_chunk(cc + offset_of(face));
         }
     }
+}
+
+auto world_grid::cell_of(
+    const vec3f& world_pos
+) const -> vec3i {
+    const auto vs = static_cast<float32>(world_units_per_voxel_);
+    return {
+        static_cast<int32>(std::floor(world_pos.x / vs)), static_cast<int32>(std::floor(world_pos.y / vs)),
+        static_cast<int32>(std::floor(world_pos.z / vs))
+    };
+}
+
+auto world_grid::chunk_holding_(
+    vec3i at
+) const -> const chunk* {
+    const auto it = chunks_.find(world_to_chunk_coord(at * world_units_per_voxel_));
+    return it != chunks_.end() ? it->second.get() : nullptr;
+}
+
+auto world_grid::chunk_holding_(
+    vec3i at
+) -> chunk* {
+    const auto it = chunks_.find(world_to_chunk_coord(at * world_units_per_voxel_));
+    return it != chunks_.end() ? it->second.get() : nullptr;
+}
+
+auto world_grid::cell_at(
+    vec3i at
+) const -> std::optional<cell> {
+    const vec3i chunk_coord = world_to_chunk_coord(at * world_units_per_voxel_);
+    if (!column_chunks_.contains(vec2i{chunk_coord.x, chunk_coord.z})) {
+        return std::nullopt;
+    }
+
+    if (const chunk* holder = chunk_holding_(at); holder != nullptr) {
+        const voxel own = holder->get_voxel(world_to_local_coord(at * world_units_per_voxel_) / world_units_per_voxel_);
+        if (!own.is_empty()) {
+            return cell{.kind = occupant_kind::terrain, .look = own};
+        }
+    }
+
+    const vec3i support = at - vec3i{0, 1, 0};
+    const chunk* ground = chunk_holding_(support);
+    if (ground == nullptr) {
+        return cell{};
+    }
+    const vec3i local = world_to_local_coord(support * world_units_per_voxel_) / world_units_per_voxel_;
+    const uint8 form  = ground->get_volume()->cover().form_at(local);
+    if (form == 0) {
+        return cell{};
+    }
+    return cell{
+        .kind = is_flower_form(form) ? occupant_kind::flower : occupant_kind::grass,
+        .look = ground->get_voxel(local),
+        .form = form,
+    };
+}
+
+auto world_grid::plant_cover(
+    vec3i at, uint8 form
+) -> std::expected<void, std::string> {
+    if (form == 0 || form > cover_form_count) {
+        return std::unexpected{std::format("cover form {} is out of 1..{}", form, cover_form_count)};
+    }
+    const auto here = cell_at(at);
+    if (!here) {
+        return std::unexpected{"the column of the cell is not loaded"};
+    }
+    if (here->kind == occupant_kind::terrain) {
+        return std::unexpected{"the cell is taken by terrain"};
+    }
+    const auto below = cell_at(at - vec3i{0, 1, 0});
+    if (!below || below->kind != occupant_kind::terrain) {
+        return std::unexpected{"there is no ground under the cell"};
+    }
+    set_cover_(at - vec3i{0, 1, 0}, form);
+    return {};
+}
+
+auto world_grid::clear_cell(
+    vec3i at
+) -> void {
+    const auto here = cell_at(at);
+    if (!here) {
+        return;
+    }
+    switch (here->kind) {
+        case occupant_kind::terrain:
+            set_voxel(at * world_units_per_voxel_, voxels::air);
+            break;
+        case occupant_kind::grass:
+        case occupant_kind::flower:
+            set_cover_(at - vec3i{0, 1, 0}, 0);
+            break;
+        case occupant_kind::empty:
+            break;
+    }
+}
+
+auto world_grid::set_cover_(
+    vec3i support, uint8 form
+) -> void {
+    chunk* ground = chunk_holding_(support);
+    if (ground == nullptr) {
+        return;
+    }
+    const vec3i local = world_to_local_coord(support * world_units_per_voxel_) / world_units_per_voxel_;
+    ground->get_volume()->cover().set(local, form);
 }
 
 auto world_grid::mark_light_dirty_(
@@ -197,6 +308,13 @@ auto world_grid::get_chunk(
     vec3i chunk_coord
 ) -> chunk* {
     auto it = chunks_.find(chunk_coord);
+    return it != chunks_.end() ? it->second.get() : nullptr;
+}
+
+auto world_grid::find_chunk(
+    vec3i chunk_coord
+) const -> const chunk* {
+    const auto it = chunks_.find(chunk_coord);
     return it != chunks_.end() ? it->second.get() : nullptr;
 }
 

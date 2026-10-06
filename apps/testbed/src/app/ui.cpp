@@ -55,6 +55,21 @@ auto testbed_app::render_ui() -> void {
         day_night_.draw_controls(get_engine().get_renderer());
     }
 
+    if (ImGui::CollapsingHeader("Grass")) {
+        auto& grass       = get_engine().get_renderer().get_grass_settings();
+        const auto& stats = get_engine().get_renderer().get_grass_stats();
+        ImGui::Checkbox("Draw grass", &grass.enabled);
+        ImGui::SliderInt("Radius, columns", &grass.radius_columns, 1, 6);
+        ImGui::SliderFloat("Fade from", &grass.fade_share, 0.0f, 0.99f, "%.2f");
+        ImGui::SliderFloat2("Wind direction", &grass.wind_direction.x, -1.0f, 1.0f, "%.2f");
+        ImGui::SliderFloat("Wind strength", &grass.wind_strength, 0.0f, 8.0f, "%.1f");
+        ImGui::SliderFloat("Wind speed", &grass.wind_speed, 0.0f, 6.0f, "%.1f");
+        ImGui::Text(
+            "%u tufts, %u meshes, %u draws, %u chunks", stats.instances, stats.meshes, stats.draws,
+            stats.chunks
+        );
+    }
+
     if (ImGui::CollapsingHeader("Editing")) {
         static constexpr std::array<const char*, 3> tool_names{"none", "place", "remove"};
 

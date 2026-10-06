@@ -693,6 +693,43 @@ auto perlin_terrain_generator::sample_column_(
     return profile;
 }
 
+// см. docs/world.md#покров
+auto perlin_terrain_generator::cover_of_(
+    const terrain_context& ctx, int32 chunk_y, const column_profile& profile, const asset::model& voxels
+) const -> asset::cover_layer {
+    constexpr int32 s = 64;
+
+    if (profile.voxels_per_cell != 1) {
+        return asset::cover_layer{};
+    }
+
+    const int32 base_y = chunk_y * s;
+    std::vector<asset::cover_layer::entry> entries;
+
+    for (int32 x = 0; x < s; ++x) {
+        for (int32 z = 0; z < s; ++z) {
+            const uint8 form = profile.paint[(x * s) + z].cover;
+            if (form == 0) {
+                continue;
+            }
+            const int32 surface = profile.surface[column_profile::ring_index(x, z)];
+            const int32 local_y = surface - base_y;
+            if (local_y < 0 || local_y >= s || profile.bottom[(x * s) + z] > surface) {
+                continue;
+            }
+            if (voxels.get_voxel(x, local_y, z).is_empty()) {
+                continue;
+            }
+            if (local_y + 1 < s && !voxels.get_voxel(x, local_y + 1, z).is_empty()) {
+                continue;
+            }
+            entries.push_back({.support = vec3i{x, local_y, z}, .form = form});
+        }
+    }
+
+    return asset::cover_layer{entries};
+}
+
 auto perlin_terrain_generator::generate_chunk(
     terrain_context& ctx, int32 chunk_y, const column_profile& profile
 ) -> void {
@@ -776,9 +813,10 @@ auto perlin_terrain_generator::generate_chunk(
 
     writer.compact_pages();
 
+    auto cover = cover_of_(ctx, chunk_y, profile, *mdl);
     ctx.create_chunk(chunk_y) = {
         vec3i{ctx.cx, chunk_y, ctx.cz},
-        std::make_shared<vw::asset::chunk_volume>(std::move(mdl))
+        std::make_shared<vw::asset::chunk_volume>(std::move(mdl), std::move(cover))
     };
 }
 

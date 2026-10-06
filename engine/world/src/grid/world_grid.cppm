@@ -1,6 +1,7 @@
 export module vw.world:grid.world_grid;
 import :grid.visibility;
 import :grid.chunk;
+import :grid.cell;
 import :terrain.generator;
 
 import std;
@@ -34,8 +35,14 @@ public:
 
     [[nodiscard]] auto light_at(const vec3f& world_pos) const -> world_light;
 
+    [[nodiscard]] auto cell_of(const vec3f& world_pos) const -> vec3i;
+    [[nodiscard]] auto cell_at(vec3i at) const -> std::optional<cell>;
+    auto plant_cover(vec3i at, uint8 form) -> std::expected<void, std::string>;
+    auto clear_cell(vec3i at) -> void;
+
     [[nodiscard]] auto has_chunk(vec3i chunk_coord) const -> bool;
     [[nodiscard]] auto get_chunk(vec3i chunk_coord) -> chunk*;
+    [[nodiscard]] auto find_chunk(vec3i chunk_coord) const -> const chunk*;
 
     [[nodiscard]] auto get_surface_voxel_y(int32 voxel_x, int32 voxel_z) const
         -> std::optional<int32>;
@@ -73,6 +80,9 @@ public:
 
 private:
     auto mark_light_dirty_(vec3i chunk_coord, vec3i local) -> void;
+    [[nodiscard]] auto chunk_holding_(vec3i at) const -> const chunk*;
+    [[nodiscard]] auto chunk_holding_(vec3i at) -> chunk*;
+    auto set_cover_(vec3i support, uint8 form) -> void;
 
     world* world_;
     int32 world_units_per_voxel_{1};

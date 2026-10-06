@@ -37,6 +37,7 @@ constexpr std::array cpu_stages{
     stage_desc{"buffer_pool_update", [](const frame_sample& s) -> float32 { return s.render.buffer_pool_update_ms; }},
     stage_desc{"compute_cull", [](const frame_sample& s) -> float32 { return s.render.compute_cull_ms; }},
     stage_desc{"light_gather", [](const frame_sample& s) -> float32 { return s.render.light_gather_ms; }},
+    stage_desc{"grass_prepare", [](const frame_sample& s) -> float32 { return s.render.grass_prepare_ms; }},
     stage_desc{"light_cull", [](const frame_sample& s) -> float32 { return s.render.light_cull_ms; }},
     stage_desc{"shadow_pass", [](const frame_sample& s) -> float32 { return s.render.shadow_pass_ms; }},
     stage_desc{"world_pass", [](const frame_sample& s) -> float32 { return s.render.world_pass_ms; }},

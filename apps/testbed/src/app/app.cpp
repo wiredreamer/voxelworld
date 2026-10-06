@@ -22,9 +22,21 @@ testbed_app::testbed_app(
     , lod_level_{args.text("--lod-level") ? args.integer("--lod-level", 0) : -1}
     , benching_{args.flag("--bench")}
     , clusters_{args.flag("--cluster-stats"), args.count("--verify-lights", 0)} {
+    if (const auto shot = args.text("--shot")) {
+        shot_path_ = std::filesystem::path{*shot};
+    }
+    if (args.text("--pitch")) {
+        pitch_ = args.real("--pitch", 0.0f);
+    }
+    if (args.text("--yaw")) {
+        yaw_ = args.real("--yaw", 0.0f);
+    }
+    lift_ = args.real("--lift", 0.0f);
+
     auto& renderer = get_engine().get_renderer();
 
     renderer.set_chunk_cull_enabled(args.flag("--chunk-cull"));
+    renderer.get_grass_settings().enabled = !args.flag("--no-grass");
     renderer.get_cluster_settings().enabled = !args.flag("--no-clusters");
 
     if (const auto visible = args.count("--max-visible-lights", 0); visible > 0) {
@@ -143,7 +155,7 @@ auto testbed_app::render(
     float32 delta_time
 ) -> void {
     if (camera_placed_ || !rig_->needs_ground()) {
-        rig_->drive(scene_->default_camera(), delta_time);
+        rig_->drive(aimed_(scene_->default_camera()), delta_time);
     }
 
     try_place_camera();
@@ -174,6 +186,46 @@ auto testbed_app::render(
     draw_hover_();
 
     render_ui();
+    tick_shot_();
+}
+
+auto testbed_app::aimed_(
+    camera_hint hint
+) const -> camera_hint {
+    hint.pitch = pitch_.value_or(hint.pitch);
+    hint.yaw   = yaw_.value_or(hint.yaw);
+    hint.offset.y += lift_;
+    return hint;
+}
+
+auto testbed_app::tick_shot_() -> void {
+    constexpr int32 settle_frames = 90;
+    constexpr log::log_category lc{"testbed"};
+
+    if (!shot_path_ || !world_ready_ || ++shot_frames_ < settle_frames) {
+        return;
+    }
+
+    auto& renderer = get_engine().get_renderer();
+    if (!shot_requested_) {
+        shot_requested_ = renderer.request_capture({});
+        return;
+    }
+
+    const auto frame = renderer.take_capture();
+    if (!frame) {
+        return;
+    }
+
+    if (const auto encoded = gfx::encode_png(*frame)) {
+        std::ofstream out{*shot_path_, std::ios::binary};
+        out.write(reinterpret_cast<const char*>(encoded->data()), static_cast<std::streamsize>(encoded->size()));
+        log::info(lc, "frame written to {}", shot_path_->string());
+    } else {
+        log::warn(lc, "the frame could not be encoded");
+    }
+    shot_path_.reset();
+    get_engine().shutdown();
 }
 
 auto testbed_app::collect_report(gfx::report& out) const -> void {

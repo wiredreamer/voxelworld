@@ -9,6 +9,25 @@ namespace {
 
 constexpr float64 wave_stretch = 2.5;
 
+constexpr float64 grass_edge     = 0.08;
+constexpr float64 grass_lush_share = 0.5;
+constexpr float64 flower_bed_cells = 12.0;
+
+[[nodiscard]] auto column_hash(float64 x, float64 z, uint64 salt) -> uint64 {
+    auto h = (static_cast<uint64>(static_cast<int64>(std::floor(x))) * 0x9E3779B97F4A7C15ULL) ^
+             (static_cast<uint64>(static_cast<int64>(std::floor(z))) * 0xC2B2AE3D27D4EB4FULL) ^ salt;
+    h ^= h >> 30U;
+    h *= 0xBF58476D1CE4E5B9ULL;
+    h ^= h >> 27U;
+    h *= 0x94D049BB133111EBULL;
+    h ^= h >> 31U;
+    return h;
+}
+
+[[nodiscard]] auto column_unit(float64 x, float64 z, uint64 salt) -> float64 {
+    return static_cast<float64>(column_hash(x, z, salt) >> 11U) * 0x1.0p-53;
+}
+
 [[nodiscard]] auto same_row(const tone_ramp& a, const tone_ramp& b) -> bool {
     return a.row.first == b.row.first && a.row.count == b.row.count;
 }
@@ -54,6 +73,51 @@ auto tone_at(
     const auto last  = static_cast<int64>(own.row.count) - 1;
     const auto index = std::clamp(static_cast<int64>(std::lround(from + (t * (to - from)))), int64{0}, last);
     return voxel{static_cast<uint8>(own.row.first.value + index)};
+}
+
+namespace {
+
+[[nodiscard]] auto lushness_at(
+    const column_facts& column, const grass_cover& cover
+) -> std::optional<float64> {
+    const float64 f = cover.patch_frequency;
+    const float64 n = column.noise->fractal((column.x * f) + 1009.0, (column.z * f) - 1009.0, 2);
+    const float64 t = 0.5 + (0.5 * std::tanh(n * wave_stretch));
+
+    const float64 threshold = ((1.0 - static_cast<float64>(cover.density)) * (1.0 + (2.0 * grass_edge))) - grass_edge;
+    const float64 chance    = smoothstep(threshold - grass_edge, threshold + grass_edge, t);
+    if (column_unit(column.x, column.z, 0x6772617373ULL) >= chance) {
+        return std::nullopt;
+    }
+    const float64 run = std::max((1.0 - threshold) * grass_lush_share, 0.02);
+    return std::clamp((t - threshold) / run, 0.0, 1.0);
+}
+
+}  // namespace
+
+// см. docs/world.md#покров
+auto cover_form_at(
+    const column_facts& column, const grass_cover& cover
+) -> uint8 {
+    const auto lushness = lushness_at(column, cover);
+    if (!lushness) {
+        return 0;
+    }
+
+    const auto height_class = static_cast<uint8>(
+        std::min<int32>(grass_height_classes - 1, static_cast<int32>(*lushness * grass_height_classes))
+    );
+
+    if (column_unit(column.x, column.z, 0x666C6F776572ULL) < static_cast<float64>(cover.flower_share)) {
+        const float64 bed_x = std::floor(column.x / flower_bed_cells);
+        const float64 bed_z = std::floor(column.z / flower_bed_cells);
+        const auto color    = static_cast<uint8>(column_hash(bed_x, bed_z, 0x636F6C6FULL) % flower_colors);
+        const auto bunch    = static_cast<uint8>(column_hash(column.x, column.z, 0x62756E63ULL) % flower_bunch_count);
+        return flower_form_of(color, bunch);
+    }
+
+    const auto layout = static_cast<uint8>(column_hash(column.x, column.z, 0x666F726DULL) % grass_layouts);
+    return grass_form_of(height_class, layout);
 }
 
 auto lend_tones(

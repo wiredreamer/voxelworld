@@ -8,4 +8,5 @@ export import :model.light_channel;
 export import :model.light_field;
 export import :model.volume;
 export import :model.edit;
+export import :model.cover;
 export import :model.chunk;

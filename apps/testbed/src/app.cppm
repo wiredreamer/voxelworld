@@ -126,6 +126,8 @@ private:
 
     auto render_ui() -> void;
     auto handle_key_press(plat::keyboard::keys key) -> void;
+    auto tick_shot_() -> void;
+    [[nodiscard]] auto aimed_(camera_hint hint) const -> camera_hint;
 
 
 
@@ -158,6 +160,13 @@ private:
     bool benching_            = false;
 
     cluster_probe clusters_;
+
+    std::optional<std::filesystem::path> shot_path_;
+    std::optional<float32> pitch_;
+    std::optional<float32> yaw_;
+    float32 lift_ = 0.0f;
+    int32 shot_frames_   = 0;
+    bool shot_requested_ = false;
 
     std::unique_ptr<scene> scene_;
 

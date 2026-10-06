@@ -331,10 +331,21 @@ std430 нет диагностики на расхождение: ошибки �
 | теневой | 0 | `shadow_uniform_buffer_object` | `ShadowUniformBufferObject` |
 | | 1 | тот же набор квадов | те же три буфера |
 | оба | location 2 | `quad::get_attribute_descriptions`: `eR32Uint`, по инстансу | `in uint inInstanceIndex` |
+| травы | 0, 2, 3, 4 | те же наборы, что у мирового, но привязаны с раскладкой травы | `grass.vert` + общий `voxel.frag` |
+| | 1 | `grass_renderer::ensure_frame_buffers_`: 0 инстансы, 1 квады | `Instances`, `Quads` |
+| | push | `grass_push_constants` (48 байт, вершинный шаг) | `GrassPush` |
 
 Номера наборов в `bindDescriptorSets` у `render_world` и `render_shadow_pass`
 обязаны совпадать с `set = N` в шейдерах. Здесь расхождение ловят слои
 валидации.
+
+Трава: `grass_instance` (`place`, `light` — по `vec4`, 32 байта, `static_assert` в
+`grass_renderer.cppm`) повторяет `GrassInstance` в `grass.vert`, а
+`grass_push_constants` (`wind`, `eye`, `shape`) — `GrassPush`. Выходы `grass.vert`
+обязаны совпадать с входами `voxel.frag` по location, как у `voxel.vert`: меняешь
+вход фрагментного шейдера — правь оба вершинных. `shape.y` — половина
+`grass_tuft_footprint`, `shape.z` — `grass_tuft_max_height`: шейдер центрирует модель и
+считает высоту для ветра по ним. Почему так — `docs/rendering.md#трава`.
 
 ## Как проверить правку
 

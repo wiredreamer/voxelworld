@@ -1,5 +1,6 @@
 export module vw.world:terrain.biomes;
 import :terrain.noise;
+import :grid.cell;
 
 import std;
 
@@ -82,6 +83,16 @@ struct column_facts {
 [[nodiscard]] auto tone_at(const column_facts& column, const tone_ramp& own, std::string_view role,
                            float64 salt) -> voxel;
 
+struct grass_cover {
+    float32 density         = 0.4F;
+    float32 patch_frequency = 0.04F;
+    float32 flower_share    = 0.05F;
+
+    auto operator==(const grass_cover&) const -> bool = default;
+};
+
+[[nodiscard]] auto cover_form_at(const column_facts& column, const grass_cover& cover) -> uint8;
+
 struct paint_layer {
     voxel fill;
     uint8 thickness = 0;
@@ -92,6 +103,7 @@ struct column_paint {
 
     std::array<paint_layer, capacity> layers{};
     uint8 count = 0;
+    uint8 cover = 0;
 
     auto add(voxel fill, int32 thickness) -> column_paint& {
         if (count < capacity && thickness > 0) {
@@ -128,6 +140,13 @@ auto visit_climate_fields(Self& self, Visit&& visit) -> void {
 }
 
 template <class Self, class Visit>
+auto visit_cover_fields(Self& self, Visit&& visit) -> void {
+    visit("grass_density", self.cover.density, 0.0F, 1.0F);
+    visit("grass_patch_frequency", self.cover.patch_frequency, 0.005F, 0.5F);
+    visit("flower_share", self.cover.flower_share, 0.0F, 1.0F);
+}
+
+template <class Self, class Visit>
 auto visit_wave_fields(Self& self, Visit&& visit) -> void {
     visit("frequency", self.shape.frequency, 0.0005F, 0.05F);
     visit("octaves", self.shape.octaves, 1.0F, 5.0F);
@@ -146,6 +165,7 @@ struct plains_biome {
     tone_ramp grass{.row = voxels::green, .from = 4.0F, .to = 8.0F};
     tone_ramp dirt{.row = voxels::brown, .from = 4.0F, .to = 8.0F};
     int32 dirt_depth = 4;
+    grass_cover cover{.density = 0.28F, .patch_frequency = 0.18F, .flower_share = 0.02F};
 
     [[nodiscard]] auto height_at(const biome_point& at) const -> float64;
     [[nodiscard]] auto paint_at(const column_facts& column) const -> column_paint;
@@ -159,6 +179,7 @@ struct plains_biome {
         visit("grass", self.grass);
         visit("dirt", self.dirt);
         visit("dirt_depth", self.dirt_depth, 1.0F, 16.0F);
+        visit_cover_fields(self, visit);
     }
 };
 
@@ -177,6 +198,7 @@ struct hills_biome {
     int32 dirt_depth    = 3;
     int32 stone_depth   = 4;
     float32 stone_slope = 1.2F;
+    grass_cover cover{.density = 0.2F, .patch_frequency = 0.2F, .flower_share = 0.012F};
 
     [[nodiscard]] auto height_at(const biome_point& at) const -> float64;
     [[nodiscard]] auto paint_at(const column_facts& column) const -> column_paint;
@@ -193,6 +215,7 @@ struct hills_biome {
         visit("dirt_depth", self.dirt_depth, 1.0F, 16.0F);
         visit("stone_depth", self.stone_depth, 1.0F, 16.0F);
         visit("stone_slope", self.stone_slope, 0.2F, 4.0F);
+        visit_cover_fields(self, visit);
     }
 };
 

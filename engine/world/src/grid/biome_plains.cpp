@@ -18,6 +18,7 @@ auto plains_biome::paint_at(
     column_paint paint;
     paint.add(tone_at(column, grass, "grass", 401.0), 1);
     paint.add(tone_at(column, dirt, "dirt", 613.0), dirt_depth);
+    paint.cover = cover_form_at(column, cover);
     return paint;
 }
 

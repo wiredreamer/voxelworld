@@ -13,6 +13,7 @@ target_sources(vw_asset
             src/model/model_edit.cppm
             src/model/light_channel.cppm
             src/model/light_field.cppm
+            src/model/cover_layer.cppm
             src/model/chunk_volume.cppm
             src/anim/anim.cppm
             src/anim/animation_keyframe.cppm
@@ -33,6 +34,7 @@ target_sources(vw_asset
     PRIVATE
         src/model/model.cpp
         src/model/model_edit.cpp
+        src/model/cover_layer.cpp
         src/model/chunk_volume.cpp
         src/anim/anim.cpp
         src/anim/animation_edit.cpp

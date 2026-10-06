@@ -35,6 +35,8 @@ target_sources(vw_world
             src/grid/terrain_settings.cppm
             src/grid/grid.cppm
             src/grid/chunk_visibility.cppm
+            src/grid/cell.cppm
+            src/flora/grass_tuft.cppm
             src/grid/chunk.cppm
             src/grid/world_grid.cppm
             src/systems/systems.cppm
@@ -68,6 +70,7 @@ target_sources(vw_world
         src/grid/terrain_settings.cpp
         src/grid/chunk.cpp
         src/grid/world_grid.cpp
+        src/flora/grass_tuft.cpp
         src/systems/animation_fsm_system.cpp
         src/systems/variant_system.cpp
         src/systems/structure_system.cpp

@@ -110,6 +110,8 @@ public:
 
     [[nodiscard]] auto get_directional_light_settings() -> directional_light_settings&;
     [[nodiscard]] auto get_fog_settings() -> fog_settings&;
+    [[nodiscard]] auto get_grass_settings() -> grass_settings&;
+    [[nodiscard]] auto get_grass_stats() const -> const grass_stats&;
     [[nodiscard]] auto get_ambient_settings() -> ambient_settings&;
     [[nodiscard]] auto get_tonemap_settings() -> tonemap_settings&;
     [[nodiscard]] auto get_block_light_settings() -> block_light_settings&;
@@ -349,6 +351,7 @@ private:
 
     const voxel_registry* voxel_registry_;
     std::unique_ptr<palette_buffer> palette_buffer_;
+    std::unique_ptr<grass_renderer> grass_;
 
     std::unique_ptr<cull_pipeline> cull_pipeline_;
 
@@ -359,6 +362,7 @@ private:
     directional_light_settings directional_light_settings_;
 
     fog_settings fog_settings_;
+    grass_settings grass_settings_;
     ambient_settings ambient_settings_;
     tonemap_settings tonemap_settings_;
     block_light_settings block_light_settings_;

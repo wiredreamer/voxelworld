@@ -37,6 +37,7 @@ target_sources(vw_gfx
             src/render/gpu_timer.cppm
             src/render/shadow_map.cppm
             src/render/cull_pipeline.cppm
+            src/render/grass_renderer.cppm
             src/render/render_settings.cppm
             src/render/render_uniforms.cppm
             src/render/renderer_stats.cppm
@@ -72,6 +73,7 @@ target_sources(vw_gfx
         src/render/gpu_timer.cpp
         src/render/shadow_map.cpp
         src/render/cull_pipeline.cpp
+        src/render/grass_renderer.cpp
         src/render/renderer.cpp
         src/render/day_night.cpp
         src/debug/debug_primitive.cpp

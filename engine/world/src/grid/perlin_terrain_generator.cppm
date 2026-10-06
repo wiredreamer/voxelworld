@@ -166,6 +166,9 @@ private:
     [[nodiscard]] auto sample_column_(int32 cx, int32 cz, int32 voxels_per_cell) const
         -> column_profile;
 
+    [[nodiscard]] auto cover_of_(const terrain_context& ctx, int32 chunk_y,
+                                 const column_profile& profile, const asset::model& voxels) const
+        -> asset::cover_layer;
     auto carve_caves_(asset::model_writer& writer, terrain_context& ctx, int32 chunk_y,
                       const column_profile& profile) const -> void;
 

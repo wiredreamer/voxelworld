@@ -105,12 +105,24 @@ renderer::renderer(
     palette_buffer_ = std::make_unique<palette_buffer>(
         *context_, descriptor_pool_, palette_descriptor_set_layout_, *voxel_registry_
     );
+
+    grass_ = std::make_unique<grass_renderer>(
+        *context_, descriptor_pool_, render_pass_, msaa_samples_,
+        grass_pipeline_layouts{
+            .uniform = uniform_descriptor_set_layout_,
+            .shadow  = shadow_descriptor_set_layout_,
+            .lights  = point_lights_descriptor_set_layout_,
+            .palette = palette_descriptor_set_layout_,
+        },
+        fragment_shader_->get_stage_info()
+    );
 }
 
 renderer::~renderer() {
     mesh_pool_.stop_gen_threads();
     wait_idle();
 
+    grass_.reset();
     combined_buffer_pool_.reset();
     cull_pipeline_.reset();
     gpu_timer_.reset();
@@ -251,6 +263,14 @@ auto renderer::get_stats() const -> const renderer_stats& {
 
 auto renderer::get_directional_light_settings() -> directional_light_settings& {
     return directional_light_settings_;
+}
+
+auto renderer::get_grass_settings() -> grass_settings& {
+    return grass_settings_;
+}
+
+auto renderer::get_grass_stats() const -> const grass_stats& {
+    return grass_->get_stats();
 }
 
 auto renderer::get_fog_settings() -> fog_settings& {
@@ -478,6 +498,10 @@ auto renderer::render(
             world, camera.get_frustum(), camera.get_position(), current_frame_
         );
         blob_buffer_->update(world, current_frame_);
+    });
+
+    stats_.timing.grass_prepare_ms = measure_ms([&] {
+        grass_->prepare(world, camera, grass_settings_, current_frame_);
     });
 
     stats_.timing.light_cull_ms = measure_ms([&] {
@@ -1843,6 +1867,19 @@ auto renderer::render_world(
                 sizeof(draw_command));
             draw_call_count_++;
         }
+    }
+
+    if (current_render_mode_ == render_mode::lit) {
+        grass_->draw(
+            command_buffers_[current_frame_], current_frame_,
+            grass_bound_sets{
+                .uniform = descriptor_sets_[current_frame_],
+                .shadow  = shadow_map_descriptor_sets_[current_frame_],
+                .lights  = point_lights_descriptor_set,
+                .palette = palette_ds,
+            }
+        );
+        draw_call_count_ += grass_->get_stats().draws;
     }
 }
 

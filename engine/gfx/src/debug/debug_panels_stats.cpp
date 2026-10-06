@@ -98,6 +98,7 @@ auto debug_window::render_render_panel() -> void {
 
     metric_row("compute_cull", timing.compute_cull_ms);
     metric_row("light_gather", timing.light_gather_ms);
+    metric_row("grass_prepare", timing.grass_prepare_ms);
     metric_row("light_cull", timing.light_cull_ms);
     metric_row("shadow_pass", timing.shadow_pass_ms);
     metric_row("world_pass", timing.world_pass_ms);
