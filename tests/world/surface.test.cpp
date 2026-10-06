@@ -71,6 +71,7 @@ private:
 auto settled_params() -> perlin_terrain_generator::params {
     perlin_terrain_generator::params p{};
     p.caves  = false;
+    p.plants = false;
     p.island = false;
 
     hills_biome settled{};

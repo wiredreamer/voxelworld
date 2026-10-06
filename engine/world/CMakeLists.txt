@@ -37,6 +37,7 @@ target_sources(vw_world
             src/grid/chunk_visibility.cppm
             src/grid/cell.cppm
             src/flora/grass_tuft.cppm
+            src/flora/trees.cppm
             src/grid/chunk.cppm
             src/grid/world_grid.cppm
             src/systems/systems.cppm
@@ -63,6 +64,7 @@ target_sources(vw_world
         src/light/light.cpp
         src/spatial/spatial.cpp
         src/grid/terrain.cpp
+        src/grid/plants_gen.cpp
         src/grid/region_map.cpp
         src/grid/terrain_biomes.cpp
         src/grid/biome_plains.cpp
@@ -71,6 +73,7 @@ target_sources(vw_world
         src/grid/chunk.cpp
         src/grid/world_grid.cpp
         src/flora/grass_tuft.cpp
+        src/flora/trees.cpp
         src/systems/animation_fsm_system.cpp
         src/systems/variant_system.cpp
         src/systems/structure_system.cpp

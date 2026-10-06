@@ -210,8 +210,8 @@ TEST_CASE("the catalog holds every colour exactly once as a matte voxel", "[voxe
 
     for (const color& clr : colors::all) {
         const auto matte = std::ranges::count_if(registry.all(), [&](const voxel_type& type) {
-            return registry.known(type.id) && type.material.clr == clr &&
-                   type.material.glow == 0 && type.material.emission == 0;
+            return registry.known(type.id) && type.material.clr == clr && type.material.glow == 0 &&
+                   type.material.emission == 0 && type.kind == voxel_kind::plain;
         });
         REQUIRE(matte == 1);
     }
@@ -223,4 +223,25 @@ TEST_CASE("a group hands out the voxels it spans", "[voxels]") {
     REQUIRE(group.at(0) == voxels::blue[0]);
     REQUIRE(group.at(5) == voxels::blue[5]);
     REQUIRE(group.at(11) == voxels::green[0]);
+}
+
+TEST_CASE("bark is wood and leaves are leaf, everything else is plain", "[voxels]") {
+    const voxel_registry registry;
+
+    for (uint8 i = 0; i < voxels::bark.count; ++i) {
+        REQUIRE(registry.get(voxels::bark[i]).kind == voxel_kind::wood);
+    }
+    for (uint8 i = 0; i < voxels::leaves.count; ++i) {
+        REQUIRE(registry.get(voxels::leaves[i]).kind == voxel_kind::leaf);
+    }
+    REQUIRE(registry.get(voxels::brown[3]).kind == voxel_kind::plain);
+    REQUIRE(registry.get(voxels::green[4]).kind == voxel_kind::plain);
+    REQUIRE(registry.get(voxels::air).kind == voxel_kind::plain);
+}
+
+TEST_CASE("bark and leaves wear the plain shades they grew from", "[voxels]") {
+    const voxel_registry registry;
+
+    REQUIRE(registry.get(voxels::bark[0]).material.clr == registry.get(voxels::amber[2]).material.clr);
+    REQUIRE(registry.get(voxels::leaves[0]).material.clr == registry.get(voxels::green[1]).material.clr);
 }

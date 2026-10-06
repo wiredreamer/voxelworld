@@ -3,6 +3,7 @@ import :terrain.generator;
 import :terrain.biomes;
 import :terrain.noise;
 import :terrain.regions;
+import :flora.trees;
 
 import std;
 
@@ -22,7 +23,8 @@ public:
         int32 rock_deep_y   = -64;
         int32 rock_bottom_y = -256;
 
-        bool caves = true;
+        bool caves  = true;
+        bool plants = true;
 
         float32 cave_field_frequency = 0.0090F;
         float32 cave_field_squash    = 0.55F;
@@ -166,16 +168,49 @@ private:
     [[nodiscard]] auto sample_column_(int32 cx, int32 cz, int32 voxels_per_cell) const
         -> column_profile;
 
-    [[nodiscard]] auto cover_of_(const terrain_context& ctx, int32 chunk_y,
-                                 const column_profile& profile, const asset::model& voxels) const
+    using plant_footing = std::bitset<static_cast<std::size_t>(64 * 64)>;
+
+    struct plant_candidate {
+        bool tree   = false;
+        vec3i root{};
+        uint64 id   = 0;
+        uint8 biome = 0;
+        uint8 turns = 0;
+    };
+
+    struct placed_plant {
+        uint64 id = 0;
+        vec3i root{};
+        std::shared_ptr<const plant_shape> shape;
+    };
+
+    [[nodiscard]] auto cover_of_(const terrain_context& ctx, int32 chunk_y, const column_profile& profile,
+                                 const asset::model& voxels, const plant_footing& footing) const
         -> asset::cover_layer;
     auto carve_caves_(asset::model_writer& writer, terrain_context& ctx, int32 chunk_y,
                       const column_profile& profile) const -> void;
 
-    auto generate_chunk(terrain_context& ctx, int32 chunk_y, const column_profile& profile) -> void;
+    auto generate_chunk(terrain_context& ctx, int32 chunk_y, const column_profile& profile,
+                        std::span<const placed_plant> plants, const plant_footing& footing) -> void;
+
+    [[nodiscard]] static auto slope_between(float32 west, float32 here, float32 east, float32 north,
+                                            float32 south) -> float32;
+
+    [[nodiscard]] auto plant_candidate_(vec2i cell) const -> std::optional<plant_candidate>;
+    [[nodiscard]] auto plants_near_(int32 cx, int32 cz) const -> std::vector<placed_plant>;
+    [[nodiscard]] auto grow_plant_(const plant_candidate& candidate) const -> plant_shape;
+    [[nodiscard]] auto grown_plant_(const plant_candidate& candidate) const -> std::shared_ptr<const plant_shape>;
+    [[nodiscard]] auto reach_of_(const plant_candidate& candidate) const -> int32;
+    [[nodiscard]] auto cave_near_root_(int32 x, int32 surface, int32 z) const -> bool;
+    [[nodiscard]] static auto footing_of_(int32 cx, int32 cz, const column_profile& profile,
+                                          std::span<const placed_plant> plants) -> plant_footing;
+    static auto plant_chunk_(asset::model_writer& writer, const asset::model& voxels, vec3i base,
+                             std::span<const placed_plant> plants) -> void;
 
     asset::model_identity_pool* identity_pool_;
     asset::page_pool* page_pool_;
+    mutable std::mutex grown_mutex_;
+    mutable std::unordered_map<uint64, std::shared_ptr<const plant_shape>> grown_;
     params params_;
     std::vector<terrain_biome> biomes_;
     perlin_noise noise_;

@@ -41,7 +41,7 @@ voxel_registry::voxel_registry(
 auto voxel_registry::add_(
     const voxel_desc& desc
 ) -> void {
-    by_value_[desc.id.value] = voxel_type{desc.id, desc.name, desc.material, desc.surface};
+    by_value_[desc.id.value] = voxel_type{desc.id, desc.name, desc.material, desc.surface, desc.kind};
     known_.set(desc.id.value);
     by_name_.insert_or_assign(desc.name, desc.id);
 }

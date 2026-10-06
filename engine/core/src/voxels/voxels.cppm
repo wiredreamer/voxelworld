@@ -65,6 +65,12 @@ enum class voxel_surface : uint8 {
     opaque,
 };
 
+enum class voxel_kind : uint8 {
+    plain,
+    wood,
+    leaf,
+};
+
 struct voxel_material {
     color clr = colors::empty;
 
@@ -80,6 +86,7 @@ struct voxel_desc {
     std::string_view name;
     voxel_material material;
     voxel_surface surface = voxel_surface::opaque;
+    voxel_kind kind       = voxel_kind::plain;
 };
 
 struct voxel_group {
@@ -99,6 +106,7 @@ struct voxel_type {
     std::string_view name;
     voxel_material material;
     voxel_surface surface = voxel_surface::invisible;
+    voxel_kind kind       = voxel_kind::plain;
 };
 
 class voxel_registry {

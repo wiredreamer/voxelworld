@@ -39,6 +39,9 @@ inline constexpr auto fire_red     = voxel{103};
 inline constexpr auto fire_purple  = voxel{104};
 inline constexpr auto fire_white   = voxel{105};
 
+inline constexpr auto bark   = voxel_span{106, 5};
+inline constexpr auto leaves = voxel_span{111, 8};
+
 inline constexpr std::array groups = {
     voxel_group{"blue", blue[0], 11},
     voxel_group{"green", green[0], 11},
@@ -51,6 +54,8 @@ inline constexpr std::array groups = {
     voxel_group{"glow", glow_blue, 6},
     voxel_group{"lamp", lamp_blue, 6},
     voxel_group{"fire", fire_blue, 6},
+    voxel_group{"bark", bark[0], 5},
+    voxel_group{"leaves", leaves[0], 8},
 };
 
 }  // namespace vw::voxels
@@ -164,6 +169,19 @@ inline constexpr std::array default_voxel_catalog = {
     voxel_desc{voxels::fire_red, "fire_red", {colors::red_8, 15, 255}},
     voxel_desc{voxels::fire_purple, "fire_purple", {colors::purple_8, 15, 255}},
     voxel_desc{voxels::fire_white, "fire_white", {colors::white, 15, 255}},
+    voxel_desc{voxels::bark[0], "bark_0", {colors::amber_2}, voxel_surface::opaque, voxel_kind::wood},
+    voxel_desc{voxels::bark[1], "bark_1", {colors::amber_3}, voxel_surface::opaque, voxel_kind::wood},
+    voxel_desc{voxels::bark[2], "bark_2", {colors::amber_4}, voxel_surface::opaque, voxel_kind::wood},
+    voxel_desc{voxels::bark[3], "bark_3", {colors::amber_5}, voxel_surface::opaque, voxel_kind::wood},
+    voxel_desc{voxels::bark[4], "bark_4", {colors::amber_6}, voxel_surface::opaque, voxel_kind::wood},
+    voxel_desc{voxels::leaves[0], "leaves_0", {colors::green_1}, voxel_surface::opaque, voxel_kind::leaf},
+    voxel_desc{voxels::leaves[1], "leaves_1", {colors::green_2}, voxel_surface::opaque, voxel_kind::leaf},
+    voxel_desc{voxels::leaves[2], "leaves_2", {colors::green_3}, voxel_surface::opaque, voxel_kind::leaf},
+    voxel_desc{voxels::leaves[3], "leaves_3", {colors::green_4}, voxel_surface::opaque, voxel_kind::leaf},
+    voxel_desc{voxels::leaves[4], "leaves_4", {colors::green_5}, voxel_surface::opaque, voxel_kind::leaf},
+    voxel_desc{voxels::leaves[5], "leaves_5", {colors::green_6}, voxel_surface::opaque, voxel_kind::leaf},
+    voxel_desc{voxels::leaves[6], "leaves_6", {colors::green_7}, voxel_surface::opaque, voxel_kind::leaf},
+    voxel_desc{voxels::leaves[7], "leaves_7", {colors::green_8}, voxel_surface::opaque, voxel_kind::leaf},
 };
 
 }  // namespace vw

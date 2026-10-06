@@ -123,16 +123,14 @@ auto chunk_loader::generate_(vec2i coord) -> void {
 
 namespace vw::ecs {
 
-namespace {
-
 // см. docs/world.md#слои
-auto slope_between(float32 west, float32 here, float32 east, float32 north, float32 south) -> float32 {
+auto perlin_terrain_generator::slope_between(
+    float32 west, float32 here, float32 east, float32 north, float32 south
+) -> float32 {
     const float32 across = std::min(std::abs(here - west), std::abs(east - here));
     const float32 along  = std::min(std::abs(here - north), std::abs(south - here));
     return std::max(across, along);
 }
-
-}  // namespace
 
 perlin_terrain_generator::perlin_terrain_generator(
     vw::asset::model_identity_pool& identity_pool, vw::asset::page_pool& pool
@@ -608,8 +606,17 @@ auto perlin_terrain_generator::generate(
     int32 min_cy = floor_div(profile.cell_of(profile.min_bottom), s);
     int32 max_cy = floor_div(profile.cell_of(profile.max_surface), s);
 
+    std::vector<placed_plant> plants;
+    if (params_.plants && profile.voxels_per_cell == 1) {
+        plants = plants_near_(ctx.cx, ctx.cz);
+    }
+    for (const placed_plant& plant : plants) {
+        max_cy = std::max(max_cy, floor_div(plant.root.y + plant.shape->max.y - 1, s));
+    }
+    const plant_footing footing = footing_of_(ctx.cx, ctx.cz, profile, plants);
+
     for (int32 cy = max_cy; cy >= min_cy; --cy) {
-        generate_chunk(ctx, cy, profile);
+        generate_chunk(ctx, cy, profile, plants, footing);
     }
 }
 
@@ -695,7 +702,8 @@ auto perlin_terrain_generator::sample_column_(
 
 // см. docs/world.md#покров
 auto perlin_terrain_generator::cover_of_(
-    const terrain_context& ctx, int32 chunk_y, const column_profile& profile, const asset::model& voxels
+    const terrain_context& ctx, int32 chunk_y, const column_profile& profile, const asset::model& voxels,
+    const plant_footing& footing
 ) const -> asset::cover_layer {
     constexpr int32 s = 64;
 
@@ -709,7 +717,7 @@ auto perlin_terrain_generator::cover_of_(
     for (int32 x = 0; x < s; ++x) {
         for (int32 z = 0; z < s; ++z) {
             const uint8 form = profile.paint[(x * s) + z].cover;
-            if (form == 0) {
+            if (form == 0 || footing.test(static_cast<std::size_t>((x * s) + z))) {
                 continue;
             }
             const int32 surface = profile.surface[column_profile::ring_index(x, z)];
@@ -731,7 +739,8 @@ auto perlin_terrain_generator::cover_of_(
 }
 
 auto perlin_terrain_generator::generate_chunk(
-    terrain_context& ctx, int32 chunk_y, const column_profile& profile
+    terrain_context& ctx, int32 chunk_y, const column_profile& profile, std::span<const placed_plant> plants,
+    const plant_footing& footing
 ) -> void {
     constexpr int32 s = 64;
 
@@ -810,10 +819,11 @@ auto perlin_terrain_generator::generate_chunk(
     }
 
     carve_caves_(writer, ctx, chunk_y, profile);
+    plant_chunk_(writer, *mdl, vec3i{ctx.cx * s, base_y, ctx.cz * s}, plants);
 
     writer.compact_pages();
 
-    auto cover = cover_of_(ctx, chunk_y, profile, *mdl);
+    auto cover = cover_of_(ctx, chunk_y, profile, *mdl, footing);
     ctx.create_chunk(chunk_y) = {
         vec3i{ctx.cx, chunk_y, ctx.cz},
         std::make_shared<vw::asset::chunk_volume>(std::move(mdl), std::move(cover))

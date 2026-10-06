@@ -9,6 +9,7 @@ export import :terrain;
 export import :light;
 export import :grid;
 export import :flora.grass;
+export import :flora.trees;
 export import :systems;
 
 import vw.core;

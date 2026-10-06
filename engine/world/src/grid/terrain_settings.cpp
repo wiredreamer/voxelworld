@@ -29,6 +29,7 @@ constexpr std::array number_fields = {
 constexpr std::array flag_fields = {
     terrain_flag_field{"island", &P::island},
     terrain_flag_field{"caves", &P::caves},
+    terrain_flag_field{"plants", &P::plants},
 };
 
 auto failure(const json::cursor& at, std::string_view message) -> std::unexpected<std::string> {

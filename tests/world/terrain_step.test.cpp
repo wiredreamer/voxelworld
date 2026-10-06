@@ -85,7 +85,8 @@ TEST_CASE("a coarser step keeps the surface within the soil it can shift", "[ter
     asset::model_identity_pool identity_pool;
     asset::page_pool pages;
 
-    const perlin_terrain_generator::params params{};
+    perlin_terrain_generator::params params{};
+    params.plants = false;
     perlin_terrain_generator gen{identity_pool, pages, params};
 
     const stepped_column fine{gen, 0, 0, 1};

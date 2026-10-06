@@ -132,6 +132,7 @@ add_executable(world_tests
     world/surface.test.cpp
     world/cover.test.cpp
     world/grass_tuft.test.cpp
+    world/trees.test.cpp
     world/terrain_step.test.cpp
     world/lod_levels.test.cpp
     world/sky_light.test.cpp

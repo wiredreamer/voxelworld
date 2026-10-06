@@ -98,6 +98,7 @@ private:
 auto flat_params(float32 density) -> perlin_terrain_generator::params {
     perlin_terrain_generator::params p{};
     p.caves  = false;
+    p.plants = false;
     p.island = false;
 
     plains_biome plains{};
@@ -249,6 +250,7 @@ TEST_CASE("the same seed grows the same grass", "[world][cover]") {
 TEST_CASE("no grass grows on the stone of steep hills", "[world][cover]") {
     perlin_terrain_generator::params p{};
     p.caves  = false;
+    p.plants = false;
     p.island = false;
 
     hills_biome hills{};

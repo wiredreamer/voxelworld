@@ -93,6 +93,68 @@ struct grass_cover {
 
 [[nodiscard]] auto cover_form_at(const column_facts& column, const grass_cover& cover) -> uint8;
 
+inline constexpr int32 plant_cell_voxels = 8;
+
+// см. docs/world.md#деревья
+struct tree_species {
+    int32 min_height     = 10;
+    int32 max_height     = 20;
+    float32 fork_share   = 0.6F;
+    int32 branches       = 4;
+    float32 branch_reach = 0.4F;
+    float32 crown_share  = 0.27F;
+    float32 roughness    = 0.35F;
+    tone_ramp bark{.row = voxels::bark, .from = 1.0F, .to = 3.0F, .spot_frequency = 0.02F};
+    tone_ramp leaves{.row = voxels::leaves, .from = 1.0F, .to = 5.0F, .spot_frequency = 0.012F};
+
+    auto operator==(const tree_species&) const -> bool = default;
+};
+
+struct bush_species {
+    int32 min_height  = 2;
+    int32 max_height  = 4;
+    int32 blobs       = 3;
+    float32 roughness = 0.35F;
+    tone_ramp leaves{.row = voxels::leaves, .from = 2.0F, .to = 6.0F, .spot_frequency = 0.012F};
+
+    auto operator==(const bush_species&) const -> bool = default;
+};
+
+struct forest {
+    float32 density         = 0.3F;
+    float32 patch_frequency = 0.008F;
+    float32 fill            = 0.6F;
+    float32 lone_trees      = 0.02F;
+    float32 bushes          = 0.1F;
+    tree_species tree;
+    bush_species bush;
+
+    auto operator==(const forest&) const -> bool = default;
+};
+
+template <class Self, class Visit>
+auto visit_forest_fields(Self& self, Visit&& visit) -> void {
+    visit("forest_density", self.woods.density, 0.0F, 1.0F);
+    visit("forest_patch_frequency", self.woods.patch_frequency, 0.001F, 0.05F);
+    visit("forest_fill", self.woods.fill, 0.0F, 1.0F);
+    visit("lone_trees", self.woods.lone_trees, 0.0F, 0.3F);
+    visit("bushes", self.woods.bushes, 0.0F, 1.0F);
+    visit("tree_min_height", self.woods.tree.min_height, 6.0F, 30.0F);
+    visit("tree_max_height", self.woods.tree.max_height, 6.0F, 30.0F);
+    visit("tree_fork", self.woods.tree.fork_share, 0.3F, 0.9F);
+    visit("tree_branches", self.woods.tree.branches, 2.0F, 6.0F);
+    visit("tree_reach", self.woods.tree.branch_reach, 0.1F, 0.7F);
+    visit("tree_crown", self.woods.tree.crown_share, 0.12F, 0.45F);
+    visit("tree_roughness", self.woods.tree.roughness, 0.0F, 0.8F);
+    visit("bark", self.woods.tree.bark);
+    visit("leaves", self.woods.tree.leaves);
+    visit("bush_min_height", self.woods.bush.min_height, 1.0F, 8.0F);
+    visit("bush_max_height", self.woods.bush.max_height, 1.0F, 8.0F);
+    visit("bush_blobs", self.woods.bush.blobs, 1.0F, 5.0F);
+    visit("bush_roughness", self.woods.bush.roughness, 0.0F, 0.8F);
+    visit("bush_leaves", self.woods.bush.leaves);
+}
+
 struct paint_layer {
     voxel fill;
     uint8 thickness = 0;
@@ -104,6 +166,7 @@ struct column_paint {
     std::array<paint_layer, capacity> layers{};
     uint8 count = 0;
     uint8 cover = 0;
+    bool fertile = false;
 
     auto add(voxel fill, int32 thickness) -> column_paint& {
         if (count < capacity && thickness > 0) {
@@ -166,6 +229,10 @@ struct plains_biome {
     tone_ramp dirt{.row = voxels::brown, .from = 4.0F, .to = 8.0F};
     int32 dirt_depth = 4;
     grass_cover cover{.density = 0.28F, .patch_frequency = 0.18F, .flower_share = 0.02F};
+    forest woods{
+        .density = 0.06F, .fill = 0.5F, .lone_trees = 0.008F, .bushes = 0.05F,
+        .tree    = {.min_height = 14, .max_height = 20, .crown_share = 0.3F},
+    };
 
     [[nodiscard]] auto height_at(const biome_point& at) const -> float64;
     [[nodiscard]] auto paint_at(const column_facts& column) const -> column_paint;
@@ -180,6 +247,7 @@ struct plains_biome {
         visit("dirt", self.dirt);
         visit("dirt_depth", self.dirt_depth, 1.0F, 16.0F);
         visit_cover_fields(self, visit);
+        visit_forest_fields(self, visit);
     }
 };
 
@@ -199,6 +267,10 @@ struct hills_biome {
     int32 stone_depth   = 4;
     float32 stone_slope = 1.2F;
     grass_cover cover{.density = 0.2F, .patch_frequency = 0.2F, .flower_share = 0.012F};
+    forest woods{
+        .density = 0.45F, .fill = 0.7F, .lone_trees = 0.03F, .bushes = 0.15F,
+        .tree    = {.min_height = 10, .max_height = 16},
+    };
 
     [[nodiscard]] auto height_at(const biome_point& at) const -> float64;
     [[nodiscard]] auto paint_at(const column_facts& column) const -> column_paint;
@@ -216,6 +288,7 @@ struct hills_biome {
         visit("stone_depth", self.stone_depth, 1.0F, 16.0F);
         visit("stone_slope", self.stone_slope, 0.2F, 4.0F);
         visit_cover_fields(self, visit);
+        visit_forest_fields(self, visit);
     }
 };
 
@@ -238,6 +311,10 @@ using terrain_biome = std::variant<plains_biome, hills_biome>;
 [[nodiscard]] inline auto paint_of(const terrain_biome& biome, const column_facts& column)
     -> column_paint {
     return std::visit([&column](const auto& b) -> column_paint { return b.paint_at(column); }, biome);
+}
+
+[[nodiscard]] inline auto woods_of(const terrain_biome& biome) -> const forest& {
+    return std::visit([](const auto& b) -> const forest& { return b.woods; }, biome);
 }
 
 template <class Visit>
