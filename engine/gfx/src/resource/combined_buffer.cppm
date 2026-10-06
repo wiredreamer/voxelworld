@@ -63,7 +63,26 @@ struct free_slot {
     uint32 quad_offset;
 };
 
-struct entity_allocation {
+// см. docs/rendering.md#ключ-инстанса
+struct instance_key {
+    uint32 id         = 0;
+    uint32 generation = 0;
+
+    [[nodiscard]] auto operator==(const instance_key&) const -> bool = default;
+};
+
+}  // namespace vw::gfx
+
+export template <>
+struct std::hash<vw::gfx::instance_key> {
+    auto operator()(const vw::gfx::instance_key& key) const noexcept -> std::size_t {
+        return std::hash<std::size_t>()(key.id) ^ (std::hash<std::size_t>()(key.generation) << 1);
+    }
+};
+
+export namespace vw::gfx {
+
+struct instance_allocation {
     uint32 instance_index;
     mesh_key key;
 };
@@ -114,21 +133,21 @@ public:
     combined_buffer& operator=(combined_buffer&&) noexcept = default;
 
     auto allocate(
-        entity e, vw::asset::model_identity model_id, const mesh& mesh_data,
+        instance_key instance, vw::asset::model_identity model_id, const mesh& mesh_data,
         const mat4f& transform_matrix, const vw::spatial::aabb& bounds
     ) -> void;
     auto allocate_mesh(vw::asset::model_identity model_id, const mesh& mesh_data) -> void;
     auto write_mesh(vw::asset::model_identity model_id, const mesh& mesh_data) -> void;
     auto write_transform(
-        entity ent, const mat4f& transform_matrix, const vw::spatial::aabb& bounds,
+        instance_key instance, const mat4f& transform_matrix, const vw::spatial::aabb& bounds,
         const world_light& light = {}
     ) -> void;
-    auto write_light(entity ent, const world_light& light) -> void;
-    auto free(entity ent) -> std::optional<entity>;
+    auto write_light(instance_key instance, const world_light& light) -> void;
+    auto free(instance_key instance) -> std::optional<instance_key>;
 
     auto write_visibility(std::span<const uint32> flags) -> void;
 
-    [[nodiscard]] auto get_entity_allocation(entity ent) -> const entity_allocation&;
+    [[nodiscard]] auto get_allocation(instance_key instance) -> const instance_allocation&;
     [[nodiscard]] auto get_quad_buffer() const -> vk::Buffer;
     [[nodiscard]] auto get_instance_index_buffer() const -> vk::Buffer;
     [[nodiscard]] auto get_indirect_draw_buffer() const -> vk::Buffer;
@@ -179,9 +198,9 @@ private:
     std::unique_ptr<device_storage_buffer> count_buffer_;
     std::unique_ptr<device_storage_buffer> visibility_buffer_;
 
-    std::unordered_map<entity, entity_allocation> entity_allocations_;
+    std::unordered_map<instance_key, instance_allocation> allocations_;
     std::unordered_map<mesh_key, mesh_allocation> mesh_allocations_;
-    std::unordered_map<uint32, entity> instance_indexes_;
+    std::unordered_map<uint32, instance_key> instance_keys_;
     std::vector<free_slot> free_slots_;
     uint32 quad_used_{0};
     uint32 mesh_peak_{0};

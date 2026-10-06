@@ -159,7 +159,7 @@ combined_buffer::combined_buffer(
 }
 
 auto combined_buffer::allocate(
-    entity e, vw::asset::model_identity model_id, const mesh& mesh_data,
+    instance_key instance, vw::asset::model_identity model_id, const mesh& mesh_data,
     const mat4f& transform_matrix, const vw::spatial::aabb& bounds
 ) -> void {
 
@@ -173,7 +173,7 @@ auto combined_buffer::allocate(
 
     auto& mesh_alloc = mesh_allocations_[key];
 
-    const auto instance_index = static_cast<uint32>(entity_allocations_.size());
+    const auto instance_index = static_cast<uint32>(allocations_.size());
     if (instance_index >= instance_capacity_) {
         expand_instance_buffers_();
     }
@@ -207,13 +207,12 @@ auto combined_buffer::allocate(
 
     write_bounds_(instance_index, transform_matrix, bounds);
 
-    const entity_allocation ent_alloc{
+    allocations_[instance] = instance_allocation{
         .instance_index = instance_index,
         .key            = key,
     };
-    entity_allocations_[e] = ent_alloc;
 
-    instance_indexes_[instance_index] = e;
+    instance_keys_[instance_index] = instance;
 
     mesh_alloc.ref_count++;
 }
@@ -325,18 +324,18 @@ auto combined_buffer::write_mesh(
     mesh_alloc.generation  = model_id.generation;
     mesh_alloc.face_counts = mesh_data.face_counts;
 
-    for (const auto& [ent, ent_alloc] : entity_allocations_) {
-        if (ent_alloc.key == key) {
-            write_draw_command_(ent_alloc.instance_index, mesh_alloc);
+    for (const auto& [instance, allocation] : allocations_) {
+        if (allocation.key == key) {
+            write_draw_command_(allocation.instance_index, mesh_alloc);
         }
     }
 }
 
 auto combined_buffer::write_transform(
-    entity ent, const mat4f& transform_matrix, const vw::spatial::aabb& bounds,
+    instance_key instance, const mat4f& transform_matrix, const vw::spatial::aabb& bounds,
     const world_light& light
 ) -> void {
-    auto& [instance_index, key] = entity_allocations_[ent];
+    auto& [instance_index, key] = allocations_[instance];
     const auto model_staged = staging_->stage_struct(transform_matrix);
     staging_->copy_to(
         model_matrix_buffer_->get_buffer(),
@@ -358,9 +357,9 @@ auto combined_buffer::write_transform(
 }
 
 auto combined_buffer::write_light(
-    entity ent, const world_light& light
+    instance_key instance, const world_light& light
 ) -> void {
-    const auto instance_index = entity_allocations_[ent].instance_index;
+    const auto instance_index = allocations_[instance].instance_index;
     const auto column         = instance_light_column(light);
     const auto staged         = staging_->stage_struct(column);
     staging_->copy_to(
@@ -384,43 +383,44 @@ auto combined_buffer::write_visibility(
 }
 
 auto combined_buffer::free(
-    entity ent
-) -> std::optional<entity> {
-    auto& ent_alloc = entity_allocations_[ent];
+    instance_key instance
+) -> std::optional<instance_key> {
+    auto& allocation = allocations_[instance];
 
-    auto& mesh_alloc = mesh_allocations_[ent_alloc.key];
+    auto& mesh_alloc = mesh_allocations_[allocation.key];
     mesh_alloc.ref_count--;
 
     if (mesh_alloc.ref_count <= 0) {
         free_slots_.push_back({.quad_offset = mesh_alloc.quad_offset});
-        mesh_allocations_.erase(ent_alloc.key);
+        mesh_allocations_.erase(allocation.key);
     }
 
-    std::optional<entity> swapped_entity;
+    std::optional<instance_key> swapped;
 
-    const auto last_index = static_cast<uint32>(entity_allocations_.size() - 1);
+    const auto last_index = static_cast<uint32>(allocations_.size() - 1);
     bool need_swap =
-        ent_alloc.instance_index != last_index && last_index < entity_allocations_.size();
+        allocation.instance_index != last_index && last_index < allocations_.size();
     if (need_swap) {
-        entity last_ent      = instance_indexes_[last_index];
-        auto& last_ent_alloc = entity_allocations_[last_ent];
+        const instance_key last = instance_keys_[last_index];
+        auto& last_allocation   = allocations_[last];
 
-        const auto& last_mesh_alloc = mesh_allocations_[last_ent_alloc.key];
-        write_draw_command_(ent_alloc.instance_index, last_mesh_alloc);
+        const auto& last_mesh_alloc = mesh_allocations_[last_allocation.key];
+        write_draw_command_(allocation.instance_index, last_mesh_alloc);
 
-        last_ent_alloc.instance_index = ent_alloc.instance_index;
-        instance_indexes_[ent_alloc.instance_index] = last_ent;
+        last_allocation.instance_index = allocation.instance_index;
+        instance_keys_[allocation.instance_index] = last;
 
-        swapped_entity = last_ent;
+        swapped = last;
     }
 
-    entity_allocations_.erase(ent);
-    return swapped_entity;
+    allocations_.erase(instance);
+    return swapped;
 }
-auto combined_buffer::get_entity_allocation(
-    entity ent
-) -> const entity_allocation& {
-    return entity_allocations_[ent];
+
+auto combined_buffer::get_allocation(
+    instance_key instance
+) -> const instance_allocation& {
+    return allocations_[instance];
 }
 
 auto combined_buffer::get_quad_buffer() const -> vk::Buffer {
@@ -453,7 +453,7 @@ auto combined_buffer::expand_mesh_buffers_() -> void {
 }
 
 auto combined_buffer::expand_instance_buffers_() -> void {
-    const auto instance_count = entity_allocations_.size();
+    const auto instance_count = allocations_.size();
 
     instance_capacity_ *= 2;
 
@@ -706,11 +706,11 @@ auto combined_buffer::get_compute_descriptor_set(uint32 frame) -> vk::Descriptor
 }
 
 auto combined_buffer::get_instance_count() const -> uint32 {
-    return static_cast<uint32>(entity_allocations_.size());
+    return static_cast<uint32>(allocations_.size());
 }
 
 auto combined_buffer::get_draw_command_count() const -> uint32 {
-    return static_cast<uint32>(entity_allocations_.size()) * faces_per_mesh;
+    return static_cast<uint32>(allocations_.size()) * faces_per_mesh;
 }
 
 auto combined_buffer::get_instance_index_buffer() const -> vk::Buffer {
@@ -742,7 +742,7 @@ auto combined_buffer::get_normal_matrix_buffer() const -> vk::Buffer {
 }
 
 auto combined_buffer::is_empty() const -> bool {
-    return entity_allocations_.empty();
+    return allocations_.empty();
 }
 
 auto combined_buffer::get_stats() const -> const combined_buffer_stats& {
@@ -752,7 +752,7 @@ auto combined_buffer::get_stats() const -> const combined_buffer_stats& {
     stats_.mesh_peak         = mesh_peak_;
     stats_.mesh_high_water   = chunk_size_.quad_count > 0 ? quad_used_ / chunk_size_.quad_count : 0;
     stats_.instance_capacity = instance_capacity_;
-    stats_.instance_count    = static_cast<uint32>(entity_allocations_.size());
+    stats_.instance_count    = static_cast<uint32>(allocations_.size());
     stats_.quad_load_min     = 0.f;
     stats_.quad_load_max     = 0.f;
     stats_.quad_load_avg     = 0.f;

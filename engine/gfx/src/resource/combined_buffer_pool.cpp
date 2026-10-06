@@ -13,6 +13,14 @@ namespace vw::gfx {
 
 namespace {
 
+auto key_of(entity ent) -> instance_key {
+    return instance_key{.id = ent.index, .generation = ent.generation};
+}
+
+auto entity_of(instance_key key) -> entity {
+    return entity{.index = key.id, .generation = key.generation};
+}
+
 auto sorted_erase(std::vector<entity>& v, entity e) -> void {
     auto it = std::lower_bound(v.begin(), v.end(), e);
     if (it != v.end() && *it == e) {
@@ -114,8 +122,8 @@ auto combined_buffer_pool::process_destroyed_(world_type& world) -> void {
         hidden_entities_.erase(ent);
         if (auto* info = entity_buffer_infos_.get(ent)) {
             touched_bounds_.push_back(info->bounds);
-            if (const auto swapped = buffers_[info->buffer_index]->free(ent)) {
-                rewrite_swapped_(world, info->buffer_index, *swapped);
+            if (const auto swapped = buffers_[info->buffer_index]->free(key_of(ent))) {
+                rewrite_swapped_(world, info->buffer_index, entity_of(*swapped));
             }
             entity_buffer_infos_.remove(ent);
         }
@@ -254,8 +262,8 @@ auto combined_buffer_pool::update_meshes_(
             hidden_entities_.erase(ent);
 
             if (auto* buffer_info = entity_buffer_infos_.get(ent)) {
-                if (const auto swapped = buffers_[buffer_info->buffer_index]->free(ent)) {
-                    rewrite_swapped_(world, buffer_info->buffer_index, *swapped);
+                if (const auto swapped = buffers_[buffer_info->buffer_index]->free(key_of(ent))) {
+                    rewrite_swapped_(world, buffer_info->buffer_index, entity_of(*swapped));
                 }
                 entity_buffer_infos_.remove(ent);
             }
@@ -303,7 +311,7 @@ auto combined_buffer_pool::update_meshes_(
             auto& buffer      = buffers_[buffer_info.buffer_index];
 
             if (buffer_info.chunk_size == required_chunk_size) {
-                const auto& ent_alloc = buffer->get_entity_allocation(ent);
+                const auto& ent_alloc = buffer->get_allocation(key_of(ent));
                 if (ent_alloc.key == mesh_key_of(model_id, mesh_ptr->lod_step)) {
                     if (staging_.available() < mesh_staging_cost) {
                         merge_buffer_.push_back(ent);
@@ -326,8 +334,8 @@ auto combined_buffer_pool::update_meshes_(
 
             touched_bounds_.push_back(buffer_info.bounds);
 
-            if (const auto swapped = buffer->free(ent)) {
-                rewrite_swapped_(world, buffer_info.buffer_index, *swapped);
+            if (const auto swapped = buffer->free(key_of(ent))) {
+                rewrite_swapped_(world, buffer_info.buffer_index, entity_of(*swapped));
             }
         } else if (staging_.available() < mesh_staging_cost) {
             merge_buffer_.push_back(ent);
@@ -337,7 +345,7 @@ auto combined_buffer_pool::update_meshes_(
         auto* buffer            = get_or_create_buffer(required_chunk_size);
         const auto buffer_index = chunk_size_to_buffer_index_[required_chunk_size];
 
-        buffer->allocate(ent, model_id, *mesh_ptr, transform_matrix, ent_bounds);
+        buffer->allocate(key_of(ent), model_id, *mesh_ptr, transform_matrix, ent_bounds);
         uploaded_models_.emplace_back(model_id, step);
 
         entity_buffer_infos_.emplace(
@@ -393,7 +401,7 @@ auto combined_buffer_pool::hide_marked_() -> void {
         }
 
         const auto buffer = info->buffer_index;
-        const auto slot   = buffers_[buffer]->get_entity_allocation(ent).instance_index;
+        const auto slot   = buffers_[buffer]->get_allocation(key_of(ent)).instance_index;
         visibility_flags_[buffer][slot] = 0U;
     }
 }
@@ -427,7 +435,7 @@ auto combined_buffer_pool::update_chunk_visibility_(
             return std::nullopt;
         }
         const auto index =
-            buffers_[info->buffer_index]->get_entity_allocation(ent).instance_index;
+            buffers_[info->buffer_index]->get_allocation(key_of(ent)).instance_index;
         return std::pair{info->buffer_index, index};
     };
 
@@ -628,7 +636,7 @@ auto combined_buffer_pool::update_transforms_(
             tr_bounds = world.get<spatial_component>(ent).get_bounds();
         }
         buffers_[info.buffer_index]->write_transform(
-            ent, model_matrix(transform_comp, world.get<model_component>(ent)), tr_bounds,
+            key_of(ent), model_matrix(transform_comp, world.get<model_component>(ent)), tr_bounds,
             info.light);
         touched_bounds_.push_back(info.bounds);
         touched_bounds_.push_back(tr_bounds);
@@ -658,7 +666,7 @@ auto combined_buffer_pool::rewrite_swapped_(
     }
 
     buffers_[buffer_index]->write_transform(
-        swapped,
+        key_of(swapped),
         model_matrix(world.get<transform_component>(swapped), world.get<model_component>(swapped)),
         bounds, light
     );
@@ -697,7 +705,7 @@ auto combined_buffer_pool::update_instance_light_(
             return;
         }
 
-        buffers_[info.buffer_index]->write_light(ent, target);
+        buffers_[info.buffer_index]->write_light(key_of(ent), target);
         info.light = target;
     }
 }
