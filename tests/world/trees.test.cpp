@@ -195,19 +195,6 @@ TEST_CASE("a turned tree is the same tree on its side of the root", "[world][tre
     }
 }
 
-TEST_CASE("a bush is all leaves and sits on its root", "[world][trees]") {
-    const bush_species species{};
-
-    for (uint64 seed = 1; seed <= 20; ++seed) {
-        const auto shape = grow_bush(species, seed, 0, voxels::leaves[4]);
-        REQUIRE_FALSE(look_at(shape, {0, 0, 0}).is_empty());
-        REQUIRE(shape.max.y <= species.max_height + 2);
-        for (const plant_voxel& v : shape.voxels) {
-            REQUIRE(voxels::leaves.contains(v.look));
-        }
-    }
-}
-
 TEST_CASE("a forest grows bark and leaves into the chunks above its ground", "[world][trees]") {
     grown_columns columns{forest_params()};
     columns.grow(0, 0);

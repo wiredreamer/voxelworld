@@ -110,24 +110,12 @@ struct tree_species {
     auto operator==(const tree_species&) const -> bool = default;
 };
 
-struct bush_species {
-    int32 min_height  = 2;
-    int32 max_height  = 4;
-    int32 blobs       = 3;
-    float32 roughness = 0.35F;
-    tone_ramp leaves{.row = voxels::leaves, .from = 2.0F, .to = 6.0F, .spot_frequency = 0.012F};
-
-    auto operator==(const bush_species&) const -> bool = default;
-};
-
 struct forest {
     float32 density         = 0.3F;
     float32 patch_frequency = 0.008F;
     float32 fill            = 0.6F;
     float32 lone_trees      = 0.02F;
-    float32 bushes          = 0.1F;
     tree_species tree;
-    bush_species bush;
 
     auto operator==(const forest&) const -> bool = default;
 };
@@ -138,7 +126,6 @@ auto visit_forest_fields(Self& self, Visit&& visit) -> void {
     visit("forest_patch_frequency", self.woods.patch_frequency, 0.001F, 0.05F);
     visit("forest_fill", self.woods.fill, 0.0F, 1.0F);
     visit("lone_trees", self.woods.lone_trees, 0.0F, 0.3F);
-    visit("bushes", self.woods.bushes, 0.0F, 1.0F);
     visit("tree_min_height", self.woods.tree.min_height, 6.0F, 30.0F);
     visit("tree_max_height", self.woods.tree.max_height, 6.0F, 30.0F);
     visit("tree_fork", self.woods.tree.fork_share, 0.3F, 0.9F);
@@ -148,11 +135,6 @@ auto visit_forest_fields(Self& self, Visit&& visit) -> void {
     visit("tree_roughness", self.woods.tree.roughness, 0.0F, 0.8F);
     visit("bark", self.woods.tree.bark);
     visit("leaves", self.woods.tree.leaves);
-    visit("bush_min_height", self.woods.bush.min_height, 1.0F, 8.0F);
-    visit("bush_max_height", self.woods.bush.max_height, 1.0F, 8.0F);
-    visit("bush_blobs", self.woods.bush.blobs, 1.0F, 5.0F);
-    visit("bush_roughness", self.woods.bush.roughness, 0.0F, 0.8F);
-    visit("bush_leaves", self.woods.bush.leaves);
 }
 
 struct paint_layer {
@@ -230,7 +212,7 @@ struct plains_biome {
     int32 dirt_depth = 4;
     grass_cover cover{.density = 0.28F, .patch_frequency = 0.18F, .flower_share = 0.02F};
     forest woods{
-        .density = 0.06F, .fill = 0.5F, .lone_trees = 0.008F, .bushes = 0.05F,
+        .density = 0.06F, .fill = 0.5F, .lone_trees = 0.008F,
         .tree    = {.min_height = 14, .max_height = 20, .crown_share = 0.3F},
     };
 
@@ -268,7 +250,7 @@ struct hills_biome {
     float32 stone_slope = 1.2F;
     grass_cover cover{.density = 0.2F, .patch_frequency = 0.2F, .flower_share = 0.012F};
     forest woods{
-        .density = 0.45F, .fill = 0.7F, .lone_trees = 0.03F, .bushes = 0.15F,
+        .density = 0.45F, .fill = 0.7F, .lone_trees = 0.03F,
         .tree    = {.min_height = 10, .max_height = 16},
     };
 

@@ -76,9 +76,7 @@ auto perlin_terrain_generator::plant_candidate_(
     const bool in_woods = patch > 1.0 - static_cast<float64>(woods.density);
 
     const float64 tree_chance = in_woods ? woods.fill : woods.lone_trees;
-    const bool tree           = unit_of(h, 1) < tree_chance;
-    const bool bush           = !tree && unit_of(h, 2) < static_cast<float64>(woods.bushes);
-    if (!tree && !bush) {
+    if (unit_of(h, 1) >= tree_chance) {
         return std::nullopt;
     }
 
@@ -91,9 +89,8 @@ auto perlin_terrain_generator::plant_candidate_(
     }
 
     return plant_candidate{
-        .tree  = tree,
         .root  = {x, shape.surface + 1, z},
-        .id    = (placement_hash(params_.seed, cell, tree ? 0x74726565ULL : 0x62757368ULL) | 1U),
+        .id    = (placement_hash(params_.seed, cell, 0x74726565ULL) | 1U),
         .biome = shape.biome,
         .turns = static_cast<uint8>((h >> 48U) & 3U),
     };
@@ -111,22 +108,14 @@ auto perlin_terrain_generator::grow_plant_(
         .surface = candidate.root.y - 1,
     };
 
-    if (candidate.tree) {
-        return grow_tree(woods.tree, candidate.id, candidate.turns, tone_at(facts, woods.tree.bark, "bark", 991.0),
-                         tone_at(facts, woods.tree.leaves, "leaves", 997.0));
-    }
-    return grow_bush(woods.bush, candidate.id, candidate.turns,
-                     tone_at(facts, woods.bush.leaves, "bush_leaves", 983.0));
+    return grow_tree(woods.tree, candidate.id, candidate.turns, tone_at(facts, woods.tree.bark, "bark", 991.0),
+                     tone_at(facts, woods.tree.leaves, "leaves", 997.0));
 }
 
 auto perlin_terrain_generator::reach_of_(
     const plant_candidate& candidate
 ) const -> int32 {
-    const forest& woods = woods_of(biomes_[candidate.biome]);
-    if (!candidate.tree) {
-        return static_cast<int32>(std::ceil(static_cast<float32>(woods.bush.max_height) * 1.2F)) + 3;
-    }
-    const auto& tree = woods.tree;
+    const auto& tree = woods_of(biomes_[candidate.biome]).tree;
     return static_cast<int32>(std::ceil(
                static_cast<float32>(tree.max_height) * ((tree.branch_reach * 1.25F) + (tree.crown_share * 1.15F))
            )) +
@@ -161,9 +150,7 @@ auto perlin_terrain_generator::plants_near_(
 
     int32 margin = side;
     for (std::size_t b = 0; b < biomes_.size(); ++b) {
-        for (const bool tree : {true, false}) {
-            margin = std::max(margin, reach_of_({.tree = tree, .biome = static_cast<uint8>(b)}));
-        }
+        margin = std::max(margin, reach_of_({.biome = static_cast<uint8>(b)}));
     }
 
     const int32 gx0   = floor_div((cx * s) - margin, side) - 1;
@@ -197,30 +184,28 @@ auto perlin_terrain_generator::plants_near_(
                 continue;
             }
 
-            if (candidate->tree) {
-                bool crowded = false;
-                for (int32 dz = -1; dz <= 1 && !crowded; ++dz) {
-                    for (int32 dx = -1; dx <= 1 && !crowded; ++dx) {
-                        if (dx == 0 && dz == 0) {
-                            continue;
-                        }
-                        const auto& other = candidate_at(gx + dx, gz + dz);
-                        if (!other || !other->tree || other->id < candidate->id) {
-                            continue;
-                        }
-                        const auto ox = static_cast<float32>(other->root.x - candidate->root.x);
-                        const auto oz = static_cast<float32>(other->root.z - candidate->root.z);
-                        crowded       = ((ox * ox) + (oz * oz)) < trunk_gap_voxels * trunk_gap_voxels;
+            bool crowded = false;
+            for (int32 dz = -1; dz <= 1 && !crowded; ++dz) {
+                for (int32 dx = -1; dx <= 1 && !crowded; ++dx) {
+                    if (dx == 0 && dz == 0) {
+                        continue;
                     }
-                }
-                if (crowded) {
-                    continue;
+                    const auto& other = candidate_at(gx + dx, gz + dz);
+                    if (!other || other->id < candidate->id) {
+                        continue;
+                    }
+                    const auto ox = static_cast<float32>(other->root.x - candidate->root.x);
+                    const auto oz = static_cast<float32>(other->root.z - candidate->root.z);
+                    crowded       = ((ox * ox) + (oz * oz)) < trunk_gap_voxels * trunk_gap_voxels;
                 }
             }
+            if (crowded) {
+                continue;
+            }
 
-            auto shape        = grown_plant_(*candidate);
-            const vec3i lo    = candidate->root + shape->min;
-            const vec3i hi    = candidate->root + shape->max;
+            auto shape     = grown_plant_(*candidate);
+            const vec3i lo = candidate->root + shape->min;
+            const vec3i hi = candidate->root + shape->max;
             if (hi.x <= cx * s || lo.x >= (cx * s) + s || hi.z <= cz * s || lo.z >= (cz * s) + s) {
                 continue;
             }

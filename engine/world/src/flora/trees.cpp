@@ -240,34 +240,4 @@ auto grow_tree(
     return shape.harvest(root, quarter_turns);
 }
 
-// см. docs/world.md#деревья
-auto grow_bush(
-    const bush_species& species, uint64 seed, uint8 quarter_turns, voxel leaves
-) -> plant_shape {
-    tree_dice dice{seed};
-    draft shape;
-
-    const int32 height   = dice.roll(species.min_height, std::max(species.min_height, species.max_height));
-    const float32 radius = std::max(1.0F, static_cast<float32>(height) * 0.55F);
-    const vec3i root{draft_centre, bush_root_depth, draft_centre};
-    const vec3f middle{
-        static_cast<float32>(root.x) + 0.5F, static_cast<float32>(bush_root_depth) + radius * 0.8F,
-        static_cast<float32>(root.z) + 0.5F
-    };
-
-    const int32 blobs = dice.roll(1, std::max(1, species.blobs));
-    for (int32 b = 0; b < blobs; ++b) {
-        const vec3f shift = b == 0 ? vec3f{} : vec3f{
-            ((dice.unit() * 2.0F) - 1.0F) * radius, (dice.unit() - 0.6F) * radius * 0.5F,
-            ((dice.unit() * 2.0F) - 1.0F) * radius
-        };
-        shape.blob(middle + shift, radius * (b == 0 ? 1.0F : 0.75F), species.roughness,
-                   seed ^ (0x200U + static_cast<uint64>(b)), leaves);
-    }
-    shape.put(root, leaves);
-    shape.put(root - vec3i{0, 1, 0}, leaves);
-
-    return shape.harvest(root, quarter_turns);
-}
-
 }  // namespace vw::ecs

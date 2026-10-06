@@ -171,7 +171,6 @@ private:
     using plant_footing = std::bitset<static_cast<std::size_t>(64 * 64)>;
 
     struct plant_candidate {
-        bool tree   = false;
         vec3i root{};
         uint64 id   = 0;
         uint8 biome = 0;
