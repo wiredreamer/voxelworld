@@ -108,8 +108,6 @@ private:
     [[nodiscard]] auto scene_camera_() -> std::unique_ptr<camera_rig>;
 
     auto tick_day_night_(float32 delta_time) -> void;
-    auto apply_time_of_day_() -> void;
-    auto step_time_of_day_(float32 delta) -> void;
 
     auto set_torch_(bool on) -> void;
     auto tick_torch_(const vec3f& at) -> void;
@@ -131,11 +129,8 @@ private:
     ecs::perlin_terrain_generator::params generator_params_;
     bool camera_placed_ = false;
 
-    float32 time_of_day_        = 0.5f;
-    float32 day_length_seconds_ = 120.0f;
-    float32 night_intensity_    = 0.06f;
-    bool day_night_running_     = true;
-    bool sun_in_bench_          = false;
+    gfx::day_night_cycle day_night_;
+    bool sun_in_bench_ = false;
 
     std::string drop_status_;
     ecs::entity torch_ = ecs::invalid_entity;

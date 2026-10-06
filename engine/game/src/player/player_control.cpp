@@ -817,7 +817,11 @@ auto player_system::update(
                 state.jump_buffered_   = -1.0f;
             }
 
-            controller.set_coyote_seconds(tuning_.coyote_seconds);
+            controller.set_coyote_seconds(tuning_.coyote_seconds)
+                .set_step_hop_voxels(
+                    state.dodging_ || state.swinging_ || state.in_stance_ ? 0.0f
+                                                                          : tuning_.step_hop_voxels
+                );
             if (state.jump_buffered_ >= 0.0f && !state.body_locked_ && !state.dodging_) {
                 controller.request_jump();
             }

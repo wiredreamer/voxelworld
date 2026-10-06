@@ -43,6 +43,7 @@ layout(location = 4) centroid out vec2 fragUV;
 layout(location = 5) flat out uint fragCornersMask;
 layout(location = 6) flat out uint fragLightMask;
 layout(location = 7) flat out uint fragConvexMask;
+layout(location = 8) flat out vec2 fragInstanceLight;
 
 const vec3 NORMALS[6] = vec3[6](
     vec3( 1,  0,  0),
@@ -94,7 +95,9 @@ void main() {
     vec4 worldPos = model * vec4(localPos, 1.0);
     fragPos = worldPos.xyz;
 
-    fragNormal = normalize(mat3(normalMatrices.normals[inInstanceIndex]) * NORMALS[normal_id]);
+    mat4 normalMatrix = normalMatrices.normals[inInstanceIndex];
+    fragNormal = normalize(mat3(normalMatrix) * NORMALS[normal_id]);
+    fragInstanceLight = normalMatrix[3].xy;
 
     fragColor = palette[palette_idx].color;
     fragGlow  = palette[palette_idx].glow;

@@ -299,12 +299,32 @@ std430 нет диагностики на расхождение: ошибки �
   на запись (сторож — `static_assert` в `palette_buffer.cpp`).
 - **Если разошлись:** чужие цвета, светится не то.
 
+## Свет инстанса в нормальной матрице
+
+- **C++:** `instance_light_column`, `instance_light_offset` и `normal_matrix_of` в
+  `resource/combined_buffer.cpp` — столбец 3 нормальной матрицы (`normal[row, 3]`,
+  float 12…15 в памяти) равен `(1 − sky, block, 0, 1)`; `combined_buffer::write_light`
+  пишет только его; выборку делает `combined_buffer_pool::update_instance_light_`.
+- **GLSL:** `normalMatrix[3].xy` → `fragInstanceLight` (location 8) в `voxel.vert`;
+  в `voxel.frag` `skyRaw *= 1 − x`, `lampRaw = max(lampRaw, y)`.
+- **Менять вместе:** смысл `x` и `y` с обеих сторон; номер location в обоих шейдерах.
+  Нормаль берёт из матрицы только `mat3` — столбец 3 в неё не попадает. Нулевая
+  тень значит «свет меша как есть»: у чанков столбец `(0, 0, 0, 1)` от аффинного
+  трансформа, и переписывать его им не нужно. Смена кодировки на «уровень, а не
+  тень» обязана писать столбец и чанкам.
+- **Сторож:** `a body reads the sky light of the air around it, not of the rock` в
+  `tests/world/sky_light.test.cpp` — только выборка. Столбец в шейдере не сверяет
+  ничто.
+- **Если разошлись:** персонаж светится в пещере или чёрный на солнце; чанки темнеют
+  целиком, если шейдер прочтёт столбец не той стороной.
+- Почему так: `docs/lighting.md#тела-в-пещере`.
+
 ## Наборы и вершинный вход
 
 | Конвейер | Набор | C++ | GLSL |
 |---|---|---|---|
 | мировой | 0 | `uniform_buffer_object` | `UniformBufferObject` |
-| | 1 | `combined_buffer::update_descriptor_set_`: 0 модели, 1 нормали, 2 квады | `ModelMatrices`, `NormalMatrices`, `Quads` |
+| | 1 | `combined_buffer::update_descriptor_set_`: 0 модели, 1 нормали (столбец 3 — свет инстанса), 2 квады | `ModelMatrices`, `NormalMatrices`, `Quads` |
 | | 2 | `shadow_map_descriptor_sets_` | `shadowMapArray`, только при `SHADOW_ENABLED` |
 | | 3 | набор источников и пятен | см. выше |
 | | 4 | `palette_buffer` | `PaletteBuffer` |

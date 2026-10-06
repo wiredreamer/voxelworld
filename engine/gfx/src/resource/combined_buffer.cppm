@@ -119,7 +119,11 @@ public:
     ) -> void;
     auto allocate_mesh(vw::asset::model_identity model_id, const mesh& mesh_data) -> void;
     auto write_mesh(vw::asset::model_identity model_id, const mesh& mesh_data) -> void;
-    auto write_transform(entity ent, const mat4f& transform_matrix, const vw::spatial::aabb& bounds) -> void;
+    auto write_transform(
+        entity ent, const mat4f& transform_matrix, const vw::spatial::aabb& bounds,
+        const world_light& light = {}
+    ) -> void;
+    auto write_light(entity ent, const world_light& light) -> void;
     auto free(entity ent) -> std::optional<entity>;
 
     auto write_visibility(std::span<const uint32> flags) -> void;

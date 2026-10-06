@@ -11,6 +11,13 @@ import :light;
 
 export namespace vw::ecs {
 
+struct world_light {
+    float32 sky   = 1.0F;
+    float32 block = 0.0F;
+
+    auto operator==(const world_light&) const -> bool = default;
+};
+
 class world_grid {
 public:
     explicit world_grid(world& w, int32 world_units_per_voxel = 8);
@@ -23,6 +30,8 @@ public:
 
     [[nodiscard]] auto get_voxel(vec3i world_pos) const -> voxel;
     auto set_voxel(vec3i world_pos, voxel v) -> void;
+
+    [[nodiscard]] auto light_at(const vec3f& world_pos) const -> world_light;
 
     [[nodiscard]] auto has_chunk(vec3i chunk_coord) const -> bool;
     [[nodiscard]] auto get_chunk(vec3i chunk_coord) -> chunk*;

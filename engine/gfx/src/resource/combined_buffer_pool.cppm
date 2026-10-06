@@ -26,12 +26,15 @@ struct entity_buffer_info {
     buffer_chunk_size chunk_size;
     std::size_t buffer_index;
     vw::spatial::aabb bounds{};
+    world_light light{};
+    bool lit_by_world = false;
 };
 
 struct buffer_pool_timing_stats {
     float32 destroyed_ms     = 0.0f;
     float32 meshes_ms        = 0.0f;
     float32 transforms_ms    = 0.0f;
+    float32 light_ms         = 0.0f;
     float32 staging_flush_ms = 0.0f;
 };
 
@@ -124,6 +127,8 @@ private:
     auto process_destroyed_(world_type& world) -> void;
     auto update_meshes_(world_type& world, const vec3f& camera_pos, mesh_pool& pool) -> void;
     auto update_transforms_(world_type& world) -> void;
+    auto update_instance_light_(world_type& world) -> void;
+    auto rewrite_swapped_(world_type& world, std::size_t buffer_index, entity swapped) -> void;
     auto update_chunk_visibility_(
         world_type& world, const vec3f& camera_pos, bool sight_starts_at_a_point
     ) -> void;

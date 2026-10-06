@@ -141,6 +141,14 @@ struct character_controller_component final {
         return seconds_off_ground_;
     }
 
+    [[nodiscard]] auto get_step_hop_voxels() const -> float32 {
+        return step_hop_voxels_;
+    }
+
+    [[nodiscard]] auto get_step_hop_count() const -> uint32 {
+        return step_hop_count_;
+    }
+
 private:
     friend class character_controller_system;
 
@@ -153,7 +161,9 @@ private:
     float32 turn_degrees_per_second_ = 900.0F;
     float32 coyote_seconds_          = 0.1F;
     float32 seconds_off_ground_      = std::numeric_limits<float32>::max();
+    float32 step_hop_voxels_         = 0.0F;
     uint32 jump_count_               = 0;
+    uint32 step_hop_count_           = 0;
     bool left_ground_by_jump_        = false;
     bool jump_requested_             = false;
 };

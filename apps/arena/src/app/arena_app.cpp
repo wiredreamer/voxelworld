@@ -12,6 +12,16 @@ import vw.gfx;
 
 namespace vw::arena {
 
+namespace {
+
+constexpr float32 day_length_seconds = 300.0f;
+
+auto player_shadow() -> ecs::blob_shadow_component {
+    return ecs::blob_shadow_component{10.0f, 48.0f, 0.6f};
+}
+
+}  // namespace
+
 arena_app::arena_app(
     gfx::engine& eng
 )
@@ -32,8 +42,9 @@ arena_app::arena_app(
               .collision_skin = 2.0f
           }
       ) {
-    get_engine().get_renderer().set_clear_color(0.4f, 0.6f, 0.9f, 1.0f);
     get_engine().get_debug_tool().set_visible(true);
+    day_night_.set_day_length_seconds(day_length_seconds);
+    day_night_.apply(get_engine().get_renderer());
 
     load_assets();
 
@@ -48,10 +59,11 @@ arena_app::arena_app(
     generator_params_ = result.generator_params;
 
     player_ = world.system<game::player_system>().spawn();
+    world.modify(player_).with(player_shadow());
     world.system<ecs::transform_system>().modify(player_).set_position({0.0f, 500.0f, 0.0f});
     world.system<game::surface_placement_system>().place(player_, {0.0f, 0.0f});
     world.system<game::input_system>().control_locally(player_);
-    register_debug_panels(get_engine(), player_, camera_controller_);
+    register_debug_panels(get_engine(), player_, camera_controller_, day_night_);
 
     constexpr int32 enemy_count   = 10;
     constexpr float32 spawn_range = 400.0f;
@@ -71,7 +83,6 @@ arena_app::arena_app(
                                static_cast<float32>(generator_params_.world_units_per_voxel);
 
     auto& fog         = get_engine().get_renderer().get_fog_settings();
-    fog.color         = {0.4f, 0.6f, 0.9f};
     fog.near_distance = 0.6f * draw_reach;
     fog.far_distance  = 0.9f * draw_reach;
 }
@@ -152,9 +163,11 @@ auto arena_app::is_player_placed_() const -> bool {
 }
 
 auto arena_app::render(
-    [[maybe_unused]] float delta_time
+    float delta_time
 ) -> void {
     auto& world = get_engine().get_world();
+
+    day_night_.tick(delta_time, get_engine().get_renderer());
 
     if (is_player_placed_()) {
         const auto& frame = world.get<game::player_input_component>(player_).get_frame();

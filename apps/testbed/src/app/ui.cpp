@@ -40,19 +40,7 @@ auto testbed_app::render_ui() -> void {
     ImGui::Text("ESC - exit");
     ImGui::Separator();
 
-    {
-        const auto hour = static_cast<int32>(time_of_day_ * 24.0f);
-        const auto minute =
-            static_cast<int32>(((time_of_day_ * 24.0f) - static_cast<float32>(hour)) * 60.0f);
-        ImGui::Text("%02d:%02d %s", hour, minute, day_night_running_ ? "" : "(paused)");
-
-        float32 time = time_of_day_;
-        if (ImGui::SliderFloat("Time", &time, 0.0f, 1.0f, "%.3f")) {
-            time_of_day_ = time;
-            apply_time_of_day_();
-        }
-        ImGui::SliderFloat("Day (s)", &day_length_seconds_, 8.0f, 600.0f, "%.0f");
-    }
+    day_night_.draw_controls(get_engine().get_renderer());
 
     ImGui::Separator();
 
@@ -138,13 +126,13 @@ auto testbed_app::handle_key_press(
             camera_controller_->toggle_keyboard_control_enabled();
             break;
         case plat::keyboard::keys::N:
-            day_night_running_ = !day_night_running_;
+            day_night_.set_running(!day_night_.is_running());
             break;
         case plat::keyboard::keys::LEFT_BRACKET:
-            step_time_of_day_(-0.02f);
+            day_night_.step(-0.02f, get_engine().get_renderer());
             break;
         case plat::keyboard::keys::RIGHT_BRACKET:
-            step_time_of_day_(0.02f);
+            day_night_.step(0.02f, get_engine().get_renderer());
             break;
         default:
             break;

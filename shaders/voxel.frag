@@ -9,6 +9,7 @@ layout(location = 4) centroid in vec2 fragUV;
 layout(location = 5) flat in uint fragCornersMask;
 layout(location = 6) flat in uint fragLightMask;
 layout(location = 7) flat in uint fragConvexMask;
+layout(location = 8) flat in vec2 fragInstanceLight;
 
 #define SHADOW_ENABLED 0
 
@@ -412,6 +413,7 @@ void main() {
     float s01 = float((sm >> 12) & 15u) * (1.0 / 15.0);
 
     float skyRaw = mix(mix(s00, s10, fragUV.x), mix(s01, s11, fragUV.x), fragUV.y);
+    skyRaw *= 1.0 - fragInstanceLight.x;
 
     float skyReach = pow(skyRaw, ubo.sky_params.x);
     float sunReach = pow(skyRaw, ubo.sky_params.y);
@@ -428,6 +430,7 @@ void main() {
     float l01 = float((bm >> 12) & 15u) * (1.0 / 15.0);
 
     float lampRaw   = mix(mix(l00, l10, fragUV.x), mix(l01, l11, fragUV.x), fragUV.y);
+    lampRaw = max(lampRaw, fragInstanceLight.y);
     float lampReach = pow(lampRaw, ubo.lamp_params.w);
 
     if (ubo.debug_view == 5u) {

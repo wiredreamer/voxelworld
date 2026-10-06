@@ -32,6 +32,7 @@ public:
         auto set_jump_impulse(float32 impulse) -> controller_modifier&;
         auto set_turn_degrees_per_second(float32 degrees_per_second) -> controller_modifier&;
         auto set_coyote_seconds(float32 seconds) -> controller_modifier&;
+        auto set_step_hop_voxels(float32 voxels) -> controller_modifier&;
         auto request_jump() -> controller_modifier&;
 
     private:
@@ -45,6 +46,8 @@ public:
     auto modify(entity ent) -> controller_modifier;
 
 private:
+    [[nodiscard]] auto step_ahead_(entity ent, const vec3f& ahead, float32 rise) const -> bool;
+
     world* world_;
 };
 

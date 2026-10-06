@@ -66,6 +66,7 @@ private:
     asset::asset_storage assets_;
 
     gfx::third_person_camera_controller camera_controller_;
+    gfx::day_night_cycle day_night_;
 
     ecs::entity player_;
     std::vector<std::unique_ptr<dummy_enemy>> enemies_;
@@ -82,7 +83,8 @@ export namespace vw::arena {
 auto register_debug_panels(
     gfx::engine& engine,
     ecs::entity player,
-    const gfx::third_person_camera_controller& camera_controller
+    const gfx::third_person_camera_controller& camera_controller,
+    gfx::day_night_cycle& day_night
 ) -> void;
 
 auto render_debug_hud(const gfx::engine& engine, ecs::entity player, bool show_colliders) -> void;

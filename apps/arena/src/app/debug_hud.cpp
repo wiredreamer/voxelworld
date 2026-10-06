@@ -136,6 +136,7 @@ auto render_lean_panel(game::movement_tuning& tuning) -> void {
 auto render_jump_panel(game::movement_tuning& tuning) -> void {
     ImGui::SliderFloat("input buffer, s", &tuning.input_buffer_seconds, 0.0f, 0.5f, "%.2f");
     ImGui::SliderFloat("coyote time, s", &tuning.coyote_seconds, 0.0f, 0.5f, "%.2f");
+    ImGui::SliderFloat("step hop, voxels (0 off)", &tuning.step_hop_voxels, 0.0f, 2.0f, "%.1f");
     ImGui::SliderFloat("fall after, s", &tuning.fall_after_seconds, 0.0f, 0.5f, "%.2f");
     ImGui::SliderFloat("hard landing, u/s", &tuning.hard_landing_speed, 50.0f, 400.0f, "%.0f");
     ImGui::SliderFloat("stride, voxels", &tuning.stride_voxels, 0.0f, 10.0f, "%.1f");
@@ -146,6 +147,7 @@ auto render_jump_panel(game::movement_tuning& tuning) -> void {
     defaults_button(
         tuning,
         {&game::movement_tuning::input_buffer_seconds, &game::movement_tuning::coyote_seconds,
+         &game::movement_tuning::step_hop_voxels,
          &game::movement_tuning::fall_after_seconds, &game::movement_tuning::hard_landing_speed,
          &game::movement_tuning::stride_voxels, &game::movement_tuning::stride_lead_pitch_degrees,
          &game::movement_tuning::stride_trail_pitch_degrees,
@@ -275,7 +277,9 @@ auto render_fighter_state(ecs::world& world, ecs::entity player) -> void {
         fighter.is_foot_stepping(1) ? ", RIGHT STEP" : "", fighter.get_turn_steps()
     );
     ImGui::Text(
-        "Landings: soft %u, hard %u%s", fighter.get_soft_landings(), fighter.get_hard_landings(),
+        "Landings: soft %u, hard %u, step hops %u%s", fighter.get_soft_landings(),
+        fighter.get_hard_landings(),
+        world.get<ecs::character_controller_component>(player).get_step_hop_count(),
         fighter.is_body_locked() ? ", LOCKED" : ""
     );
     ImGui::Text(
@@ -297,7 +301,8 @@ auto render_fighter_state(ecs::world& world, ecs::entity player) -> void {
 auto register_debug_panels(
     gfx::engine& engine,
     ecs::entity player,
-    const gfx::third_person_camera_controller& camera_controller
+    const gfx::third_person_camera_controller& camera_controller,
+    gfx::day_night_cycle& day_night
 ) -> void {
     auto& tool   = engine.get_debug_tool();
     auto& world  = engine.get_world();
@@ -310,6 +315,9 @@ auto register_debug_panels(
     tool.add_panel(menu, "Strike", [&tuning] { render_strike_panel(tuning); });
     tool.add_panel(menu, "Dodge", [&tuning] { render_dodge_panel(tuning); });
     tool.add_panel(menu, "Input", [&world, player] { render_input_panel(world, player); });
+    tool.add_panel(menu, "Sky", [&day_night, &renderer = engine.get_renderer()] {
+        day_night.draw_controls(renderer);
+    });
     tool.add_panel(menu, "Body", [&world, player, &camera_controller] {
         render_body_panel(world, player, camera_controller);
     });

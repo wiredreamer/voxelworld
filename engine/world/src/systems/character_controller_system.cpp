@@ -16,6 +16,33 @@ auto approach(const vec3f& from, const vec3f& to, float32 max_step) -> vec3f {
     return from + gap * (max_step / gap_length);
 }
 
+constexpr float32 step_probe_voxels     = 0.25f;
+constexpr float32 step_probe_seconds    = 0.12f;
+constexpr float32 step_clearance_voxels = 0.2f;
+constexpr float32 step_floor_skin       = 1.0f;
+constexpr float32 step_input_threshold  = 0.1f;
+
+auto box_hits_solid(const world_grid& grid, const vec3f& lo, const vec3f& hi) -> bool {
+    const int32 vs_i = grid.world_units_per_voxel();
+    const auto vs    = static_cast<float32>(vs_i);
+
+    const auto first = [vs](float32 v) -> int32 { return static_cast<int32>(std::floor(v / vs)); };
+    const auto last  = [vs](float32 v) -> int32 {
+        return static_cast<int32>(std::ceil(v / vs)) - 1;
+    };
+
+    for (int32 vx = first(lo.x); vx <= last(hi.x); ++vx) {
+        for (int32 vy = first(lo.y); vy <= last(hi.y); ++vy) {
+            for (int32 vz = first(lo.z); vz <= last(hi.z); ++vz) {
+                if (!grid.get_voxel(vec3i{vx * vs_i, vy * vs_i, vz * vs_i}).is_empty()) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
 auto planar_step(
     const character_controller_component& cc, const vec3f& from, const vec3f& to, float32 dt
 ) -> float32 {
@@ -73,6 +100,28 @@ auto character_controller_system::update(float32 delta_time) -> void {
             mi.wish_axes_ = axis_flag::xz | axis_flag::y;
             cc.left_ground_by_jump_ = true;
             ++cc.jump_count_;
+        } else if (cc.step_hop_voxels_ > 0.0f && !jump_waiting_for_physics && rb.is_grounded()) {
+            const vec3f wish{cc.move_input_.x, 0.0f, cc.move_input_.z};
+            const float32 wish_length = math::length(wish);
+            const auto* grid = world_->system<world_grid_system>().grid();
+            if (wish_length > step_input_threshold && grid != nullptr) {
+                const auto vs        = static_cast<float32>(grid->world_units_per_voxel());
+                const float32 rise   = cc.step_hop_voxels_ * vs;
+                const float32 reach  = std::max(
+                    step_probe_voxels * vs, math::length(planar_next) * step_probe_seconds
+                );
+
+                if (step_ahead_(ent, wish * (reach / wish_length), rise)) {
+                    const float32 gravity = std::abs(
+                        world_->system<physics_system>().get_gravity() * rb.get_gravity_scale()
+                    );
+                    mi.wish_velocity_.y =
+                        std::sqrt(2.0f * gravity * (rise + (step_clearance_voxels * vs)));
+                    mi.wish_axes_ = axis_flag::xz | axis_flag::y;
+                    cc.left_ground_by_jump_ = true;
+                    ++cc.step_hop_count_;
+                }
+            }
         }
 
         auto facing_len = math::length(cc.facing_direction_);
@@ -98,6 +147,36 @@ auto character_controller_system::update(float32 delta_time) -> void {
         cc.jump_requested_ = false;
         cc.move_input_ = {0.0f, 0.0f, 0.0f};
     }
+}
+
+auto character_controller_system::step_ahead_(
+    entity ent, const vec3f& ahead, float32 rise
+) const -> bool {
+    auto& reg = world_->registry();
+    const auto* grid = world_->system<world_grid_system>().grid();
+    if (grid == nullptr || !reg.has<box_collider_component>(ent) ||
+        !reg.has<transform_component>(ent)) {
+        return false;
+    }
+
+    const auto& collider = reg.get<box_collider_component>(ent);
+    const vec3f center =
+        reg.get<transform_component>(ent).get_position() + collider.get_offset();
+    const vec3f half = collider.get_extents() * 0.5f;
+
+    const vec3f lifted{0.0f, rise + 0.01f, 0.0f};
+    const vec3f lo = center - half;
+    const vec3f hi = center + half;
+
+    const vec3f feet_lo{lo.x, lo.y + step_floor_skin, lo.z};
+    const vec3f feet_hi{hi.x, std::min(hi.y, lo.y + rise), hi.z};
+
+    if (!box_hits_solid(*grid, feet_lo + ahead, feet_hi + ahead)) {
+        return false;
+    }
+
+    return !box_hits_solid(*grid, lo + lifted, hi + lifted) &&
+           !box_hits_solid(*grid, lo + lifted + ahead, hi + lifted + ahead);
 }
 
 character_controller_system::controller_modifier::controller_modifier(
@@ -215,6 +294,18 @@ auto character_controller_system::controller_modifier::request_jump(
     }
     auto& comp = reg.get<character_controller_component>(entity_);
     comp.jump_requested_ = true;
+    return *this;
+}
+
+auto character_controller_system::controller_modifier::set_step_hop_voxels(
+    float32 voxels
+) -> controller_modifier& {
+    auto& reg = system_->world_->registry();
+    if (!reg.has<character_controller_component>(entity_)) {
+        return *this;
+    }
+    auto& comp = reg.get<character_controller_component>(entity_);
+    comp.step_hop_voxels_ = voxels;
     return *this;
 }
 

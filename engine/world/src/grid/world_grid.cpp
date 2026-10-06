@@ -23,6 +23,69 @@ auto world_grid::get_voxel(
     return it->second->get_voxel(lc / world_units_per_voxel_);
 }
 
+auto world_grid::light_at(
+    const vec3f& world_pos
+) const -> world_light {
+    constexpr auto full = static_cast<float32>(light_column::max_level);
+
+    const auto vs = static_cast<float32>(world_units_per_voxel_);
+    const vec3f cell{
+        (world_pos.x / vs) - 0.5F, (world_pos.y / vs) - 0.5F, (world_pos.z / vs) - 0.5F
+    };
+    const vec3i base{
+        static_cast<int32>(std::floor(cell.x)), static_cast<int32>(std::floor(cell.y)),
+        static_cast<int32>(std::floor(cell.z))
+    };
+    const vec3f frac{
+        cell.x - static_cast<float32>(base.x), cell.y - static_cast<float32>(base.y),
+        cell.z - static_cast<float32>(base.z)
+    };
+
+    float32 weight = 0.0F;
+    float32 sky    = 0.0F;
+    float32 block  = 0.0F;
+
+    for (int32 corner = 0; corner < 8; ++corner) {
+        const vec3i step{corner & 1, (corner >> 1) & 1, (corner >> 2) & 1};
+        const vec3i voxel_pos = base + step;
+        const float32 w = (step.x != 0 ? frac.x : 1.0F - frac.x) *
+                          (step.y != 0 ? frac.y : 1.0F - frac.y) *
+                          (step.z != 0 ? frac.z : 1.0F - frac.z);
+
+        const vec3i at = voxel_pos * world_units_per_voxel_;
+        const auto it  = chunks_.find(world_to_chunk_coord(at));
+        if (it == chunks_.end()) {
+            weight += w;
+            sky += w * full;
+            continue;
+        }
+
+        const vec3i local = world_to_local_coord(at) / world_units_per_voxel_;
+        if (!it->second->get_voxel(local).is_empty()) {
+            continue;
+        }
+
+        const auto& volume = *it->second->get_volume();
+        const auto* sky_field   = volume.get_sky_light();
+        const auto* block_field = volume.get_block_light();
+        if (sky_field == nullptr) {
+            continue;
+        }
+
+        weight += w;
+        sky += w * static_cast<float32>(sky_field->level_at(local));
+        if (block_field != nullptr) {
+            block += w * static_cast<float32>(block_field->level_at(local));
+        }
+    }
+
+    if (weight <= 0.0001F) {
+        return {};
+    }
+
+    return {.sky = sky / (weight * full), .block = block / (weight * full)};
+}
+
 auto world_grid::set_voxel(
     vec3i world_pos, voxel v
 ) -> void {

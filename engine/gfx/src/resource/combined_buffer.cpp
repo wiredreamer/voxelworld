@@ -32,6 +32,28 @@ auto is_axis_aligned(
     return true;
 }
 
+// см. docs/lighting.md#тела-в-пещере
+auto instance_light_column(
+    const world_light& light
+) -> std::array<float32, 4> {
+    return {1.0f - light.sky, light.block, 0.0f, 1.0f};
+}
+
+constexpr std::size_t instance_light_offset = 12 * sizeof(float32);
+
+auto normal_matrix_of(
+    const mat4f& transform_matrix, const world_light& light
+) -> mat4f {
+    auto normal = math::transpose_matrix(
+        math::inverse_matrix(transform_matrix).value_or(transform_matrix)
+    );
+    const auto column = instance_light_column(light);
+    for (int32 row = 0; row < 4; ++row) {
+        normal[row, 3] = column[static_cast<std::size_t>(row)];
+    }
+    return normal;
+}
+
 }  // namespace
 
 combined_buffer::~combined_buffer() {
@@ -174,8 +196,7 @@ auto combined_buffer::allocate(
         sizeof(mat4f)
     );
 
-    const auto normal_matrix =
-        math::transpose_matrix(math::inverse_matrix(transform_matrix).value_or(transform_matrix));
+    const auto normal_matrix = normal_matrix_of(transform_matrix, world_light{});
     const auto normal_staged = staging_->stage_struct(normal_matrix);
     staging_->copy_to(
         normal_matrix_buffer_->get_buffer(),
@@ -312,7 +333,8 @@ auto combined_buffer::write_mesh(
 }
 
 auto combined_buffer::write_transform(
-    entity ent, const mat4f& transform_matrix, const vw::spatial::aabb& bounds
+    entity ent, const mat4f& transform_matrix, const vw::spatial::aabb& bounds,
+    const world_light& light
 ) -> void {
     auto& [instance_index, key] = entity_allocations_[ent];
     const auto model_staged = staging_->stage_struct(transform_matrix);
@@ -323,8 +345,7 @@ auto combined_buffer::write_transform(
         sizeof(mat4f)
     );
 
-    const auto normal_matrix =
-        math::transpose_matrix(math::inverse_matrix(transform_matrix).value_or(transform_matrix));
+    const auto normal_matrix = normal_matrix_of(transform_matrix, light);
     const auto normal_staged = staging_->stage_struct(normal_matrix);
     staging_->copy_to(
         normal_matrix_buffer_->get_buffer(),
@@ -334,6 +355,20 @@ auto combined_buffer::write_transform(
     );
 
     write_bounds_(instance_index, transform_matrix, bounds);
+}
+
+auto combined_buffer::write_light(
+    entity ent, const world_light& light
+) -> void {
+    const auto instance_index = entity_allocations_[ent].instance_index;
+    const auto column         = instance_light_column(light);
+    const auto staged         = staging_->stage_struct(column);
+    staging_->copy_to(
+        normal_matrix_buffer_->get_buffer(),
+        (instance_index * sizeof(mat4f)) + instance_light_offset,
+        staged,
+        sizeof(column)
+    );
 }
 
 auto combined_buffer::write_visibility(

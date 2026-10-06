@@ -852,3 +852,69 @@ TEST_CASE("a strike leaves the guard at once, goes where the body looks and the 
     s.g.run_for(0.2F);
     REQUIRE(s.action_state() == "block");
 }
+
+TEST_CASE("running into a one voxel step hops onto it, a taller wall stops the run", "[game][jump]") {
+    const int32 wall_voxels = GENERATE(1, 2);
+    INFO("wall " << wall_voxels << " voxels");
+
+    grounded_world g;
+    REQUIRE(g.settle());
+
+    auto& mapper = g.world.system<game::input_system>().mapper();
+    mapper.cursor_at(0.0, 0.0);
+    g.tick();
+
+    const vec3f look = g.world.get<game::player_input_component>(g.player).get_frame().look_forward_flat();
+    const bool along_x = std::abs(look.x) > std::abs(look.z);
+    const int32 ahead  = (along_x ? look.x : look.z) > 0.0F ? 1 : -1;
+
+    const vec3f start = g.world.get<ecs::transform_component>(g.player).get_position();
+    const auto vs     = static_cast<float32>(units_per_voxel);
+    const int32 floor_y = static_cast<int32>(std::lround((start.y - 0.5F) / vs)) - 1;
+    const vec3i origin{
+        static_cast<int32>(std::floor(start.x / vs)), floor_y,
+        static_cast<int32>(std::floor(start.z / vs))
+    };
+
+    auto& grid = *g.world.system<ecs::world_grid_system>().grid();
+    const auto put = [&](int32 along, int32 aside, int32 up, voxel v) {
+        const vec3i offset = along_x ? vec3i{along * ahead, up, aside} : vec3i{aside, up, along * ahead};
+        grid.set_voxel((origin + offset) * units_per_voxel, v);
+    };
+
+    constexpr int32 wall_at = 4;
+    for (int32 along = -3; along <= 16; ++along) {
+        for (int32 aside = -3; aside <= 3; ++aside) {
+            put(along, aside, 0, voxels::red[6]);
+            for (int32 up = 1; up <= 8; ++up) {
+                const bool wall = along >= wall_at && up <= wall_voxels;
+                put(along, aside, up, wall ? voxels::red[6] : voxels::air);
+            }
+        }
+    }
+    g.run_for(0.3F);
+    REQUIRE(g.grounded());
+
+    const uint32 hops_before = g.world.get<ecs::character_controller_component>(g.player).get_step_hop_count();
+    mapper.key(keys::W, true);
+    g.run_for(0.7F);
+    mapper.key(keys::W, false);
+    g.run_for(0.4F);
+
+    const vec3f end      = g.world.get<ecs::transform_component>(g.player).get_position();
+    const uint32 hops    = g.world.get<ecs::character_controller_component>(g.player).get_step_hop_count() - hops_before;
+    const float32 wall_face = (static_cast<float32>(along_x ? origin.x : origin.z) + 0.5F +
+                               static_cast<float32>(ahead) * (static_cast<float32>(wall_at) - 0.5F)) * vs;
+    const float32 travelled = static_cast<float32>(ahead) * ((along_x ? end.x : end.z) - wall_face);
+
+    REQUIRE(g.grounded());
+    if (wall_voxels == 1) {
+        REQUIRE(hops == 1);
+        REQUIRE(end.y == Catch::Approx(start.y + vs).margin(0.5F));
+        REQUIRE(travelled > 2.0F * vs);
+    } else {
+        REQUIRE(hops == 0);
+        REQUIRE(end.y == Catch::Approx(start.y).margin(0.5F));
+        REQUIRE(travelled < 0.0F);
+    }
+}

@@ -92,6 +92,10 @@ auto combined_buffer_pool::update(
         update_transforms_(world);
     });
 
+    stats_.timing.light_ms = measure_ms([&] {
+        update_instance_light_(world);
+    });
+
     stats_.chunk_cull.walk_ms = measure_ms([&] {
         update_chunk_visibility_(world, camera.get_position(), !camera.is_orthographic());
     });
@@ -110,16 +114,8 @@ auto combined_buffer_pool::process_destroyed_(world_type& world) -> void {
         hidden_entities_.erase(ent);
         if (auto* info = entity_buffer_infos_.get(ent)) {
             touched_bounds_.push_back(info->bounds);
-            auto swapped = buffers_[info->buffer_index]->free(ent);
-            if (swapped && world.has<transform_component>(*swapped)) {
-                auto& tc = world.get<transform_component>(*swapped);
-                vw::spatial::aabb bounds{};
-                if (world.has<spatial_component>(*swapped)) {
-                    bounds = world.get<spatial_component>(*swapped)
-                                 .get_bounds();
-                }
-                buffers_[info->buffer_index]->write_transform(
-                    *swapped, model_matrix(tc, world.get<model_component>(*swapped)), bounds);
+            if (const auto swapped = buffers_[info->buffer_index]->free(ent)) {
+                rewrite_swapped_(world, info->buffer_index, *swapped);
             }
             entity_buffer_infos_.remove(ent);
         }
@@ -258,17 +254,8 @@ auto combined_buffer_pool::update_meshes_(
             hidden_entities_.erase(ent);
 
             if (auto* buffer_info = entity_buffer_infos_.get(ent)) {
-                auto swapped = buffers_[buffer_info->buffer_index]->free(ent);
-                if (swapped && world.has<transform_component>(*swapped)) {
-                    auto& tc = world.get<transform_component>(*swapped);
-                    vw::spatial::aabb swap_bounds{};
-                    if (world.has<spatial_component>(*swapped)) {
-                        swap_bounds = world.get<spatial_component>(*swapped)
-                                          .get_bounds();
-                    }
-                    buffers_[buffer_info->buffer_index]->write_transform(
-                        *swapped, model_matrix(tc, world.get<model_component>(*swapped)),
-                        swap_bounds);
+                if (const auto swapped = buffers_[buffer_info->buffer_index]->free(ent)) {
+                    rewrite_swapped_(world, buffer_info->buffer_index, *swapped);
                 }
                 entity_buffer_infos_.remove(ent);
             }
@@ -339,16 +326,8 @@ auto combined_buffer_pool::update_meshes_(
 
             touched_bounds_.push_back(buffer_info.bounds);
 
-            auto swapped = buffer->free(ent);
-            if (swapped && world.has<transform_component>(*swapped)) {
-                auto& tc = world.get<transform_component>(*swapped);
-                vw::spatial::aabb sw_bounds{};
-                if (world.has<spatial_component>(*swapped)) {
-                    sw_bounds = world.get<spatial_component>(*swapped)
-                                    .get_bounds();
-                }
-                buffer->write_transform(
-                    *swapped, model_matrix(tc, world.get<model_component>(*swapped)), sw_bounds);
+            if (const auto swapped = buffer->free(ent)) {
+                rewrite_swapped_(world, buffer_info.buffer_index, *swapped);
             }
         } else if (staging_.available() < mesh_staging_cost) {
             merge_buffer_.push_back(ent);
@@ -362,7 +341,13 @@ auto combined_buffer_pool::update_meshes_(
         uploaded_models_.emplace_back(model_id, step);
 
         entity_buffer_infos_.emplace(
-            ent, entity_buffer_info{required_chunk_size, buffer_index, ent_bounds}
+            ent,
+            entity_buffer_info{
+                .chunk_size   = required_chunk_size,
+                .buffer_index = buffer_index,
+                .bounds       = ent_bounds,
+                .lit_by_world = model_comp.get_chunk() == nullptr,
+            }
         );
         touched_bounds_.push_back(ent_bounds);
         ++mesh_writes;
@@ -643,7 +628,8 @@ auto combined_buffer_pool::update_transforms_(
             tr_bounds = world.get<spatial_component>(ent).get_bounds();
         }
         buffers_[info.buffer_index]->write_transform(
-            ent, model_matrix(transform_comp, world.get<model_component>(ent)), tr_bounds);
+            ent, model_matrix(transform_comp, world.get<model_component>(ent)), tr_bounds,
+            info.light);
         touched_bounds_.push_back(info.bounds);
         touched_bounds_.push_back(tr_bounds);
         info.bounds = tr_bounds;
@@ -652,6 +638,68 @@ auto combined_buffer_pool::update_transforms_(
     std::sort(merge_buffer_.begin(), merge_buffer_.end());
     transform_pending_entities_.swap(merge_buffer_);
     stats_.transform_pending = static_cast<uint32>(transform_pending_entities_.size());
+}
+
+auto combined_buffer_pool::rewrite_swapped_(
+    world_type& world, std::size_t buffer_index, entity swapped
+) -> void {
+    if (!world.has<transform_component>(swapped)) {
+        return;
+    }
+
+    vw::spatial::aabb bounds{};
+    if (world.has<spatial_component>(swapped)) {
+        bounds = world.get<spatial_component>(swapped).get_bounds();
+    }
+
+    world_light light{};
+    if (const auto* info = entity_buffer_infos_.get(swapped)) {
+        light = info->light;
+    }
+
+    buffers_[buffer_index]->write_transform(
+        swapped,
+        model_matrix(world.get<transform_component>(swapped), world.get<model_component>(swapped)),
+        bounds, light
+    );
+}
+
+auto combined_buffer_pool::update_instance_light_(
+    world_type& world
+) -> void {
+    constexpr float32 light_step = 1.0f / 512.0f;
+
+    const auto* grid = world.system<ecs::world_grid_system>().grid();
+    if (grid == nullptr) {
+        return;
+    }
+
+    const auto& entities = entity_buffer_infos_.entities();
+    for (uint32 slot = 0; slot < entity_buffer_infos_.size(); ++slot) {
+        auto& info = entity_buffer_infos_.at(slot);
+        if (!info.lit_by_world) {
+            continue;
+        }
+
+        const entity ent = entities[slot];
+        if (!world.has<spatial_component>(ent)) {
+            continue;
+        }
+
+        const world_light target =
+            grid->light_at(world.get<spatial_component>(ent).get_bounds().center());
+        if (std::abs(target.sky - info.light.sky) < light_step &&
+            std::abs(target.block - info.light.block) < light_step) {
+            continue;
+        }
+
+        if (staging_.available() < sizeof(vec4f)) {
+            return;
+        }
+
+        buffers_[info.buffer_index]->write_light(ent, target);
+        info.light = target;
+    }
 }
 
 auto combined_buffer_pool::get_stats() const -> const combined_buffer_pool_stats& {

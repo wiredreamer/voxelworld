@@ -30,6 +30,7 @@ dummy_enemy::dummy_enemy(
             .with<ecs::rigid_body_component>()
             .with<ecs::box_collider_component>()
             .with<ecs::model_component>()
+            .with(ecs::blob_shadow_component{12.0f, 48.0f, 0.6f})
             .get_entity();
 
     transform_sys

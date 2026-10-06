@@ -41,6 +41,7 @@ target_sources(vw_gfx
             src/render/render_uniforms.cppm
             src/render/renderer_stats.cppm
             src/render/renderer.cppm
+            src/render/day_night.cppm
             src/debug/debug.cppm
             src/debug/debug_window.cppm
             src/debug/debug_primitive.cppm
@@ -72,6 +73,7 @@ target_sources(vw_gfx
         src/render/shadow_map.cpp
         src/render/cull_pipeline.cpp
         src/render/renderer.cpp
+        src/render/day_night.cpp
         src/debug/debug_primitive.cpp
         src/debug/debug_window.cpp
         src/debug/debug_panels_stats.cpp
