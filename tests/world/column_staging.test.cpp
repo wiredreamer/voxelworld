@@ -17,30 +17,38 @@ constexpr int32 view_distance = 2;
 auto shallow_params() -> perlin_terrain_generator::params {
     perlin_terrain_generator::params p{};
     p.world_bottom_y = -192;
+    p.island         = false;
+    hills_biome hills{};
+    p.biomes         = {hills};
     return p;
 }
 
 class settled_grid {
 public:
-    settled_grid(world& w, job_system& jobs) : world_{&w} {
-        auto& models = w.resource<asset::model_registry>();
-        auto& gs     = w.system<world_grid_system>();
+    settled_grid(world& w, job_system& jobs) : world_{&w}, jobs_{&jobs} {
+        install(shallow_params());
 
-        gs.set_grid(std::make_unique<world_grid>(w, 8));
+        viewer_ = w.create().with<transform_component>().with<world_view_component>().get_entity();
+        w.system<world_grid_system>().modify_view(viewer_).set_view_distance(view_distance);
+
+        settle();
+    }
+
+    auto install(const perlin_terrain_generator::params& params) -> void {
+        auto& models = world_->resource<asset::model_registry>();
+        auto& gs     = world_->system<world_grid_system>();
+
+        gs.set_grid(std::make_unique<world_grid>(*world_, 8));
         gs.set_loader(
             std::make_unique<chunk_loader>(
                 std::make_unique<perlin_terrain_generator>(
-                    models.get_identity_pool(), models.get_page_pool(), shallow_params()
+                    models.get_identity_pool(), models.get_page_pool(), params
                 ),
-                jobs
+                *jobs_
             ),
-            jobs
+            *jobs_
         );
-
-        viewer_ = w.create().with<transform_component>().with<world_view_component>().get_entity();
-        gs.modify_view(viewer_).set_view_distance(view_distance);
-
-        settle();
+        first_seen_.clear();
     }
 
     auto settle() -> void {
@@ -103,6 +111,7 @@ private:
     }
 
     world* world_;
+    job_system* jobs_;
     entity viewer_;
     std::unordered_map<vec3i, asset::model_identity> first_seen_;
     int32 placed_this_frame_ = 0;
@@ -172,6 +181,21 @@ TEST_CASE("a placed chunk is never reissued", "[world][grid]") {
     REQUIRE(settled.seen_count() > 0);
 
     REQUIRE(settled.reissued() == 0);
+}
+
+TEST_CASE("a new generator fills the view without the viewer moving", "[world][grid]") {
+    job_system jobs;
+    world w;
+    settled_grid settled{w, jobs};
+    REQUIRE(settled.seen_count() > 0);
+
+    auto reseeded = shallow_params();
+    reseeded.seed = 7;
+    settled.install(reseeded);
+    settled.settle();
+
+    REQUIRE(settled.seen_count() > 0);
+    REQUIRE(settled.grid().has_column({0, 0}));
 }
 
 TEST_CASE("a placed chunk knows every neighbour it has", "[world][grid]") {

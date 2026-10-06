@@ -18,7 +18,7 @@ constexpr auto entry_for(std::string_view name) -> scene_entry {
             }};
 }
 
-const std::array<scene_entry, 8> scene_table{{
+const std::array<scene_entry, 9> scene_table{{
     entry_for<terrain_scene>("terrain"),
     entry_for<voxel_edits_scene>("voxel-edits"),
     entry_for<lamp_edits_scene>("lamp-edits"),
@@ -27,6 +27,7 @@ const std::array<scene_entry, 8> scene_table{{
     entry_for<blob_shadows_scene>("blob-shadows"),
     entry_for<animated_crowd_scene>("animated-crowd"),
     entry_for<lod_probe_scene>("lod-probe"),
+    entry_for<terrain_lab_scene>("terrain-lab"),
 }};
 
 }  // namespace

@@ -15,9 +15,18 @@ auto setup_world_grid(gfx::engine& engine) -> world_setup_result {
     auto& world    = engine.get_world();
     auto& registry = world.resource<asset::model_registry>();
 
+    constexpr log::log_category lc{"arena"};
+
     ecs::perlin_terrain_generator::params params{
         .world_units_per_voxel = 16,
     };
+    if (auto loaded = ecs::load_terrain_settings(
+            "assets/data/world_gen.json", engine.get_voxel_registry(), params
+        )) {
+        params = std::move(*loaded);
+    } else {
+        log::warn(lc, "world generation settings not loaded, built-in ones are used: {}", loaded.error());
+    }
 
     auto generator = std::make_unique<ecs::perlin_terrain_generator>(
         registry.get_identity_pool(), registry.get_page_pool(), params

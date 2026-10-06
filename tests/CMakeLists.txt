@@ -156,6 +156,10 @@ target_link_libraries(world_tests PRIVATE
     Catch2::Catch2WithMain
 )
 
+target_compile_definitions(world_tests PRIVATE
+    VW_ASSET_DIR="${CMAKE_SOURCE_DIR}/assets"
+)
+
 target_compile_features(world_tests PRIVATE cxx_std_23)
 vw_use_std_module(world_tests)
 

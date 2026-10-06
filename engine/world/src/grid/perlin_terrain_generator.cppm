@@ -1,5 +1,8 @@
 export module vw.world:terrain.perlin;
 import :terrain.generator;
+import :terrain.biomes;
+import :terrain.noise;
+import :terrain.regions;
 
 import std;
 
@@ -16,14 +19,6 @@ public:
 
         int32 world_bottom_y = -448;
 
-        int32 soil_depth_max      = 5;
-        float32 soil_frequency    = 0.012F;
-        float32 soil_slope_limit  = 1.4F;
-        int32 soil_altitude_start = 55;
-        int32 soil_altitude_end   = 78;
-        int32 snow_line           = 82;
-
-        int32 rock_skin     = 4;
         int32 rock_deep_y   = -64;
         int32 rock_bottom_y = -256;
 
@@ -61,21 +56,25 @@ public:
 
         int32 cave_sample_stride = 4;
 
-        float32 continent_frequency = 0.003F;
-        float32 terrain_frequency   = 0.02F;
-        int32 octaves               = 4;
-        float32 lacunarity          = 2.0F;
-        float32 persistence         = 0.5F;
+        bool island                    = true;
+        float32 region_spacing_voxels  = 1000.0F;
+        float32 region_jitter          = 0.35F;
+        float32 region_warp_voxels     = 60.0F;
+        float32 region_warp_frequency  = 0.004F;
+        float32 island_taper_voxels    = 128.0F;
+        int32 island_min_thickness     = 6;
+        float32 island_jag_voxels      = 10.0F;
+        float32 island_jag_frequency   = 0.03F;
 
-        int32 plains_height    = 20;
-        int32 hills_height     = 35;
-        int32 mountains_height = 55;
+        float32 relief_warp_frequency  = 0.003F;
+        float32 relief_warp_voxels     = 40.0F;
+        float32 landscape_frequency    = 0.003F;
 
-        float32 ridge_frequency = 0.015F;
-        float32 ridge_weight    = 0.6F;
+        float32 moisture_frequency     = 0.002F;
+        float32 biome_blend            = 0.15F;
+        float32 tone_blend             = 0.3F;
 
-        float32 warp_frequency = 0.01F;
-        float32 warp_strength  = 30.0F;
+        std::vector<terrain_biome> biomes = default_biomes();
     };
 
     perlin_terrain_generator(asset::model_identity_pool& identity_pool, asset::page_pool& pool);
@@ -84,12 +83,28 @@ public:
 
     auto generate(terrain_context& ctx) -> void override;
 
-    [[nodiscard]] auto surface_height_at(int32 wx, int32 wz) const -> int32;
+    [[nodiscard]] auto surface_height_at(int32 wx, int32 wz) const -> std::optional<int32>;
+
+    [[nodiscard]] auto get_regions() const -> const region_map& {
+        return regions_;
+    }
+
+    [[nodiscard]] auto biome_at(int32 wx, int32 wz) const -> const terrain_biome&;
+    [[nodiscard]] auto surface_voxel_at(int32 wx, int32 wz) const -> std::optional<voxel>;
 
 private:
-    [[nodiscard]] auto noise2d(float64 x, float64 y) const -> float64;
+    struct column_shape {
+        int32 surface      = 0;
+        int32 bottom       = 0;
+        float32 height     = 0.0F;
+        uint8 biome        = 0;
+        uint8 neighbour    = 0;
+        float32 tone_share = 0.0F;
 
-    [[nodiscard]] auto noise3d(float64 x, float64 y, float64 z) const -> float64;
+        [[nodiscard]] auto is_void() const -> bool {
+            return bottom > surface;
+        }
+    };
 
     [[nodiscard]] auto cave_field_at(int32 wx, int32 wy, int32 wz, int32 depth) const -> float32;
 
@@ -99,15 +114,22 @@ private:
 
     [[nodiscard]] auto cave_entrance_leak_at(int32 wx, int32 wz) const -> float32;
 
-    [[nodiscard]] auto octave_noise(float64 x, float64 y) const -> float64;
-    [[nodiscard]] auto ridged_noise(float64 x, float64 y) const -> float64;
-    [[nodiscard]] auto continent_at(float64 nx, float64 nz) const -> float64;
+    [[nodiscard]] auto shape_at(int32 wx, int32 wz) const -> column_shape;
 
-    [[nodiscard]] auto stone_height_at(int32 wx, int32 wz) const -> int32;
-    [[nodiscard]] auto soil_depth_at(int32 wx, int32 wz, int32 stone, float32 slope) const -> int32;
+    struct relief_sample {
+        float64 height     = 0.0;
+        uint8 biome        = 0;
+        uint8 neighbour    = 0;
+        float32 tone_share = 0.0F;
+    };
+
+    [[nodiscard]] auto climate_at(float64 x, float64 z) const -> biome_point;
+    [[nodiscard]] auto relief_at(float64 x, float64 z) const -> relief_sample;
+    [[nodiscard]] auto paint_at_(int32 wx, int32 wz, const column_shape& shape, float32 slope) const
+        -> column_paint;
 
     [[nodiscard]] auto rock_voxel_at(int32 wy) const -> voxel;
-    [[nodiscard]] auto voxel_at(int32 wy, int32 stone_top, int32 surface_top) const -> voxel;
+    [[nodiscard]] auto voxel_at(int32 wy, int32 surface, const column_paint& paint) const -> voxel;
 
     struct column_profile {
         static constexpr int32 size   = 64;
@@ -116,18 +138,22 @@ private:
         static constexpr int32 page   = 8;
         static constexpr int32 pages  = size / page;
 
-        std::array<int32, stride * stride> stone{};
-        std::array<int32, size * size> surface{};
+        std::array<int32, stride * stride> surface{};
+        std::array<float32, stride * stride> height{};
+        std::array<int32, size * size> bottom{};
+        std::array<column_paint, size * size> paint{};
 
-        std::array<int32, pages * pages> page_min_stone{};
+        std::array<int32, pages * pages> page_min_rock{};
         std::array<int32, pages * pages> page_max_surface{};
+        std::array<int32, pages * pages> page_min_bottom{};
+        std::array<int32, pages * pages> page_max_bottom{};
 
-        int32 min_stone   = 0;
         int32 max_surface = 0;
+        int32 min_bottom  = 0;
 
         int32 voxels_per_cell = 1;
 
-        [[nodiscard]] static auto stone_index(int32 x, int32 z) -> int32 {
+        [[nodiscard]] static auto ring_index(int32 x, int32 z) -> int32 {
             return ((x + apron) * stride) + (z + apron);
         }
 
@@ -145,14 +171,12 @@ private:
 
     auto generate_chunk(terrain_context& ctx, int32 chunk_y, const column_profile& profile) -> void;
 
-    static auto fade(float64 t) -> float64;
-    static auto lerp(float64 t, float64 a, float64 b) -> float64;
-    static auto grad(int32 hash, float64 x, float64 y) -> float64;
-
     asset::model_identity_pool* identity_pool_;
     asset::page_pool* page_pool_;
     params params_;
-    std::array<int32, 512> perm_;
+    std::vector<terrain_biome> biomes_;
+    perlin_noise noise_;
+    region_map regions_;
 };
 
 }  // namespace vw::ecs

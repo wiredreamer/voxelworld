@@ -30,19 +30,30 @@ auto testbed_app::render_ui() -> void {
         ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoNav |
         ImGuiWindowFlags_NoFocusOnAppearing;
 
-    ImGui::Begin("World Grid Test", nullptr, window_flags);
-    ImGui::Text("Controls:");
-    ImGui::Text("WASD + Mouse - moving");
-    ImGui::Text("F1 - toggle cursor");
-    ImGui::Text("LMB - use the tool, cursor captured");
-    ImGui::Text("N - pause the sun, [ ] - move it");
-    ImGui::Text("CTRL+F12 - engine debug tool");
-    ImGui::Text("ESC - exit");
-    ImGui::Separator();
+    ImGui::Begin("Testbed", nullptr, window_flags);
 
-    day_night_.draw_controls(get_engine().get_renderer());
+    if (scene_ != nullptr) {
+        ImGui::Text("scene: %s", std::string{scene_->name()}.c_str());
+        scene_->ui();
+    }
 
-    ImGui::Separator();
+    float speed = camera_controller_->get_camera_speed();
+    if (ImGui::SliderFloat("Speed", &speed, 1.0f, 5000.0f, "%.0f")) {
+        camera_controller_->set_camera_speed(speed);
+    }
+
+    if (ImGui::CollapsingHeader("Controls")) {
+        ImGui::TextUnformatted("WASD + mouse - move");
+        ImGui::TextUnformatted("F1 - toggle cursor");
+        ImGui::TextUnformatted("LMB - use the tool, cursor captured");
+        ImGui::TextUnformatted("N - pause the sun, [ ] - move it");
+        ImGui::TextUnformatted("CTRL+F12 - engine debug tool");
+        ImGui::TextUnformatted("ESC - exit");
+    }
+
+    if (ImGui::CollapsingHeader("Sky")) {
+        day_night_.draw_controls(get_engine().get_renderer());
+    }
 
     if (ImGui::CollapsingHeader("Editing")) {
         static constexpr std::array<const char*, 3> tool_names{"none", "place", "remove"};
@@ -76,13 +87,7 @@ auto testbed_app::render_ui() -> void {
         }
 
         ImGui::Text("edits: %d", edit_clicks_);
-
-        if (scene_ != nullptr) {
-            scene_->ui();
-        }
     }
-
-    ImGui::Separator();
 
     if (ImGui::CollapsingHeader("Emitters")) {
         bool torch = torch_.is_valid();
@@ -103,12 +108,6 @@ auto testbed_app::render_ui() -> void {
                 ImGui::TextUnformatted(drop_status_.c_str());
             }
         }
-    }
-
-    ImGui::Separator();
-    float speed = camera_controller_->get_camera_speed();
-    if (ImGui::SliderFloat("Speed", &speed, 1.0f, 5000.0f, "%.0f")) {
-        camera_controller_->set_camera_speed(speed);
     }
 
     ImGui::End();

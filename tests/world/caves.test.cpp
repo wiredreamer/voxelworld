@@ -63,6 +63,20 @@ public:
                 }
             }
         }
+
+        lowest_solid_.assign(static_cast<std::size_t>(size_x()) * size_z(), size_y());
+        highest_solid_.assign(static_cast<std::size_t>(size_x()) * size_z(), -1);
+        for (int32 x = 0; x < size_x(); ++x) {
+            for (int32 z = 0; z < size_z(); ++z) {
+                const std::size_t column = (static_cast<std::size_t>(z) * size_x()) + x;
+                for (int32 y = 0; y < size_y(); ++y) {
+                    if (solid_[at(x, y, z)]) {
+                        lowest_solid_[column]  = std::min(lowest_solid_[column], y);
+                        highest_solid_[column] = y;
+                    }
+                }
+            }
+        }
     }
 
     [[nodiscard]] auto size_x() const -> int32 { return columns_x_ * chunk; }
@@ -77,23 +91,8 @@ public:
     }
 
     [[nodiscard]] auto is_underground(int32 x, int32 y, int32 z) const -> bool {
-        bool above = false;
-        for (int32 up = y + 1; up < size_y(); ++up) {
-            if (is_solid(x, up, z)) {
-                above = true;
-                break;
-            }
-        }
-        if (!above) {
-            return false;
-        }
-
-        for (int32 down = y - 1; down >= 0; --down) {
-            if (is_solid(x, down, z)) {
-                return true;
-            }
-        }
-        return false;
+        const std::size_t column = (static_cast<std::size_t>(z) * size_x()) + x;
+        return y > lowest_solid_[column] && y < highest_solid_[column];
     }
 
     [[nodiscard]] auto at(int32 x, int32 y, int32 z) const -> std::size_t {
@@ -107,6 +106,8 @@ private:
     int32 min_y_     = std::numeric_limits<int32>::max();
     int32 max_y_     = std::numeric_limits<int32>::lowest();
     std::vector<bool> solid_;
+    std::vector<int32> lowest_solid_;
+    std::vector<int32> highest_solid_;
 };
 
 struct cave_stats {
@@ -127,13 +128,13 @@ struct cave_stats {
 };
 
 constexpr vec3i arena_body_units{12, 28, 12};
-constexpr int32 world_units_per_voxel = perlin_terrain_generator::params{}.world_units_per_voxel;
+const int32 world_units_per_voxel = perlin_terrain_generator::params{}.world_units_per_voxel;
 
-[[nodiscard]] constexpr auto voxels_covering(int32 world_units) -> int32 {
+[[nodiscard]] auto voxels_covering(int32 world_units) -> int32 {
     return (world_units + world_units_per_voxel - 1) / world_units_per_voxel;
 }
 
-constexpr vec3i arena_body_voxels{
+const vec3i arena_body_voxels{
     voxels_covering(arena_body_units.x),
     voxels_covering(arena_body_units.y),
     voxels_covering(arena_body_units.z),
@@ -394,7 +395,11 @@ TEST_CASE("some caves are open to the sky", "[world][caves]") {
     asset::model_identity_pool identity_pool;
     asset::page_pool pages;
 
-    perlin_terrain_generator gen{identity_pool, pages, perlin_terrain_generator::params{}};
+    perlin_terrain_generator::params rugged{};
+    rugged.island = false;
+    hills_biome hills{};
+    rugged.biomes    = {hills};
+    perlin_terrain_generator gen{identity_pool, pages, rugged};
 
     std::size_t air       = 0;
     std::size_t reachable = 0;

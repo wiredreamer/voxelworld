@@ -94,6 +94,11 @@ private:
 
         ecs::perlin_terrain_generator::params terrain{};
         terrain.world_bottom_y = -192;
+        terrain.island         = false;
+
+        ecs::plains_biome level{};
+        level.height   = 0.0F;
+        terrain.biomes = {level};
 
         grid.set_grid(std::make_unique<ecs::world_grid>(world, units_per_voxel));
         grid.set_loader(

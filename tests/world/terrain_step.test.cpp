@@ -105,7 +105,7 @@ TEST_CASE("a coarser step keeps the surface within the soil it can shift", "[ter
                 REQUIRE(coarse_top.has_value());
 
                 const int32 drift = std::abs((*coarse_top * step) - *fine_top);
-                REQUIRE(drift <= params.soil_depth_max + step);
+                REQUIRE(drift <= step);
 
                 ++compared;
             }

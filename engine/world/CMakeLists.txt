@@ -28,7 +28,11 @@ target_sources(vw_world
             src/grid/gen_column.cppm
             src/grid/chunk_loader.cppm
             src/grid/terrain_palette.cppm
-        src/grid/perlin_terrain_generator.cppm
+            src/grid/perlin_noise.cppm
+            src/grid/terrain_biomes.cppm
+            src/grid/region_map.cppm
+            src/grid/perlin_terrain_generator.cppm
+            src/grid/terrain_settings.cppm
             src/grid/grid.cppm
             src/grid/chunk_visibility.cppm
             src/grid/chunk.cppm
@@ -57,6 +61,11 @@ target_sources(vw_world
         src/light/light.cpp
         src/spatial/spatial.cpp
         src/grid/terrain.cpp
+        src/grid/region_map.cpp
+        src/grid/terrain_biomes.cpp
+        src/grid/biome_plains.cpp
+        src/grid/biome_hills.cpp
+        src/grid/terrain_settings.cpp
         src/grid/chunk.cpp
         src/grid/world_grid.cpp
         src/systems/animation_fsm_system.cpp

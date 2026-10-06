@@ -7,6 +7,7 @@ export import :scenes.standing_lights;
 export import :scenes.blob_shadows;
 export import :scenes.lod_probe;
 export import :scenes.animated_crowd;
+export import :scenes.terrain_lab;
 
 import std;
 

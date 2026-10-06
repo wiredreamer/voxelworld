@@ -21,14 +21,16 @@ auto world_grid_system::set_grid(
     std::unique_ptr<world_grid> grid
 ) -> void {
     clear_grid_transient_state_(columns_);
-    columns_.grid = std::move(grid);
+    columns_.grid     = std::move(grid);
+    columns_.reseeded = true;
 }
 
 auto world_grid_system::set_loader(
     std::unique_ptr<chunk_loader> loader, job_system& jobs
 ) -> void {
     clear_loader_transient_state_(columns_);
-    columns_.loader = std::move(loader);
+    columns_.loader   = std::move(loader);
+    columns_.reseeded = true;
     columns_.baker  = columns_.loader != nullptr
                   ? std::make_unique<light_baker>(world_->voxel_types(), jobs)
                   : nullptr;
@@ -92,8 +94,9 @@ auto world_grid_system::update(float32) -> void {
     restore_lod_boundaries_();
     update_grid_stats_();
 
-    const bool view_moved =
+    const bool view_changed =
         !reg.requested<world_view_component>().empty() && process_dirty_entities_();
+    const bool view_moved = std::exchange(columns_.reseeded, false) || view_changed;
 
     if (view_moved) {
         stats_.rebuild_active_ms = measure_ms([&] { rebuild_active_set_(); });

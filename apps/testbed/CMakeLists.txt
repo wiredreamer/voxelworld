@@ -22,6 +22,7 @@ target_sources(${PROJECT_NAME}
             src/scenes/blob_shadows.cppm
             src/scenes/lod_probe.cppm
             src/scenes/animated_crowd.cppm
+            src/scenes/terrain_lab.cppm
     PRIVATE
         src/main.cpp
         src/cameras.cpp
@@ -38,9 +39,11 @@ target_sources(${PROJECT_NAME}
         src/scenes/blob_shadows.cpp
         src/scenes/lod_probe.cpp
         src/scenes/animated_crowd.cpp
+        src/scenes/terrain_lab.cpp
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE vwengine imgui::imgui)
+target_compile_definitions(${PROJECT_NAME} PRIVATE VW_TESTBED_ASSET_ROOT="${CMAKE_SOURCE_DIR}/assets")
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_23)
 vw_use_std_module(${PROJECT_NAME})
 vw_set_warnings(${PROJECT_NAME})

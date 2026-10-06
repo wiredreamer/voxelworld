@@ -13,9 +13,33 @@ namespace vw::testbed {
 auto testbed_app::setup_world_grid() -> void {
     auto& world = get_engine().get_world();
 
-    generator_params_ = {
+    install_terrain_(ecs::perlin_terrain_generator::params{
         .world_units_per_voxel = 8,
-    };
+        .island                = false,
+    });
+
+    viewer_ = world.create()
+        .with<ecs::transform_component>()
+        .with<ecs::world_view_component>()
+        .get_entity();
+
+    world.system<ecs::world_grid_system>().modify_view(viewer_).set_view_distance(
+        static_cast<int32>(view_distance_)
+    );
+}
+
+auto testbed_app::rebuild_terrain(
+    ecs::perlin_terrain_generator::params params
+) -> void {
+    install_terrain_(std::move(params));
+}
+
+auto testbed_app::install_terrain_(
+    ecs::perlin_terrain_generator::params params
+) -> void {
+    auto& world = get_engine().get_world();
+
+    generator_params_ = std::move(params);
     auto& registry = world.resource<asset::model_registry>();
     auto generator = std::make_unique<ecs::perlin_terrain_generator>(
         registry.get_identity_pool(), registry.get_page_pool(), generator_params_);
@@ -29,13 +53,6 @@ auto testbed_app::setup_world_grid() -> void {
     auto& gs     = world.system<ecs::world_grid_system>();
     gs.set_grid(std::move(grid));
     gs.set_loader(std::move(loader), get_engine().get_jobs());
-
-    viewer_ = world.create()
-        .with<ecs::transform_component>()
-        .with<ecs::world_view_component>()
-        .get_entity();
-
-    gs.modify_view(viewer_).set_view_distance(static_cast<int32>(view_distance_));
 
     const auto chunk_units = static_cast<float32>(
         ecs::chunk::size * generator_params_.world_units_per_voxel

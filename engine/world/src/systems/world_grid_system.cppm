@@ -92,6 +92,7 @@ private:
     struct column_layer {
         vec2i camera_column{};
         int32 draw_distance = 0;
+        bool reseeded       = false;
 
         std::unique_ptr<world_grid> grid;
         std::unique_ptr<chunk_loader> loader;

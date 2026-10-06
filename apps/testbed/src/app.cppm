@@ -82,6 +82,12 @@ public:
         return *generator_;
     }
 
+    [[nodiscard]] auto terrain_params() const -> const ecs::perlin_terrain_generator::params& {
+        return generator_params_;
+    }
+
+    auto rebuild_terrain(ecs::perlin_terrain_generator::params params) -> void;
+
     [[nodiscard]] auto world_units_per_voxel() const -> int32 {
         return generator_params_.world_units_per_voxel;
     }
@@ -104,6 +110,7 @@ public:
 
 private:
     auto setup_world_grid() -> void;
+    auto install_terrain_(ecs::perlin_terrain_generator::params params) -> void;
     auto try_place_camera() -> void;
     [[nodiscard]] auto scene_camera_() -> std::unique_ptr<camera_rig>;
 

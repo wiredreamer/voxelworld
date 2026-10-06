@@ -123,6 +123,16 @@ auto chunk_loader::generate_(vec2i coord) -> void {
 
 namespace vw::ecs {
 
+namespace {
+
+// см. docs/world.md#слои
+auto slope_between(float32 west, float32 here, float32 east, float32 north, float32 south) -> float32 {
+    const float32 across = std::min(std::abs(here - west), std::abs(east - here));
+    const float32 along  = std::min(std::abs(here - north), std::abs(south - here));
+    return std::max(across, along);
+}
+
+}  // namespace
 
 perlin_terrain_generator::perlin_terrain_generator(
     vw::asset::model_identity_pool& identity_pool, vw::asset::page_pool& pool
@@ -132,112 +142,24 @@ perlin_terrain_generator::perlin_terrain_generator(
 perlin_terrain_generator::perlin_terrain_generator(
     vw::asset::model_identity_pool& identity_pool, vw::asset::page_pool& pool, params p
 )
-    : identity_pool_(&identity_pool), page_pool_(&pool), params_(p) {
-    for (int32 i = 0; i < 256; ++i) {
-        perm_[i] = i;
-    }
-
-    uint32 state = params_.seed;
-    for (int32 i = 255; i > 0; --i) {
-        state   = state * 1664525u + 1013904223u;
-        int32 j = static_cast<int32>(state % static_cast<uint32>(i + 1));
-        std::swap(perm_[i], perm_[j]);
-    }
-
-    for (int32 i = 0; i < 256; ++i) {
-        perm_[i + 256] = perm_[i];
-    }
-}
-
-auto perlin_terrain_generator::fade(
-    float64 t
-) -> float64 {
-    return t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
-}
-
-auto perlin_terrain_generator::lerp(
-    float64 t, float64 a, float64 b
-) -> float64 {
-    return a + t * (b - a);
-}
-
-auto perlin_terrain_generator::grad(
-    int32 hash, float64 x, float64 y
-) -> float64 {
-    int32 h   = hash & 3;
-    float64 u = h < 2 ? x : y;
-    float64 v = h < 2 ? y : x;
-    return ((h & 1) ? -u : u) + ((h & 2) ? -v : v);
-}
-
-auto perlin_terrain_generator::noise2d(
-    float64 x, float64 y
-) const -> float64 {
-    int32 xi = static_cast<int32>(std::floor(x)) & 255;
-    int32 yi = static_cast<int32>(std::floor(y)) & 255;
-
-    float64 xf = x - std::floor(x);
-    float64 yf = y - std::floor(y);
-
-    float64 u = fade(xf);
-    float64 v = fade(yf);
-
-    int32 aa = perm_[perm_[xi] + yi];
-    int32 ab = perm_[perm_[xi] + yi + 1];
-    int32 ba = perm_[perm_[xi + 1] + yi];
-    int32 bb = perm_[perm_[xi + 1] + yi + 1];
-
-    float64 x1 = lerp(u, grad(aa, xf, yf), grad(ba, xf - 1.0, yf));
-    float64 x2 = lerp(u, grad(ab, xf, yf - 1.0), grad(bb, xf - 1.0, yf - 1.0));
-
-    return lerp(v, x1, x2);
-}
-
-auto perlin_terrain_generator::noise3d(
-    float64 x, float64 y, float64 z
-) const -> float64 {
-    const int32 xi = static_cast<int32>(std::floor(x)) & 255;
-    const int32 yi = static_cast<int32>(std::floor(y)) & 255;
-    const int32 zi = static_cast<int32>(std::floor(z)) & 255;
-
-    const float64 xf = x - std::floor(x);
-    const float64 yf = y - std::floor(y);
-    const float64 zf = z - std::floor(z);
-
-    const float64 u = fade(xf);
-    const float64 v = fade(yf);
-    const float64 w = fade(zf);
-
-    const int32 a  = perm_[xi] + yi;
-    const int32 aa = perm_[a] + zi;
-    const int32 ab = perm_[a + 1] + zi;
-    const int32 b  = perm_[xi + 1] + yi;
-    const int32 ba = perm_[b] + zi;
-    const int32 bb = perm_[b + 1] + zi;
-
-    const auto g = [](int32 hash, float64 px, float64 py, float64 pz) -> float64 {
-        const int32 h    = hash & 15;
-        const float64 gu = h < 8 ? px : py;
-        const float64 gv = h < 4 ? py : (h == 12 || h == 14 ? px : pz);
-        return ((h & 1) != 0 ? -gu : gu) + ((h & 2) != 0 ? -gv : gv);
-    };
-
-    const float64 x1 = lerp(u, g(perm_[aa], xf, yf, zf), g(perm_[ba], xf - 1.0, yf, zf));
-    const float64 x2 = lerp(u, g(perm_[ab], xf, yf - 1.0, zf), g(perm_[bb], xf - 1.0, yf - 1.0, zf));
-    const float64 x3 =
-        lerp(u, g(perm_[aa + 1], xf, yf, zf - 1.0), g(perm_[ba + 1], xf - 1.0, yf, zf - 1.0));
-    const float64 x4 = lerp(
-        u, g(perm_[ab + 1], xf, yf - 1.0, zf - 1.0), g(perm_[bb + 1], xf - 1.0, yf - 1.0, zf - 1.0)
-    );
-
-    return lerp(w, lerp(v, x1, x2), lerp(v, x3, x4));
-}
+    : identity_pool_(&identity_pool)
+    , page_pool_(&pool)
+    , params_(p)
+    , biomes_(p.biomes.empty() ? default_biomes() : p.biomes)
+    , noise_(p.seed)
+    , regions_(region_map::params{
+          .seed           = p.seed,
+          .spacing_voxels = p.region_spacing_voxels,
+          .jitter         = p.region_jitter,
+          .warp_voxels    = p.region_warp_voxels,
+          .warp_frequency = p.region_warp_frequency,
+      }) {}
 
 auto perlin_terrain_generator::cave_field_at(
     int32 wx, int32 wy, int32 wz, int32 depth
 ) const -> float32 {
     const auto f = params_.cave_field_frequency;
-    const auto n = static_cast<float32>(noise3d(
+    const auto n = static_cast<float32>(noise_.noise3d(
         (static_cast<float64>(wx) * f) + 517.3,
         static_cast<float64>(wy) * f * params_.cave_field_squash,
         (static_cast<float64>(wz) * f) + 241.9
@@ -259,7 +181,7 @@ auto perlin_terrain_generator::cave_entrance_leak_at(
     int32 wx, int32 wz
 ) const -> float32 {
     const auto fe = params_.cave_entrance_frequency;
-    const auto n  = static_cast<float32>(noise2d(
+    const auto n  = static_cast<float32>(noise_.noise2d(
         (static_cast<float64>(wx) * fe) - 88.1, (static_cast<float64>(wz) * fe) + 44.6
     ));
 
@@ -283,14 +205,14 @@ auto perlin_terrain_generator::cave_openness_at(
 
     const auto fc = params_.cave_cheese_frequency;
     const auto cheese = static_cast<float32>(
-        noise3d(x * fc, y * fc * params_.cave_cheese_squash, z * fc)
+        noise_.noise3d(x * fc, y * fc * params_.cave_cheese_squash, z * fc)
     );
     const float32 cheese_open =
         (params_.cave_cheese_width * field * band) - std::abs(cheese);
 
     const auto ft = params_.cave_tunnel_frequency;
-    const auto ta = static_cast<float32>(noise3d((x * ft) + 71.5, (y * ft) + 13.7, (z * ft) + 39.1));
-    const auto tb = static_cast<float32>(noise3d((x * ft) - 128.3, (y * ft) + 96.2, (z * ft) - 57.4));
+    const auto ta = static_cast<float32>(noise_.noise3d((x * ft) + 71.5, (y * ft) + 13.7, (z * ft) + 39.1));
+    const auto tb = static_cast<float32>(noise_.noise3d((x * ft) - 128.3, (y * ft) + 96.2, (z * ft) - 57.4));
     const float32 tunnel_open =
         (params_.cave_tunnel_width * field) - std::sqrt((ta * ta) + (tb * tb));
 
@@ -361,7 +283,7 @@ auto perlin_terrain_generator::carve_caves_(
                 const int32 lx = std::min(gx * stride, s - 1);
                 const int32 wx = (x0 + lx) * voxels_per_cell;
 
-                const int32 surface = profile.surface[(lx * s) + lz];
+                const int32 surface = profile.surface[column_profile::ring_index(lx, lz)];
                 const int32 depth   = surface - wy;
 
                 const float32 leak =
@@ -459,121 +381,170 @@ auto perlin_terrain_generator::carve_caves_(
     }
 }
 
-auto perlin_terrain_generator::octave_noise(
-    float64 x, float64 y
-) const -> float64 {
-    float64 total   = 0.0;
-    float64 freq    = 1.0;
-    float64 amp     = 1.0;
-    float64 max_amp = 0.0;
+// см. docs/world.md#климат
+auto perlin_terrain_generator::climate_at(
+    float64 x, float64 z
+) const -> biome_point {
+    const auto& tuning = params_;
 
-    for (int32 i = 0; i < params_.octaves; ++i) {
-        total += noise2d(x * freq, y * freq) * amp;
-        max_amp += amp;
-        freq *= params_.lacunarity;
-        amp *= params_.persistence;
+    const float64 rf = tuning.relief_warp_frequency;
+    const float64 px =
+        x + (noise_.fractal((x * rf) + 5.2, (z * rf) + 1.3, 2) * tuning.relief_warp_voxels);
+    const float64 pz =
+        z + (noise_.fractal((x * rf) + 9.7, (z * rf) + 6.1, 2) * tuning.relief_warp_voxels);
+
+    const float64 lf     = tuning.landscape_frequency;
+    const float64 relief = std::clamp((noise_.fractal(px * lf, pz * lf, 3) * 0.9) + 0.5, 0.0, 1.0);
+
+    const float64 mf = tuning.moisture_frequency;
+
+    return {
+        .noise    = &noise_,
+        .x        = px,
+        .z        = pz,
+        .relief   = relief,
+        .moisture = unit_noise(noise_.fractal((px * mf) + 201.0, (pz * mf) + 301.0, 2)),
+    };
+}
+
+// см. docs/world.md#биомы
+auto perlin_terrain_generator::relief_at(
+    float64 x, float64 z
+) const -> relief_sample {
+    constexpr float64 weight_floor = 0.02;
+
+    const biome_point at = climate_at(x, z);
+    const float64 blend  = std::max(0.01, static_cast<float64>(params_.biome_blend));
+    const float64 toning = std::max(0.01, static_cast<float64>(params_.tone_blend));
+
+    std::array<float64, 256> distances{};
+    float64 nearest     = std::numeric_limits<float64>::max();
+    float64 runner_up   = std::numeric_limits<float64>::max();
+    std::size_t best    = 0;
+    std::size_t second  = 0;
+
+    for (std::size_t index = 0; index < biomes_.size(); ++index) {
+        const biome_climate& climate = climate_of(biomes_[index]);
+
+        const float64 dr = at.relief - climate.relief;
+        const float64 dm = at.moisture - climate.moisture;
+        distances[index] = (dr * dr) + (dm * dm);
+        if (distances[index] < nearest) {
+            runner_up = nearest;
+            second    = best;
+            nearest   = distances[index];
+            best      = index;
+        } else if (distances[index] < runner_up) {
+            runner_up = distances[index];
+            second    = index;
+        }
     }
 
-    return total / max_amp;
-}
-
-auto perlin_terrain_generator::ridged_noise(
-    float64 x, float64 y
-) const -> float64 {
-    float64 total   = 0.0;
-    float64 freq    = 1.0;
-    float64 amp     = 1.0;
-    float64 max_amp = 0.0;
-
-    for (int32 i = 0; i < params_.octaves; ++i) {
-        float64 n = noise2d(x * freq, y * freq);
-        n         = 1.0 - std::abs(n);
-        n         = n * n;
-        total += n * amp;
-        max_amp += amp;
-        freq *= params_.lacunarity;
-        amp *= params_.persistence;
+    const float64 strongest = std::exp(-nearest / (blend * blend));
+    float64 height          = 0.0;
+    float64 total           = 0.0;
+    for (std::size_t index = 0; index < biomes_.size(); ++index) {
+        const float64 weight =
+            std::exp(-distances[index] / (blend * blend)) - (weight_floor * strongest);
+        if (weight <= 0.0) {
+            continue;
+        }
+        height += weight * height_of(biomes_[index], at);
+        total += weight;
     }
 
-    return total / max_amp;
+    float32 tone_share = 0.0F;
+    if (second != best) {
+        const float64 own   = std::exp(-nearest / (toning * toning));
+        const float64 other = std::exp(-runner_up / (toning * toning));
+        tone_share          = static_cast<float32>(other / (own + other));
+    }
+
+    return {
+        .height     = total > 0.0 ? height / total : height_of(biomes_[best], at),
+        .biome      = static_cast<uint8>(best),
+        .neighbour  = static_cast<uint8>(second),
+        .tone_share = tone_share,
+    };
 }
 
-auto perlin_terrain_generator::continent_at(
-    float64 nx, float64 nz
-) const -> float64 {
-    float64 c = octave_noise(nx * params_.continent_frequency, nz * params_.continent_frequency);
-    return (c + 1.0) * 0.5;
-}
-
-auto perlin_terrain_generator::stone_height_at(
+auto perlin_terrain_generator::biome_at(
     int32 wx, int32 wz
-) const -> int32 {
-    auto nx = static_cast<float64>(wx);
-    auto nz = static_cast<float64>(wz);
-
-    float64 warp_x =
-        octave_noise(nx * params_.warp_frequency + 5.2, nz * params_.warp_frequency + 1.3) *
-        params_.warp_strength;
-    float64 warp_z =
-        octave_noise(nx * params_.warp_frequency + 9.7, nz * params_.warp_frequency + 6.1) *
-        params_.warp_strength;
-
-    float64 warped_x = nx + warp_x;
-    float64 warped_z = nz + warp_z;
-
-    float64 continent = continent_at(nx, nz);
-
-    float64 terrain =
-        octave_noise(warped_x * params_.terrain_frequency, warped_z * params_.terrain_frequency);
-    terrain = (terrain + 1.0) * 0.5;
-
-    float64 ridge =
-        ridged_noise(warped_x * params_.ridge_frequency, warped_z * params_.ridge_frequency);
-
-    float64 mixed = terrain * (1.0 - params_.ridge_weight) + ridge * params_.ridge_weight;
-
-    int32 base_h;
-    float64 amplitude;
-    if (continent < 0.35) {
-        base_h    = params_.plains_height;
-        amplitude = 5.0;
-    } else if (continent < 0.55) {
-        float64 t = (continent - 0.35) / 0.2;
-        base_h    = params_.plains_height +
-            static_cast<int32>(t * (params_.hills_height - params_.plains_height));
-        amplitude = 5.0 + t * 15.0;
-    } else if (continent < 0.75) {
-        float64 t = (continent - 0.55) / 0.2;
-        base_h    = params_.hills_height +
-            static_cast<int32>(t * (params_.mountains_height - params_.hills_height));
-        amplitude = 20.0 + t * 20.0;
-    } else {
-        base_h    = params_.mountains_height;
-        amplitude = 40.0;
-    }
-
-    return base_h + static_cast<int32>(mixed * amplitude);
+) const -> const terrain_biome& {
+    return biomes_[shape_at(wx, wz).biome];
 }
 
-auto perlin_terrain_generator::soil_depth_at(
-    int32 wx, int32 wz, int32 stone, float32 slope
-) const -> int32 {
-    const float64 n = noise2d(
-        static_cast<float64>(wx) * params_.soil_frequency,
-        static_cast<float64>(wz) * params_.soil_frequency
-    );
+auto perlin_terrain_generator::shape_at(
+    int32 wx, int32 wz
+) const -> column_shape {
+    const auto x = static_cast<float64>(wx);
+    const auto z = static_cast<float64>(wz);
 
-    auto t = static_cast<float32>((n + 1.0) * 0.5);
-
-    t *= std::clamp(1.0F - (slope / params_.soil_slope_limit), 0.0F, 1.0F);
-
-    if (stone > params_.soil_altitude_start) {
-        const auto start = static_cast<float32>(params_.soil_altitude_start);
-        const auto end   = static_cast<float32>(params_.soil_altitude_end);
-        t *= std::clamp((end - static_cast<float32>(stone)) / (end - start), 0.0F, 1.0F);
+    if (!params_.island) {
+        const relief_sample relief = relief_at(x, z);
+        return {
+            .surface    = static_cast<int32>(std::floor(relief.height)),
+            .bottom     = params_.world_bottom_y,
+            .height     = static_cast<float32>(relief.height),
+            .biome      = relief.biome,
+            .neighbour  = relief.neighbour,
+            .tone_share = relief.tone_share,
+        };
     }
 
-    return static_cast<int32>((t * static_cast<float32>(params_.soil_depth_max)) + 0.5F);
+    const region_sample region = regions_.sample(x, z);
+
+    const float64 jf  = params_.island_jag_frequency;
+    const float64 jag = noise_.fractal((x * jf) + 133.0, (z * jf) + 77.0, 2) *
+                        params_.island_jag_voxels;
+    const float64 inside =
+        region_map::is_home(region.cell) ? region.edge_distance + jag : -1.0;
+
+    const relief_sample relief = relief_at(x, z);
+    const float64 height       = relief.height;
+    const auto surface         = static_cast<int32>(std::floor(height));
+    if (inside < 0.0) {
+        return {
+            .surface    = surface,
+            .bottom     = surface + 1,
+            .height     = static_cast<float32>(height),
+            .biome      = relief.biome,
+            .neighbour  = relief.neighbour,
+            .tone_share = relief.tone_share,
+        };
+    }
+
+    const float64 taper =
+        std::clamp(inside / std::max(1.0, static_cast<float64>(params_.island_taper_voxels)), 0.0, 1.0);
+    const float64 depth = static_cast<float64>(params_.island_min_thickness) +
+                          (taper * taper * static_cast<float64>(surface - params_.world_bottom_y));
+
+    return {
+        .surface    = surface,
+        .bottom     = std::max(params_.world_bottom_y, surface - static_cast<int32>(depth)),
+        .height     = static_cast<float32>(height),
+        .biome      = relief.biome,
+        .neighbour  = relief.neighbour,
+        .tone_share = relief.tone_share,
+    };
+}
+
+// см. docs/world.md#слои
+auto perlin_terrain_generator::paint_at_(
+    int32 wx, int32 wz, const column_shape& shape, float32 slope
+) const -> column_paint {
+    column_facts column{
+        .noise   = &noise_,
+        .x       = static_cast<float64>(wx),
+        .z       = static_cast<float64>(wz),
+        .surface = shape.surface,
+        .slope   = slope,
+    };
+    if (shape.tone_share > 0.0F && shape.neighbour != shape.biome) {
+        lend_tones(biomes_[shape.neighbour], column);
+        column.neighbour_share = shape.tone_share;
+    }
+    return paint_of(biomes_[shape.biome], column);
 }
 
 auto perlin_terrain_generator::rock_voxel_at(
@@ -592,34 +563,33 @@ auto perlin_terrain_generator::rock_voxel_at(
 }
 
 auto perlin_terrain_generator::voxel_at(
-    int32 wy, int32 stone_top, int32 surface_top
+    int32 wy, int32 surface, const column_paint& paint
 ) const -> voxel {
-    if (wy > stone_top) {
-        return wy == surface_top ? terrain::grass[0] : terrain::dirt[0];
-    }
-
-    if (wy == stone_top && surface_top == stone_top) {
-        return wy > params_.snow_line ? terrain::snow[2] : terrain::stone[2];
-    }
-    if ((stone_top - wy) < params_.rock_skin) {
-        return terrain::stone[0];
-    }
-
-    return rock_voxel_at(wy);
+    return paint.at(surface - wy).value_or(rock_voxel_at(wy));
 }
 
 auto perlin_terrain_generator::surface_height_at(
     int32 wx, int32 wz
-) const -> int32 {
-    const int32 stone = stone_height_at(wx, wz);
+) const -> std::optional<int32> {
+    const column_shape shape = shape_at(wx, wz);
+    if (shape.is_void()) {
+        return std::nullopt;
+    }
+    return shape.surface;
+}
 
-    const auto dx = stone_height_at(wx + 1, wz) - stone_height_at(wx - 1, wz);
-    const auto dz = stone_height_at(wx, wz + 1) - stone_height_at(wx, wz - 1);
-
-    const auto slope =
-        0.5F * static_cast<float32>(std::max(std::abs(dx), std::abs(dz)));
-
-    return stone + soil_depth_at(wx, wz, stone, slope);
+auto perlin_terrain_generator::surface_voxel_at(
+    int32 wx, int32 wz
+) const -> std::optional<voxel> {
+    const column_shape shape = shape_at(wx, wz);
+    if (shape.is_void()) {
+        return std::nullopt;
+    }
+    const float32 slope = slope_between(
+        shape_at(wx - 1, wz).height, shape.height, shape_at(wx + 1, wz).height,
+        shape_at(wx, wz - 1).height, shape_at(wx, wz + 1).height
+    );
+    return voxel_at(shape.surface, shape.surface, paint_at_(wx, wz, shape, slope));
 }
 
 auto perlin_terrain_generator::generate(
@@ -631,7 +601,11 @@ auto perlin_terrain_generator::generate(
 
     auto floor_div = [](int32 a, int32 b) -> int32 { return a >= 0 ? a / b : (a - b + 1) / b; };
 
-    int32 min_cy = floor_div(profile.cell_of(params_.world_bottom_y), s);
+    if (profile.min_bottom > profile.max_surface) {
+        return;
+    }
+
+    int32 min_cy = floor_div(profile.cell_of(profile.min_bottom), s);
     int32 max_cy = floor_div(profile.cell_of(profile.max_surface), s);
 
     for (int32 cy = max_cy; cy >= min_cy; --cy) {
@@ -648,46 +622,71 @@ auto perlin_terrain_generator::sample_column_(
 
     column_profile profile{};
     profile.voxels_per_cell = voxels_per_cell;
-    profile.min_stone       = std::numeric_limits<int32>::max();
     profile.max_surface     = std::numeric_limits<int32>::lowest();
+    profile.min_bottom      = std::numeric_limits<int32>::max();
+
+    std::array<uint8, column_profile::stride * column_profile::stride> biomes{};
+    std::array<uint8, column_profile::stride * column_profile::stride> neighbours{};
+    std::array<float32, column_profile::stride * column_profile::stride> shares{};
+    std::array<int32, column_profile::stride * column_profile::stride> bottoms{};
 
     for (int32 i = 0; i < column_profile::stride; ++i) {
         for (int32 j = 0; j < column_profile::stride; ++j) {
-            profile.stone[(i * column_profile::stride) + j] = stone_height_at(
+            const column_shape shape = shape_at(
                 ((cx * s) + i - a) * voxels_per_cell, ((cz * s) + j - a) * voxels_per_cell
             );
+            const int32 cell      = (i * column_profile::stride) + j;
+            profile.surface[cell] = shape.surface;
+            profile.height[cell]  = shape.height;
+            biomes[cell]          = shape.biome;
+            neighbours[cell]      = shape.neighbour;
+            shares[cell]          = shape.tone_share;
+            bottoms[cell]         = shape.bottom;
         }
     }
 
-    profile.page_min_stone.fill(std::numeric_limits<int32>::max());
+    profile.page_min_rock.fill(std::numeric_limits<int32>::max());
     profile.page_max_surface.fill(std::numeric_limits<int32>::lowest());
+    profile.page_min_bottom.fill(std::numeric_limits<int32>::max());
+    profile.page_max_bottom.fill(std::numeric_limits<int32>::lowest());
 
     for (int32 x = 0; x < s; ++x) {
         for (int32 z = 0; z < s; ++z) {
-            const int32 stone = profile.stone[column_profile::stone_index(x, z)];
+            const int32 cell = column_profile::ring_index(x, z);
+            const column_shape shape{
+                .surface    = profile.surface[cell],
+                .bottom     = bottoms[cell],
+                .height     = profile.height[cell],
+                .biome      = biomes[cell],
+                .neighbour  = neighbours[cell],
+                .tone_share = shares[cell],
+            };
+            profile.bottom[(x * s) + z] = shape.bottom;
+            if (shape.is_void()) {
+                continue;
+            }
 
-            const auto dx = profile.stone[column_profile::stone_index(x + 1, z)] -
-                profile.stone[column_profile::stone_index(x - 1, z)];
-            const auto dz = profile.stone[column_profile::stone_index(x, z + 1)] -
-                profile.stone[column_profile::stone_index(x, z - 1)];
+            const float32 slope = slope_between(
+                profile.height[column_profile::ring_index(x - 1, z)], shape.height,
+                profile.height[column_profile::ring_index(x + 1, z)],
+                profile.height[column_profile::ring_index(x, z - 1)],
+                profile.height[column_profile::ring_index(x, z + 1)]
+            ) / static_cast<float32>(voxels_per_cell);
 
-            const auto slope = 0.5F * static_cast<float32>(std::max(std::abs(dx), std::abs(dz))) /
-                               static_cast<float32>(voxels_per_cell);
-
-            const int32 surface = stone +
-                soil_depth_at(
-                    ((cx * s) + x) * voxels_per_cell, ((cz * s) + z) * voxels_per_cell, stone,
-                    slope
-                );
-
-            profile.surface[(x * s) + z] = surface;
+            const column_paint paint = paint_at_(
+                ((cx * s) + x) * voxels_per_cell, ((cz * s) + z) * voxels_per_cell, shape, slope
+            );
+            profile.paint[(x * s) + z] = paint;
 
             const int32 page = ((x / p) * column_profile::pages) + (z / p);
-            profile.page_min_stone[page]   = std::min(profile.page_min_stone[page], stone);
-            profile.page_max_surface[page] = std::max(profile.page_max_surface[page], surface);
+            profile.page_min_rock[page] =
+                std::min(profile.page_min_rock[page], shape.surface - paint.depth());
+            profile.page_max_surface[page] = std::max(profile.page_max_surface[page], shape.surface);
+            profile.page_min_bottom[page]  = std::min(profile.page_min_bottom[page], shape.bottom);
+            profile.page_max_bottom[page]  = std::max(profile.page_max_bottom[page], shape.bottom);
 
-            profile.min_stone   = std::min(profile.min_stone, stone);
-            profile.max_surface = std::max(profile.max_surface, surface);
+            profile.max_surface = std::max(profile.max_surface, shape.surface);
+            profile.min_bottom  = std::min(profile.min_bottom, shape.bottom);
         }
     }
 
@@ -730,13 +729,13 @@ auto perlin_terrain_generator::generate_chunk(
             for (int32 pz = 0; pz < pn; ++pz) {
                 const int32 page = (px * pn) + pz;
 
-                if (y0 > profile.cell_of(profile.page_max_surface[page])) {
+                if (y0 > profile.cell_of(profile.page_max_surface[page]) ||
+                    y1 < profile.cell_of(profile.page_min_bottom[page])) {
                     continue;
                 }
 
-                if (one_rock &&
-                    ((y1 * voxels_per_cell) + voxels_per_cell - 1) <
-                        (profile.page_min_stone[page] - params_.rock_skin)) {
+                if (one_rock && y0 > profile.cell_of(profile.page_max_bottom[page]) &&
+                    ((y1 * voxels_per_cell) + voxels_per_cell - 1) < profile.page_min_rock[page]) {
                     writer.fill_page(px, py, pz, rock_voxel_at(y0 * voxels_per_cell));
                     continue;
                 }
@@ -747,20 +746,25 @@ auto perlin_terrain_generator::generate_chunk(
                     for (int32 lz = 0; lz < p; ++lz) {
                         const int32 z = (pz * p) + lz;
 
-                        const int32 stone   = profile.stone[column_profile::stone_index(x, z)];
-                        const int32 surface = profile.surface[(x * s) + z];
+                        const int32 surface = profile.surface[column_profile::ring_index(x, z)];
+                        const int32 floor   = profile.bottom[(x * s) + z];
+                        if (floor > surface) {
+                            continue;
+                        }
+                        const column_paint& paint = profile.paint[(x * s) + z];
 
                         const int32 surface_cell = profile.cell_of(surface);
 
                         const int32 top    = std::min(surface_cell, y1);
-                        const int32 bottom = std::max(y0, bottom_cell);
+                        const int32 bottom =
+                            std::max(y0, std::max(bottom_cell, profile.cell_of(floor)));
 
                         for (int32 cell_y = bottom; cell_y <= top; ++cell_y) {
                             const int32 wy = cell_y == surface_cell
                                 ? surface
                                 : cell_y * voxels_per_cell;
 
-                            writer.set(x, cell_y - base_y, z, voxel_at(wy, stone, surface));
+                            writer.set(x, cell_y - base_y, z, voxel_at(wy, surface, paint));
                         }
                     }
                 }
