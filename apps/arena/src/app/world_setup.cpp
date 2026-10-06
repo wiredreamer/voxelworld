@@ -17,9 +17,7 @@ auto setup_world_grid(gfx::engine& engine) -> world_setup_result {
 
     constexpr log::log_category lc{"arena"};
 
-    ecs::perlin_terrain_generator::params params{
-        .world_units_per_voxel = 16,
-    };
+    ecs::perlin_terrain_generator::params params{};
     if (auto loaded = ecs::load_terrain_settings(
             "assets/data/world_gen.json", engine.get_voxel_registry(), params
         )) {

@@ -7,6 +7,8 @@ import vw.asset;
 
 export namespace vw::ecs {
 
+inline constexpr int32 default_world_units_per_voxel = 16;
+
 struct chunk_data {
     vec3i coord;
     std::shared_ptr<asset::chunk_volume> volume;

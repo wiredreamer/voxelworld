@@ -1,6 +1,7 @@
 export module vw.world:grid.world_grid;
 import :grid.visibility;
 import :grid.chunk;
+import :terrain.generator;
 
 import std;
 
@@ -20,7 +21,7 @@ struct world_light {
 
 class world_grid {
 public:
-    explicit world_grid(world& w, int32 world_units_per_voxel = 8);
+    explicit world_grid(world& w, int32 world_units_per_voxel = default_world_units_per_voxel);
     ~world_grid() = default;
 
     world_grid(const world_grid&)                    = delete;

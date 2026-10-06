@@ -13,7 +13,6 @@ namespace vw::testbed {
 
 namespace {
 
-constexpr int32 lab_units_per_voxel = 16;
 constexpr std::string_view asset_root = VW_TESTBED_ASSET_ROOT;
 
 auto settings_file(const arg_reader& args) -> std::filesystem::path {
@@ -24,7 +23,7 @@ auto settings_file(const arg_reader& args) -> std::filesystem::path {
 }
 
 auto lab_base() -> ecs::perlin_terrain_generator::params {
-    return ecs::perlin_terrain_generator::params{.world_units_per_voxel = lab_units_per_voxel};
+    return ecs::perlin_terrain_generator::params{};
 }
 
 }  // namespace

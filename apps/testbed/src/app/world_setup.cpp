@@ -14,8 +14,7 @@ auto testbed_app::setup_world_grid() -> void {
     auto& world = get_engine().get_world();
 
     install_terrain_(ecs::perlin_terrain_generator::params{
-        .world_units_per_voxel = 8,
-        .island                = false,
+        .island = false,
     });
 
     viewer_ = world.create()
