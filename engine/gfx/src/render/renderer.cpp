@@ -417,7 +417,7 @@ auto renderer::draw_colliders(
 ) -> void {
     for (auto [ent, box, tc] :
          w.registry().view<box_collider_component, transform_component>()) {
-        auto pos  = tc.get_position() + box.get_offset();
+        auto pos  = tc.get_shown_position() + box.get_offset();
         auto half = box.get_extents() * 0.5f;
         draw_box(pos - half, box.get_extents(), col);
     }

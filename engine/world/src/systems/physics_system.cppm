@@ -35,6 +35,7 @@ public:
     static constexpr float32 step_blocked_share     = 0.02F;
     static constexpr int32 step_lead_halvings       = 6;
     static constexpr float32 step_lead_slack        = 1.5F;
+    static constexpr float32 longest_shown_step     = 4.0F;
 
     explicit physics_system(world& w);
 
@@ -98,6 +99,7 @@ private:
         float32 within
     ) const -> float32;
     [[nodiscard]] auto box_blocked_(const vec3f& lo, const vec3f& hi) const -> bool;
+    auto show_between_steps_() -> void;
 
     auto resolve_entity_collisions(entity ent, vec3f& position, vec3f& velocity,
                                    const vec3f& half_extents, const vec3f& offset) -> void;

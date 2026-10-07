@@ -62,7 +62,7 @@ auto light_buffer::update(
 
     auto view = world.view<light_component, transform_component>();
     for (const auto& [ent, light_comp, transform_comp] : view) {
-        const vec3f& pos      = transform_comp.get_position();
+        const vec3f pos       = transform_comp.get_shown_position();
         const float32 range   = light_comp.get_range();
 
         const spatial::aabb reach{

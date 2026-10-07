@@ -38,7 +38,7 @@ private:
 
 struct rigid_body_component final {
     [[nodiscard]] auto get_step_sink() const -> float32 {
-        return step_sink_;
+        return shown_sink_;
     }
 
     [[nodiscard]] auto get_steps_taken() const -> uint32 {
@@ -78,6 +78,10 @@ private:
     float32 drag_          = 5.0F;
     bool grounded_         = false;
     bool frozen_           = false;
+    vec3f stepped_from_{0.0F, 0.0F, 0.0F};
+    vec3f stepped_to_{0.0F, 0.0F, 0.0F};
+    float32 sink_before_step_    = 0.0F;
+    float32 shown_sink_          = 0.0F;
     float32 step_sink_           = 0.0F;
     float32 step_lead_           = 0.0F;
     float32 step_catch_up_       = 0.0F;

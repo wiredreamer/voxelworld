@@ -165,6 +165,18 @@ auto transform_system::transform_modifier::mark_world_dirty() -> transform_modif
     return *this;
 }
 
+auto transform_system::transform_modifier::set_shown_offset(
+    const vec3f& offset
+) -> transform_modifier& {
+    auto* comp = system_->world_->registry().try_get<transform_component>(entity_);
+    if (comp == nullptr || comp->shown_offset_ == offset) {
+        return *this;
+    }
+
+    comp->shown_offset_ = offset;
+    return mark_world_dirty();
+}
+
 auto transform_system::transform_modifier::set_transform(
     const transform& transform
 ) -> transform_modifier& {
@@ -283,6 +295,11 @@ auto transform_system::update_entity_world_matrix(
                     parent_comp->get_world_matrix() * local_matrix;
             }
         }
+    }
+
+    const vec3f& shown = transform_comp.shown_offset_;
+    if (shown.x != 0.0f || shown.y != 0.0f || shown.z != 0.0f) {
+        transform_comp.world_matrix_ = math::translation_matrix(shown) * transform_comp.world_matrix_;
     }
 }
 

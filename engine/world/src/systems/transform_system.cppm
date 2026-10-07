@@ -35,6 +35,7 @@ public:
         auto rotate(const vec3f& angles) -> transform_modifier&;
         auto scale(const vec3f& factor) -> transform_modifier&;
         auto mark_world_dirty() -> transform_modifier&;
+        auto set_shown_offset(const vec3f& offset) -> transform_modifier&;
 
     private:
         friend class transform_system;

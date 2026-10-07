@@ -904,12 +904,16 @@ TEST_CASE("a run steps onto a one voxel ledge without leaving the ground, a tall
     const auto risen = [&] {
         return g.world.get<ecs::transform_component>(g.player).get_position().y - start.y;
     };
+    const auto shown_height = [&] {
+        return g.world.get<ecs::transform_component>(g.player).get_shown_position().y - start.y +
+               g.world.get<ecs::rigid_body_component>(g.player).get_step_sink();
+    };
 
     float32 longest_in_the_air = 0.0F;
     float32 in_the_air         = 0.0F;
     float32 biggest_jolt       = 0.0F;
     float32 deepest_sink       = 0.0F;
-    float32 shown_before       = risen() + body.get_step_sink();
+    float32 shown_before       = shown_height();
 
     mapper.key(keys::W, true);
     for (float32 elapsed = 0.0F; elapsed < 1.0F; elapsed += g.tick_seconds) {
@@ -918,7 +922,7 @@ TEST_CASE("a run steps onto a one voxel ledge without leaving the ground, a tall
         in_the_air         = g.grounded() ? 0.0F : in_the_air + g.tick_seconds;
         longest_in_the_air = std::max(longest_in_the_air, in_the_air);
 
-        const float32 shown = risen() + body.get_step_sink();
+        const float32 shown = shown_height();
         biggest_jolt        = std::max(biggest_jolt, std::abs(shown - shown_before));
         deepest_sink        = std::min(deepest_sink, body.get_step_sink());
         shown_before        = shown;
@@ -1017,6 +1021,10 @@ auto run_up_stairs(bool across_the_corner) -> stair_run {
     const auto risen = [&] {
         return g.world.get<ecs::transform_component>(g.player).get_position().y - start.y;
     };
+    const auto shown_height = [&] {
+        return g.world.get<ecs::transform_component>(g.player).get_shown_position().y - start.y +
+               g.world.get<ecs::rigid_body_component>(g.player).get_step_sink();
+    };
 
     stair_run seen;
     const uint32 steps_before = body.get_steps_taken();
@@ -1024,7 +1032,7 @@ auto run_up_stairs(bool across_the_corner) -> stair_run {
     int32 ticks_in_the_window = 0;
 
     float32 in_the_air   = 0.0F;
-    float32 shown_before = risen() + body.get_step_sink();
+    float32 shown_before = shown_height();
 
     mapper.key(keys::W, true);
     if (across_the_corner) {
@@ -1036,7 +1044,7 @@ auto run_up_stairs(bool across_the_corner) -> stair_run {
         in_the_air              = g.grounded() ? 0.0F : in_the_air + g.tick_seconds;
         seen.longest_in_the_air = std::max(seen.longest_in_the_air, in_the_air);
 
-        const float32 shown = risen() + body.get_step_sink();
+        const float32 shown = shown_height();
         seen.biggest_jolt   = std::max(seen.biggest_jolt, std::abs(shown - shown_before));
         seen.deepest_sink   = std::min(seen.deepest_sink, body.get_step_sink());
         shown_before        = shown;
@@ -1090,4 +1098,49 @@ TEST_CASE("a diagonal run climbs the inside corner of two staircases", "[game][j
     REQUIRE(seen.longest_in_the_air == 0.0F);
     REQUIRE(seen.biggest_jolt < 0.45F * static_cast<float32>(units_per_voxel));
     REQUIRE(seen.deepest_sink > -0.25F * static_cast<float32>(units_per_voxel));
+}
+
+TEST_CASE("between physics steps a running body is shown moving, though it stands still", "[game][physics]") {
+    constexpr float32 fast_tick = 1.0F / 240.0F;
+
+    grounded_world g{fast_tick};
+    REQUIRE(g.settle());
+
+    auto& mapper = g.world.system<game::input_system>().mapper();
+    mapper.cursor_at(0.0, 0.0);
+    mapper.key(keys::W, true);
+    g.run_for(0.5F);
+
+    const auto& placed = g.world.get<ecs::transform_component>(g.player);
+
+    int32 frames_the_body_stood  = 0;
+    int32 frames_the_shown_stood = 0;
+    float32 longest_shown_stride = 0.0F;
+    float32 farthest_behind      = 0.0F;
+
+    vec3f body_before  = placed.get_position();
+    vec3f shown_before = placed.get_shown_position();
+    for (int32 frame = 0; frame < 240; ++frame) {
+        g.tick();
+
+        const vec3f body  = placed.get_position();
+        const vec3f shown = placed.get_shown_position();
+
+        frames_the_body_stood  += body == body_before ? 1 : 0;
+        frames_the_shown_stood += shown == shown_before ? 1 : 0;
+        longest_shown_stride    = std::max(longest_shown_stride, math::length(shown - shown_before));
+        farthest_behind         = std::max(farthest_behind, math::length(body - shown));
+
+        body_before  = body;
+        shown_before = shown;
+    }
+    mapper.key(keys::W, false);
+
+    const float32 run_speed = g.world.get<ecs::character_controller_component>(g.player).get_move_speed();
+    const float32 physics_stride = run_speed / 60.0F;
+
+    REQUIRE(frames_the_body_stood > 150);
+    REQUIRE(frames_the_shown_stood < 10);
+    REQUIRE(longest_shown_stride < physics_stride * 0.6F);
+    REQUIRE(farthest_behind <= physics_stride * 1.01F);
 }

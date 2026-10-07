@@ -27,7 +27,7 @@ auto third_person_camera_controller::update(
     }
 
     const auto& tc        = registry.get<transform_component>(target);
-    const auto player_pos = tc.get_position();
+    const auto player_pos = tc.get_shown_position();
     const auto focus      = player_pos + params_.target_offset + vec3f{0.0f, focus_lift, 0.0f};
 
     const float32 yaw_rad   = math::radians(look_yaw_degrees);

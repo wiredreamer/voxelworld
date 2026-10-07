@@ -58,6 +58,8 @@ auto physics_system::update(
         ++stats_.step_count;
     }
 
+    show_between_steps_();
+
     stats_.step_ms = std::chrono::duration<float32>(clock::now() - step_start).count() * 1000.0f;
 }
 
@@ -78,6 +80,10 @@ auto physics_system::step(
     for (auto [ent, rb, tc] :
          reg.view<rigid_body_component, transform_component>()) {
         auto position = tc.get_position();
+
+        rb.stepped_from_     = position;
+        rb.stepped_to_       = position;
+        rb.sink_before_step_ = rb.step_sink_;
 
         rb.velocity_.y += gravity_ * rb.gravity_scale_ * dt;
 
@@ -192,7 +198,6 @@ auto physics_system::step(
                     );
                 }
 
-                const float32 shown_before = rb.step_sink_;
                 const float32 natural = step_lead_slack * speed * dt * (step_height / voxel_size);
                 const float32 jump    = (lead - rb.step_lead_) + stepped;
                 const float32 kept    = std::clamp(jump, -natural, natural);
@@ -201,13 +206,6 @@ auto physics_system::step(
                                     std::exp(-dt / rb.step_smooth_seconds_);
                 rb.step_lead_ = lead;
                 rb.step_sink_ = rb.step_lead_ + rb.step_catch_up_;
-
-                if (auto* follower = reg.try_get<transform_component>(rb.step_follower_)) {
-                    const vec3f held = follower->get_position();
-                    world_->system<transform_system>()
-                        .modify(rb.step_follower_)
-                        .set_position({held.x, held.y + (rb.step_sink_ - shown_before), held.z});
-                }
             } else {
                 rb.step_sink_     = 0.0f;
                 rb.step_lead_     = 0.0f;
@@ -215,7 +213,46 @@ auto physics_system::step(
             }
         }
 
+        rb.stepped_to_ = new_position;
         world_->system<transform_system>().modify(ent).set_position(new_position);
+    }
+}
+
+// см. docs/ENGINE.md#положение-для-показа
+auto physics_system::show_between_steps_() -> void {
+    const float32 into_step = std::clamp(accumulated_time_ / fixed_dt, 0.0f, 1.0f);
+    const float32 behind    = 1.0f - into_step;
+
+    auto& reg        = world_->registry();
+    auto& transforms = world_->system<transform_system>();
+    const auto voxel = static_cast<float32>(
+        world_->system<world_grid_system>().grid()->world_units_per_voxel()
+    );
+
+    for (auto [ent, rb, tc] : reg.view<rigid_body_component, transform_component>()) {
+        const vec3f back = rb.stepped_from_ - rb.stepped_to_;
+
+        const bool moved_by_hand = tc.get_position() != rb.stepped_to_;
+        const bool too_far =
+            math::dot(back, back) > (longest_shown_step * voxel) * (longest_shown_step * voxel);
+
+        const bool held    = moved_by_hand || too_far || rb.frozen_;
+        const vec3f offset = held ? vec3f{0.0f, 0.0f, 0.0f} : back * behind;
+        if (tc.get_shown_offset() != offset) {
+            transforms.modify(ent).set_shown_offset(offset);
+        }
+
+        const float32 sink =
+            held ? rb.step_sink_
+                 : rb.step_sink_ + ((rb.sink_before_step_ - rb.step_sink_) * behind);
+        if (sink != rb.shown_sink_) {
+            if (auto* follower = reg.try_get<transform_component>(rb.step_follower_)) {
+                const vec3f at = follower->get_position();
+                transforms.modify(rb.step_follower_)
+                    .set_position({at.x, at.y + (sink - rb.shown_sink_), at.z});
+            }
+            rb.shown_sink_ = sink;
+        }
     }
 }
 

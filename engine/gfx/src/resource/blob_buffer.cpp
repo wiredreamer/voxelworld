@@ -36,7 +36,7 @@ auto blob_buffer::update(
 
     auto view = world.view<blob_shadow_component, transform_component>();
     for (const auto& [ent, blob, transform] : view) {
-        vec3f pos = transform.get_position();
+        vec3f pos = transform.get_shown_position();
 
         float32 height = blob.get_fall();
 

@@ -53,11 +53,21 @@ struct transform_component final {
         return transform_.get_scale();
     }
 
+    // см. docs/ENGINE.md#положение-для-показа
+    [[nodiscard]] auto get_shown_offset() const -> const vec3f& {
+        return shown_offset_;
+    }
+
+    [[nodiscard]] auto get_shown_position() const -> vec3f {
+        return transform_.get_position() + shown_offset_;
+    }
+
 private:
     friend class hierarchy_system;
     friend class transform_system;
 
     transform transform_;
+    vec3f shown_offset_{0.0F, 0.0F, 0.0F};
 
     mutable mat4f local_matrix_;
     mutable bool local_dirty_ = true;
