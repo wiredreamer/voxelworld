@@ -16,6 +16,19 @@ constexpr int32 flood_reach_voxels = 16;
 constexpr int32 shaft_depth_voxels = 64;
 constexpr int32 seeds_from_sky     = 8;
 constexpr int32 last_pass          = 16;
+constexpr int32 wipes_sources      = 32;
+constexpr int32 near_sources       = 64;
+constexpr int32 source_level_shift = 8;
+
+auto chunk_of(vec3i voxel) -> vec3i {
+    return {voxel.x >> 6, voxel.y >> 6, voxel.z >> 6};
+}
+
+auto page_key_of(const asset::emitting_voxel& at) -> int32 {
+    return ((at.z >> 3) << 6) | ((at.y >> 3) << 3) | (at.x >> 3);
+}
+
+static_assert(chunk_voxels == 64);
 
 static_assert((1 << brick_shift) == light_cache::brick_texels);
 
@@ -59,11 +72,13 @@ auto window_origin(vec3i centre_voxel, int32 cascade) -> vec3i {
 
 light_cache::light_cache(
     vulkan_context& context, vk::DescriptorPool descriptor_pool,
-    vk::DescriptorSetLayout occupancy_layout
+    vk::DescriptorSetLayout occupancy_layout, const voxel_registry& registry
 )
     : context_{&context}
     , descriptor_pool_{descriptor_pool}
-    , compute_{context, "shaders/light_cache.comp.spv", shader_type::COMPUTE} {
+    , compute_{context, "shaders/light_cache.comp.spv", shader_type::COMPUTE}
+    , scatter_{context, "shaders/light_sources.comp.spv", shader_type::COMPUTE}
+    , emission_{asset::build_emission_table(registry)} {
     for (std::size_t cascade = 0; cascade < cascades_.size(); ++cascade) {
         const auto slots = static_cast<std::size_t>(shapes[cascade].slot_count());
 
@@ -74,8 +89,12 @@ light_cache::light_cache(
         frame.queue = std::make_unique<storage_buffer>(
             context, vk::DeviceSize{most_bricks_a_frame} * sizeof(vec4<int32>)
         );
+        frame.sources = std::make_unique<storage_buffer>(
+            context, vk::DeviceSize{most_sources_a_frame} * sizeof(vec4<int32>)
+        );
     }
     chosen_.reserve(most_bricks_a_frame);
+    source_entries_.reserve(most_sources_a_frame);
 
     create_images_();
     create_pipeline_(occupancy_layout);
@@ -90,6 +109,7 @@ light_cache::~light_cache() {
     }
     static_cast<void>(device.freeDescriptorSets(descriptor_pool_, sampled_set_));
 
+    device.destroyPipeline(scatter_pipeline_);
     device.destroyPipeline(pipeline_);
     device.destroyPipelineLayout(pipeline_layout_);
     device.destroyDescriptorSetLayout(written_layout_);
@@ -172,17 +192,19 @@ auto light_cache::create_pipeline_(vk::DescriptorSetLayout occupancy_layout) -> 
         "create light cache sampled layout"
     );
 
-    std::array<vk::DescriptorSetLayoutBinding, cascade_count + 1> written{};
+    std::array<vk::DescriptorSetLayoutBinding, cascade_count + 2> written{};
     for (uint32 cascade = 0; cascade < cascade_count; ++cascade) {
         written[cascade].binding         = cascade;
         written[cascade].descriptorType  = vk::DescriptorType::eStorageImage;
         written[cascade].descriptorCount = 1;
         written[cascade].stageFlags      = vk::ShaderStageFlagBits::eCompute;
     }
-    written[cascade_count].binding         = cascade_count;
-    written[cascade_count].descriptorType  = vk::DescriptorType::eStorageBuffer;
-    written[cascade_count].descriptorCount = 1;
-    written[cascade_count].stageFlags      = vk::ShaderStageFlagBits::eCompute;
+    for (uint32 list = cascade_count; list < cascade_count + 2; ++list) {
+        written[list].binding         = list;
+        written[list].descriptorType  = vk::DescriptorType::eStorageBuffer;
+        written[list].descriptorCount = 1;
+        written[list].stageFlags      = vk::ShaderStageFlagBits::eCompute;
+    }
 
     written_layout_ = vk_must(
         device.createDescriptorSetLayout({
@@ -215,6 +237,13 @@ auto light_cache::create_pipeline_(vk::DescriptorSetLayout occupancy_layout) -> 
             nullptr, {.stage = compute_.get_stage_info(), .layout = pipeline_layout_}
         ),
         "create light cache pipeline"
+    );
+
+    scatter_pipeline_ = vk_must(
+        device.createComputePipeline(
+            nullptr, {.stage = scatter_.get_stage_info(), .layout = pipeline_layout_}
+        ),
+        "create light source pipeline"
     );
 }
 
@@ -269,7 +298,12 @@ auto light_cache::create_sets_() -> void {
         queue_info.offset = 0;
         queue_info.range  = vk::DeviceSize{most_bricks_a_frame} * sizeof(vec4<int32>);
 
-        std::array<vk::WriteDescriptorSet, cascade_count + 1> writes{};
+        vk::DescriptorBufferInfo sources_info{};
+        sources_info.buffer = frames_[frame].sources->get_buffer();
+        sources_info.offset = 0;
+        sources_info.range  = vk::DeviceSize{most_sources_a_frame} * sizeof(vec4<int32>);
+
+        std::array<vk::WriteDescriptorSet, cascade_count + 2> writes{};
         for (uint32 cascade = 0; cascade < cascade_count; ++cascade) {
             writes[cascade].dstSet          = sets[frame];
             writes[cascade].dstBinding      = cascade;
@@ -282,6 +316,12 @@ auto light_cache::create_sets_() -> void {
         writes[cascade_count].descriptorType  = vk::DescriptorType::eStorageBuffer;
         writes[cascade_count].descriptorCount = 1;
         writes[cascade_count].pBufferInfo     = &queue_info;
+
+        writes[cascade_count + 1].dstSet          = sets[frame];
+        writes[cascade_count + 1].dstBinding      = cascade_count + 1;
+        writes[cascade_count + 1].descriptorType  = vk::DescriptorType::eStorageBuffer;
+        writes[cascade_count + 1].descriptorCount = 1;
+        writes[cascade_count + 1].pBufferInfo     = &sources_info;
 
         device.updateDescriptorSets(writes, nullptr);
     }
@@ -337,6 +377,12 @@ auto light_cache::slot_index_(int32 cascade, vec3i brick) -> std::size_t {
 auto light_cache::arm_(int32 cascade, slot& held) -> void {
     auto& state = cascades_[static_cast<std::size_t>(cascade)];
 
+    // см. docs/lighting.md#когда-пересчитывается
+    if (cascade > 0 && held.passes_left > 0 && !held.fresh) {
+        held.armed_again = true;
+        return;
+    }
+
     --state.owing[held.passes_left];
     held.passes_left = shapes[static_cast<std::size_t>(cascade)].passes_to_settle;
     ++state.owing[held.passes_left];
@@ -358,8 +404,10 @@ auto light_cache::move_window_(int32 cascade, vec3i origin) -> void {
                 if (held.assigned && held.brick == brick) {
                     continue;
                 }
-                held.brick    = brick;
-                held.assigned = true;
+                held.brick       = brick;
+                held.assigned    = true;
+                held.fresh       = true;
+                held.armed_again = false;
                 arm_(cascade, held);
             }
         }
@@ -413,9 +461,194 @@ auto light_cache::mark_changed_(const ecs::occupancy_change& change) -> void {
     );
 }
 
+auto light_cache::touch_sources_at_(vec3i voxel) -> void {
+    for (int32 cascade = 0; cascade < cascade_count; ++cascade) {
+        const int32 shift = shapes[static_cast<std::size_t>(cascade)].cell_shift;
+        touched_cells_.push_back({
+            .cascade = cascade,
+            .cell    = {voxel.x >> shift, voxel.y >> shift, voxel.z >> shift},
+        });
+    }
+}
+
+auto light_cache::rescan_sources_(const ecs::world_grid& grid, vec3i chunk) -> void {
+    found_.clear();
+    if (const ecs::chunk* placed = grid.find_chunk(chunk);
+        placed != nullptr && placed->get_model() != nullptr) {
+        placed->get_model()->collect_emitters(emission_, found_);
+    }
+    std::ranges::stable_sort(found_, {}, page_key_of);
+
+    const auto known = sources_.find(chunk);
+    if (known == sources_.end() && found_.empty()) {
+        return;
+    }
+
+    const vec3i base{chunk.x * chunk_voxels, chunk.y * chunk_voxels, chunk.z * chunk_voxels};
+    const auto touch = [&](const std::vector<asset::emitting_voxel>& voxels) {
+        for (const asset::emitting_voxel& at : voxels) {
+            touch_sources_at_({base.x + at.x, base.y + at.y, base.z + at.z});
+        }
+    };
+
+    if (known != sources_.end()) {
+        touch(known->second);
+    }
+    touch(found_);
+
+    if (found_.empty()) {
+        sources_.erase(known);
+        source_reach_stale_ = true;
+    } else if (known == sources_.end()) {
+        sources_.emplace(chunk, found_);
+        source_reach_stale_ = true;
+    } else {
+        known->second = found_;
+    }
+}
+
+auto light_cache::note_sources_(
+    const ecs::world_grid& grid, const ecs::occupancy_change& change
+) -> void {
+    if (!change.whole_chunk && !sources_.contains(change.chunk)) {
+        const ecs::chunk* placed = grid.find_chunk(change.chunk);
+        if (placed == nullptr) {
+            return;
+        }
+
+        const vec3i local{
+            change.voxel.x - (change.chunk.x * chunk_voxels),
+            change.voxel.y - (change.chunk.y * chunk_voxels),
+            change.voxel.z - (change.chunk.z * chunk_voxels)
+        };
+        if (emission_[placed->get_voxel(local).value] == 0) {
+            return;
+        }
+    }
+
+    rescan_sources_(grid, change.chunk);
+}
+
+auto light_cache::refresh_source_reach_() -> void {
+    if (!source_reach_stale_) {
+        return;
+    }
+    source_reach_stale_ = false;
+
+    source_reach_.clear();
+    for (const auto& [chunk, voxels] : sources_) {
+        for (int32 z = -1; z <= 1; ++z) {
+            for (int32 y = -1; y <= 1; ++y) {
+                for (int32 x = -1; x <= 1; ++x) {
+                    source_reach_.insert({chunk.x + x, chunk.y + y, chunk.z + z});
+                }
+            }
+        }
+    }
+}
+
+auto light_cache::seed_sources_(int32 cascade, vec3i brick) -> void {
+    const int32 cell_shift  = shapes[static_cast<std::size_t>(cascade)].cell_shift;
+    const int32 brick_reach = brick_shift + cell_shift;
+
+    const vec3i low{brick.x << brick_reach, brick.y << brick_reach, brick.z << brick_reach};
+    const vec3i chunk = chunk_of(low);
+
+    const auto known = sources_.find(chunk);
+    if (known == sources_.end()) {
+        return;
+    }
+
+    const vec3i base{chunk.x * chunk_voxels, chunk.y * chunk_voxels, chunk.z * chunk_voxels};
+    for (const asset::emitting_voxel& at : known->second) {
+        const vec3i voxel{base.x + at.x, base.y + at.y, base.z + at.z};
+        if ((voxel.x >> brick_reach) != brick.x || (voxel.y >> brick_reach) != brick.y ||
+            (voxel.z >> brick_reach) != brick.z) {
+            continue;
+        }
+        touched_cells_.push_back({
+            .cascade = cascade,
+            .cell    = {voxel.x >> cell_shift, voxel.y >> cell_shift, voxel.z >> cell_shift},
+        });
+    }
+}
+
+auto light_cache::strongest_source_in_(int32 cascade, vec3i cell) const -> uint8 {
+    const int32 shift = shapes[static_cast<std::size_t>(cascade)].cell_shift;
+
+    const vec3i low{cell.x << shift, cell.y << shift, cell.z << shift};
+    const vec3i chunk = chunk_of(low);
+
+    const auto known = sources_.find(chunk);
+    if (known == sources_.end()) {
+        return 0;
+    }
+
+    const asset::emitting_voxel first{
+        .x = static_cast<uint8>(low.x - (chunk.x * chunk_voxels)),
+        .y = static_cast<uint8>(low.y - (chunk.y * chunk_voxels)),
+        .z = static_cast<uint8>(low.z - (chunk.z * chunk_voxels)),
+    };
+
+    uint8 strongest = 0;
+    for (const asset::emitting_voxel& at :
+         std::ranges::equal_range(known->second, page_key_of(first), {}, page_key_of)) {
+        if ((at.x >> shift) == (first.x >> shift) && (at.y >> shift) == (first.y >> shift) &&
+            (at.z >> shift) == (first.z >> shift)) {
+            strongest = std::max(strongest, at.level);
+        }
+    }
+    return strongest;
+}
+
+auto light_cache::flush_sources_(frame_state& current) -> void {
+    const auto order = [](const source_cell& at) {
+        return std::tuple{at.cascade, at.cell.z, at.cell.y, at.cell.x};
+    };
+    std::ranges::sort(touched_cells_, {}, order);
+    const auto repeated = std::ranges::unique(touched_cells_);
+    touched_cells_.erase(repeated.begin(), repeated.end());
+
+    source_entries_.clear();
+    late_cells_.clear();
+
+    for (const source_cell& touched : touched_cells_) {
+        if (source_entries_.size() >= most_sources_a_frame) {
+            late_cells_.push_back(touched);
+            continue;
+        }
+
+        const vec3i brick{
+            touched.cell.x >> brick_shift, touched.cell.y >> brick_shift,
+            touched.cell.z >> brick_shift
+        };
+        const slot& held = cascades_[static_cast<std::size_t>(touched.cascade)]
+                               .slots[slot_index_(touched.cascade, brick)];
+        if (!held.assigned || held.fresh || held.brick != brick) {
+            continue;
+        }
+
+        const int32 level = strongest_source_in_(touched.cascade, touched.cell);
+        source_entries_.push_back({
+            touched.cell.x, touched.cell.y, touched.cell.z,
+            touched.cascade | (level << source_level_shift)
+        });
+    }
+    touched_cells_.swap(late_cells_);
+
+    current.source_cells = static_cast<uint32>(source_entries_.size());
+    if (!source_entries_.empty()) {
+        current.sources->copy_from_vector(source_entries_);
+    }
+
+    stats_.sources_frame = current.source_cells;
+    stats_.source_chunks = static_cast<uint32>(sources_.size());
+}
+
 auto light_cache::choose_bricks(
-    vec3i centre_voxel, std::span<const ecs::occupancy_change> changes,
-    const light_cache_settings& settings, uint32 frame
+    const ecs::world_grid* grid, vec3i centre_voxel,
+    std::span<const ecs::occupancy_change> changes, const light_cache_settings& settings,
+    uint32 frame
 ) -> void {
     for (int32 cascade = 0; cascade < cascade_count; ++cascade) {
         const vec3i origin = window_origin(centre_voxel, cascade);
@@ -428,7 +661,11 @@ auto light_cache::choose_bricks(
 
     for (const auto& change : changes) {
         mark_changed_(change);
+        if (grid != nullptr) {
+            note_sources_(*grid, change);
+        }
     }
+    refresh_source_reach_();
 
     const uint32 budget = std::min(settings.bricks_per_frame, most_bricks_a_frame);
 
@@ -439,6 +676,9 @@ auto light_cache::choose_bricks(
     for (int32 cascade = cascade_count - 1; cascade >= 0; --cascade) {
         auto& state        = cascades_[static_cast<std::size_t>(cascade)];
         const uint8 passes = shapes[static_cast<std::size_t>(cascade)].passes_to_settle;
+
+        const int32 brick_reach =
+            brick_shift + shapes[static_cast<std::size_t>(cascade)].cell_shift;
 
         uint32 taken_above = 0;
         for (uint8 wave = passes; wave > 0 && chosen_.size() < budget; --wave) {
@@ -453,12 +693,27 @@ auto light_cache::choose_bricks(
                 --left;
                 ++taken_above;
 
-                const int32 flags = (wave == passes ? seeds_from_sky : 0) |
-                                    (wave == 1 ? last_pass : 0);
+                int32 flags = (wave == passes ? seeds_from_sky : 0) | (wave == 1 ? last_pass : 0);
+                if (wave == passes && held.fresh) {
+                    flags      |= wipes_sources;
+                    held.fresh = false;
+                    seed_sources_(cascade, held.brick);
+                }
+                if (!source_reach_.empty() &&
+                    source_reach_.contains(chunk_of({
+                        held.brick.x << brick_reach, held.brick.y << brick_reach,
+                        held.brick.z << brick_reach
+                    }))) {
+                    flags |= near_sources;
+                }
                 chosen_.push_back({held.brick.x, held.brick.y, held.brick.z, cascade | flags});
 
                 --state.owing[wave];
                 --held.passes_left;
+                if (held.passes_left == 0 && held.armed_again) {
+                    held.armed_again = false;
+                    held.passes_left = passes;
+                }
                 ++state.owing[held.passes_left];
                 held.chosen_at = serial_;
             }
@@ -472,6 +727,7 @@ auto light_cache::choose_bricks(
     if (!chosen_.empty()) {
         current.queue->copy_from_vector(chosen_);
     }
+    flush_sources_(current);
 
     stats_.bricks_frame = current.bricks;
     stats_.bricks_total += current.bricks;
@@ -483,13 +739,11 @@ auto light_cache::dispatch(
     vk::CommandBuffer cmd, vk::DescriptorSet occupancy_set, vec3i base_chunk, uint32 frame
 ) const -> void {
     const auto& current = frames_[frame];
-    if (current.bricks == 0) {
+    if (current.bricks == 0 && current.source_cells == 0) {
         return;
     }
 
     const std::array sets{occupancy_set, current.set};
-
-    cmd.bindPipeline(vk::PipelineBindPoint::eCompute, pipeline_);
     cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipeline_layout_, 0, sets, nullptr);
 
     light_cache_push push{};
@@ -501,21 +755,40 @@ auto light_cache::dispatch(
         };
     }
 
-    cmd.pushConstants<light_cache_push>(
-        pipeline_layout_, vk::ShaderStageFlagBits::eCompute, 0, push
-    );
-    cmd.dispatch(current.bricks, 1, 1);
+    const auto settle = [&] {
+        cmd.pipelineBarrier(
+            vk::PipelineStageFlagBits::eComputeShader,
+            vk::PipelineStageFlagBits::eComputeShader | vk::PipelineStageFlagBits::eFragmentShader,
+            {},
+            vk::MemoryBarrier{
+                .srcAccessMask = vk::AccessFlagBits::eShaderWrite,
+                .dstAccessMask = vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite,
+            },
+            nullptr, nullptr
+        );
+    };
 
-    cmd.pipelineBarrier(
-        vk::PipelineStageFlagBits::eComputeShader,
-        vk::PipelineStageFlagBits::eComputeShader | vk::PipelineStageFlagBits::eFragmentShader,
-        {},
-        vk::MemoryBarrier{
-            .srcAccessMask = vk::AccessFlagBits::eShaderWrite,
-            .dstAccessMask = vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite,
-        },
-        nullptr, nullptr
-    );
+    if (current.bricks > 0) {
+        cmd.bindPipeline(vk::PipelineBindPoint::eCompute, pipeline_);
+        cmd.pushConstants<light_cache_push>(
+            pipeline_layout_, vk::ShaderStageFlagBits::eCompute, 0, push
+        );
+        cmd.dispatch(current.bricks, 1, 1);
+        settle();
+    }
+
+    if (current.source_cells > 0) {
+        constexpr uint32 cells_a_group = 64;
+
+        push.base_chunk.w = static_cast<int32>(current.source_cells);
+
+        cmd.bindPipeline(vk::PipelineBindPoint::eCompute, scatter_pipeline_);
+        cmd.pushConstants<light_cache_push>(
+            pipeline_layout_, vk::ShaderStageFlagBits::eCompute, 0, push
+        );
+        cmd.dispatch((current.source_cells + cells_a_group - 1) / cells_a_group, 1, 1);
+        settle();
+    }
 }
 
 auto light_cache::wrap_of(int32 cascade, vec3i base_chunk) -> vec4f {

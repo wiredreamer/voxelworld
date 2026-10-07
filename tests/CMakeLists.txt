@@ -55,6 +55,7 @@ catch_discover_tests(core_tests)
 add_executable(asset_tests
     asset/page_pool.test.cpp
     asset/page_format.test.cpp
+    asset/model_emitters.test.cpp
     asset/model_fill.test.cpp
     asset/occupancy_bricks.test.cpp
     asset/model_edit.test.cpp

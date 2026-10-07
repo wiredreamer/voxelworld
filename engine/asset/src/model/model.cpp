@@ -884,6 +884,53 @@ auto model::page_may_hold(
     }
 }
 
+auto model::collect_emitters(
+    std::span<const uint8, voxel_type_capacity> emission_of_type, std::vector<emitting_voxel>& out
+) const -> void {
+    constexpr int32 ps = page_size;
+
+    voxel_set emitting;
+    for (std::size_t type = 0; type < emission_of_type.size(); ++type) {
+        emitting.set(type, emission_of_type[type] != 0);
+    }
+    if (emitting.none()) {
+        return;
+    }
+
+    for (int32 pz = 0; pz < pages_z_; ++pz) {
+        for (int32 py = 0; py < pages_y_; ++py) {
+            for (int32 px = 0; px < pages_x_; ++px) {
+                if (!page_may_hold(px, py, pz, emitting)) {
+                    continue;
+                }
+
+                const bool whole = get_page_mode(px, py, pz) == page_mode::uniform;
+                const auto page  = whole ? page_view{} : get_page(px, py, pz);
+                const voxel fill = get_page_fill(px, py, pz);
+
+                for (int32 lz = 0; lz < ps; ++lz) {
+                    for (int32 ly = 0; ly < ps; ++ly) {
+                        for (int32 lx = 0; lx < ps; ++lx) {
+                            const voxel held  = whole ? fill : page.voxel_at(lx, ly, lz);
+                            const uint8 level = emission_of_type[held.value];
+                            if (level == 0) {
+                                continue;
+                            }
+
+                            out.push_back({
+                                .x     = static_cast<uint8>((px * ps) + lx),
+                                .y     = static_cast<uint8>((py * ps) + ly),
+                                .z     = static_cast<uint8>((pz * ps) + lz),
+                                .level = level,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 auto model::build_rows_of(
     chunk_occupancy& out, const voxel_set& wanted
 ) const -> bool {

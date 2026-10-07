@@ -128,6 +128,12 @@ public:
 
     [[nodiscard]] auto page_may_hold(int32 px, int32 py, int32 pz, const voxel_set& wanted) const -> bool;
 
+    // см. docs/lighting.md#излучатели-в-кеше
+    auto collect_emitters(
+        std::span<const uint8, voxel_type_capacity> emission_of_type,
+        std::vector<emitting_voxel>& out
+    ) const -> void;
+
     // см. docs/rendering.md#качание-листвы
     [[nodiscard]] auto build_rows_of(chunk_occupancy& out, const voxel_set& wanted) const -> bool;
 

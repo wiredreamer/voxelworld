@@ -7,6 +7,7 @@ export module vw.gfx:resource.light_cache;
 import std;
 
 import vw.core;
+import vw.asset;
 import :frames_in_flight;
 import :gpu_buffers;
 import :renderer.settings;
@@ -47,6 +48,8 @@ struct light_cache_stats {
     uint32 waiting       = 0;
     uint64 bricks_total  = 0;
     uint32 peak_waiting  = 0;
+    uint32 sources_frame = 0;
+    uint32 source_chunks = 0;
 };
 
 // см. docs/lighting.md#кеш-освещённости
@@ -61,13 +64,14 @@ public:
         {.texture_side = 128, .cell_shift = 3, .passes_to_settle = 3},
     }};
 
-    static constexpr uint32 most_bricks_a_frame = 4096;
+    static constexpr uint32 most_bricks_a_frame  = 4096;
+    static constexpr uint32 most_sources_a_frame = 16384;
 
     static constexpr vk::Format format = vk::Format::eR8G8B8A8Unorm;
 
     light_cache(
         vulkan_context& context, vk::DescriptorPool descriptor_pool,
-        vk::DescriptorSetLayout occupancy_layout
+        vk::DescriptorSetLayout occupancy_layout, const voxel_registry& registry
     );
     ~light_cache();
 
@@ -79,8 +83,9 @@ public:
     auto make_ready(vk::CommandBuffer cmd) -> void;
 
     auto choose_bricks(
-        vec3i centre_voxel, std::span<const ecs::occupancy_change> changes,
-        const light_cache_settings& settings, uint32 frame
+        const ecs::world_grid* grid, vec3i centre_voxel,
+        std::span<const ecs::occupancy_change> changes, const light_cache_settings& settings,
+        uint32 frame
     ) -> void;
 
     auto dispatch(
@@ -108,6 +113,8 @@ private:
         vec3i brick{};
         uint32 chosen_at  = 0;
         bool assigned     = false;
+        bool fresh        = false;
+        bool armed_again  = false;
         uint8 passes_left = 0;
     };
 
@@ -124,8 +131,17 @@ private:
 
     struct frame_state {
         std::unique_ptr<storage_buffer> queue;
+        std::unique_ptr<storage_buffer> sources;
         vk::DescriptorSet set = nullptr;
         uint32 bricks         = 0;
+        uint32 source_cells   = 0;
+    };
+
+    struct source_cell {
+        int32 cascade = 0;
+        vec3i cell{};
+
+        auto operator==(const source_cell&) const -> bool = default;
     };
 
     auto create_images_() -> void;
@@ -136,23 +152,42 @@ private:
     auto mark_box_(vec3i low_voxel, vec3i high_voxel) -> void;
     auto mark_changed_(const ecs::occupancy_change& change) -> void;
     auto arm_(int32 cascade, slot& held) -> void;
+
+    auto note_sources_(const ecs::world_grid& grid, const ecs::occupancy_change& change) -> void;
+    auto rescan_sources_(const ecs::world_grid& grid, vec3i chunk) -> void;
+    auto touch_sources_at_(vec3i voxel) -> void;
+    auto seed_sources_(int32 cascade, vec3i brick) -> void;
+    auto flush_sources_(frame_state& current) -> void;
+    auto refresh_source_reach_() -> void;
+    [[nodiscard]] auto strongest_source_in_(int32 cascade, vec3i cell) const -> uint8;
     [[nodiscard]] static auto slot_index_(int32 cascade, vec3i brick) -> std::size_t;
 
     vulkan_context* context_;
     vk::DescriptorPool descriptor_pool_;
 
     shader compute_;
+    shader scatter_;
+    asset::emission_table emission_;
 
     vk::Sampler sampler_                     = nullptr;
     vk::DescriptorSetLayout sampled_layout_  = nullptr;
     vk::DescriptorSetLayout written_layout_  = nullptr;
     vk::PipelineLayout pipeline_layout_      = nullptr;
     vk::Pipeline pipeline_                   = nullptr;
+    vk::Pipeline scatter_pipeline_           = nullptr;
     vk::DescriptorSet sampled_set_           = nullptr;
 
     std::array<cascade_state, cascade_count> cascades_;
     std::array<frame_state, frames_in_flight> frames_;
     std::vector<vec4<int32>> chosen_;
+
+    std::unordered_map<vec3i, std::vector<asset::emitting_voxel>> sources_;
+    std::unordered_set<vec3i> source_reach_;
+    bool source_reach_stale_ = false;
+    std::vector<asset::emitting_voxel> found_;
+    std::vector<source_cell> touched_cells_;
+    std::vector<source_cell> late_cells_;
+    std::vector<vec4<int32>> source_entries_;
     uint32 serial_ = 0;
     bool ready_    = false;
 

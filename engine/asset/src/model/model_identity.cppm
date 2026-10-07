@@ -376,6 +376,15 @@ enum class page_mode : uint8 {
 
 enum class model_fill : uint8 { mixed = 0, air = 1, solid = 2 };
 
+struct emitting_voxel {
+    uint8 x     = 0;
+    uint8 y     = 0;
+    uint8 z     = 0;
+    uint8 level = 0;
+
+    auto operator==(const emitting_voxel&) const -> bool = default;
+};
+
 struct page_entry {
     static constexpr uint32 mode_bits     = 3;
     static constexpr uint32 fill_bits     = 8;

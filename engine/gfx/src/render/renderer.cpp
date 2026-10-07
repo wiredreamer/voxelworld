@@ -64,7 +64,7 @@ renderer::renderer(
         *context_, descriptor_pool_, *model_volumes_
     );
     light_cache_ = std::make_unique<light_cache>(
-        *context_, descriptor_pool_, occupancy_->get_descriptor_set_layout()
+        *context_, descriptor_pool_, occupancy_->get_descriptor_set_layout(), *voxel_registry_
     );
     create_graphics_pipeline();
     create_wireframe_pipeline();
@@ -543,8 +543,8 @@ auto renderer::render(
         light_cache_->make_ready(cmd);
         if (light_cache_settings_.enabled) {
             light_cache_->choose_bricks(
-                occupancy_->centre_voxel(), occupancy_->packed_changes(), light_cache_settings_,
-                current_frame_
+                world.system<ecs::world_grid_system>().grid(), occupancy_->centre_voxel(),
+                occupancy_->packed_changes(), light_cache_settings_, current_frame_
             );
             light_cache_->dispatch(
                 cmd, occupancy_->get_descriptor_set(current_frame_), occupancy_->centre_chunk(),

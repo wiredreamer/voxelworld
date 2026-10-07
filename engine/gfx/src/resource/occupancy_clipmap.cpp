@@ -227,21 +227,30 @@ auto occupancy_clipmap::create_sets_(const model_occupancy_buffer& model_volumes
 }
 
 auto occupancy_clipmap::mark_(
-    const level_state& state, int32 level, std::size_t index, bool known
+    level_state& state, int32 level, std::size_t index, bool known, bool hollow
 ) -> void {
-    const slot& held = state.slots[index];
-    if (held.valid == known) {
+    slot& held = state.slots[index];
+
+    // см. docs/rendering.md#занятость-на-gpu
+    const bool was_told = held.valid && !held.hollow;
+    const bool told     = known && !hollow;
+
+    if (held.valid != known) {
+        stats_.valid_slots += known ? 1U : ~0U;
+    }
+    held.valid  = known;
+    held.hollow = hollow;
+
+    if (was_told == told) {
         return;
     }
 
     const auto bit  = static_cast<std::size_t>(layout::first_valid_bit(level)) + index;
     const uint32 at = 1U << (bit & 31);
-    if (known) {
+    if (told) {
         params_.valid[bit >> 7][(bit >> 5) & 3] |= at;
-        ++stats_.valid_slots;
     } else {
         params_.valid[bit >> 7][(bit >> 5) & 3] &= ~at;
-        --stats_.valid_slots;
     }
     frames_behind_ = frames_in_flight;
 }
@@ -291,7 +300,7 @@ auto occupancy_clipmap::move_window_(int32 level, vec3i origin) -> void {
                     continue;
                 }
 
-                mark_(state, level, static_cast<std::size_t>(index), false);
+                mark_(state, level, static_cast<std::size_t>(index), false, false);
 
                 held.chunk    = chunk;
                 held.assigned = true;
@@ -442,9 +451,8 @@ auto occupancy_clipmap::stage_(
         static_cast<std::size_t>(
             spatial::occupancy_slot_index(spatial::occupancy_slot_of(held.chunk, level), level)
         ),
-        true
+        true, fill == asset::model_fill::air
     );
-    held.valid = true;
     ++stats_.packed_frame;
 
 }

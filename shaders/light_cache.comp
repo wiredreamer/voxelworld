@@ -2,59 +2,33 @@
 
 #define OCCUPANCY_SET 0
 #include "occupancy.glsl"
+#include "light_cascades.glsl"
 
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 8) in;
-
-layout(set = 1, binding = 0, rgba8) uniform image3D cascadeNear;
-layout(set = 1, binding = 1, rgba8) uniform image3D cascadeMid;
-layout(set = 1, binding = 2, rgba8) uniform image3D cascadeFar;
 
 layout(std430, set = 1, binding = 3) readonly buffer LightBricks {
     ivec4 bricks[];
 } queue;
 
-layout(push_constant) uniform LightPush {
-    ivec4 base_chunk;
-    ivec4 window[3];
-} push;
-
 const int BRICK_TEXELS   = 8;
-const int LAST_CASCADE   = 2;
-const int CASCADE_BITS   = 7;
 const int SEEDS_FROM_SKY = 8;
 const int LAST_PASS      = 16;
+const int WIPES_SOURCES  = 32;
+const int NEAR_SOURCES   = 64;
 
-const int CELL_SHIFT[3] = int[3](0, 2, 3);
-const int SIDE_MASK[3]  = int[3](255, 127, 127);
+const float SKY_REACH      = 1024.0;
+const float SKY_LEVEL      = 0.99;
+const int SOLID_SUB_BLOCKS = 5;
 
-const float FULL_LEVEL      = 15.0;
-const float SKY_REACH       = 1024.0;
-const float SKY_LEVEL       = 0.99;
-const int SOLID_SUB_BLOCKS  = 5;
+const float SOURCE_STRIDE = 1.25;
+const float EDGE_LENGTH   = 1.41421356;
+const float CORNER_LENGTH = 1.73205081;
 
 const ivec3 NEIGHBOURS[6] = ivec3[6](
     ivec3(1, 0, 0), ivec3(-1, 0, 0), ivec3(0, 1, 0), ivec3(0, -1, 0), ivec3(0, 0, 1), ivec3(0, 0, -1)
 );
 
-vec4 readCascade(int cascade, ivec3 texel) {
-    if (cascade == 0) {
-        return imageLoad(cascadeNear, texel);
-    }
-    if (cascade == 1) {
-        return imageLoad(cascadeMid, texel);
-    }
-    return imageLoad(cascadeFar, texel);
-}
-
-void writeCascade(int cascade, ivec3 texel, vec4 light) {
-    if (cascade == 0) {
-        imageStore(cascadeNear, texel, light);
-    } else if (cascade == 1) {
-        imageStore(cascadeMid, texel, light);
-    } else {
-        imageStore(cascadeFar, texel, light);
-    }
-}
+const vec4 OPEN_SKY = vec4(0.0, 0.0, 0.0, 1.0);
 
 bool cellHoldsSolid(ivec3 lowVoxel, int cascade) {
     if (!occupancyKnows(lowVoxel >> OCCUPANCY_CHUNK_SHIFT, cascade)) {
@@ -74,35 +48,35 @@ bool windowHolds(int cascade, ivec3 texel) {
            all(lessThanEqual(inside, ivec3(SIDE_MASK[cascade])));
 }
 
-float levelAt(int cascade, ivec3 texel) {
+vec4 lightAt(int cascade, ivec3 texel) {
     ivec3 lowVoxel = texel << CELL_SHIFT[cascade];
     while (!windowHolds(cascade, texel)) {
         if (cascade == LAST_CASCADE) {
-            return 1.0;
+            return OPEN_SKY;
         }
         cascade += 1;
         texel   = lowVoxel >> CELL_SHIFT[cascade];
     }
-    return readCascade(cascade, texel & SIDE_MASK[cascade]).a;
+    return readCascade(cascade, texel & SIDE_MASK[cascade]);
 }
 
-float levelInsideSolid(ivec3 lowVoxel, ivec3 texel, int cascade, bool widened) {
+vec2 lightInsideSolid(ivec3 lowVoxel, ivec3 texel, int cascade, bool widened) {
     int cellVoxels = 1 << CELL_SHIFT[cascade];
 
-    float gathered = 0.0;
-    float open     = 0.0;
+    vec2 gathered = vec2(0.0);
+    float open    = 0.0;
     for (int side = 0; side < 6; ++side) {
         if (cellHoldsSolid(lowVoxel + (NEIGHBOURS[side] * cellVoxels), cascade)) {
             continue;
         }
-        gathered += levelAt(cascade, texel + NEIGHBOURS[side]);
+        gathered += lightAt(cascade, texel + NEIGHBOURS[side]).ga;
         open     += 1.0;
     }
     if (open > 0.0) {
         return gathered / open;
     }
     if (!widened) {
-        return 0.0;
+        return vec2(0.0);
     }
 
     for (int z = -1; z <= 1; ++z) {
@@ -113,12 +87,12 @@ float levelInsideSolid(ivec3 lowVoxel, ivec3 texel, int cascade, bool widened) {
                     cellHoldsSolid(lowVoxel + (beside * cellVoxels), cascade)) {
                     continue;
                 }
-                gathered += levelAt(cascade, texel + beside);
+                gathered += lightAt(cascade, texel + beside).ga;
                 open     += 1.0;
             }
         }
     }
-    return open > 0.0 ? gathered / open : 0.0;
+    return open > 0.0 ? gathered / open : vec2(0.0);
 }
 
 bool columnSeesSky(vec3 origin, int cascade) {
@@ -142,43 +116,98 @@ float skyShare(ivec3 lowVoxel, int cascade) {
     return open;
 }
 
+uint faceBit(int axis, int along) {
+    return 1u << uint((axis * 2) + (along < 0 ? 1 : 0));
+}
+
+float sourcesAcrossCorners(ivec3 lowVoxel, ivec3 texel, int cascade, uint openFaces, float stride) {
+    int cellVoxels = 1 << CELL_SHIFT[cascade];
+
+    float strongest = 0.0;
+    for (int z = -1; z <= 1; ++z) {
+        for (int y = -1; y <= 1; ++y) {
+            for (int x = -1; x <= 1; ++x) {
+                int steps = abs(x) + abs(y) + abs(z);
+                if (steps < 2) {
+                    continue;
+                }
+
+                uint towards = (x != 0 ? faceBit(0, x) : 0u) | (y != 0 ? faceBit(1, y) : 0u) |
+                               (z != 0 ? faceBit(2, z) : 0u);
+                if ((openFaces & towards) == 0u) {
+                    continue;
+                }
+
+                ivec3 beside = ivec3(x, y, z);
+                vec4 light   = lightAt(cascade, texel + beside);
+                bool solid   = cellHoldsSolid(lowVoxel + (beside * cellVoxels), cascade);
+
+                float span = steps == 2 ? EDGE_LENGTH : CORNER_LENGTH;
+                strongest  = max(strongest, (solid ? light.r : light.g) - (stride * span));
+            }
+        }
+    }
+    return strongest;
+}
+
 void main() {
     ivec4 brick   = queue.bricks[gl_WorkGroupID.x];
     int cascade   = brick.w & CASCADE_BITS;
     bool reseeded = (brick.w & SEEDS_FROM_SKY) != 0;
     bool closing  = (brick.w & LAST_PASS) != 0;
+    bool lamps    = (brick.w & NEAR_SOURCES) != 0;
 
     ivec3 texel    = (brick.xyz * BRICK_TEXELS) + ivec3(gl_LocalInvocationID);
     ivec3 stored   = texel & SIDE_MASK[cascade];
     ivec3 lowVoxel = texel << CELL_SHIFT[cascade];
     int cellVoxels = 1 << CELL_SHIFT[cascade];
 
+    vec4 own     = readCascade(cascade, stored);
+    float source = (brick.w & WIPES_SOURCES) != 0 ? 0.0 : own.r;
+
     if (cellHoldsSolid(lowVoxel, cascade)) {
-        writeCascade(
-            cascade, stored, vec4(0.0, 0.0, 0.0, levelInsideSolid(lowVoxel, texel, cascade, closing))
-        );
+        vec2 around = lightInsideSolid(lowVoxel, texel, cascade, closing);
+        writeCascade(cascade, stored, vec4(source, lamps ? around.x : 0.0, 0.0, around.y));
         return;
     }
 
-    float underSky = readCascade(cascade, stored).b;
-    if (reseeded) {
-        underSky = skyShare(lowVoxel, cascade);
-    }
+    float underSky = reseeded ? skyShare(lowVoxel, cascade) : own.b;
+    float stride   = (SOURCE_STRIDE * float(cellVoxels)) / FULL_LEVEL;
 
     float level = 1.0;
-    if (underSky < SKY_LEVEL) {
+    float lamp  = 0.0;
+    if (lamps || underSky < SKY_LEVEL) {
         float brightest = 0.0;
+        uint openFaces  = 0u;
+
         for (int side = 0; side < 6; ++side) {
-            if (cellHoldsSolid(lowVoxel + (NEIGHBOURS[side] * cellVoxels), cascade)) {
+            bool solid = cellHoldsSolid(lowVoxel + (NEIGHBOURS[side] * cellVoxels), cascade);
+            if (solid && !lamps) {
                 continue;
             }
-            brightest = max(brightest, levelAt(cascade, texel + NEIGHBOURS[side]));
+
+            vec4 beside = lightAt(cascade, texel + NEIGHBOURS[side]);
+            if (solid) {
+                lamp = max(lamp, beside.r - stride);
+                continue;
+            }
+
+            openFaces |= 1u << uint(side);
+            brightest = max(brightest, beside.a);
+            lamp      = max(lamp, beside.g - stride);
         }
 
-        float stride = (cascade > 0 && brightest > SKY_LEVEL) ? 0.5 : 1.0;
-        float spread = max(brightest - ((stride * float(cellVoxels)) / FULL_LEVEL), 0.0);
-        level        = mix(spread, 1.0, underSky);
+        if (underSky < SKY_LEVEL) {
+            float pace   = (cascade > 0 && brightest > SKY_LEVEL) ? 0.5 : 1.0;
+            float spread = max(brightest - ((pace * float(cellVoxels)) / FULL_LEVEL), 0.0);
+            level        = mix(spread, 1.0, underSky);
+        }
+
+        if (lamps && lamp > 0.0) {
+            lamp = max(lamp, sourcesAcrossCorners(lowVoxel, texel, cascade, openFaces, stride));
+        }
+        lamp = lamps ? max(lamp, source) : 0.0;
     }
 
-    writeCascade(cascade, stored, vec4(0.0, 0.0, underSky, level));
+    writeCascade(cascade, stored, vec4(source, lamp, underSky, level));
 }

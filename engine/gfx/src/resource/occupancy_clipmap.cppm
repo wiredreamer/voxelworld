@@ -92,6 +92,7 @@ private:
         vec3i chunk{};
         bool assigned = false;
         bool valid    = false;
+        bool hollow   = false;
         bool queued   = false;
         bool touched  = false;
     };
@@ -154,7 +155,8 @@ private:
 
     occupancy_params params_{};
     uint32 frames_behind_ = frames_in_flight;
-    auto mark_(const level_state& state, int32 level, std::size_t index, bool known) -> void;
+    auto mark_(level_state& state, int32 level, std::size_t index, bool known, bool hollow)
+        -> void;
 
     std::unique_ptr<asset::chunk_occupancy> scratch_;
     occupancy_stats stats_;

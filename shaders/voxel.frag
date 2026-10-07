@@ -594,8 +594,10 @@ void main() {
     float skyReach = pow(skyRaw, ubo.sky_params.x);
     float sunReach = pow(skyRaw, ubo.sky_params.y);
 
-    if (ubo.light_wrap[0].w > 0.5) {
-        skyRaw   = cachedLight(normal).a;
+    bool cached     = ubo.light_wrap[0].w > 0.5;
+    vec4 cacheLight = cached ? cachedLight(normal) : vec4(0.0);
+    if (cached) {
+        skyRaw   = cacheLight.a;
         skyReach = pow(skyRaw, ubo.sky_params.x);
         sunReach = pow(skyRaw, ubo.sky_params.y);
     }
@@ -617,7 +619,7 @@ void main() {
     float l01 = float((bm >> 12) & 15u) * (1.0 / 15.0);
 
     float lampRaw   = mix(mix(l00, l10, fragUV.x), mix(l01, l11, fragUV.x), fragUV.y);
-    lampRaw = max(lampRaw, fragInstanceLight.y);
+    lampRaw = cached ? cacheLight.g : max(lampRaw, fragInstanceLight.y);
     float lampReach = pow(lampRaw, ubo.lamp_params.w);
 
     if (ubo.debug_view == 5u) {

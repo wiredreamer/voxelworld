@@ -1,0 +1,25 @@
+#version 450
+
+#include "light_cascades.glsl"
+
+layout(local_size_x = 64) in;
+
+layout(std430, set = 1, binding = 4) readonly buffer LightSources {
+    ivec4 cells[];
+} sources;
+
+const int LEVEL_SHIFT = 8;
+
+void main() {
+    if (gl_GlobalInvocationID.x >= uint(push.base_chunk.w)) {
+        return;
+    }
+
+    ivec4 cell  = sources.cells[gl_GlobalInvocationID.x];
+    int cascade = cell.w & CASCADE_BITS;
+    ivec3 held  = cell.xyz & SIDE_MASK[cascade];
+
+    vec4 light = readCascade(cascade, held);
+    light.r    = float(cell.w >> LEVEL_SHIFT) / FULL_LEVEL;
+    writeCascade(cascade, held, light);
+}
