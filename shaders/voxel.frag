@@ -117,7 +117,7 @@ layout(set = 6, binding = 0) uniform sampler3D lightCascades[3];
 const int LIGHT_LAST_CASCADE  = 2;
 const float LIGHT_CELL[3]     = float[3](1.0, 4.0, 8.0);
 const float LIGHT_SPAN[3]     = float[3](256.0, 512.0, 1024.0);
-const float LIGHT_EDGE[3]     = float[3](96.0, 192.0, 384.0);
+const float LIGHT_EDGE[3]     = float[3](96.0, 192.0, 480.0);
 const float LIGHT_EDGE_BLEND  = 0.8;
 
 vec4 cascadeLight(int cascade, vec3 fromBase, vec3 normal) {
