@@ -20,8 +20,8 @@ class spatial_system;
 class transform_system;
 class world_grid_system;
 
-// см. docs/lod-plan.md#подобранные-умолчания
-inline constexpr uint32 default_view_distance = 16;
+// см. docs/light-plan.md#пресеты-качества
+inline constexpr uint32 default_view_distance = 8;
 
 struct world_view_component final {
     [[nodiscard]] auto get_chunk_coord() const -> vec3i {

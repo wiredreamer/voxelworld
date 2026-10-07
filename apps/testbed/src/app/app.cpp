@@ -15,9 +15,12 @@ testbed_app::testbed_app(
 )
     : app{eng}
     , sun_in_bench_{args.flag("--sun")}
-    , view_distance_{args.count("--view-distance", ecs::default_view_distance)}
+    , quality_{quality_of(args)}
+    , view_distance_{
+          args.count("--view-distance", gfx::preset_of(quality_).view_distance_columns)
+      }
     , lod_distance_{args.real(
-          "--lod-distance", static_cast<float32>(ecs::default_lod_base_chunks)
+          "--lod-distance", static_cast<float32>(gfx::preset_of(quality_).lod_base_chunks)
       )}
     , lod_level_{args.text("--lod-level") ? args.integer("--lod-level", 0) : -1}
     , benching_{args.flag("--bench")}
@@ -37,6 +40,7 @@ testbed_app::testbed_app(
 
     renderer.set_chunk_cull_enabled(args.flag("--chunk-cull"));
     renderer.get_grass_settings().enabled = !args.flag("--no-grass");
+    renderer.get_grass_settings().radius_columns = gfx::preset_of(quality_).grass_radius_columns;
     renderer.get_cluster_settings().enabled = !args.flag("--no-clusters");
 
     if (const auto visible = args.count("--max-visible-lights", 0); visible > 0) {
@@ -229,7 +233,12 @@ auto testbed_app::tick_shot_() -> void {
 }
 
 auto testbed_app::collect_report(gfx::report& out) const -> void {
-    out.section("stand").value("scene", scene_->name()).value("camera", rig_->name());
+    out.section("stand")
+        .value("scene", scene_->name())
+        .value("camera", rig_->name())
+        .value("quality", gfx::name_of(quality_))
+        .value("view_distance", static_cast<uint64>(view_distance_))
+        .value("lod_distance", lod_distance_);
 
     scene_->collect_report(out);
     clusters_.collect_report(out);

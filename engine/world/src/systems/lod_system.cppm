@@ -21,7 +21,8 @@ struct lod_system_stats {
     std::array<uint32, asset::lod_level_count> at_level{};
 };
 
-inline constexpr uint32 default_lod_base_chunks = 6;
+// см. docs/light-plan.md#пресеты-качества
+inline constexpr uint32 default_lod_base_chunks = 3;
 
 // см. docs/lod-plan.md#выбор-уровня
 class lod_system {

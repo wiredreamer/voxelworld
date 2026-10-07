@@ -3,6 +3,7 @@ export module vw.gfx:renderer.settings;
 import std;
 
 import vw.core;
+import vw.world;
 
 export namespace vw::gfx {
 
@@ -11,6 +12,58 @@ enum class render_mode : uint8 { lit, wireframe };
 inline constexpr std::array<std::string_view, 2> render_mode_names{"lit", "wireframe"};
 
 inline constexpr uint32 msaa_sample_count = 4;
+
+enum class quality_tier : uint8 { low, medium, high };
+
+inline constexpr std::array<std::string_view, 3> quality_tier_names{"low", "medium", "high"};
+
+inline constexpr quality_tier default_quality = quality_tier::medium;
+
+// см. docs/light-plan.md#пресеты-качества
+struct quality_preset {
+    uint32 view_distance_columns;
+    uint32 lod_base_chunks;
+    uint32 msaa_samples;
+    int32 grass_radius_columns;
+};
+
+inline constexpr std::array<quality_preset, quality_tier_names.size()> quality_presets{{
+    {
+        .view_distance_columns = 6,
+        .lod_base_chunks       = 2,
+        .msaa_samples          = 2,
+        .grass_radius_columns  = 1,
+    },
+    {
+        .view_distance_columns = ecs::default_view_distance,
+        .lod_base_chunks       = ecs::default_lod_base_chunks,
+        .msaa_samples          = msaa_sample_count,
+        .grass_radius_columns  = 2,
+    },
+    {
+        .view_distance_columns = 16,
+        .lod_base_chunks       = 6,
+        .msaa_samples          = 4,
+        .grass_radius_columns  = 2,
+    },
+}};
+
+[[nodiscard]] constexpr auto preset_of(quality_tier tier) -> const quality_preset& {
+    return quality_presets[static_cast<std::size_t>(tier)];
+}
+
+[[nodiscard]] constexpr auto name_of(quality_tier tier) -> std::string_view {
+    return quality_tier_names[static_cast<std::size_t>(tier)];
+}
+
+[[nodiscard]] constexpr auto find_quality(std::string_view name) -> std::optional<quality_tier> {
+    for (std::size_t tier = 0; tier < quality_tier_names.size(); ++tier) {
+        if (quality_tier_names[tier] == name) {
+            return static_cast<quality_tier>(tier);
+        }
+    }
+    return std::nullopt;
+}
 
 struct directional_light_settings {
     vec3f direction{0.0f, -1.0f, 0.0f};

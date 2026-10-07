@@ -150,6 +150,7 @@ private:
     int32 edit_clicks_  = 0;
     std::optional<voxel_pick> hovered_;
 
+    gfx::quality_tier quality_ = gfx::default_quality;
     uint32 view_distance_ = ecs::default_view_distance;
     float32 lod_distance_ = static_cast<float32>(ecs::default_lod_base_chunks);
     int32 lod_level_       = -1;

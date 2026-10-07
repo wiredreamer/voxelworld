@@ -5,7 +5,8 @@
 Подсистемы подробно: `docs/lighting.md` (свет), `docs/rendering.md` (рендер),
 `docs/world.md` (мировая сетка). Что уже оптимизировано, что нет и что станет
 дорого при росте — `docs/optimization.md`. Управление редактором по MCP —
-`docs/mcp.md`.
+`docs/mcp.md`. Идущий план пересмотра света, свойств вокселя и отсева —
+`docs/light-plan.md`.
 
 ## Architecture
 

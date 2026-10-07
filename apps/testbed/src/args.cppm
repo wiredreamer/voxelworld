@@ -3,6 +3,7 @@ export module vw.testbed:args;
 import std;
 
 import vw.core;
+import vw.gfx;
 
 export namespace vw::testbed {
 
@@ -61,5 +62,20 @@ public:
 private:
     std::vector<std::string_view> args_;
 };
+
+[[nodiscard]] auto quality_of(const arg_reader& args) -> gfx::quality_tier {
+    const auto wanted = args.text("--quality");
+    if (!wanted) {
+        return gfx::default_quality;
+    }
+
+    if (const auto tier = gfx::find_quality(*wanted)) {
+        return *tier;
+    }
+
+    throw std::runtime_error(
+        std::format("unknown quality '{}'; known ones are: low, medium, high", *wanted)
+    );
+}
 
 }  // namespace vw::testbed
