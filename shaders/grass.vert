@@ -17,7 +17,6 @@ layout(set = 1, binding = 0, std430) readonly buffer Instances {
 struct Quad {
     uint data0;
     uint data1;
-    uint data2;
 };
 
 layout(set = 1, binding = 1, std430) readonly buffer Quads {

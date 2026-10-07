@@ -18,8 +18,6 @@ struct mesh_generation_task {
     std::weak_ptr<vw::asset::model> model_ref;
     std::weak_ptr<vw::asset::chunk_volume> chunk_ref;
     std::shared_ptr<const vw::asset::model_boundary> boundary;
-    std::shared_ptr<const vw::asset::light_field> sky;
-    std::shared_ptr<const vw::asset::light_field> block;
     std::promise<mesh> promise;
     mesh_options opts;
 
@@ -28,16 +26,12 @@ struct mesh_generation_task {
         std::weak_ptr<vw::asset::model> model_ref,
         std::weak_ptr<vw::asset::chunk_volume> chunk_ref,
         std::shared_ptr<const vw::asset::model_boundary> boundary,
-        std::shared_ptr<const vw::asset::light_field> sky,
-        std::shared_ptr<const vw::asset::light_field> block,
         mesh_options opts
     )
         : identity(identity)
         , model_ref(std::move(model_ref))
         , chunk_ref(std::move(chunk_ref))
         , boundary(std::move(boundary))
-        , sky(std::move(sky))
-        , block(std::move(block))
         , opts(opts) {}
 };
 

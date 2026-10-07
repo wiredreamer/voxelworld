@@ -179,9 +179,7 @@ auto mesh_pool::request_mesh(
 
     auto task = std::make_unique<mesh_generation_task>(
         identity, model_ptr, chunk_ptr,
-        chunk_ptr ? chunk_ptr->share_boundary() : nullptr,
-        chunk_ptr ? chunk_ptr->share_sky_light() : nullptr,
-        chunk_ptr ? chunk_ptr->share_block_light() : nullptr, opts
+        chunk_ptr ? chunk_ptr->share_boundary() : nullptr, opts
     );
 
     slot.pending = task->promise.get_future();
@@ -336,12 +334,7 @@ auto mesh_pool::generate_(
         return;
     }
 
-    const mesh_source source{
-        .voxels   = *model_ptr,
-        .boundary = task.boundary.get(),
-        .sky      = task.sky.get(),
-        .block    = task.block.get()
-    };
+    const mesh_source source{.voxels = *model_ptr, .boundary = task.boundary.get()};
 
     try {
         const auto started = std::chrono::steady_clock::now();

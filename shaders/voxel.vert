@@ -18,7 +18,6 @@ layout(set = 1, binding = 1, std430) readonly buffer NormalMatrices {
 struct Quad {
     uint data0;
     uint data1;
-    uint data2;
 };
 
 layout(set = 1, binding = 2, std430) readonly buffer Quads {

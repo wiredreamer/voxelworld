@@ -22,14 +22,12 @@ struct quad {
 
     uint32 data0 = 0;
     uint32 data1 = 0;
-    uint32 data2 = 0;
 
     quad() = default;
 
     // см. docs/rendering.md#качание-листвы
     [[nodiscard]] static auto pack(
-        vec3i min_pos, vec3i max_pos, face_direction face, voxel v, uint8 corners_ao,
-        uint8 corners_shape, uint16 corners_sky, uint16 corners_block, bool sways
+        vec3i min_pos, vec3i max_pos, face_direction face, voxel v, uint8 corners_sway, bool sways
     ) -> quad;
 
     [[nodiscard]] static auto get_binding_descriptions()
@@ -38,6 +36,8 @@ struct quad {
     [[nodiscard]] static auto get_attribute_descriptions()
         -> std::vector<vk::VertexInputAttributeDescription>;
 };
+
+static_assert(sizeof(quad) == 8);
 
 // см. docs/lod-plan.md#одна-модель-на-двух-расстояниях
 using vw::asset::lod_level_count;
@@ -80,38 +80,22 @@ struct mesh_options {
 struct mesh_source {
     const vw::asset::model& voxels;
     const vw::asset::model_boundary* boundary = nullptr;
-    const vw::asset::light_field* sky         = nullptr;
-    const vw::asset::light_field* block       = nullptr;
 
     int32 lod_step                                 = 1;
     const vw::asset::chunk_occupancy* lod_cells    = nullptr;
     const voxel* lod_indices                 = nullptr;
 
-    const vw::asset::model_boundary* boundary_touched = nullptr;
-
     const vw::asset::chunk_occupancy* solid  = nullptr;
     const vw::asset::chunk_occupancy* leaves = nullptr;
-
-    // см. docs/lod-plan.md#свет-сворачивается-тем-же-правилом-что-занятость
-    const uint8* lod_sky   = nullptr;
-    const uint8* lod_block = nullptr;
 
     [[nodiscard]] auto has_boundary_slice(face_direction face) const -> bool {
         return boundary != nullptr && (boundary->valid & face_bit(face)) != 0;
     }
 
-    // см. docs/lod-plan.md#тот-же-срез-отвечает-на-два-разных-вопроса
     [[nodiscard]] auto covers_boundary_cell(face_direction face, int32 x, int32 y, int32 z) const
         -> bool {
         const vec2i on_plane = project_onto_face_plane(face, vec3i{x, y, z});
         return boundary->faces[face].test(on_plane.x, on_plane.y);
-    }
-
-    [[nodiscard]] auto touches_boundary_cell(face_direction face, int32 x, int32 y, int32 z) const
-        -> bool {
-        const vec2i on_plane = project_onto_face_plane(face, vec3i{x, y, z});
-        const auto* plane    = boundary_touched != nullptr ? boundary_touched : boundary;
-        return plane->faces[face].test(on_plane.x, on_plane.y);
     }
 
     [[nodiscard]] auto boundary_face(face_direction face) const
@@ -119,33 +103,12 @@ struct mesh_source {
         return boundary->faces[face];
     }
 
-    // см. docs/lod-plan.md#у-мешера-двадцать-шесть-соседей
-    [[nodiscard]] auto shell() const -> const vw::asset::model_boundary& {
-        return *(boundary_touched != nullptr ? boundary_touched : boundary);
-    }
-
     [[nodiscard]] auto has_boundary_edge(vec3i step) const -> bool {
-        return boundary != nullptr && shell().has_edge(step);
-    }
-
-    [[nodiscard]] auto touches_boundary_edge(vec3i step, int32 along) const -> bool {
-        return shell().edge_holds(step, along);
+        return boundary != nullptr && boundary->has_edge(step);
     }
 
     [[nodiscard]] auto has_boundary_corner(vec3i step) const -> bool {
-        return boundary != nullptr && shell().has_corner(step);
-    }
-
-    [[nodiscard]] auto touches_boundary_corner(vec3i step) const -> bool {
-        return shell().corner_holds(step);
-    }
-
-    [[nodiscard]] auto sky_light() const -> const vw::asset::light_field* {
-        return sky;
-    }
-
-    [[nodiscard]] auto block_light() const -> const vw::asset::light_field* {
-        return block;
+        return boundary != nullptr && boundary->has_corner(step);
     }
 
     [[nodiscard]] auto cells_x() const -> int32 {
@@ -211,20 +174,9 @@ private:
     ) -> bool;
 };
 
-struct corner_light {
-    uint16 sky   = 0;
-    uint16 block = 0;
-
-    [[nodiscard]] auto operator==(const corner_light&) const -> bool = default;
-};
-
 struct face_mask_cell {
     voxel index;
-    uint8 corner_ao;
-
-    corner_light light{};
-
-    uint8 corner_convex = 0;
+    uint8 corner_sway = 0;
 
     [[nodiscard]]
     auto operator==(const face_mask_cell&) const -> bool = default;
@@ -247,9 +199,6 @@ struct mesh_generation_storage {
     std::unique_ptr<vw::asset::chunk_occupancy> leaves;
     std::vector<voxel> lod_indices;
     vw::asset::model_boundary lod_boundary;
-    vw::asset::model_boundary lod_boundary_touched;
-    std::vector<uint8> lod_sky;
-    std::vector<uint8> lod_block;
 
     vw::asset::chunk_link_scratch link_scratch;
 

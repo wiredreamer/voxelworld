@@ -20,10 +20,7 @@ auto quad::pack(
     vec3i max_pos,
     face_direction face,
     voxel v,
-    uint8 corners_ao,
-    uint8 corners_shape,
-    uint16 corners_sky,
-    uint16 corners_block,
+    uint8 corners_sway,
     bool sways
 ) -> quad {
     const int32 u_axis = tangent_u_axis[face];
@@ -37,17 +34,13 @@ auto quad::pack(
         (static_cast<uint32>(min_pos.x) & 0x7Fu) |          //
         ((static_cast<uint32>(min_pos.y) & 0x7Fu) << 7) |   //
         ((static_cast<uint32>(min_pos.z) & 0x7Fu) << 14) |  //
-        ((static_cast<uint32>(face) & 0x7u) << 21) |        //
-        (static_cast<uint32>(corners_ao) << 24);
+        ((static_cast<uint32>(face) & 0x7u) << 21);
 
     q.data1 =                                               //
         (span_u & 0x7Fu) |                                  //
         ((span_v & 0x7Fu) << 7) |                           //
         (static_cast<uint32>(v.value) << 14) |               //
-        (sways ? sway_flag : 0U) |                           //
-        (static_cast<uint32>(corners_shape) << 24);
-
-    q.data2 = static_cast<uint32>(corners_sky) | (static_cast<uint32>(corners_block) << 16);
+        (sways ? sway_flag | (static_cast<uint32>(corners_sway) << 24) : 0U);
 
     return q;
 }
@@ -141,19 +134,11 @@ struct face_axis_mapping {
         -> std::pair<vec3i, vec3i>;
 };
 
-[[nodiscard]] auto compute_corner_darkness(mesh_source src, int32 x, int32 y, int32 z,
-                                           face_direction face) -> uint8;
-[[nodiscard]] auto compute_corner_convexity(mesh_source src, int32 x, int32 y, int32 z,
-                                            face_direction face) -> uint8;
-[[nodiscard]] auto compute_corner_light(mesh_source src, int32 x, int32 y, int32 z,
-                                        face_direction face) -> corner_light;
 [[nodiscard]] auto compute_corner_sway(mesh_source src, int32 x, int32 y, int32 z, face_direction face)
     -> uint8;
 [[nodiscard]] auto compute_corner_shape(mesh_source src, int32 x, int32 y, int32 z, face_direction face,
                                         voxel v) -> uint8;
 [[nodiscard]] auto is_leaf_voxel(voxel v) -> bool;
-
-inline constexpr face_direction convex_face = face_direction::pos_y;
 
 [[nodiscard]] auto is_face_visible(mesh_source src, int32 x, int32 y, int32 z,
                                    face_direction face) -> bool;
@@ -173,23 +158,12 @@ auto add_quad(
     vec3i min_pos,
     vec3i max_pos,
     voxel v,
-    uint8 corner_ao,
-    uint8 corner_convex,
-    corner_light light
+    uint8 corner_sway
 ) -> void;
 
 struct layer_rows {
     std::array<uint64, 64> visible{};
-    std::array<uint64, 64> front{};
-
-    std::array<uint64, 64> own{};
-
-    bool front_outside = false;
 };
-
-[[nodiscard]] auto light_from_rows(mesh_source src, const layer_rows& rows,
-                                   int32 u_at, int32 v_at, int32 x, int32 y, int32 z,
-                                   face_direction face) -> corner_light;
 
 [[nodiscard]] auto build_layer_rows(
     mesh_source src,
@@ -275,103 +249,6 @@ face_axis_mapping::face_axis_mapping(
     }
 }
 
-//см. docs/lod-plan.md#у-мешера-двадцать-шесть-соседей
-enum class shell_sample : uint8 { air, solid, unknown };
-
-auto sample_at(
-    mesh_source src, vec3i p
-) -> shell_sample {
-    const auto beyond = [](int32 v, int32 cells) -> int32 {
-        return v < 0 ? -1 : (v >= cells ? 1 : 0);
-    };
-
-    const vec3i step{
-        beyond(p.x, src.cells_x()), beyond(p.y, src.cells_y()), beyond(p.z, src.cells_z())
-    };
-
-    const auto answer = [](bool solid) {
-        return solid ? shell_sample::solid : shell_sample::air;
-    };
-
-    switch (shell_span(step)) {
-        case 0:
-            return answer(!src.cell_empty(p.x, p.y, p.z));
-        case 1: {
-            const face_direction face = shell_face(step);
-            if (!src.has_boundary_slice(face)) {
-                return shell_sample::unknown;
-            }
-            return answer(src.touches_boundary_cell(face, p.x, p.y, p.z));
-        }
-        case 2: {
-            if (!src.has_boundary_edge(step)) {
-                return shell_sample::unknown;
-            }
-            return answer(src.touches_boundary_edge(step, p[shell_free_axis(step)]));
-        }
-        default:
-            if (!src.has_boundary_corner(step)) {
-                return shell_sample::unknown;
-            }
-            return answer(src.touches_boundary_corner(step));
-    }
-}
-
-auto is_solid_at(
-    mesh_source src, vec3i p
-) -> bool {
-    return sample_at(src, p) == shell_sample::solid;
-}
-
-[[nodiscard]] auto corner_level(bool edge_a, bool edge_b, bool diagonal) -> uint8 {
-    if (edge_a && edge_b) {
-        return 3;
-    }
-    return static_cast<uint8>(edge_a) + static_cast<uint8>(edge_b) +
-           static_cast<uint8>(diagonal);
-}
-
-[[nodiscard]] auto is_open_at(mesh_source src, vec3i p) -> bool {
-    return sample_at(src, p) == shell_sample::air;
-}
-
-[[nodiscard]] auto corner_open_level(bool open_a, bool open_b, bool open_diagonal) -> uint8 {
-    if (open_a && open_b) {
-        return 3;
-    }
-    return static_cast<uint8>(open_a) + static_cast<uint8>(open_b) +
-           static_cast<uint8>(open_diagonal);
-}
-
-[[nodiscard]] auto compute_corner_convexity(
-    mesh_source src, int x, int y, int z, face_direction face
-) -> uint8 {
-    if (face != convex_face) {
-        return 0;
-    }
-
-    const vec3i host = vec3i{x, y, z};
-    const vec3i u    = ao_tangent_u[face];
-    const vec3i v    = ao_tangent_v[face];
-
-    const bool open_mu = is_open_at(src, host - u);
-    const bool open_pu = is_open_at(src, host + u);
-    const bool open_mv = is_open_at(src, host - v);
-    const bool open_pv = is_open_at(src, host + v);
-
-    const bool diag_c0 = is_open_at(src, host - u - v);
-    const bool diag_c1 = is_open_at(src, host + u - v);
-    const bool diag_c2 = is_open_at(src, host + u + v);
-    const bool diag_c3 = is_open_at(src, host - u + v);
-
-    const uint8 c0 = corner_open_level(open_mu, open_mv, diag_c0);
-    const uint8 c1 = corner_open_level(open_pu, open_mv, diag_c1);
-    const uint8 c2 = corner_open_level(open_pu, open_pv, diag_c2);
-    const uint8 c3 = corner_open_level(open_mu, open_pv, diag_c3);
-
-    return static_cast<uint8>(c0 | (c1 << 2) | (c2 << 4) | (c3 << 6));
-}
-
 auto is_leaf_voxel(
     voxel v
 ) -> bool {
@@ -421,13 +298,13 @@ auto sway_sample_at(
                 return sway_sample::open;
             }
             const int32 along = p[shell_free_axis(step)];
-            return answer(src.shell().edge_holds(step, along), src.shell().edge_holds_leaf(step, along));
+            return answer(src.boundary->edge_holds(step, along), src.boundary->edge_holds_leaf(step, along));
         }
         default:
             if (!src.has_boundary_corner(step)) {
                 return sway_sample::open;
             }
-            return answer(src.shell().corner_holds(step), src.shell().corner_holds_leaf(step));
+            return answer(src.boundary->corner_holds(step), src.boundary->corner_holds_leaf(step));
     }
 }
 
@@ -482,242 +359,10 @@ auto compute_corner_sway(
 auto compute_corner_shape(
     mesh_source src, int32 x, int32 y, int32 z, face_direction face, voxel v
 ) -> uint8 {
-    if (!is_leaf_voxel(v)) {
-        return compute_corner_convexity(src, x, y, z, face);
+    if (!is_leaf_voxel(v) || src.lod_step != 1) {
+        return 0;
     }
-    return src.lod_step == 1 ? compute_corner_sway(src, x, y, z, face) : uint8{0};
-}
-
-auto compute_corner_darkness(
-    mesh_source src, int x, int y, int z, face_direction face
-) -> uint8 {
-    const vec3i n = vec3i{x, y, z} + offset_of(face);
-    const vec3i u = ao_tangent_u[face];
-    const vec3i v = ao_tangent_v[face];
-
-    const bool edge_mu = is_solid_at(src, n - u);
-    const bool edge_pu = is_solid_at(src, n + u);
-    const bool edge_mv = is_solid_at(src, n - v);
-    const bool edge_pv = is_solid_at(src, n + v);
-
-    const bool diag_c0 = is_solid_at(src, n - u - v);
-    const bool diag_c1 = is_solid_at(src, n + u - v);
-    const bool diag_c2 = is_solid_at(src, n + u + v);
-    const bool diag_c3 = is_solid_at(src, n - u + v);
-
-    const uint8 c0 = corner_level(edge_mu, edge_mv, diag_c0);
-    const uint8 c1 = corner_level(edge_pu, edge_mv, diag_c1);
-    const uint8 c2 = corner_level(edge_pu, edge_pv, diag_c2);
-    const uint8 c3 = corner_level(edge_mu, edge_pv, diag_c3);
-
-    return static_cast<uint8>(c0 | (c1 << 2) | (c2 << 4) | (c3 << 6));
-}
-
-
-[[nodiscard]] auto average_of(int32 sum, int32 count) -> int32 {
-    switch (count) {
-        case 1:
-            return sum;
-        case 2:
-            return sum >> 1;
-        case 4:
-            return sum >> 2;
-        default:
-            return (sum * 21846) >> 16;
-    }
-}
-
-[[nodiscard]] constexpr auto patch_slot(int32 du, int32 dv) -> std::size_t {
-    return static_cast<std::size_t>(((dv + 1) * 3) + (du + 1));
-}
-
-[[nodiscard]] constexpr auto patch_bit(int32 du, int32 dv) -> uint32 {
-    return 1U << patch_slot(du, dv);
-}
-
-constexpr std::size_t front_cell_slot = patch_slot(0, 0);
-constexpr uint32 front_cell_bit       = patch_bit(0, 0);
-
-constexpr int32 max_light_level = 15;
-
-struct voxel_span {
-    int32 lo;
-    int32 hi;
-};
-
-// см. docs/lod-plan.md#свет-сворачивается-тем-же-правилом-что-занятость
-auto outside_cell_light(
-    const vw::asset::light_field& field, mesh_source src, vec3i cell
-) -> int32 {
-    constexpr int32 side = vw::asset::light_field::side;
-
-    const auto span = [step = src.lod_step](int32 c, int32 cells) -> voxel_span {
-        if (c < 0) {
-            return voxel_span{.lo = -1, .hi = -1};
-        }
-        if (c >= cells) {
-            return voxel_span{.lo = side, .hi = side};
-        }
-        return voxel_span{.lo = c * step, .hi = (c * step) + step - 1};
-    };
-
-    const voxel_span sx = span(cell.x, src.cells_x());
-    const voxel_span sy = span(cell.y, src.cells_y());
-    const voxel_span sz = span(cell.z, src.cells_z());
-
-    int32 best = 0;
-
-    for (int32 z = sz.lo; z <= sz.hi; ++z) {
-        for (int32 y = sy.lo; y <= sy.hi; ++y) {
-            for (int32 x = sx.lo; x <= sx.hi; ++x) {
-                best = std::max(best, static_cast<int32>(field.level_around(x, y, z)));
-                if (best == max_light_level) {
-                    return best;
-                }
-            }
-        }
-    }
-
-    return best;
-}
-
-auto cell_light(
-    const vw::asset::light_field& field, const uint8* cells, mesh_source src, vec3i cell
-) -> int32 {
-    if (src.lod_step == 1) {
-        return field.level_around(cell.x, cell.y, cell.z);
-    }
-    if (cells != nullptr && src.cell_inside(cell)) {
-        return cells[src.cell_offset(cell.x, cell.y, cell.z)];
-    }
-    return outside_cell_light(field, src, cell);
-}
-
-auto corners_from_patch(
-    mesh_source src, vec3i n, vec3i u, vec3i v, uint32 open_patch
-) -> corner_light {
-    const auto* sky   = src.sky_light();
-    const auto* block = src.block_light();
-
-    const auto flat = [](const vw::asset::light_field* field, uint16 absent) -> uint16 {
-        if (field == nullptr) {
-            return absent;
-        }
-        return static_cast<uint16>(static_cast<uint16>(field->uniform_level()) * 0x1111U);
-    };
-
-    const bool walk_sky   = sky != nullptr && !sky->is_uniform();
-    const bool walk_block = block != nullptr && !block->is_uniform();
-
-    if (!walk_sky && !walk_block) {
-        return corner_light{.sky = flat(sky, 0xFFFFU), .block = flat(block, 0x0000U)};
-    }
-
-    std::array<int32, 9> lit_sky{};
-    std::array<int32, 9> lit_block{};
-    std::array<int32, 9> open{};
-
-    vec3i row = n - u - v;
-
-    for (int32 dv = -1; dv <= 1; ++dv) {
-        vec3i cell = row;
-
-        for (int32 du = -1; du <= 1; ++du) {
-            const auto slot = patch_slot(du, dv);
-
-            open[slot] = (open_patch & patch_bit(du, dv)) != 0 ? 1 : 0;
-            if (open[slot] != 0) {
-                if (walk_sky) {
-                    lit_sky[slot] = cell_light(*sky, src.lod_sky, src, cell);
-                }
-                if (walk_block) {
-                    lit_block[slot] = cell_light(*block, src.lod_block, src, cell);
-                }
-            }
-
-            cell = cell + u;
-        }
-
-        row = row + v;
-    }
-
-    const auto pack_corners = [&](const std::array<int32, 9>& lit) -> uint16 {
-        const auto corner = [&](int32 du, int32 dv) -> uint16 {
-            const std::size_t along_u  = patch_slot(du, 0);
-            const std::size_t along_v  = patch_slot(0, dv);
-            const std::size_t diagonal = patch_slot(du, dv);
-
-            const int32 sum   = lit[front_cell_slot] + lit[along_u] + lit[along_v] + lit[diagonal];
-            const int32 count = 1 + open[along_u] + open[along_v] + open[diagonal];
-            return static_cast<uint16>(average_of(sum, count));
-        };
-
-        const uint16 c0 = corner(-1, -1);
-        const uint16 c1 = corner(1, -1);
-        const uint16 c2 = corner(1, 1);
-        const uint16 c3 = corner(-1, 1);
-
-        return static_cast<uint16>(c0 | (c1 << 4) | (c2 << 8) | (c3 << 12));
-    };
-
-    return corner_light{
-        .sky   = walk_sky ? pack_corners(lit_sky) : flat(sky, 0xFFFFU),
-        .block = walk_block ? pack_corners(lit_block) : flat(block, 0x0000U),
-    };
-}
-
-auto compute_corner_light(
-    mesh_source src, int x, int y, int z, face_direction face
-) -> corner_light {
-    const vec3i n = vec3i{x, y, z} + offset_of(face);
-    const vec3i u = ao_tangent_u[face];
-    const vec3i v = ao_tangent_v[face];
-
-    uint32 open_patch = front_cell_bit;
-
-    for (int32 dv = -1; dv <= 1; ++dv) {
-        for (int32 du = -1; du <= 1; ++du) {
-            if (du == 0 && dv == 0) {
-                continue;
-            }
-
-            vec3i at = n;
-            if (du < 0) {
-                at = at - u;
-            } else if (du > 0) {
-                at = at + u;
-            }
-            if (dv < 0) {
-                at = at - v;
-            } else if (dv > 0) {
-                at = at + v;
-            }
-
-            open_patch |= sample_at(src, at) != shell_sample::solid ? patch_bit(du, dv) : 0U;
-        }
-    }
-
-    return corners_from_patch(src, n, u, v, open_patch);
-}
-
-auto light_from_rows(
-    mesh_source src, const layer_rows& rows, int32 u_at, int32 v_at, int x,
-    int y, int z, face_direction face
-) -> corner_light {
-    uint32 open_patch = 0;
-
-    for (int32 dv = -1; dv <= 1; ++dv) {
-        const uint64 row = rows.front[v_at + dv];
-        for (int32 du = -1; du <= 1; ++du) {
-            open_patch |= ((row >> (u_at + du)) & 1U) == 0 ? patch_bit(du, dv) : 0U;
-        }
-    }
-    open_patch |= front_cell_bit;
-
-    return corners_from_patch(
-        src, vec3i{x, y, z} + offset_of(face), ao_tangent_u[face], ao_tangent_v[face],
-        open_patch
-    );
+    return compute_corner_sway(src, x, y, z, face);
 }
 
 auto is_face_visible(
@@ -754,7 +399,7 @@ auto build_face_mask(
         return (static_cast<std::size_t>(u) * static_cast<std::size_t>(axes.height)) + static_cast<std::size_t>(v);
     };
 
-    constexpr face_mask_cell empty_cell{voxel{}, 0};
+    constexpr face_mask_cell empty_cell{};
 
     for (int u_block = 0; u_block < axes.width; u_block += ps) {
         int u_end = std::min(u_block + ps, axes.width);
@@ -780,10 +425,7 @@ auto build_face_mask(
                         auto [mx, my, mz] = axes.to_model_coords(u, v, layer);
                         if (is_face_visible(src, mx, my, mz, face)) {
                             storage.mask[idx(u, v)] = {
-                                fid,
-                                compute_corner_darkness(src, mx, my, mz, face),
-                                compute_corner_light(src, mx, my, mz, face),
-                                compute_corner_shape(src, mx, my, mz, face, fid)
+                                fid, compute_corner_shape(src, mx, my, mz, face, fid)
                             };
                         } else {
                             storage.mask[idx(u, v)] = empty_cell;
@@ -800,10 +442,7 @@ auto build_face_mask(
                     const auto vx     = page.voxel_at(mx % ps, my % ps, mz % ps);
                     if (!vx.is_empty() && is_face_visible(src, mx, my, mz, face)) {
                         storage.mask[idx(u, v)] = {
-                            vx,
-                            compute_corner_darkness(src, mx, my, mz, face),
-                            compute_corner_light(src, mx, my, mz, face),
-                            compute_corner_shape(src, mx, my, mz, face, vx)
+                            vx, compute_corner_shape(src, mx, my, mz, face, vx)
                         };
                     } else {
                         storage.mask[idx(u, v)] = empty_cell;
@@ -820,9 +459,7 @@ auto add_quad(
     vec3i min_pos,
     vec3i max_pos,
     voxel v,
-    uint8 corner_ao,
-    uint8 corner_convex,
-    corner_light light
+    uint8 corner_sway
 ) -> void {
     using corner_order = std::array<uint8, 4>;
 
@@ -837,37 +474,15 @@ auto add_quad(
 
     static constexpr uint8 corner_to_ao[4] = {0, 1, 3, 2};
 
-    const uint8 c_ao[4] = {
-        static_cast<uint8>(corner_ao & 0x3u),
-        static_cast<uint8>((corner_ao >> 2) & 0x3u),
-        static_cast<uint8>((corner_ao >> 4) & 0x3u),
-        static_cast<uint8>((corner_ao >> 6) & 0x3u),
-    };
-
-    uint8 ao_winding     = 0;
-    uint8 convex_winding = 0;
-    uint16 sky_winding   = 0;
-    uint16 block_winding = 0;
+    // см. docs/rendering.md#порядок-углов
+    uint8 sway_winding = 0;
     for (int i = 0; i < 4; i++) {
-        const uint8 corner_i = winding_to_corner[face][i];
-        const uint8 ao_i     = corner_to_ao[corner_i];
-        ao_winding |= static_cast<uint8>(c_ao[ao_i] << (i * 2));
-
-        // см. docs/rendering.md#порядок-углов
-        const auto level = static_cast<uint16>((light.sky >> (ao_i * 4)) & 0xFu);
-        sky_winding |= static_cast<uint16>(level << (i * 4));
-
-        const auto lamp = static_cast<uint16>((light.block >> (ao_i * 4)) & 0xFu);
-        block_winding |= static_cast<uint16>(lamp << (i * 4));
-
-        const auto out = static_cast<uint8>((corner_convex >> (ao_i * 2)) & 0x3u);
-        convex_winding |= static_cast<uint8>(out << (i * 2));
+        const uint8 ao_i  = corner_to_ao[winding_to_corner[face][i]];
+        const auto weight = static_cast<uint8>((corner_sway >> (ao_i * 2)) & 0x3u);
+        sway_winding |= static_cast<uint8>(weight << (i * 2));
     }
 
-    quads.push_back(quad::pack(
-        min_pos, max_pos, face, v, ao_winding, convex_winding, sky_winding,
-        block_winding, is_leaf_voxel(v)
-    ));
+    quads.push_back(quad::pack(min_pos, max_pos, face, v, sway_winding, is_leaf_voxel(v)));
 }
 
 
@@ -906,8 +521,6 @@ auto build_layer_rows(
     const int32 nd    = d + step;
     const bool inside = nd >= 0 && nd < axes.depth;
 
-    out.front_outside = !inside;
-
     uint64 any = 0;
 
     for (int32 v = 0; v < axes.height; ++v) {
@@ -929,59 +542,11 @@ auto build_layer_rows(
                 break;
         }
 
-        out.front[v]   = front;
-        out.own[v]     = own;
         out.visible[v] = own & ~front;
         any |= out.visible[v];
     }
 
     return any != 0;
-}
-
-struct corner_samples {
-    uint64 edge_mu = 0;
-    uint64 edge_pu = 0;
-    uint64 edge_mv = 0;
-    uint64 edge_pv = 0;
-    uint64 diag_c0 = 0;
-    uint64 diag_c1 = 0;
-    uint64 diag_c2 = 0;
-    uint64 diag_c3 = 0;
-};
-
-auto samples_from_rows(uint64 row_mv, uint64 row, uint64 row_pv) -> corner_samples {
-    return {
-        .edge_mu = row << 1,
-        .edge_pu = row >> 1,
-        .edge_mv = row_mv,
-        .edge_pv = row_pv,
-        .diag_c0 = row_mv << 1,
-        .diag_c1 = row_mv >> 1,
-        .diag_c2 = row_pv >> 1,
-        .diag_c3 = row_pv << 1,
-    };
-}
-
-auto pack_corners(const corner_samples& s, int u) -> uint8 {
-    const auto bit = [u](uint64 mask) -> bool { return ((mask >> u) & 1U) != 0; };
-
-    const uint8 c0 = corner_level(bit(s.edge_mu), bit(s.edge_mv), bit(s.diag_c0));
-    const uint8 c1 = corner_level(bit(s.edge_pu), bit(s.edge_mv), bit(s.diag_c1));
-    const uint8 c2 = corner_level(bit(s.edge_pu), bit(s.edge_pv), bit(s.diag_c2));
-    const uint8 c3 = corner_level(bit(s.edge_mu), bit(s.edge_pv), bit(s.diag_c3));
-
-    return static_cast<uint8>(c0 | (c1 << 2) | (c2 << 4) | (c3 << 6));
-}
-
-auto pack_corners_convex(const corner_samples& s, int u) -> uint8 {
-    const auto open = [u](uint64 mask) -> bool { return ((mask >> u) & 1U) == 0; };
-
-    const uint8 c0 = corner_open_level(open(s.edge_mu), open(s.edge_mv), open(s.diag_c0));
-    const uint8 c1 = corner_open_level(open(s.edge_pu), open(s.edge_mv), open(s.diag_c1));
-    const uint8 c2 = corner_open_level(open(s.edge_pu), open(s.edge_pv), open(s.diag_c2));
-    const uint8 c3 = corner_open_level(open(s.edge_mu), open(s.edge_pv), open(s.diag_c3));
-
-    return static_cast<uint8>(c0 | (c1 << 2) | (c2 << 4) | (c3 << 6));
 }
 
 auto emit_rect(
@@ -997,16 +562,7 @@ auto emit_rect(
 ) -> void {
     auto [min_pos, max_pos] = axes.to_local_min_max(u_start, v_start, w, h, layer);
 
-    add_quad(
-        storage.quads,
-        face,
-        min_pos,
-        max_pos,
-        cell.index,
-        cell.corner_ao,
-        cell.corner_convex,
-        cell.light
-    );
+    add_quad(storage.quads, face, min_pos, max_pos, cell.index, cell.corner_sway);
 }
 
 [[nodiscard]] auto cell_span_mask(int32 step) -> uint64 {
@@ -1107,62 +663,17 @@ auto build_cell_indices(
     }
 }
 
-// см. docs/lod-plan.md#свет-сворачивается-тем-же-правилом-что-занятость
-auto build_cell_light(
-    const vw::asset::light_field& field, int32 step, std::vector<uint8>& out
-) -> void {
-    constexpr int32 side = vw::asset::light_field::side;
-
-    const int32 cells = side / step;
-
-    out.assign(static_cast<std::size_t>(cells) * cells * cells, 0);
-
-    for (int32 cz = 0; cz < cells; ++cz) {
-        for (int32 cy = 0; cy < cells; ++cy) {
-            for (int32 cx = 0; cx < cells; ++cx) {
-                uint8 best = 0;
-
-                for (int32 dz = 0; dz < step && best < max_light_level; ++dz) {
-                    for (int32 dy = 0; dy < step && best < max_light_level; ++dy) {
-                        for (int32 dx = 0; dx < step && best < max_light_level; ++dx) {
-                            best = std::max(
-                                best, field.level_at(
-                                          (cx * step) + dx, (cy * step) + dy, (cz * step) + dz
-                                      )
-                            );
-                        }
-                    }
-                }
-
-                out[static_cast<std::size_t>((((cz * cells) + cy) * cells) + cx)] = best;
-            }
-        }
-    }
-}
-
 auto build_cell_boundary(
-    const vw::asset::model_boundary& fine, int32 step, vw::asset::model_boundary& covered,
-    vw::asset::model_boundary& touched
+    const vw::asset::model_boundary& fine, int32 step, vw::asset::model_boundary& covered
 ) -> void {
     const int32 cells = vw::asset::face_occupancy::side / step;
 
     covered.valid = fine.valid;
-    touched.valid = fine.valid;
-
-    touched.edges_valid   = fine.edges_valid;
-    touched.corners_valid = fine.corners_valid;
-    touched.corners       = fine.corners;
-
-    for (std::size_t edge = 0; edge < fine.edges.size(); ++edge) {
-        touched.edges[edge] = compress_row(fine.edges[edge], step, cells);
-    }
 
     for (const face_direction face : all_face_directions) {
         auto& covered_plane = covered.faces[face];
-        auto& touched_plane = touched.faces[face];
 
         covered_plane.clear();
-        touched_plane.clear();
 
         if ((fine.valid & face_bit(face)) == 0) {
             continue;
@@ -1171,13 +682,10 @@ auto build_cell_boundary(
         const auto& source = fine.faces[face];
         for (int32 b = 0; b < cells; ++b) {
             uint64 whole = ~uint64{0};
-            uint64 any   = 0;
             for (int32 db = 0; db < step; ++db) {
                 whole &= source.rows[(b * step) + db];
-                any |= source.rows[(b * step) + db];
             }
             covered_plane.rows[b] = compress_row_full(whole, step, cells);
-            touched_plane.rows[b] = compress_row(any, step, cells);
         }
     }
 }
@@ -1231,9 +739,7 @@ auto simple_mesh_generator::add_cube_face(
         {x, y, z},
         {x + 1, y + 1, z + 1},
         voxel_id,
-        detail::compute_corner_darkness(src, x, y, z, face),
-        detail::compute_corner_shape(src, x, y, z, face, voxel_id),
-        detail::compute_corner_light(src, x, y, z, face)
+        detail::compute_corner_shape(src, x, y, z, face, voxel_id)
     );
 }
 
@@ -1392,20 +898,8 @@ auto greedy_mesh_generator::generate_mesh_data(
         detail::build_cell_indices(src.voxels, *storage.occupancy, step, storage.lod_indices);
 
         if (src.boundary != nullptr) {
-            detail::build_cell_boundary(
-                *src.boundary, step, storage.lod_boundary, storage.lod_boundary_touched
-            );
-            src.boundary         = &storage.lod_boundary;
-            src.boundary_touched = &storage.lod_boundary_touched;
-        }
-
-        if (src.sky != nullptr && !src.sky->is_uniform()) {
-            detail::build_cell_light(*src.sky, step, storage.lod_sky);
-            src.lod_sky = storage.lod_sky.data();
-        }
-        if (src.block != nullptr && !src.block->is_uniform()) {
-            detail::build_cell_light(*src.block, step, storage.lod_block);
-            src.lod_block = storage.lod_block.data();
+            detail::build_cell_boundary(*src.boundary, step, storage.lod_boundary);
+            src.boundary = &storage.lod_boundary;
         }
 
         src.lod_step    = step;
@@ -1507,7 +1001,7 @@ auto greedy_mesh_generator::merge_and_emit_rects(
         return static_cast<std::size_t>(u) * static_cast<std::size_t>(axes.height) + static_cast<std::size_t>(v);
     };
 
-    face_mask_cell empty_cell{voxel{}, 0};
+    face_mask_cell empty_cell{};
 
     for (int v = 0; v < axes.height; v++) {
         for (int u = 0; u < axes.width; u++) {
@@ -1607,50 +1101,18 @@ auto greedy_mesh_generator::generate_face_quads(
                     continue;
                 }
 
-                const bool interior_v = v > 0 && v + 1 < axes.height;
-                const bool bit_ao     = interior_v && !rows.front_outside;
-
-                const auto samples = detail::samples_from_rows(
-                    interior_v ? rows.front[v - 1] : 0,
-                    rows.front[v],
-                    interior_v ? rows.front[v + 1] : 0
-                );
-
-                const bool wants_convex = face == detail::convex_face;
-
-                const auto own_samples = detail::samples_from_rows(
-                    interior_v && wants_convex ? rows.own[v - 1] : 0,
-                    wants_convex ? rows.own[v] : 0,
-                    interior_v && wants_convex ? rows.own[v + 1] : 0
-                );
-
                 while (bits != 0) {
                     const int u = std::countr_zero(bits);
                     bits &= bits - 1;
 
                     auto [mx, my, mz] = axes.to_model_coords(u, v, layer);
 
-                    const bool interior = bit_ao && u > 0 && u + 1 < axes.width;
-                    const voxel here    = src.cell_index(mx, my, mz);
+                    const bool leaf = src.leaves != nullptr && src.leaves->test(mx, my, mz);
 
-                    const uint8 dark   = interior ? detail::pack_corners(samples, u)
-                                                  : detail::compute_corner_darkness(
-                                                        src, mx, my, mz, face
-                                                    );
-                    uint8 convex = 0;
-                    if (src.leaves != nullptr && src.leaves->test(mx, my, mz)) {
-                        convex = detail::compute_corner_sway(src, mx, my, mz, face);
-                    } else if (wants_convex && !detail::is_leaf_voxel(here)) {
-                        convex = interior
-                            ? detail::pack_corners_convex(own_samples, u)
-                            : detail::compute_corner_convexity(src, mx, my, mz, face);
-                    }
-                    const corner_light light =
-                        interior
-                            ? detail::light_from_rows(src, rows, u, v, mx, my, mz, face)
-                            : detail::compute_corner_light(src, mx, my, mz, face);
-
-                    storage.mask[idx(u, v)] = {here, dark, light, convex};
+                    storage.mask[idx(u, v)] = {
+                        src.cell_index(mx, my, mz),
+                        leaf ? detail::compute_corner_sway(src, mx, my, mz, face) : uint8{0}
+                    };
                 }
             }
 
