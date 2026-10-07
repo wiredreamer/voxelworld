@@ -4,7 +4,6 @@ import std;
 
 import vw.core;
 import :model.occupancy;
-import :model.light_field;
 import :model.cover;
 import :model.volume;
 
@@ -72,34 +71,6 @@ public:
         return boundary_;
     }
 
-    [[nodiscard]] auto share_sky_light() const -> std::shared_ptr<const light_field> {
-        return sky_;
-    }
-
-    [[nodiscard]] auto share_block_light() const -> std::shared_ptr<const light_field> {
-        return block_;
-    }
-
-    auto set_sky_light(light_field light) -> void;
-
-    [[nodiscard]] auto get_sky_light() const -> const light_field* {
-        return sky_.get();
-    }
-
-    [[nodiscard]] auto has_sky_light() const -> bool {
-        return sky_ != nullptr;
-    }
-
-    auto set_block_light(light_field light) -> void;
-
-    [[nodiscard]] auto get_block_light() const -> const light_field* {
-        return block_.get();
-    }
-
-    [[nodiscard]] auto has_block_light() const -> bool {
-        return block_ != nullptr;
-    }
-
     [[nodiscard]] auto cover() -> cover_layer& {
         return cover_;
     }
@@ -112,8 +83,6 @@ private:
     std::shared_ptr<model> voxels_;
     cover_layer cover_;
     std::shared_ptr<model_boundary> boundary_;
-    std::shared_ptr<light_field> sky_;
-    std::shared_ptr<light_field> block_;
 };
 
 }  // namespace vw::asset

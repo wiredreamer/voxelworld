@@ -51,7 +51,7 @@ auto testbed_app::install_terrain_(
         std::move(generator), get_engine().get_jobs());
     auto& gs     = world.system<ecs::world_grid_system>();
     gs.set_grid(std::move(grid));
-    gs.set_loader(std::move(loader), get_engine().get_jobs());
+    gs.set_loader(std::move(loader));
 
     const auto chunk_units = static_cast<float32>(
         ecs::chunk::size * generator_params_.world_units_per_voxel
@@ -105,7 +105,7 @@ auto testbed_app::try_place_camera() -> void {
 
 [[nodiscard]] auto testbed_app::streaming_settled() const -> bool {
     const auto& stats = get_engine().get_world().system<ecs::world_grid_system>().get_stats();
-    return stats.pending_count == 0 && stats.lighting_count == 0 &&
+    return stats.pending_count == 0 && stats.ready_count == 0 &&
            get_engine().get_renderer().get_mesh_pool().get_pending_count() == 0;
 }
 

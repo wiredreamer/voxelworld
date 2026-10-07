@@ -34,10 +34,7 @@ private:
     uint64 edits_    = 0;
     bool started_    = false;
 
-    uint64 mesh_base_        = 0;
-    uint64 relight_base_     = 0;
-    uint64 relit_chunk_base_ = 0;
-    uint64 light_base_       = 0;
+    uint64 mesh_base_ = 0;
 };
 
 }  // namespace vw::testbed

@@ -52,8 +52,7 @@ auto standing_lights_scene::orbit_radius(std::size_t, float32 spread) const -> f
 }
 
 auto standing_lights_scene::is_ready() const -> bool {
-    const auto& wgs = stand().world().system<ecs::world_grid_system>();
-    return standing_ && wgs.get_stats().relight_backlog == 0;
+    return standing_;
 }
 
 auto standing_lights_scene::spawn_lights_() -> void {

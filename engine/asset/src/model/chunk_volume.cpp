@@ -178,14 +178,4 @@ auto chunk_volume::boundaries_are_solid() const -> bool {
     });
 }
 
-auto chunk_volume::set_sky_light(light_field light) -> void {
-    sky_ = std::make_shared<light_field>(std::move(light));
-    voxels_->invalidate();
-}
-
-auto chunk_volume::set_block_light(light_field light) -> void {
-    block_ = std::make_shared<light_field>(std::move(light));
-    voxels_->invalidate();
-}
-
 }  // namespace vw::asset

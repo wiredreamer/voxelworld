@@ -110,10 +110,6 @@ auto combined_buffer_pool::update(
         update_transforms_(world);
     });
 
-    stats_.timing.light_ms = measure_ms([&] {
-        update_instance_light_(world);
-    });
-
     stats_.chunk_cull.walk_ms = measure_ms([&] {
         update_chunk_visibility_(world, camera.get_position(), !camera.is_orthographic());
     });
@@ -336,7 +332,7 @@ auto combined_buffer_pool::update_meshes_(
                             buffer_info.corners = fresh;
                             buffer->write_transform(
                                 key_of(ent), transform_matrix, ent_bounds,
-                                instance_shading{.light = buffer_info.light, .corners = fresh}
+                                instance_shading{.corners = fresh}
                             );
                         }
                     }
@@ -384,7 +380,6 @@ auto combined_buffer_pool::update_meshes_(
                 .chunk_size   = required_chunk_size,
                 .buffer_index = buffer_index,
                 .bounds       = ent_bounds,
-                .lit_by_world = !on_world_grid,
                 .corners      = corners,
                 .volume_model = corners.has_volume() ? model_id.index
                                                      : asset::model_identity::invalid_index,
@@ -670,7 +665,7 @@ auto combined_buffer_pool::update_transforms_(
         }
         buffers_[info.buffer_index]->write_transform(
             key_of(ent), model_matrix(transform_comp, world.get<model_component>(ent)), tr_bounds,
-            instance_shading{.light = info.light, .corners = info.corners});
+            instance_shading{.corners = info.corners});
         touched_bounds_.push_back(info.bounds);
         touched_bounds_.push_back(tr_bounds);
         info.bounds = tr_bounds;
@@ -695,7 +690,7 @@ auto combined_buffer_pool::rewrite_swapped_(
 
     instance_shading shading{};
     if (const auto* info = entity_buffer_infos_.get(swapped)) {
-        shading = {.light = info->light, .corners = info->corners};
+        shading = {.corners = info->corners};
     }
 
     buffers_[buffer_index]->write_transform(
@@ -703,44 +698,6 @@ auto combined_buffer_pool::rewrite_swapped_(
         model_matrix(world.get<transform_component>(swapped), world.get<model_component>(swapped)),
         bounds, shading
     );
-}
-
-auto combined_buffer_pool::update_instance_light_(
-    world_type& world
-) -> void {
-    constexpr float32 light_step = 1.0f / 512.0f;
-
-    const auto* grid = world.system<ecs::world_grid_system>().grid();
-    if (grid == nullptr) {
-        return;
-    }
-
-    const auto& entities = entity_buffer_infos_.entities();
-    for (uint32 slot = 0; slot < entity_buffer_infos_.size(); ++slot) {
-        auto& info = entity_buffer_infos_.at(slot);
-        if (!info.lit_by_world) {
-            continue;
-        }
-
-        const entity ent = entities[slot];
-        if (!world.has<spatial_component>(ent)) {
-            continue;
-        }
-
-        const world_light target =
-            grid->light_at(world.get<spatial_component>(ent).get_bounds().center());
-        if (std::abs(target.sky - info.light.sky) < light_step &&
-            std::abs(target.block - info.light.block) < light_step) {
-            continue;
-        }
-
-        if (staging_.available() < sizeof(vec4f)) {
-            return;
-        }
-
-        buffers_[info.buffer_index]->write_light(key_of(ent), target);
-        info.light = target;
-    }
 }
 
 auto combined_buffer_pool::get_stats() const -> const combined_buffer_pool_stats& {

@@ -36,13 +36,8 @@ private:
     uint64 placed_ = 0;
     bool started_  = false;
 
-    uint64 mesh_base_        = 0;
-    uint64 quads_base_       = 0;
-    uint64 relight_base_     = 0;
-    uint64 relit_chunk_base_ = 0;
-    uint64 columns_base_     = 0;
-    float32 flood_base_ms_   = 0.0f;
-    float32 bake_base_ms_    = 0.0f;
+    uint64 mesh_base_  = 0;
+    uint64 quads_base_ = 0;
 
     float64 quads_per_chunk_base_ = 0.0;
 };

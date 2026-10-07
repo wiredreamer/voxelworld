@@ -60,7 +60,6 @@ auto debug_window::render_systems_panel() -> void {
             metric_row("requests", grid.request_columns_ms);
             metric_row("rebuild", grid.rebuild_active_ms);
             metric_row("unload", grid.unload_ms);
-            metric_row("light_apply", grid.light_apply_ms);
             ImGui::Unindent();
         }
     }
@@ -181,15 +180,9 @@ auto debug_window::render_world_panel() -> void {
     count_row("active", stats.active_count);
     count_row("pending", stats.pending_count);
     count_row("staged", stats.staged_count);
-    count_row("lighting", stats.lighting_count);
     count_row("chunks", grid->chunk_count());
     count_row("drawn", grid->drawn_chunk_count());
     count_row("mesh pending", engine_->get_renderer().get_mesh_pool().get_pending_count());
-
-    ImGui::SeparatorText("relight");
-    count_row("backlog", stats.relight_backlog);
-    ImGui::Text("%-18s %8llu", "columns", static_cast<unsigned long long>(stats.relit_columns));
-    ImGui::Text("%-18s %8llu", "chunks", static_cast<unsigned long long>(stats.relit_chunks));
 
     ImGui::SeparatorText("terrain workers");
     const auto loader = system.get_loader_stats();
@@ -202,18 +195,6 @@ auto debug_window::render_world_panel() -> void {
         loader.p99_us, loader.max_us
     );
     ImGui::Text("queue %u, peak %u", loader.queue_depth, loader.queue_peak);
-
-    ImGui::SeparatorText("light workers");
-    const auto light = system.get_light_stats();
-    ImGui::Text("%llu columns", static_cast<unsigned long long>(light.columns));
-    ImGui::Text(
-        "rows %.1fms flood %.1fms bake %.1fms", light.rows_ms, light.flood_ms, light.bake_ms
-    );
-    ImGui::Text(
-        "mean %.0fus p50 %.0fus p99 %.0fus max %.0fus", light.mean_us, light.p50_us,
-        light.p99_us, light.max_us
-    );
-    ImGui::Text("queue %u, peak %u", light.queue_depth, light.queue_peak);
 
     ImGui::SeparatorText("mesh workers");
     const auto mesh = engine_->get_renderer().get_mesh_pool().get_gen_stats();

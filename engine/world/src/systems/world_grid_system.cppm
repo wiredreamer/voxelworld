@@ -8,7 +8,6 @@ import vw.ecs;
 import :components;
 import :grid;
 import :spatial;
-import :light;
 import :terrain;
 
 export namespace vw::ecs {
@@ -31,14 +30,7 @@ struct world_grid_system_stats {
 
     uint32 staged_count = 0;
 
-    uint32 lighting_count = 0;
-
-    float32 light_apply_ms = 0.0F;
-
-    uint32 relight_backlog = 0;
-    uint64 relit_columns   = 0;
-
-    uint64 relit_chunks = 0;
+    uint32 ready_count = 0;
 
     uint32 boundary_restored = 0;
 };
@@ -56,7 +48,7 @@ public:
     auto operator=(world_grid_system&&) noexcept -> world_grid_system&;
 
     auto set_grid(std::unique_ptr<world_grid> grid) -> void;
-    auto set_loader(std::unique_ptr<chunk_loader> loader, job_system& jobs) -> void;
+    auto set_loader(std::unique_ptr<chunk_loader> loader) -> void;
 
     [[nodiscard]] auto grid() -> world_grid*;
     [[nodiscard]] auto grid() const -> const world_grid*;
@@ -70,7 +62,6 @@ public:
 
     [[nodiscard]] auto get_stats() const -> const world_grid_system_stats&;
     [[nodiscard]] auto get_loader_stats() const -> column_gen_stats;
-    [[nodiscard]] auto get_light_stats() const -> light_stats;
 
     class view_modifier {
     public:
@@ -96,30 +87,18 @@ private:
 
         std::unique_ptr<world_grid> grid;
         std::unique_ptr<chunk_loader> loader;
-        std::unique_ptr<light_baker> baker;
 
         std::unordered_set<vec2i> active_columns;
         std::unordered_set<vec2i> pending_active_columns;
         std::vector<vec2i> pending_requests;
         std::unordered_map<vec2i, std::unique_ptr<gen_column>> staged_columns;
         std::vector<vec2i> ready_columns;
-
-        std::unordered_set<vec2i> light_dirty;
     };
-
 
     auto process_dirty_entity_(entity ent) -> bool;
     auto process_dirty_entities_() -> bool;
     auto stage_completed_columns_(column_layer& layer) -> void;
-    auto collect_lit_columns_(column_layer& layer) -> void;
-    auto relight_dirty_columns_(column_layer& layer) -> void;
-    auto apply_relit_column_(column_layer& layer, light_result& result) -> void;
     auto integrate_completed_columns_(column_layer& layer) -> void;
-    auto dispatch_light_(column_layer& layer, vec2i coord) -> bool;
-    [[nodiscard]] auto column_stack_(column_layer& layer, vec2i coord, int32 bottom)
-        -> std::vector<std::shared_ptr<asset::model>>;
-    [[nodiscard]] auto column_bottom_(column_layer& layer, vec2i coord) -> std::optional<int32>;
-    [[nodiscard]] static auto already_lit_(gen_column& col) -> bool;
     [[nodiscard]] auto column_available_(column_layer& layer, vec2i coord) const -> bool;
     [[nodiscard]] auto column_ready_(column_layer& layer, vec2i coord) const -> bool;
     [[nodiscard]] auto within_draw_(const column_layer& layer, vec2i coord) const -> bool;

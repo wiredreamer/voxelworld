@@ -27,11 +27,6 @@ auto voxel_edits_scene::start_() -> void {
     started_   = true;
 
     mesh_base_ = stand().renderer().get_mesh_pool().get_gen_stats().chunks;
-
-    const auto& wgs   = stand().world().system<ecs::world_grid_system>();
-    relight_base_     = wgs.get_stats().relit_columns;
-    relit_chunk_base_ = wgs.get_stats().relit_chunks;
-    light_base_       = wgs.get_light_stats().columns;
 }
 
 auto voxel_edits_scene::tick(float32) -> void {
@@ -72,12 +67,6 @@ auto voxel_edits_scene::collect_report(gfx::report& out) const -> void {
 
     const auto meshed = stand().renderer().get_mesh_pool().get_gen_stats().chunks - mesh_base_;
 
-    const auto& wgs     = stand().world().system<ecs::world_grid_system>();
-    const auto& stats   = wgs.get_stats();
-    const auto relit    = stats.relit_columns - relight_base_;
-    const auto relit_ch = stats.relit_chunks - relit_chunk_base_;
-    const auto lit      = wgs.get_light_stats().columns - light_base_;
-
     const auto per = [this](uint64 n) -> float64 {
         return static_cast<float64>(n) / static_cast<float64>(edits_);
     };
@@ -89,12 +78,7 @@ auto voxel_edits_scene::collect_report(gfx::report& out) const -> void {
         .value("box_side", static_cast<int64>(side))
         .value("voxels_per_frame", static_cast<int64>(per_frame_))
         .value("cursor", static_cast<int64>(cursor_))
-        .value("cells", static_cast<int64>(cells))
-        .value("relight_columns", relit)
-        .value("relight_columns_per_edit", per(relit))
-        .value("columns_flooded", lit)
-        .value("chunks_changed", relit_ch)
-        .value("relight_backlog", static_cast<uint64>(stats.relight_backlog));
+        .value("cells", static_cast<int64>(cells));
 }
 
 auto voxel_edits_scene::ui() -> void {

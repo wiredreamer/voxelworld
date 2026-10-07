@@ -84,7 +84,6 @@ struct std::hash<vw::gfx::instance_key> {
 export namespace vw::gfx {
 
 struct instance_shading {
-    world_light light{};
     instance_corners corners{};
 };
 
@@ -149,7 +148,6 @@ public:
         instance_key instance, const mat4f& transform_matrix, const vw::spatial::aabb& bounds,
         const instance_shading& shading = {}
     ) -> void;
-    auto write_light(instance_key instance, const world_light& light) -> void;
     auto free(instance_key instance) -> std::optional<instance_key>;
 
     auto write_visibility(std::span<const uint32> flags) -> void;

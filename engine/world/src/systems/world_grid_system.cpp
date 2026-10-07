@@ -26,14 +26,11 @@ auto world_grid_system::set_grid(
 }
 
 auto world_grid_system::set_loader(
-    std::unique_ptr<chunk_loader> loader, job_system& jobs
+    std::unique_ptr<chunk_loader> loader
 ) -> void {
     clear_loader_transient_state_(columns_);
     columns_.loader   = std::move(loader);
     columns_.reseeded = true;
-    columns_.baker  = columns_.loader != nullptr
-                  ? std::make_unique<light_baker>(world_->voxel_types(), jobs)
-                  : nullptr;
 }
 
 auto world_grid_system::grid() -> world_grid* {
@@ -64,17 +61,12 @@ auto world_grid_system::get_loader_stats() const -> column_gen_stats {
     return columns_.loader ? columns_.loader->get_gen_stats() : column_gen_stats{};
 }
 
-auto world_grid_system::get_light_stats() const -> light_stats {
-    return columns_.baker ? columns_.baker->get_stats() : light_stats{};
-}
-
 auto world_grid_system::get_stats() const -> const world_grid_system_stats& {
     return stats_;
 }
 
 auto world_grid_system::shutdown() -> void {
     columns_.grid.reset();
-    columns_.baker.reset();
     columns_.loader.reset();
 }
 
@@ -84,7 +76,6 @@ auto world_grid_system::update(float32) -> void {
     }
 
     stats_.stage_ms           = 0.0F;
-    stats_.light_apply_ms     = 0.0F;
     stats_.integrate_ms       = 0.0F;
     stats_.request_columns_ms = 0.0F;
 
@@ -119,10 +110,6 @@ auto world_grid_system::run_layer_(
     }
 
     stats_.stage_ms += measure_ms([&] { stage_completed_columns_(layer); });
-    stats_.light_apply_ms += measure_ms([&] {
-        collect_lit_columns_(layer);
-        relight_dirty_columns_(layer);
-    });
     stats_.integrate_ms += measure_ms([&] { integrate_completed_columns_(layer); });
     stats_.request_columns_ms += measure_ms([&] { dispatch_column_requests_(layer); });
 }
@@ -243,50 +230,15 @@ auto world_grid_system::queue_if_ready_(
         return;
     }
 
-    const auto phase = it->second->get_phase();
-    if (phase == column_phase::complete || phase == column_phase::lighting) {
+    if (it->second->get_phase() == column_phase::complete) {
         return;
     }
-    if (!column_ready_(layer, coord)) {
-        return;
-    }
-
-    if (already_lit_(*it->second)) {
-        it->second->set_phase(column_phase::complete);
-        layer.ready_columns.push_back(coord);
+    if (it->second->get_all_chunk_data().empty() || !column_ready_(layer, coord)) {
         return;
     }
 
-    if (dispatch_light_(layer, coord)) {
-        it->second->set_phase(column_phase::lighting);
-    }
-}
-
-auto world_grid_system::already_lit_(
-    gen_column& col
-) -> bool {
-    const auto& chunks = col.get_all_chunk_data();
-    return !chunks.empty() && std::ranges::all_of(chunks, [](const auto& entry) -> bool {
-        return entry.second.volume->has_sky_light();
-    });
-}
-
-auto world_grid_system::column_bottom_(
-    column_layer& layer, vec2i coord
-) -> std::optional<int32> {
-    if (const auto it = layer.staged_columns.find(coord); it != layer.staged_columns.end()) {
-        const auto& chunks = it->second->get_all_chunk_data();
-        if (chunks.empty()) {
-            return std::nullopt;
-        }
-        return chunks.rbegin()->first;
-    }
-
-    const auto levels = layer.grid->column_levels(coord);
-    if (levels.empty()) {
-        return std::nullopt;
-    }
-    return levels.front();
+    it->second->set_phase(column_phase::complete);
+    layer.ready_columns.push_back(coord);
 }
 
 auto world_grid_system::column_top_(
@@ -305,175 +257,6 @@ auto world_grid_system::column_top_(
         return std::nullopt;
     }
     return levels.back();
-}
-
-auto world_grid_system::column_stack_(
-    column_layer& layer, vec2i coord, int32 bottom
-) -> std::vector<std::shared_ptr<asset::model>> {
-    std::vector<std::shared_ptr<asset::model>> stack;
-
-    const auto put = [&](int32 y, std::shared_ptr<asset::model> mdl) -> void {
-        if (y < bottom) {
-            return;
-        }
-        const auto slot = static_cast<std::size_t>(y - bottom);
-        if (stack.size() <= slot) {
-            stack.resize(slot + 1);
-        }
-        stack[slot] = std::move(mdl);
-    };
-
-    if (const auto it = layer.staged_columns.find(coord); it != layer.staged_columns.end()) {
-        for (auto& [y, cd] : it->second->get_all_chunk_data()) {
-            put(y, cd.volume->shared_voxels());
-        }
-        return stack;
-    }
-
-    for (int32 y : layer.grid->column_levels(coord)) {
-        if (auto* placed = layer.grid->get_chunk(vec3i{coord.x, y, coord.y})) {
-            put(y, placed->get_model());
-        }
-    }
-    return stack;
-}
-
-auto world_grid_system::dispatch_light_(
-    column_layer& layer, vec2i coord
-) -> bool {
-    if (layer.baker == nullptr) {
-        return false;
-    }
-    if (layer.baker->is_pending(coord)) {
-        return true;
-    }
-
-    int32 bottom = std::numeric_limits<int32>::max();
-    for (auto offset : column_neighbor_offsets) {
-        if (const auto at = column_bottom_(layer, coord + offset)) {
-            bottom = std::min(bottom, *at);
-        }
-    }
-    const auto own = column_bottom_(layer, coord);
-    if (!own) {
-        return false;
-    }
-    bottom = std::min(bottom, *own);
-
-    light_request job;
-    job.coord    = coord;
-    job.bottom_y = bottom;
-
-    for (int32 dz = -1; dz <= 1; ++dz) {
-        for (int32 dx = -1; dx <= 1; ++dx) {
-            const auto slot  = static_cast<std::size_t>(((dz + 1) * 3) + (dx + 1));
-            job.around[slot] = column_stack_(layer, coord + vec2i{dx, dz}, bottom);
-        }
-    }
-
-    return layer.baker->request(std::move(job));
-}
-
-auto world_grid_system::collect_lit_columns_(
-    column_layer& layer
-) -> void {
-    if (layer.baker == nullptr) {
-        return;
-    }
-
-    while (auto result = layer.baker->try_pop_completed()) {
-        const auto it = layer.staged_columns.find(result->coord);
-        if (it == layer.staged_columns.end()) {
-            apply_relit_column_(layer, *result);
-            continue;
-        }
-
-        for (auto& [y, cd] : it->second->get_all_chunk_data()) {
-            const auto slot = static_cast<std::size_t>(y - result->bottom_y);
-            if (slot < result->sky.size()) {
-                cd.volume->set_sky_light(std::move(result->sky[slot]));
-                cd.volume->set_block_light(std::move(result->block[slot]));
-            }
-        }
-
-        it->second->set_phase(column_phase::complete);
-        layer.ready_columns.push_back(result->coord);
-    }
-}
-
-auto world_grid_system::apply_relit_column_(
-    column_layer& layer, light_result& result
-) -> void {
-    for (int32 y : layer.grid->column_levels(result.coord)) {
-        const auto slot = static_cast<std::size_t>(y - result.bottom_y);
-        if (slot >= result.sky.size()) {
-            continue;
-        }
-
-        const vec3i at{result.coord.x, y, result.coord.y};
-        auto* placed = layer.grid->get_chunk(at);
-        if (placed == nullptr) {
-            continue;
-        }
-
-        auto& vol               = *placed->get_volume();
-        const auto* stood_sky   = vol.get_sky_light();
-        const auto* stood_block = vol.get_block_light();
-
-        const bool sky_moved   = stood_sky == nullptr || *stood_sky != result.sky[slot];
-        const bool block_moved = stood_block == nullptr || *stood_block != result.block[slot];
-
-        if (!sky_moved && !block_moved) {
-            continue;
-        }
-
-        vol.set_sky_light(std::move(result.sky[slot]));
-        vol.set_block_light(std::move(result.block[slot]));
-        layer.grid->remesh_drawn_chunk(at);
-        static_cast<void>(refresh_boundary_(layer, at));
-        ++stats_.relit_chunks;
-    }
-}
-
-auto world_grid_system::relight_dirty_columns_(
-    column_layer& layer
-) -> void {
-    if (layer.baker == nullptr) {
-        return;
-    }
-
-    for (vec2i coord : layer.grid->take_light_dirty()) {
-        layer.light_dirty.insert(coord);
-    }
-
-    if (layer.light_dirty.empty()) {
-        return;
-    }
-
-    static constexpr int32 max_relights_per_frame = 2;
-    int32 started                                 = 0;
-
-    std::erase_if(layer.light_dirty, [&](vec2i coord) -> bool {
-        if (!column_available_(layer, coord)) {
-            return true;
-        }
-        if (started >= max_relights_per_frame || layer.baker->is_pending(coord)) {
-            return false;
-        }
-        if (!column_ready_(layer, coord)) {
-            return false;
-        }
-
-        if (!dispatch_light_(layer, coord)) {
-            return true;
-        }
-
-        ++started;
-        ++stats_.relit_columns;
-        return true;
-    });
-
-    stats_.relight_backlog = static_cast<uint32>(layer.light_dirty.size());
 }
 
 auto world_grid_system::stage_completed_columns_(
@@ -580,8 +363,7 @@ auto world_grid_system::dispatch_column_requests_(
     // см. docs/world.md#потолок-работы-в-полёте
     static constexpr uint32 max_columns_in_flight = 96;
 
-    const uint32 in_flight =
-        layer.loader->pending_count() + (layer.baker != nullptr ? layer.baker->pending_count() : 0U);
+    const uint32 in_flight = layer.loader->pending_count();
 
     int32 requests = 0;
     while (!layer.pending_requests.empty() && requests < max_requests_per_frame &&
@@ -600,7 +382,7 @@ auto world_grid_system::update_grid_stats_() -> void {
     stats_.loaded_count      = columns_.grid->chunk_count();
     stats_.drawn_count       = columns_.grid->drawn_chunk_count();
     stats_.staged_count      = static_cast<uint32>(columns_.staged_columns.size());
-    stats_.lighting_count    = columns_.baker != nullptr ? columns_.baker->pending_count() : 0U;
+    stats_.ready_count       = static_cast<uint32>(columns_.ready_columns.size());
     stats_.rebuild_active_ms = 0.0f;
     stats_.unload_ms         = 0.0f;
 }
@@ -761,7 +543,6 @@ auto world_grid_system::clear_grid_transient_state_(
     layer.pending_requests.clear();
     layer.staged_columns.clear();
     layer.ready_columns.clear();
-    layer.light_dirty.clear();
     layer.active_columns.clear();
     layer.pending_active_columns.clear();
 }

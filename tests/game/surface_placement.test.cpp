@@ -40,8 +40,7 @@ auto start_streaming(ecs::world& w, job_system& jobs) -> void {
                 models.get_identity_pool(), models.get_page_pool(), shallow_params()
             ),
             jobs
-        ),
-        jobs
+        )
     );
 
     const auto viewer = w.create()

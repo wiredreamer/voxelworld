@@ -1,4 +1,3 @@
-#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 import std;
@@ -612,40 +611,4 @@ TEST_CASE("sky light cost on real terrain", "[.sky_light_measure]") {
     );
 
     REQUIRE(field_chunks > 0);
-}
-
-TEST_CASE("a body reads the sky light of the air around it, not of the rock", "[sky_light]") {
-    constexpr int32 units = 8;
-
-    ecs::world w;
-    world_grid grid{w, units};
-    auto model = w.resource<asset::model_registry>().create_unnamed(side, side, side);
-
-    column_fixture fixture{1};
-    const auto solid = [&](int32 x0, int32 y0, int32 z0, int32 x1, int32 y1, int32 z1) {
-        fixture.fill_solid(x0, y0, z0, x1, y1, z1);
-        for (int32 y = y0; y <= y1; ++y) {
-            for (int32 z = z0; z <= z1; ++z) {
-                for (int32 x = x0; x <= x1; ++x) {
-                    model->set_voxel(x, y, z, voxels::red[6]);
-                }
-            }
-        }
-    };
-    solid(0, 0, 0, side - 1, 40, side - 1);
-    solid(0, 60, 0, 31, 60, side - 1);
-
-    auto volume = std::make_shared<asset::chunk_volume>(model);
-    volume->set_sky_light(fixture.light().bake(0, asset::light_channel::sky));
-    static_cast<void>(grid.place_chunk({0, 0, 0}, volume));
-
-    const auto at = [](float32 x, float32 y, float32 z) -> vec3f {
-        return vec3f{x * units, y * units, z * units};
-    };
-
-    REQUIRE(grid.light_at(at(48.5F, 50.5F, 32.5F)).sky == Catch::Approx(1.0F));
-    REQUIRE(grid.light_at(at(48.5F, 41.0F, 32.5F)).sky == Catch::Approx(1.0F));
-    REQUIRE(grid.light_at(at(5.5F, 50.5F, 32.5F)).sky == Catch::Approx(0.0F));
-    REQUIRE(grid.light_at(at(31.5F, 59.5F, 32.5F)).sky == Catch::Approx(14.0F / 15.0F));
-    REQUIRE(grid.light_at(at(-20.0F, 50.0F, 32.0F)) == world_light{});
 }

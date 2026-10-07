@@ -183,20 +183,3 @@ TEST_CASE("a baked block field reads back what was flooded", "[block_light]") {
         }
     }
 }
-
-TEST_CASE("setting either light invalidates the mesh built from it", "[block_light]") {
-    asset::model_identity_pool ids;
-    asset::page_pool pages;
-
-    auto voxels = std::make_shared<asset::model>(ids, pages, side, side, side);
-    asset::chunk_volume chunk{voxels};
-
-    const asset::model_identity fresh = voxels->get_identity();
-
-    chunk.set_sky_light(asset::light_field{});
-    const asset::model_identity after_sky = voxels->get_identity();
-    REQUIRE(after_sky != fresh);
-
-    chunk.set_block_light(asset::light_field{});
-    REQUIRE(voxels->get_identity() != after_sky);
-}

@@ -234,29 +234,6 @@ auto engine::write_bench_report_() const -> void {
         columns.queue_peak
     );
 
-    const auto light      = world_->system<ecs::world_grid_system>().get_light_stats();
-    const auto grid_stats = world_->system<ecs::world_grid_system>().get_stats();
-    std::format_to(
-        std::back_inserter(report_text),
-        "\nsky light: {} columns, rows {:.1f} ms, flood {:.1f} ms, bake {:.1f} ms\n"
-        "  per column (us): mean {:.0f}  p50 {:.0f}  p99 {:.0f}  max {:.0f}\n"
-        "  queue: {} left, {} peak\n"
-        "  relight: {} columns after edits, {} chunks changed, {} in the backlog\n",
-        light.columns,
-        light.rows_ms,
-        light.flood_ms,
-        light.bake_ms,
-        light.mean_us,
-        light.p50_us,
-        light.p99_us,
-        light.max_us,
-        light.queue_depth,
-        light.queue_peak,
-        grid_stats.relit_columns,
-        grid_stats.relit_chunks,
-        grid_stats.relight_backlog
-    );
-
     std::format_to(
         std::back_inserter(report_text),
         "\nscene ready after {} frames, {:.0f} ms\n",

@@ -45,8 +45,7 @@ public:
                     models.get_identity_pool(), models.get_page_pool(), params
                 ),
                 *jobs_
-            ),
-            *jobs_
+            )
         );
         first_seen_.clear();
     }
@@ -61,8 +60,7 @@ public:
             observe_();
 
             const auto& stats  = gs.get_stats();
-            const bool waiting = stats.pending_count > 0 || stats.lighting_count > 0 ||
-                                 stats.relight_backlog > 0;
+            const bool waiting = stats.pending_count > 0 || stats.ready_count > 0;
             quiet = (waiting || placed_this_frame_ > 0) ? 0 : quiet + 1;
 
             if (waiting && placed_this_frame_ == 0) {
@@ -116,60 +114,6 @@ private:
     std::unordered_map<vec3i, asset::model_identity> first_seen_;
     int32 placed_this_frame_ = 0;
 };
-
-auto light_at(world_grid& grid, vec3i world_pos) -> std::optional<int32> {
-    auto* c = grid.get_chunk(grid.world_to_chunk_coord(world_pos));
-    if (c == nullptr) {
-        return std::nullopt;
-    }
-
-    const auto* light = c->get_volume()->get_sky_light();
-    if (light == nullptr) {
-        return std::nullopt;
-    }
-
-    return light->level_at(grid.world_to_local_coord(world_pos) / grid.world_units_per_voxel());
-}
-
-auto solid_shaft_site(world_grid& grid, vec2i column, int32 depth) -> std::optional<vec3i> {
-    const auto levels = grid.column_levels(column);
-    if (levels.empty()) {
-        return std::nullopt;
-    }
-
-    const int32 scale = grid.world_units_per_voxel();
-    const int32 span  = chunk::size * scale;
-    const int32 top   = ((levels.back() + 1) * span) - scale;
-    const int32 floor = levels.front() * span;
-
-    for (int32 lz = 16; lz < 48; ++lz) {
-        for (int32 lx = 16; lx < 48; ++lx) {
-            const int32 wx = (column.x * span) + (lx * scale);
-            const int32 wz = (column.y * span) + (lz * scale);
-
-            int32 y = top;
-            while (y >= floor && grid.get_voxel(vec3i{wx, y, wz}).is_empty()) {
-                y -= scale;
-            }
-
-            const int32 deepest = y - ((depth - 1) * scale);
-            if (y < floor || deepest < floor) {
-                continue;
-            }
-
-            bool all_rock = true;
-            for (int32 at = y; at >= deepest && all_rock; at -= scale) {
-                all_rock = !grid.get_voxel(vec3i{wx, at, wz}).is_empty();
-            }
-
-            if (all_rock) {
-                return vec3i{wx, y, wz};
-            }
-        }
-    }
-
-    return std::nullopt;
-}
 
 }  // namespace
 
@@ -358,143 +302,6 @@ TEST_CASE("digging a seam tells both sides", "[world][grid]") {
     );
 
     REQUIRE(east->get_volume()->is_boundary_solid(face_direction::neg_x, 0, local.y + 1, local.z));
-}
-
-TEST_CASE("a placed chunk arrives with its sky light", "[world][grid]") {
-    job_system jobs;
-    world w;
-    const settled_grid settled{w, jobs};
-
-    std::size_t chunks     = 0;
-    std::size_t with_light = 0;
-    std::size_t paged      = 0;
-    std::size_t dark       = 0;
-    bool saw_open_sky      = false;
-
-    settled.grid().for_each_chunk([&](vec3i, const chunk& c) -> void {
-        ++chunks;
-
-        const auto* light = c.get_volume()->get_sky_light();
-        if (light == nullptr) {
-            return;
-        }
-        ++with_light;
-
-        if (light->is_uniform()) {
-            dark += light->uniform_level() == 0 ? 1 : 0;
-            return;
-        }
-
-        ++paged;
-
-        for (int32 z = 0; z < asset::light_field::side && !saw_open_sky; ++z) {
-            for (int32 x = 0; x < asset::light_field::side; ++x) {
-                if (light->level_at(x, asset::light_field::side - 1, z) ==
-                    ecs::light_column::max_level) {
-                    saw_open_sky = true;
-                    break;
-                }
-            }
-        }
-    });
-
-    INFO(
-        "chunks " << chunks << ", with light " << with_light << ", paged " << paged << ", dark "
-                  << dark
-    );
-
-    REQUIRE(chunks > 0);
-    REQUIRE(with_light == chunks);
-
-    REQUIRE(dark > 0);
-    REQUIRE(saw_open_sky);
-    REQUIRE(paged > 0);
-}
-
-TEST_CASE("digging to the sky relights the shaft", "[world][grid]") {
-    job_system jobs;
-    world w;
-    settled_grid settled{w, jobs};
-
-    auto& gs         = w.system<world_grid_system>();
-    auto& grid       = *gs.grid();
-    const int32 scale = grid.world_units_per_voxel();
-
-    constexpr int32 depth = 20;
-
-    const auto surface = solid_shaft_site(grid, vec2i{0, 0}, depth);
-    REQUIRE(surface.has_value());
-
-    std::vector<vec3i> shaft;
-    for (int32 i = 0; i < depth; ++i) {
-        shaft.push_back(vec3i{surface->x, surface->y - (i * scale), surface->z});
-    }
-
-    for (vec3i at : shaft) {
-        REQUIRE_FALSE(grid.get_voxel(at).is_empty());
-        REQUIRE(light_at(grid, at) == 0);
-    }
-
-    const auto columns_before = gs.get_stats().relit_columns;
-
-    for (vec3i at : shaft) {
-        grid.set_voxel(at, voxels::air);
-    }
-
-    REQUIRE(grid.get_voxel(shaft.back()).is_empty());
-    REQUIRE(light_at(grid, shaft.back()) == 0);
-
-    settled.settle();
-
-    for (vec3i at : shaft) {
-        INFO("world y " << at.y);
-        REQUIRE(light_at(grid, at) == ecs::light_column::max_level);
-    }
-
-    REQUIRE(gs.get_stats().relit_columns == columns_before + 1);
-}
-
-TEST_CASE("digging in the dark relights nothing", "[world][grid]") {
-    job_system jobs;
-    world w;
-    settled_grid settled{w, jobs};
-
-    auto& gs   = w.system<world_grid_system>();
-    auto& grid = *gs.grid();
-
-    std::optional<vec3i> target;
-    grid.for_each_chunk([&](vec3i coord, const chunk& c) -> void {
-        if (target.has_value() || !c.is_solid()) {
-            return;
-        }
-
-        const auto* light = c.get_volume()->get_sky_light();
-        if (light != nullptr && light->is_uniform() && light->uniform_level() == 0) {
-            target = coord;
-        }
-    });
-
-    REQUIRE(target.has_value());
-
-    const auto& stats         = gs.get_stats();
-    const auto chunks_before  = stats.relit_chunks;
-    const auto columns_before = stats.relit_columns;
-
-    const vec3i at =
-        grid.chunk_to_world_coord(*target) + (vec3i{32, 32, 32} * grid.world_units_per_voxel());
-
-    REQUIRE_FALSE(grid.get_voxel(at).is_empty());
-    grid.set_voxel(at, voxels::air);
-
-    settled.settle();
-
-    INFO(
-        "relit " << (stats.relit_columns - columns_before) << " columns, "
-                 << (stats.relit_chunks - chunks_before) << " chunks"
-    );
-
-    REQUIRE(stats.relit_columns > columns_before);
-    REQUIRE(stats.relit_chunks == chunks_before);
 }
 
 TEST_CASE("the apron is generated but not placed", "[world][grid]") {

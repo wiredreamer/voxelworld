@@ -107,8 +107,7 @@ private:
                     models.get_identity_pool(), models.get_page_pool(), terrain
                 ),
                 jobs
-            ),
-            jobs
+            )
         );
 
         const auto viewer = world.create()

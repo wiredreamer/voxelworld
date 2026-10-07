@@ -34,7 +34,7 @@ auto setup_world_grid(gfx::engine& engine) -> world_setup_result {
     auto& gs   = world.system<ecs::world_grid_system>();
     gs.set_grid(std::make_unique<ecs::world_grid>(world, params.world_units_per_voxel));
     gs.set_loader(
-        std::make_unique<ecs::chunk_loader>(std::move(generator), jobs), jobs
+        std::make_unique<ecs::chunk_loader>(std::move(generator), jobs)
     );
 
     const auto chunk_units =

@@ -9,16 +9,8 @@ import std;
 import vw.core;
 import vw.asset;
 import vw.ecs;
-import :light;
 
 export namespace vw::ecs {
-
-struct world_light {
-    float32 sky   = 1.0F;
-    float32 block = 0.0F;
-
-    auto operator==(const world_light&) const -> bool = default;
-};
 
 // см. docs/world.md#журнал-занятости
 struct occupancy_change {
@@ -41,8 +33,6 @@ public:
 
     [[nodiscard]] auto get_voxel(vec3i world_pos) const -> voxel;
     auto set_voxel(vec3i world_pos, voxel v) -> void;
-
-    [[nodiscard]] auto light_at(const vec3f& world_pos) const -> world_light;
 
     [[nodiscard]] auto cell_of(const vec3f& world_pos) const -> vec3i;
     [[nodiscard]] auto cell_at(vec3i at) const -> std::optional<cell>;
@@ -70,10 +60,6 @@ public:
 
     auto refresh_chunk(vec3i chunk_coord) -> void;
 
-    auto remesh_drawn_chunk(vec3i chunk_coord) -> void;
-
-    [[nodiscard]] auto take_light_dirty() -> std::vector<vec2i>;
-
     // см. docs/world.md#журнал-занятости
     [[nodiscard]] auto occupancy_serial() const -> uint64;
     [[nodiscard]] auto occupancy_changes_since(uint64 serial) const
@@ -93,7 +79,6 @@ public:
     [[nodiscard]] auto chunk_to_world_coord(vec3i chunk_coord) const -> vec3i;
 
 private:
-    auto mark_light_dirty_(vec3i chunk_coord, vec3i local) -> void;
     [[nodiscard]] auto chunk_holding_(vec3i at) const -> const chunk*;
     [[nodiscard]] auto chunk_holding_(vec3i at) -> chunk*;
     auto set_cover_(vec3i support, uint8 form) -> void;
@@ -103,7 +88,6 @@ private:
     int32 world_units_per_voxel_{1};
     std::unordered_map<vec3i, std::unique_ptr<chunk>> chunks_;
     std::unordered_map<vec2i, std::vector<int32>> column_chunks_;
-    std::unordered_set<vec2i> light_dirty_;
     uint32 drawn_chunks_ = 0;
 
     uint64 occupancy_first_serial_;

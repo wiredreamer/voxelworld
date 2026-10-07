@@ -34,69 +34,6 @@ auto world_grid::get_voxel(
     return it->second->get_voxel(lc / world_units_per_voxel_);
 }
 
-auto world_grid::light_at(
-    const vec3f& world_pos
-) const -> world_light {
-    constexpr auto full = static_cast<float32>(light_column::max_level);
-
-    const auto vs = static_cast<float32>(world_units_per_voxel_);
-    const vec3f cell{
-        (world_pos.x / vs) - 0.5F, (world_pos.y / vs) - 0.5F, (world_pos.z / vs) - 0.5F
-    };
-    const vec3i base{
-        static_cast<int32>(std::floor(cell.x)), static_cast<int32>(std::floor(cell.y)),
-        static_cast<int32>(std::floor(cell.z))
-    };
-    const vec3f frac{
-        cell.x - static_cast<float32>(base.x), cell.y - static_cast<float32>(base.y),
-        cell.z - static_cast<float32>(base.z)
-    };
-
-    float32 weight = 0.0F;
-    float32 sky    = 0.0F;
-    float32 block  = 0.0F;
-
-    for (int32 corner = 0; corner < 8; ++corner) {
-        const vec3i step{corner & 1, (corner >> 1) & 1, (corner >> 2) & 1};
-        const vec3i voxel_pos = base + step;
-        const float32 w = (step.x != 0 ? frac.x : 1.0F - frac.x) *
-                          (step.y != 0 ? frac.y : 1.0F - frac.y) *
-                          (step.z != 0 ? frac.z : 1.0F - frac.z);
-
-        const vec3i at = voxel_pos * world_units_per_voxel_;
-        const auto it  = chunks_.find(world_to_chunk_coord(at));
-        if (it == chunks_.end()) {
-            weight += w;
-            sky += w * full;
-            continue;
-        }
-
-        const vec3i local = world_to_local_coord(at) / world_units_per_voxel_;
-        if (!it->second->get_voxel(local).is_empty()) {
-            continue;
-        }
-
-        const auto& volume = *it->second->get_volume();
-        const auto* sky_field   = volume.get_sky_light();
-        const auto* block_field = volume.get_block_light();
-        if (sky_field == nullptr) {
-            continue;
-        }
-
-        weight += w;
-        sky += w * static_cast<float32>(sky_field->level_at(local));
-        if (block_field != nullptr) {
-            block += w * static_cast<float32>(block_field->level_at(local));
-        }
-    }
-
-    if (weight <= 0.0001F) {
-        return {};
-    }
-
-    return {.sky = sky / (weight * full), .block = block / (weight * full)};
-}
-
 auto world_grid::set_voxel(
     vec3i world_pos, voxel v
 ) -> void {
@@ -111,7 +48,6 @@ auto world_grid::set_voxel(
     const vec3i at = (cc * chunk::size) + lc;
     set_cover_(v.is_empty() ? at : at - vec3i{0, 1, 0}, 0);
 
-    mark_light_dirty_(cc, lc);
     note_occupancy_change_({.chunk = cc, .voxel = at, .whole_chunk = false});
     refresh_chunk(cc);
 
@@ -228,52 +164,6 @@ auto world_grid::set_cover_(
     }
     const vec3i local = world_to_local_coord(support * world_units_per_voxel_) / world_units_per_voxel_;
     ground->get_volume()->cover().set(local, form);
-}
-
-auto world_grid::mark_light_dirty_(
-    vec3i chunk_coord, vec3i local
-) -> void {
-    constexpr int32 reach = ecs::light_column::max_level;
-    static_assert(reach * 2 < chunk::size, "an edit must not reach past the next column");
-
-    const vec2i column{chunk_coord.x, chunk_coord.z};
-    light_dirty_.insert(column);
-
-    const auto side_of = [](int32 at) -> int32 {
-        if (at + 1 <= reach) {
-            return -1;
-        }
-        return (chunk::size - at) <= reach ? 1 : 0;
-    };
-
-    const int32 dx = side_of(local.x);
-    const int32 dz = side_of(local.z);
-
-    if (dx != 0) {
-        light_dirty_.insert(column + vec2i{dx, 0});
-    }
-    if (dz != 0) {
-        light_dirty_.insert(column + vec2i{0, dz});
-    }
-    if (dx != 0 && dz != 0) {
-        light_dirty_.insert(column + vec2i{dx, dz});
-    }
-}
-
-auto world_grid::take_light_dirty() -> std::vector<vec2i> {
-    std::vector<vec2i> out(light_dirty_.begin(), light_dirty_.end());
-    light_dirty_.clear();
-    return out;
-}
-
-auto world_grid::remesh_drawn_chunk(
-    vec3i chunk_coord
-) -> void {
-    const auto it = chunks_.find(chunk_coord);
-    if (it == chunks_.end() || !it->second->is_drawn()) {
-        return;
-    }
-    refresh_chunk(chunk_coord);
 }
 
 auto world_grid::refresh_chunk(

@@ -21,7 +21,6 @@ target_sources(vw_world
             src/components/world_view_component.cppm
             src/light/light.cppm
             src/light/light_column.cppm
-            src/light/light_baker.cppm
             src/spatial/spatial.cppm
             src/grid/terrain.cppm
             src/grid/terrain_generator.cppm

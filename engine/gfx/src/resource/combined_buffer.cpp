@@ -32,17 +32,11 @@ auto is_axis_aligned(
     return true;
 }
 
-// см. docs/lighting.md#тела-в-пещере
-auto instance_light_column(
+auto instance_shading_column(
     const instance_shading& shading
 ) -> std::array<float32, 4> {
-    return {
-        1.0f - shading.light.sky, shading.light.block, shading.corners.packed_size,
-        shading.corners.word_offset
-    };
+    return {0.0f, 0.0f, shading.corners.packed_size, shading.corners.word_offset};
 }
-
-constexpr std::size_t instance_light_offset = 12 * sizeof(float32);
 
 auto normal_matrix_of(
     const mat4f& transform_matrix, const instance_shading& shading
@@ -50,7 +44,7 @@ auto normal_matrix_of(
     auto normal = math::transpose_matrix(
         math::inverse_matrix(transform_matrix).value_or(transform_matrix)
     );
-    const auto column = instance_light_column(shading);
+    const auto column = instance_shading_column(shading);
     for (int32 row = 0; row < 4; ++row) {
         normal[row, 3] = column[static_cast<std::size_t>(row)];
     }
@@ -359,20 +353,6 @@ auto combined_buffer::write_transform(
     );
 
     write_bounds_(instance_index, transform_matrix, bounds);
-}
-
-auto combined_buffer::write_light(
-    instance_key instance, const world_light& light
-) -> void {
-    const auto instance_index = allocations_[instance].instance_index;
-    const std::array<float32, 2> column{1.0f - light.sky, light.block};
-    const auto staged = staging_->stage_struct(column);
-    staging_->copy_to(
-        normal_matrix_buffer_->get_buffer(),
-        (instance_index * sizeof(mat4f)) + instance_light_offset,
-        staged,
-        sizeof(column)
-    );
 }
 
 auto combined_buffer::write_visibility(

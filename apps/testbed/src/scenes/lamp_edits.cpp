@@ -20,7 +20,6 @@ lamp_edits_scene::lamp_edits_scene(
     , inert_{args.flag("--inert")} {}
 
 auto lamp_edits_scene::start_() -> void {
-    const auto& wgs      = stand().world().system<ecs::world_grid_system>();
     const auto& mesh_gen = stand().renderer().get_mesh_pool().get_gen_stats();
 
     started_    = true;
@@ -30,14 +29,6 @@ auto lamp_edits_scene::start_() -> void {
     quads_per_chunk_base_ = mesh_gen.chunks == 0
         ? 0.0
         : static_cast<float64>(mesh_gen.quads) / static_cast<float64>(mesh_gen.chunks);
-
-    relight_base_     = wgs.get_stats().relit_columns;
-    relit_chunk_base_ = wgs.get_stats().relit_chunks;
-
-    const auto light_stats = wgs.get_light_stats();
-    columns_base_          = light_stats.columns;
-    flood_base_ms_         = light_stats.flood_ms;
-    bake_base_ms_          = light_stats.bake_ms;
 }
 
 auto lamp_edits_scene::tick(float32) -> void {
@@ -82,24 +73,8 @@ auto lamp_edits_scene::collect_report(gfx::report& out) const -> void {
     const auto meshed    = mesh_gen.chunks - mesh_base_;
     const auto quads     = mesh_gen.quads - quads_base_;
 
-    const auto& wgs     = stand().world().system<ecs::world_grid_system>();
-    const auto& stats   = wgs.get_stats();
-    const auto relit    = stats.relit_columns - relight_base_;
-    const auto relit_ch = stats.relit_chunks - relit_chunk_base_;
-
-    const auto light_stats = wgs.get_light_stats();
-    const auto columns     = light_stats.columns - columns_base_;
-    const auto flood_ms    = light_stats.flood_ms - flood_base_ms_;
-    const auto bake_ms     = light_stats.bake_ms - bake_base_ms_;
-
     const auto per = [this](uint64 n) -> float64 {
         return static_cast<float64>(n) / static_cast<float64>(placed_);
-    };
-
-    const auto us_a_column = [columns](float32 ms) -> float64 {
-        return columns == 0
-            ? 0.0
-            : (static_cast<float64>(ms) * 1000.0) / static_cast<float64>(columns);
     };
 
     const float64 quads_a_chunk =
@@ -115,16 +90,9 @@ auto lamp_edits_scene::collect_report(gfx::report& out) const -> void {
         .value("per_frame", static_cast<int64>(per_frame_))
         .value("cursor", static_cast<int64>(cursor_))
         .value("cells", static_cast<int64>(cells))
-        .value("relight_columns", relit)
-        .value("relight_columns_per_edit", per(relit))
-        .value("columns_flooded", columns)
-        .value("chunks_changed", relit_ch)
         .value("quads_built", quads)
         .value("quads_per_chunk", quads_a_chunk, 0)
-        .value("quads_per_chunk_streaming", quads_per_chunk_base_, 0)
-        .value("flood_us_per_column", us_a_column(flood_ms), 0)
-        .value("bake_us_per_column", us_a_column(bake_ms), 0)
-        .value("relight_backlog", static_cast<uint64>(stats.relight_backlog));
+        .value("quads_per_chunk_streaming", quads_per_chunk_base_, 0);
 }
 
 auto lamp_edits_scene::ui() -> void {

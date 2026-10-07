@@ -7,7 +7,7 @@ import vw.core;
 
 export namespace vw::ecs {
 
-enum class column_phase : uint8 { empty, terrain, lighting, complete };
+enum class column_phase : uint8 { empty, terrain, complete };
 
 class gen_column {
 public:
