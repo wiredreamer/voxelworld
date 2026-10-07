@@ -175,8 +175,6 @@ auto debug_window::render_lighting_panel() -> void {
         if (ImGui::SliderInt("bricks per frame", &bricks, 1, 2048)) {
             cache.bricks_per_frame = static_cast<uint32>(bricks);
         }
-        ImGui::SliderFloat("sky reach", &cache.sky_reach_cells, 16.0f, 256.0f, "%.0f");
-        ImGui::SliderFloat("sky gain", &cache.sky_gain, 1.0f, 6.0f, "%.2f");
 
         if (reset_button("reset##light_cache")) {
             cache = light_cache_settings{};

@@ -548,7 +548,7 @@ auto renderer::render(
             );
             light_cache_->dispatch(
                 cmd, occupancy_->get_descriptor_set(current_frame_), occupancy_->centre_chunk(),
-                light_cache_settings_, current_frame_
+                current_frame_
             );
         }
         gpu_timer_->end(cmd, gpu_stage::light_cache);
@@ -2232,7 +2232,6 @@ auto renderer::update_uniform_buffer(
         ubo.light_wrap[cascade] = light_cache::wrap_of(cascade, base_chunk);
     }
     ubo.light_wrap[0].w = light_cache_settings_.enabled ? 1.0f : 0.0f;
-    ubo.light_wrap[1].w = light_cache_settings_.sky_gain;
     ubo.fog.near_distance = fog_settings_.near_distance;
     ubo.fog.far_distance  = fog_settings_.far_distance;
     ubo.fog.enabled       = fog_settings_.enabled ? 1u : 0u;

@@ -12,9 +12,10 @@ namespace {
 constexpr int32 chunk_voxels = spatial::occupancy_clipmap_layout::chunk_voxels;
 constexpr int32 brick_shift  = 3;
 
-constexpr int32 near_margin_cells   = 1;
-constexpr int32 shade_spread_voxels = 8;
-constexpr int32 shade_depth_voxels  = 32;
+constexpr int32 flood_reach_voxels = 16;
+constexpr int32 shaft_depth_voxels = 64;
+constexpr int32 seeds_from_sky     = 8;
+constexpr int32 last_pass          = 16;
 
 static_assert((1 << brick_shift) == light_cache::brick_texels);
 
@@ -42,9 +43,11 @@ auto whole_image() -> vk::ImageSubresourceRange {
 }
 
 auto window_origin(vec3i centre_voxel, int32 cascade) -> vec3i {
-    const int32 shift = brick_shift + cascade;
+    const auto& shape = light_cache::shapes[static_cast<std::size_t>(cascade)];
+
+    const int32 shift = brick_shift + shape.cell_shift;
     const int32 half  = 1 << (shift - 1);
-    const int32 back  = light_cache::bricks_per_side / 2;
+    const int32 back  = shape.bricks_per_side() / 2;
 
     return {
         ((centre_voxel.x + half) >> shift) - back, ((centre_voxel.y + half) >> shift) - back,
@@ -61,8 +64,11 @@ light_cache::light_cache(
     : context_{&context}
     , descriptor_pool_{descriptor_pool}
     , compute_{context, "shaders/light_cache.comp.spv", shader_type::COMPUTE} {
-    for (auto& cascade : cascades_) {
-        cascade.slots.resize(static_cast<std::size_t>(slot_count));
+    for (std::size_t cascade = 0; cascade < cascades_.size(); ++cascade) {
+        const auto slots = static_cast<std::size_t>(shapes[cascade].slot_count());
+
+        cascades_[cascade].slots.resize(slots);
+        cascades_[cascade].owing[0] = static_cast<uint32>(slots);
     }
     for (auto& frame : frames_) {
         frame.queue = std::make_unique<storage_buffer>(
@@ -100,8 +106,9 @@ light_cache::~light_cache() {
 auto light_cache::create_images_() -> void {
     const vk::Device device = context_->get_device();
 
-    for (auto& cascade : cascades_) {
-        const auto side = static_cast<uint32>(texture_side);
+    for (std::size_t index = 0; index < cascades_.size(); ++index) {
+        auto& cascade   = cascades_[index];
+        const auto side = static_cast<uint32>(shapes[index].texture_side);
 
         vk::ImageCreateInfo image_info{};
         image_info.imageType     = vk::ImageType::e3D;
@@ -318,11 +325,21 @@ auto light_cache::make_ready(vk::CommandBuffer cmd) -> void {
     );
 }
 
-auto light_cache::slot_index_(vec3i brick) -> std::size_t {
-    constexpr int32 mask = bricks_per_side - 1;
+auto light_cache::slot_index_(int32 cascade, vec3i brick) -> std::size_t {
+    const int32 side = shapes[static_cast<std::size_t>(cascade)].bricks_per_side();
+    const int32 mask = side - 1;
+
     return static_cast<std::size_t>(
-        (brick.x & mask) + (bricks_per_side * ((brick.y & mask) + (bricks_per_side * (brick.z & mask))))
+        (brick.x & mask) + (side * ((brick.y & mask) + (side * (brick.z & mask))))
     );
+}
+
+auto light_cache::arm_(int32 cascade, slot& held) -> void {
+    auto& state = cascades_[static_cast<std::size_t>(cascade)];
+
+    --state.owing[held.passes_left];
+    held.passes_left = shapes[static_cast<std::size_t>(cascade)].passes_to_settle;
+    ++state.owing[held.passes_left];
 }
 
 auto light_cache::move_window_(int32 cascade, vec3i origin) -> void {
@@ -330,45 +347,46 @@ auto light_cache::move_window_(int32 cascade, vec3i origin) -> void {
     state.origin = origin;
     state.placed = true;
 
-    for (int32 z = 0; z < bricks_per_side; ++z) {
-        for (int32 y = 0; y < bricks_per_side; ++y) {
-            for (int32 x = 0; x < bricks_per_side; ++x) {
+    const int32 side = shapes[static_cast<std::size_t>(cascade)].bricks_per_side();
+
+    for (int32 z = 0; z < side; ++z) {
+        for (int32 y = 0; y < side; ++y) {
+            for (int32 x = 0; x < side; ++x) {
                 const vec3i brick{origin.x + x, origin.y + y, origin.z + z};
 
-                slot& held = state.slots[slot_index_(brick)];
+                slot& held = state.slots[slot_index_(cascade, brick)];
                 if (held.assigned && held.brick == brick) {
                     continue;
                 }
                 held.brick    = brick;
                 held.assigned = true;
-                held.waiting  = true;
+                arm_(cascade, held);
             }
         }
     }
 }
 
-auto light_cache::mark_box_(vec3i low_voxel, vec3i high_voxel, int32 margin_cells) -> void {
+auto light_cache::mark_box_(vec3i low_voxel, vec3i high_voxel) -> void {
     for (int32 cascade = 0; cascade < cascade_count; ++cascade) {
         auto& state = cascades_[static_cast<std::size_t>(cascade)];
+        if (!state.placed) {
+            continue;
+        }
 
-        const int32 shift  = brick_shift + cascade;
-        const int32 margin = margin_cells << cascade;
-        const vec3i low{
-            (low_voxel.x - margin) >> shift, (low_voxel.y - margin) >> shift,
-            (low_voxel.z - margin) >> shift
-        };
-        const vec3i high{
-            (high_voxel.x + margin) >> shift, (high_voxel.y + margin) >> shift,
-            (high_voxel.z + margin) >> shift
-        };
+        const auto& shape = shapes[static_cast<std::size_t>(cascade)];
+        const int32 shift = brick_shift + shape.cell_shift;
+        const int32 last  = shape.bricks_per_side() - 1;
 
-        for (int32 z = std::max(low.z, state.origin.z);
-             z <= std::min(high.z, state.origin.z + bricks_per_side - 1); ++z) {
+        const vec3i low{low_voxel.x >> shift, low_voxel.y >> shift, low_voxel.z >> shift};
+        const vec3i high{high_voxel.x >> shift, high_voxel.y >> shift, high_voxel.z >> shift};
+
+        for (int32 z = std::max(low.z, state.origin.z); z <= std::min(high.z, state.origin.z + last);
+             ++z) {
             for (int32 y = std::max(low.y, state.origin.y);
-                 y <= std::min(high.y, state.origin.y + bricks_per_side - 1); ++y) {
+                 y <= std::min(high.y, state.origin.y + last); ++y) {
                 for (int32 x = std::max(low.x, state.origin.x);
-                     x <= std::min(high.x, state.origin.x + bricks_per_side - 1); ++x) {
-                    state.slots[slot_index_({x, y, z})].waiting = true;
+                     x <= std::min(high.x, state.origin.x + last); ++x) {
+                    arm_(cascade, state.slots[slot_index_(cascade, {x, y, z})]);
                 }
             }
         }
@@ -376,20 +394,22 @@ auto light_cache::mark_box_(vec3i low_voxel, vec3i high_voxel, int32 margin_cell
 }
 
 auto light_cache::mark_changed_(const ecs::occupancy_change& change) -> void {
-    if (!change.whole_chunk) {
-        mark_box_(change.voxel, change.voxel, near_margin_cells);
-        return;
+    vec3i low  = change.voxel;
+    vec3i high = change.voxel;
+    if (change.whole_chunk) {
+        low = {
+            change.chunk.x * chunk_voxels, change.chunk.y * chunk_voxels,
+            change.chunk.z * chunk_voxels
+        };
+        high = {low.x + chunk_voxels - 1, low.y + chunk_voxels - 1, low.z + chunk_voxels - 1};
     }
 
-    const vec3i low{
-        change.chunk.x * chunk_voxels, change.chunk.y * chunk_voxels,
-        change.chunk.z * chunk_voxels
-    };
-    const vec3i high{low.x + chunk_voxels - 1, low.y + chunk_voxels - 1, low.z + chunk_voxels - 1};
-
     mark_box_(
-        {low.x - shade_spread_voxels, low.y - shade_depth_voxels, low.z - shade_spread_voxels},
-        {high.x + shade_spread_voxels, high.y, high.z + shade_spread_voxels}, near_margin_cells
+        {
+            low.x - flood_reach_voxels, low.y - shaft_depth_voxels - flood_reach_voxels,
+            low.z - flood_reach_voxels
+        },
+        {high.x + flood_reach_voxels, high.y + flood_reach_voxels, high.z + flood_reach_voxels}
     );
 }
 
@@ -413,21 +433,38 @@ auto light_cache::choose_bricks(
     const uint32 budget = std::min(settings.bricks_per_frame, most_bricks_a_frame);
 
     chosen_.clear();
+    ++serial_;
     uint32 waiting = 0;
 
     for (int32 cascade = cascade_count - 1; cascade >= 0; --cascade) {
-        auto& state = cascades_[static_cast<std::size_t>(cascade)];
-        for (slot& held : state.slots) {
-            if (!held.waiting) {
-                continue;
+        auto& state        = cascades_[static_cast<std::size_t>(cascade)];
+        const uint8 passes = shapes[static_cast<std::size_t>(cascade)].passes_to_settle;
+
+        uint32 taken_above = 0;
+        for (uint8 wave = passes; wave > 0 && chosen_.size() < budget; --wave) {
+            uint32 left = state.owing[wave] - taken_above;
+            taken_above = 0;
+
+            for (std::size_t index = 0; left > 0 && chosen_.size() < budget; ++index) {
+                slot& held = state.slots[index];
+                if (held.passes_left != wave || held.chosen_at == serial_) {
+                    continue;
+                }
+                --left;
+                ++taken_above;
+
+                const int32 flags = (wave == passes ? seeds_from_sky : 0) |
+                                    (wave == 1 ? last_pass : 0);
+                chosen_.push_back({held.brick.x, held.brick.y, held.brick.z, cascade | flags});
+
+                --state.owing[wave];
+                --held.passes_left;
+                ++state.owing[held.passes_left];
+                held.chosen_at = serial_;
             }
-            if (chosen_.size() >= budget) {
-                ++waiting;
-                continue;
-            }
-            held.waiting = false;
-            chosen_.push_back({held.brick.x, held.brick.y, held.brick.z, cascade});
         }
+
+        waiting += static_cast<uint32>(state.slots.size()) - state.owing[0];
     }
 
     auto& current  = frames_[frame];
@@ -443,8 +480,7 @@ auto light_cache::choose_bricks(
 }
 
 auto light_cache::dispatch(
-    vk::CommandBuffer cmd, vk::DescriptorSet occupancy_set, vec3i base_chunk,
-    const light_cache_settings& settings, uint32 frame
+    vk::CommandBuffer cmd, vk::DescriptorSet occupancy_set, vec3i base_chunk, uint32 frame
 ) const -> void {
     const auto& current = frames_[frame];
     if (current.bricks == 0) {
@@ -456,32 +492,34 @@ auto light_cache::dispatch(
     cmd.bindPipeline(vk::PipelineBindPoint::eCompute, pipeline_);
     cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipeline_layout_, 0, sets, nullptr);
 
-    const vk::MemoryBarrier between_phases{
-        .srcAccessMask = vk::AccessFlagBits::eShaderWrite,
-        .dstAccessMask = vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite,
-    };
-
-    for (int32 phase = 0; phase < 2; ++phase) {
-        const light_cache_push push{
-            .sky        = {settings.sky_reach_cells, 0.0f, 0.0f, 0.0f},
-            .base_chunk = {base_chunk.x, base_chunk.y, base_chunk.z, phase},
+    light_cache_push push{};
+    push.base_chunk = {base_chunk.x, base_chunk.y, base_chunk.z, 0};
+    for (std::size_t cascade = 0; cascade < cascades_.size(); ++cascade) {
+        const vec3i origin   = cascades_[cascade].origin;
+        push.window[cascade] = {
+            origin.x * brick_texels, origin.y * brick_texels, origin.z * brick_texels, 0
         };
-        cmd.pushConstants<light_cache_push>(
-            pipeline_layout_, vk::ShaderStageFlagBits::eCompute, 0, push
-        );
-        cmd.dispatch(current.bricks, 1, 1);
-
-        cmd.pipelineBarrier(
-            vk::PipelineStageFlagBits::eComputeShader,
-            phase == 0 ? vk::PipelineStageFlags{vk::PipelineStageFlagBits::eComputeShader}
-                       : vk::PipelineStageFlags{vk::PipelineStageFlagBits::eFragmentShader},
-            {}, between_phases, nullptr, nullptr
-        );
     }
+
+    cmd.pushConstants<light_cache_push>(
+        pipeline_layout_, vk::ShaderStageFlagBits::eCompute, 0, push
+    );
+    cmd.dispatch(current.bricks, 1, 1);
+
+    cmd.pipelineBarrier(
+        vk::PipelineStageFlagBits::eComputeShader,
+        vk::PipelineStageFlagBits::eComputeShader | vk::PipelineStageFlagBits::eFragmentShader,
+        {},
+        vk::MemoryBarrier{
+            .srcAccessMask = vk::AccessFlagBits::eShaderWrite,
+            .dstAccessMask = vk::AccessFlagBits::eShaderRead | vk::AccessFlagBits::eShaderWrite,
+        },
+        nullptr, nullptr
+    );
 }
 
 auto light_cache::wrap_of(int32 cascade, vec3i base_chunk) -> vec4f {
-    const int32 span = texture_side << cascade;
+    const int32 span = shapes[static_cast<std::size_t>(cascade)].span_voxels();
 
     const auto along = [&](int32 chunk) -> float32 {
         const int32 voxel = chunk * chunk_voxels;

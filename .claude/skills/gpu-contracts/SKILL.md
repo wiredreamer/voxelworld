@@ -373,42 +373,51 @@ std430 нет диагностики на расхождение: ошибки �
 
 ## Кеш освещённости
 
-- **C++:** `light_cache` (`resource/light_cache.cppm/.cpp`): каскадов 4, сторона
-  128, блок 8 текселей, `light_cache_push`, `wrap_of`; хвост кадрового uniform
-  `light_grid` (880) и `light_wrap[4]` (896), пишет `update_uniform_buffer`.
-- **GLSL:** `shaders/light_cache.comp` — `LightPush`, `LightBricks`, четыре
-  хранимых образа, `BRICK_TEXELS`, `TEXTURE_MASK`, `SKY_DIRECTIONS`;
-  `voxel.frag` — `lightCascades[4]` (`set = 6`), `cascadeLight`, `cachedLight`,
-  `LIGHT_TEXELS`, `LIGHT_EDGE_TEXELS`.
+- **C++:** `light_cache` (`resource/light_cache.cppm/.cpp`): `shapes` — сторона,
+  сдвиг клетки и число проходов на каскад, блок 8 текселей, `light_cache_push`,
+  `wrap_of`; хвост кадрового uniform `light_grid` (880) и `light_wrap[4]` (896),
+  пишет `update_uniform_buffer`.
+- **GLSL:** `shaders/light_cache.comp` — `LightPush`, `LightBricks`, три
+  хранимых образа, `BRICK_TEXELS`, `CELL_SHIFT`, `SIDE_MASK`; `voxel.frag` —
+  `lightCascades[3]` (`set = 6`), `cascadeLight`, `cachedLight`, `LIGHT_CELL`,
+  `LIGHT_SPAN`, `LIGHT_EDGE`.
 - **Менять вместе:**
-  - сторона текстуры и размер блока: `texture_side`/`brick_texels` ↔
-    `TEXTURE_MASK`/`BRICK_TEXELS` в compute и `LIGHT_TEXELS` во фрагменте;
+  - число каскадов, сторона и клетка: `cascade_count`/`shapes` ↔
+    `CELL_SHIFT`/`SIDE_MASK`/`LAST_CASCADE` в compute ↔
+    `LIGHT_CELL`/`LIGHT_SPAN`/`LIGHT_EDGE` во фрагменте. Массив `light_wrap` в
+    uniform длиной 4, занято три;
+  - каскад `k` читает занятость уровня `k`: клетка каскада равна блоку этого
+    уровня, а правило «сплошная» считает его биты. Сменил клетку — смени уровень;
   - запись очереди `ivec4`: xyz — блок в единицах блоков своего каскада, w —
-    каскад; одна рабочая группа на запись (`dispatch(блоков, 1, 1)`,
-    `local_size` 8³);
-  - `light_cache_push` (32 байта): `sky.x` — дальность луча в клетках каскада;
-    `base_chunk` — xyz чанк камеры, w — проход (0 лучи, 1 сплошные клетки);
-  - каналы: `A` — доля неба, `RGB` свободны под излучатели; пишет compute, читает
-    `cachedLight`. Очистка и «открыто» за последним каскадом — `(0, 0, 0, 1)`:
-    `make_ready` ↔ `LIGHT_OPEN_SKY`;
-  - `light_wrap[1].w` — усиление неба `sky_gain`;
-  - уровень занятости для луча: `min(каскад, 2)` — параметр `finestLevel` у
-    `marchOccupancy` и `finest_level` у эталона `march_occupancy`;
-  - `light_wrap[k].xyz` — доля стороны текстуры, на которую сдвинут угол чанка
+    каскад в младших трёх битах, 8 — проход засевает небо (`seeds_from_sky` ↔
+    `SEEDS_FROM_SKY`), 16 — последний проход блока (`last_pass` ↔ `LAST_PASS`);
+    одна рабочая группа на запись (`dispatch(блоков, 1, 1)`, `local_size` 8³);
+  - `light_cache_push` (64 байта): `base_chunk` — чанк камеры, `window[k]` —
+    угол окна каскада в его текселях;
+  - каналы: `A` — уровень неба, `B` — доля клетки под небом, `RG` свободны под
+    излучатели; пишет compute, читает `cachedLight`. Очистка и «открыто» за
+    последним каскадом — `(0, 0, 0, 1)`: `make_ready` ↔ `LIGHT_OPEN_SKY`;
+  - шаг заливки `клетка / 15` в compute и запас пометки `flood_reach_voxels`
+    (16) в C++: свет уходит на пятнадцать вокселей, и блок дальше запаса от
+    правки не пересчитывается;
+  - `light_wrap[k].xyz` — доля охвата каскада, на которую сдвинут угол чанка
     камеры: без неё тороидальная выборка читает чужой тексель. `light_wrap[0].w`
     — включён ли кеш;
-  - `LIGHT_EDGE_TEXELS` (48) обязан быть меньше гарантированной половины окна:
-    окно ±64 текселя вокруг угла блока, камера не дальше 4 текселей от него;
+  - `LIGHT_EDGE` (96, 192, 384 вокселя) обязан быть меньше гарантированной
+    половины окна: окно — половина охвата вокруг угла блока, камера не дальше
+    четырёх текселей от него;
   - образы живут в раскладке `eGeneral` всегда: и хранимый, и выбираемый
     дескриптор объявлены с ней.
-- **Наборы:** compute — `set = 0` занятость, `set = 1`: 0–3 каскады, 4 очередь
+- **Наборы:** compute — `set = 0` занятость, `set = 1`: 0–2 каскады, 3 очередь
   блоков (на кадр в полёте). Фрагмент — `set = 6`, один набор на все кадры.
-- **Сторож:** `static_assert` на `light_cache_push` (16, размер 32) и на
+- **Сторож:** `static_assert` на `light_cache_push` (16, размер 64) и на
   смещения 880, 896, размер 960 кадрового uniform. Шейдеры не сверяет ничто:
-  режим просмотра `sky light` при `--light=cache`.
+  режим просмотра `sky light` при `--light=cache` обязан совпасть с
+  `--light=baked`.
 - **Если разошлись:** свет сдвинут на долю каскада или повторяется плиткой
   (`light_wrap`), блоки 8³ пятнами не на своих местах (очередь), свет обрезан
-  квадратом вокруг камеры (`LIGHT_EDGE_TEXELS`).
+  квадратом вокруг камеры (`LIGHT_EDGE`), тени не досчитываются до края (число
+  проходов меньше, чем клеток в пятнадцати шагах).
 - Почему так: `docs/lighting.md#кеш-освещённости`.
 
 ## Углы из занятости
@@ -499,7 +508,7 @@ std430 нет диагностики на расхождение: ошибки �
 | | 3 | набор источников и пятен | см. выше |
 | | 4 | `palette_buffer` | `PaletteBuffer` |
 | | 5 | `occupancy_clipmap::get_descriptor_set` | `OccupancyParams`, `occupancyBricks[3]`, `ModelOccupancy` |
-| | 6 | `light_cache::get_sampled_set` | `lightCascades[4]` |
+| | 6 | `light_cache::get_sampled_set` | `lightCascades[3]` |
 | | push | `world_push_constant_data` (32 байта, вершинный шаг): ветер, затем сетка | `WorldPush` |
 | теневой | 0 | `shadow_uniform_buffer_object` | `ShadowUniformBufferObject` |
 | | 1 | тот же набор квадов | те же три буфера |

@@ -141,10 +141,8 @@ struct tonemap_settings {
 
 // см. docs/lighting.md#кеш-освещённости
 struct light_cache_settings {
-    bool enabled             = false;
-    uint32 bricks_per_frame  = 64;
-    float32 sky_reach_cells  = 64.0f;
-    float32 sky_gain         = 2.5f;
+    bool enabled            = false;
+    uint32 bricks_per_frame = 1024;
 };
 
 struct bloom_settings {

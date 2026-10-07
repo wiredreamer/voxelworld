@@ -112,16 +112,17 @@ layout(set = 0, binding = 0) uniform UniformBufferObject {
     vec4 light_wrap[4];
 } ubo;
 
-layout(set = 6, binding = 0) uniform sampler3D lightCascades[4];
+layout(set = 6, binding = 0) uniform sampler3D lightCascades[3];
 
-const float LIGHT_TEXELS      = 128.0;
-const float LIGHT_EDGE_TEXELS = 48.0;
-const int LIGHT_LAST_CASCADE  = 3;
+const int LIGHT_LAST_CASCADE  = 2;
+const float LIGHT_CELL[3]     = float[3](1.0, 4.0, 8.0);
+const float LIGHT_SPAN[3]     = float[3](256.0, 512.0, 1024.0);
+const float LIGHT_EDGE[3]     = float[3](96.0, 192.0, 384.0);
+const float LIGHT_EDGE_BLEND  = 0.8;
 
 vec4 cascadeLight(int cascade, vec3 fromBase, vec3 normal) {
-    float cell = float(1 << cascade);
-    vec3 at    = ((fromBase + (normal * (0.5 * cell))) / (LIGHT_TEXELS * cell)) +
-                 ubo.light_wrap[cascade].xyz;
+    vec3 at = ((fromBase + (normal * (0.5 * LIGHT_CELL[cascade]))) / LIGHT_SPAN[cascade]) +
+              ubo.light_wrap[cascade].xyz;
 
     if (cascade == 0) {
         return texture(lightCascades[0], at);
@@ -129,10 +130,7 @@ vec4 cascadeLight(int cascade, vec3 fromBase, vec3 normal) {
     if (cascade == 1) {
         return texture(lightCascades[1], at);
     }
-    if (cascade == 2) {
-        return texture(lightCascades[2], at);
-    }
-    return texture(lightCascades[3], at);
+    return texture(lightCascades[2], at);
 }
 
 const vec4 LIGHT_OPEN_SKY = vec4(0.0, 0.0, 0.0, 1.0);
@@ -142,11 +140,10 @@ vec4 cachedLight(vec3 normal) {
     vec3 fromEye  = abs(fromBase - ubo.occupancy_eye.xyz);
     float reach   = max(fromEye.x, max(fromEye.y, fromEye.z));
 
-    int cascade = reach < LIGHT_EDGE_TEXELS ? 0
-                : (reach < LIGHT_EDGE_TEXELS * 2.0 ? 1 : (reach < LIGHT_EDGE_TEXELS * 4.0 ? 2 : 3));
+    int cascade = reach < LIGHT_EDGE[0] ? 0 : (reach < LIGHT_EDGE[1] ? 1 : 2);
 
-    float edge  = LIGHT_EDGE_TEXELS * float(1 << cascade);
-    float outer = smoothstep(edge * 0.8, edge, reach);
+    float edge  = LIGHT_EDGE[cascade];
+    float outer = smoothstep(edge * LIGHT_EDGE_BLEND, edge, reach);
 
     vec4 near = cascadeLight(cascade, fromBase, normal);
     if (outer <= 0.0) {
@@ -598,7 +595,7 @@ void main() {
     float sunReach = pow(skyRaw, ubo.sky_params.y);
 
     if (ubo.light_wrap[0].w > 0.5) {
-        skyRaw   = min(cachedLight(normal).a * ubo.light_wrap[1].w, 1.0);
+        skyRaw   = cachedLight(normal).a;
         skyReach = pow(skyRaw, ubo.sky_params.x);
         sunReach = pow(skyRaw, ubo.sky_params.y);
     }

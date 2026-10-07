@@ -248,6 +248,9 @@ auto testbed_app::tick_shot_() -> void {
     }
 
     auto& renderer = get_engine().get_renderer();
+    if (!shot_requested_ && renderer.get_stats().light_cache.waiting > 0) {
+        return;
+    }
     if (!shot_requested_) {
         shot_requested_ = renderer.request_capture({});
         return;
