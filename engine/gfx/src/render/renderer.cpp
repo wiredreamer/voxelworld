@@ -120,12 +120,19 @@ renderer::renderer(
 
     post_process_ = std::make_unique<post_process>(*context_, descriptor_pool_, composite_pass_);
     post_process_->resize(swapchain_extent_, scene_image_view_);
+
+    occupancy_      = std::make_unique<occupancy_clipmap>(*context_, descriptor_pool_);
+    occupancy_view_ = std::make_unique<occupancy_view>(
+        *context_, render_pass_, msaa_samples_, occupancy_->get_descriptor_set_layout()
+    );
 }
 
 renderer::~renderer() {
     mesh_pool_.stop_gen_threads();
     wait_idle();
 
+    occupancy_view_.reset();
+    occupancy_.reset();
     post_process_.reset();
     grass_.reset();
     combined_buffer_pool_.reset();
@@ -495,6 +502,12 @@ auto renderer::render(
     gpu_timer_->begin(cmd, gpu_stage::frame);
 
     stats_.timing.mesh_sync_ms = measure_ms([&] { sync_meshes_(world); });
+
+    stats_.timing.occupancy_update_ms = measure_ms([&] {
+        occupancy_->update(world, camera.get_position(), current_frame_);
+        occupancy_->record_uploads(cmd, current_frame_);
+    });
+    stats_.occupancy = occupancy_->get_stats();
 
     stats_.timing.buffer_pool_update_ms = measure_ms([&] {
         gpu_timer_->begin(cmd, gpu_stage::buffer_upload);
@@ -1555,12 +1568,13 @@ auto renderer::create_descriptor_pool() -> void {
     std::array pool_sizes = {
         vk::DescriptorPoolSize{
             vk::DescriptorType::eUniformBuffer,
-            static_cast<uint32>(frames_in_flight * 8)
+            static_cast<uint32>(frames_in_flight * 9)
         },
         vk::DescriptorPoolSize{vk::DescriptorType::eStorageBuffer, STORAGE_BUFFER_COUNT},
         vk::DescriptorPoolSize{
             vk::DescriptorType::eCombinedImageSampler,
-            static_cast<uint32>(frames_in_flight) + post_process::sampled_image_count
+            static_cast<uint32>(frames_in_flight) + post_process::sampled_image_count +
+                static_cast<uint32>(frames_in_flight * occupancy_clipmap::layout::level_count)
         }
     };
 
@@ -1942,6 +1956,14 @@ auto renderer::render_post_() -> void {
 auto renderer::render_world(
     [[maybe_unused]] world_type& world, [[maybe_unused]] const camera& camera
 ) -> void {
+    if (debug_view_ == debug_view::occupancy && !camera.is_orthographic()) {
+        occupancy_view_->draw(
+            command_buffers_[current_frame_], *occupancy_, current_frame_, camera, tonemap_push_()
+        );
+        ++draw_call_count_;
+        return;
+    }
+
     vk::Pipeline current_pipeline =
         (current_render_mode_ == render_mode::lit) ? graphics_pipeline_ : wireframe_pipeline_;
     command_buffers_[current_frame_].bindPipeline(vk::PipelineBindPoint::eGraphics, current_pipeline);

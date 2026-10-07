@@ -367,6 +367,19 @@ auto engine::write_bench_report_() const -> void {
         used_mb
     );
 
+    const auto& occupancy = renderer_->get_stats().occupancy;
+    std::format_to(
+        std::back_inserter(report_text),
+        "\noccupancy: {} of {} slots known, {} queued; {} chunks packed, {:.1f} MB sent\n"
+        "  packing peak {:.3f} ms in a frame\n",
+        occupancy.valid_slots,
+        occupancy.slot_count,
+        occupancy.queued,
+        occupancy.packed_total,
+        static_cast<float32>(occupancy.uploaded_bytes) / (1024.0F * 1024.0F),
+        occupancy.pack_peak_ms
+    );
+
     const auto& cull = renderer_->get_stats().combined_buffers.chunk_cull;
     std::format_to(
         std::back_inserter(report_text),

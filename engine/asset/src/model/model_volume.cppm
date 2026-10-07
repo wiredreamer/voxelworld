@@ -121,6 +121,8 @@ public:
 
     [[nodiscard]] auto build_occupancy(chunk_occupancy& out) const -> bool;
 
+    [[nodiscard]] auto build_rows_page_by_page(chunk_occupancy& out) const -> bool;
+
     [[nodiscard]] auto page_may_hold(int32 px, int32 py, int32 pz, const voxel_set& wanted) const -> bool;
 
     // см. docs/rendering.md#качание-листвы

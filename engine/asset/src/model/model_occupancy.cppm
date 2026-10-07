@@ -96,6 +96,12 @@ struct chunk_occupancy {
     }
 };
 
+[[nodiscard]] auto occupancy_brick_count(int32 level) -> std::size_t;
+
+// см. docs/rendering.md#занятость-на-gpu
+auto pack_occupancy_bricks(const chunk_occupancy& solid, int32 level, std::span<uint8> out)
+    -> void;
+
 struct chunk_pocket {
     static constexpr int32 face_span = 8;
 

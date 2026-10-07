@@ -36,6 +36,9 @@ public:
     [[nodiscard]] auto get_entity() const -> entity;
     [[nodiscard]] auto is_drawn() const -> bool;
     [[nodiscard]] auto is_solid() const -> bool;
+    [[nodiscard]] auto get_fill() const -> asset::model_fill {
+        return fill_;
+    }
 
     [[nodiscard]] auto known_neighbors() const -> uint8;
 

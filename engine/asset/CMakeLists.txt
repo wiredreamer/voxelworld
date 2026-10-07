@@ -33,6 +33,7 @@ target_sources(vw_asset
             src/serial/asset_storage.cppm
     PRIVATE
         src/model/model.cpp
+        src/model/occupancy_bricks.cpp
         src/model/model_edit.cpp
         src/model/cover_layer.cpp
         src/model/chunk_volume.cpp

@@ -6,10 +6,21 @@ import vw.asset;
 
 namespace vw::ecs {
 
+namespace {
+
+auto fresh_occupancy_serial() -> uint64 {
+    static std::atomic<uint64> grids_made{1};
+    return grids_made.fetch_add(1) << 32;
+}
+
+}  // namespace
+
 world_grid::world_grid(
     world& w, int32 world_units_per_voxel
 )
-    : world_(&w), world_units_per_voxel_(world_units_per_voxel) {}
+    : world_(&w)
+    , world_units_per_voxel_(world_units_per_voxel)
+    , occupancy_first_serial_(fresh_occupancy_serial()) {}
 
 auto world_grid::get_voxel(
     vec3i world_pos
@@ -101,6 +112,7 @@ auto world_grid::set_voxel(
     set_cover_(v.is_empty() ? at : at - vec3i{0, 1, 0}, 0);
 
     mark_light_dirty_(cc, lc);
+    note_occupancy_change_(cc);
     refresh_chunk(cc);
 
     for (const face_direction face : all_face_directions) {
@@ -393,6 +405,7 @@ auto world_grid::place_chunk(
     if (inserted && it->second->is_drawn()) {
         ++drawn_chunks_;
     }
+    note_occupancy_change_(chunk_coord);
 
     return it->second.get();
 }
@@ -418,9 +431,37 @@ auto world_grid::unload_column(
                 --drawn_chunks_;
             }
             chunks_.erase(it);
+            note_occupancy_change_(chunk_coord);
         }
         column_chunks_.erase(col_it);
     }
+}
+
+auto world_grid::occupancy_serial() const -> uint64 {
+    return occupancy_first_serial_ + occupancy_log_.size();
+}
+
+auto world_grid::occupancy_changes_since(uint64 serial) const
+    -> std::optional<std::span<const vec3i>> {
+    if (serial < occupancy_first_serial_ || serial > occupancy_serial()) {
+        return std::nullopt;
+    }
+    return std::span<const vec3i>{occupancy_log_}.subspan(
+        static_cast<std::size_t>(serial - occupancy_first_serial_)
+    );
+}
+
+auto world_grid::note_occupancy_change_(vec3i chunk_coord) -> void {
+    constexpr std::size_t kept_changes = 4096;
+
+    if (occupancy_log_.size() >= kept_changes * 2) {
+        occupancy_log_.erase(
+            occupancy_log_.begin(),
+            occupancy_log_.begin() + static_cast<std::ptrdiff_t>(kept_changes)
+        );
+        occupancy_first_serial_ += kept_changes;
+    }
+    occupancy_log_.push_back(chunk_coord);
 }
 
 auto world_grid::world_units_per_voxel() const -> int32 {

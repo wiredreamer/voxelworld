@@ -365,6 +365,8 @@ private:
     std::unique_ptr<palette_buffer> palette_buffer_;
     std::unique_ptr<grass_renderer> grass_;
     std::unique_ptr<post_process> post_process_;
+    std::unique_ptr<occupancy_clipmap> occupancy_;
+    std::unique_ptr<occupancy_view> occupancy_view_;
 
     std::unique_ptr<cull_pipeline> cull_pipeline_;
 

@@ -328,6 +328,46 @@ std430 нет диагностики на расхождение: ошибки �
   целиком, если шейдер прочтёт столбец не той стороной.
 - Почему так: `docs/lighting.md#тела-в-пещере`.
 
+## Занятость
+
+- **C++:** раскладка — `spatial::occupancy_clipmap_layout`, адресация —
+  `occupancy_window_origin`, `occupancy_slot_of`, `occupancy_slot_index`,
+  `occupancy_brick_bit`, обход — `march_occupancy`
+  (`engine/core/src/spatial/occupancy.cppm`); упаковка блока —
+  `asset::pack_occupancy_bricks`; `occupancy_params` и запись текстур —
+  `resource/occupancy_clipmap.cppm/.cpp`; `occupancy_view_push` —
+  `render/occupancy_view.cppm`.
+- **GLSL:** `shaders/include/occupancy.glsl` — `OccupancyParams`,
+  `occupancyBricks[3]`, `occupancyKnows`, `occupancyAt`, `occupancyBrickBit`,
+  `marchOccupancy`; `OccupancyViewPush` в `occupancy_view.frag`. Включающий файл
+  обязан до `#include` задать `OCCUPANCY_SET`.
+- **Менять вместе:**
+  - числа раскладки: окно `4 << level`, сдвиг чанка 6, маска текселя 127, первый
+    бит известности уровня (0, 64, 576) — в шейдере это литералы;
+  - порядок битов в блоке `x | y << 1 | z << 2` — упаковщик, эталон и шейдер;
+  - порядок текселей при записи: `x` быстрее всех, затем `y`, затем `z` — так
+    пишет `pack_occupancy_bricks` и так читает `copyBufferToImage`;
+  - слово известности: бит `n` лежит в `valid[n >> 7][(n >> 5) & 3]`, разряд
+    `n & 31` (`write_params_` ↔ `occupancyKnows`);
+  - обход: размеры шага (64, две клетки, клетка), сдвиг `1e-3`, предел в 192
+    шага и правило «неизвестный чанк пуст». `marchOccupancy` — построчный перевод
+    `march_occupancy`; при расхождении прав C++;
+  - `occupancy_view_push` (112 байт): `eye` — точка в вокселях от угла
+    `base_chunk`, `w` — дальность; `corners` — направления в углы кадра в порядке
+    верх-лево, верх-право, низ-право, низ-лево; `tonemap`; `base_chunk`.
+- **Наборы:** у вида занятости `set = 0`: 0 — `OccupancyParams`, 1 — три
+  `usampler3D`. Набор на кадр в полёте: параметры у каждого кадра свои, текстуры
+  общие.
+- **Сторож:** `static_assert` на `occupancy_params` (`valid` 48, размер 640) и на
+  `occupancy_view_push` (16, 80, 96, размер 112); тесты `[occupancy]` в
+  `tests/core/occupancy_march.test.cpp` и `tests/asset/occupancy_bricks.test.cpp`
+  — только C++. Шейдер не сверяет ничто, кроме глаза: `--debug-view=occupancy`
+  обязан дать те же силуэты, что обычный кадр.
+- **Если разошлись:** в виде занятости мир зеркален или собран из перемешанных
+  кубов 64³ (адресация слотов), изрыт дырами по сетке 2 × 2 × 2 (порядок битов),
+  либо чанки пропадают целиком (слово известности).
+- Почему так: `docs/rendering.md#занятость-на-gpu`.
+
 ## Тоновая кривая и композит
 
 - **GLSL:** `displayFromScene` и `sceneFromDisplay` в
@@ -371,6 +411,8 @@ std430 нет диагностики на расхождение: ошибки �
 | | 1 | тот же набор квадов | те же три буфера |
 | | push | `shadow_push_constant_data` (32 байта): ветер, затем номер каскада | `ShadowPushConstants` |
 | оба | location 2 | `quad::get_attribute_descriptions`: `eR32Uint`, по инстансу | `in uint inInstanceIndex` |
+| вид занятости | 0 | `occupancy_clipmap::get_descriptor_set` | `OccupancyParams`, `occupancyBricks[3]` |
+| | push | `occupancy_view_push` (112 байт, фрагментный шаг) | `OccupancyViewPush` |
 | травы | 0, 2, 3, 4 | те же наборы, что у мирового, но привязаны с раскладкой травы | `grass.vert` + общий `voxel.frag` |
 | | 1 | `grass_renderer::ensure_frame_buffers_`: 0 инстансы, 1 квады | `Instances`, `Quads` |
 | | push | `grass_push_constants` (48 байт, вершинный шаг) | `GrassPush` |

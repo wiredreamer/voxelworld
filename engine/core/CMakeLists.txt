@@ -19,6 +19,7 @@ target_sources(vw_core
             src/math/transform.cppm
             src/math/math.cppm
             src/spatial/spatial.cppm
+            src/spatial/occupancy.cppm
             src/voxels/voxels.cppm
             src/voxels/catalog.cppm
             src/voxels/face_direction.cppm

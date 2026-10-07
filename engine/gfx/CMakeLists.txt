@@ -32,6 +32,7 @@ target_sources(vw_gfx
             src/resource/combined_buffer.cppm
             src/resource/combined_buffer_pool.cppm
             src/resource/image.cppm
+            src/resource/occupancy_clipmap.cppm
             src/render/render.cppm
             src/render/vulkan_context.cppm
             src/render/gpu_timer.cppm
@@ -39,6 +40,7 @@ target_sources(vw_gfx
             src/render/cull_pipeline.cppm
             src/render/grass_renderer.cppm
             src/render/post_process.cppm
+            src/render/occupancy_view.cppm
             src/render/render_settings.cppm
             src/render/render_uniforms.cppm
             src/render/renderer_stats.cppm
@@ -70,12 +72,14 @@ target_sources(vw_gfx
         src/resource/combined_buffer.cpp
         src/resource/combined_buffer_pool.cpp
         src/resource/image.cpp
+        src/resource/occupancy_clipmap.cpp
         src/render/vulkan_context.cpp
         src/render/gpu_timer.cpp
         src/render/shadow_map.cpp
         src/render/cull_pipeline.cpp
         src/render/grass_renderer.cpp
         src/render/post_process.cpp
+        src/render/occupancy_view.cpp
         src/render/renderer.cpp
         src/render/day_night.cpp
         src/debug/debug_primitive.cpp

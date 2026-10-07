@@ -58,6 +58,16 @@ testbed_app::testbed_app(
         renderer.get_cluster_settings().cap = cap;
     }
 
+    if (const auto wanted = args.text("--debug-view")) {
+        const auto found = std::ranges::find(gfx::debug_view_names, *wanted);
+        if (found == gfx::debug_view_names.end()) {
+            throw std::runtime_error(std::format("unknown debug view '{}'", *wanted));
+        }
+        renderer.set_debug_view(
+            static_cast<gfx::debug_view>(found - gfx::debug_view_names.begin())
+        );
+    }
+
     if (clusters_.wanted()) {
         renderer.set_cluster_readback(clusters_.readback_level());
     }

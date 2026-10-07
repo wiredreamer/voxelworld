@@ -28,6 +28,7 @@ add_executable(core_tests
     core/math.test.cpp
     core/transform.test.cpp
     core/cluster_grid.test.cpp
+    core/occupancy_march.test.cpp
     core/log.test.cpp
     core/latency.test.cpp
     core/jobs.test.cpp
@@ -55,6 +56,7 @@ add_executable(asset_tests
     asset/page_pool.test.cpp
     asset/page_format.test.cpp
     asset/model_fill.test.cpp
+    asset/occupancy_bricks.test.cpp
     asset/model_edit.test.cpp
     asset/model_trim.test.cpp
     asset/model_reorient.test.cpp
@@ -129,6 +131,7 @@ add_executable(world_tests
     world/extension.test.cpp
     world/hierarchy.test.cpp
     world/column_staging.test.cpp
+    world/occupancy_log.test.cpp
     world/surface.test.cpp
     world/cover.test.cpp
     world/grass_tuft.test.cpp

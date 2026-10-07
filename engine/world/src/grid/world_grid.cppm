@@ -65,6 +65,11 @@ public:
 
     [[nodiscard]] auto take_light_dirty() -> std::vector<vec2i>;
 
+    // см. docs/world.md#журнал-занятости
+    [[nodiscard]] auto occupancy_serial() const -> uint64;
+    [[nodiscard]] auto occupancy_changes_since(uint64 serial) const
+        -> std::optional<std::span<const vec3i>>;
+
     [[nodiscard]] auto world_units_per_voxel() const -> int32;
 
     template <typename F>
@@ -83,6 +88,7 @@ private:
     [[nodiscard]] auto chunk_holding_(vec3i at) const -> const chunk*;
     [[nodiscard]] auto chunk_holding_(vec3i at) -> chunk*;
     auto set_cover_(vec3i support, uint8 form) -> void;
+    auto note_occupancy_change_(vec3i chunk_coord) -> void;
 
     world* world_;
     int32 world_units_per_voxel_{1};
@@ -90,5 +96,8 @@ private:
     std::unordered_map<vec2i, std::vector<int32>> column_chunks_;
     std::unordered_set<vec2i> light_dirty_;
     uint32 drawn_chunks_ = 0;
+
+    uint64 occupancy_first_serial_;
+    std::vector<vec3i> occupancy_log_;
 };
 }  // namespace vw::ecs

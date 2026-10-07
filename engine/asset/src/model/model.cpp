@@ -338,6 +338,54 @@ auto model::build_occupancy(chunk_occupancy& out) const -> bool {
     return true;
 }
 
+auto model::build_rows_page_by_page(chunk_occupancy& out) const -> bool {
+    constexpr int32 ps   = page_size;
+    constexpr int32 side = chunk_occupancy::side;
+
+    if (width_ != side || height_ != side || depth_ != side) {
+        return false;
+    }
+
+    out.rows.fill(0);
+
+    for (int32 px = 0; px < pages_x_; ++px) {
+        const int32 x0 = px * ps;
+
+        for (int32 py = 0; py < pages_y_; ++py) {
+            const int32 y0 = py * ps;
+
+            for (int32 pz = 0; pz < pages_z_; ++pz) {
+                const auto mode = get_page_mode(px, py, pz);
+                if (mode == page_mode::empty) {
+                    continue;
+                }
+
+                const int32 z0 = pz * ps;
+
+                if (mode == page_mode::uniform) {
+                    const uint64 span = uint64{0xFF} << x0;
+                    for (int32 ly = 0; ly < ps; ++ly) {
+                        for (int32 lz = 0; lz < ps; ++lz) {
+                            out.rows[((y0 + ly) * side) + z0 + lz] |= span;
+                        }
+                    }
+                    continue;
+                }
+
+                const auto page = get_page(px, py, pz);
+                for (int32 ly = 0; ly < ps; ++ly) {
+                    for (int32 lz = 0; lz < ps; ++lz) {
+                        out.rows[((y0 + ly) * side) + z0 + lz] |=
+                            uint64{page.row_bits(ly, lz)} << x0;
+                    }
+                }
+            }
+        }
+    }
+
+    return true;
+}
+
 auto model::build_x_rows(
     chunk_occupancy& out, int32 px0, int32 px1, int32 pz0, int32 pz1
 ) const -> bool {
