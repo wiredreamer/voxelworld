@@ -76,6 +76,14 @@ public:
         return centre_chunk_;
     }
 
+    [[nodiscard]] auto centre_voxel() const -> vec3i {
+        return centre_voxel_;
+    }
+
+    [[nodiscard]] auto packed_changes() const -> std::span<const ecs::occupancy_change> {
+        return packed_changes_;
+    }
+
 private:
     static constexpr vk::DeviceSize staging_bytes = vk::DeviceSize{2} << 20;
     static constexpr float32 pack_budget_ms       = 0.4F;
@@ -113,11 +121,12 @@ private:
 
     auto forget_everything_() -> void;
     auto move_window_(int32 level, vec3i origin) -> void;
-    auto touch_(vec3i chunk) -> void;
+    auto touch_(const ecs::occupancy_change& change) -> void;
     auto enqueue_(level_state& state, int32 index) -> void;
     auto pack_queued_(const ecs::world_grid& grid, frame_state& frame) -> void;
     [[nodiscard]] auto read_chunk_(const ecs::world_grid& grid, vec3i chunk) -> asset::model_fill;
     auto stage_(frame_state& frame, int32 level, slot& held, asset::model_fill fill) -> void;
+    auto report_packed_(const ecs::occupancy_change& change) -> void;
     [[nodiscard]] auto has_room_for_(int32 level) const -> bool;
     [[nodiscard]] auto coarsest_slot_(vec3i chunk) -> slot&;
     auto write_params_(frame_state& frame) -> void;
@@ -136,8 +145,10 @@ private:
     uint64 seen_serial_          = 0;
     float32 units_per_voxel_     = 1.0F;
     vec3i centre_chunk_{};
+    vec3i centre_voxel_{};
+    std::vector<ecs::occupancy_change> packed_changes_;
 
-    std::vector<vec3i> touched_;
+    std::vector<ecs::occupancy_change> touched_;
     std::size_t touched_head_ = 0;
     vk::DeviceSize staged_    = 0;
 

@@ -29,7 +29,7 @@ void main() {
     vec3 bottom = mix(push.corners[3].xyz, push.corners[2].xyz, fragUV.x);
     vec3 ray    = normalize(mix(top, bottom, fragUV.y));
 
-    OccupancyHit hit = marchOccupancy(push.base_chunk.xyz, push.eye.xyz, ray, push.eye.w);
+    OccupancyHit hit = marchOccupancy(push.base_chunk.xyz, push.eye.xyz, ray, push.eye.w, 0);
 
     vec3 shown = vec3(0.40, 0.60, 0.90);
     if (hit.found) {

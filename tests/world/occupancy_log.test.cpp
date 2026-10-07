@@ -40,20 +40,22 @@ TEST_CASE("the grid names every chunk whose voxels came, went or changed", "[wor
     const auto placed = grid.occupancy_changes_since(start);
     REQUIRE(placed);
     REQUIRE(placed->size() == 2);
-    CHECK((*placed)[0] == vec3i{0, 0, 0});
-    CHECK((*placed)[1] == vec3i{1, 0, 0});
+    CHECK((*placed)[0] == occupancy_change{.chunk = {0, 0, 0}});
+    CHECK((*placed)[1] == occupancy_change{.chunk = {1, 0, 0}});
 
     const uint64 settled = grid.occupancy_serial();
     REQUIRE(grid.occupancy_changes_since(settled)->empty());
 
-    grid.set_voxel({5, 3, 5}, voxels::gray[8]);
+    const int32 units = grid.world_units_per_voxel();
+    grid.set_voxel({5 * units, 3 * units, 5 * units}, voxels::gray[8]);
     grid.unload_column({1, 0});
 
     const auto later = grid.occupancy_changes_since(settled);
     REQUIRE(later);
     REQUIRE(later->size() == 2);
-    CHECK((*later)[0] == vec3i{0, 0, 0});
-    CHECK((*later)[1] == vec3i{1, 0, 0});
+    CHECK((*later)[0] ==
+          occupancy_change{.chunk = {0, 0, 0}, .voxel = {5, 3, 5}, .whole_chunk = false});
+    CHECK((*later)[1] == occupancy_change{.chunk = {1, 0, 0}});
 }
 
 TEST_CASE("a reader that fell too far behind is told to start over", "[world][grid]") {

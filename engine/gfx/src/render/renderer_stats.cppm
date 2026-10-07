@@ -13,6 +13,7 @@ struct render_timing_stats {
 
     float32 mesh_sync_ms            = 0.0f;
     float32 occupancy_update_ms     = 0.0f;
+    float32 light_cache_ms          = 0.0f;
     float32 shadow_map_update_ms    = 0.0f;
     float32 buffer_pool_update_ms   = 0.0f;
     float32 compute_cull_ms         = 0.0f;
@@ -35,6 +36,7 @@ struct renderer_stats {
     uint32 draw_call_count = 0;
     occupancy_stats occupancy;
     model_occupancy_stats model_volumes;
+    light_cache_stats light_cache;
     render_timing_stats timing;
 };
 }  // namespace vw::gfx

@@ -63,6 +63,9 @@ renderer::renderer(
     occupancy_     = std::make_unique<occupancy_clipmap>(
         *context_, descriptor_pool_, *model_volumes_
     );
+    light_cache_ = std::make_unique<light_cache>(
+        *context_, descriptor_pool_, occupancy_->get_descriptor_set_layout()
+    );
     create_graphics_pipeline();
     create_wireframe_pipeline();
     create_shadow_pipeline();
@@ -119,7 +122,8 @@ renderer::renderer(
             .shadow  = shadow_descriptor_set_layout_,
             .lights  = point_lights_descriptor_set_layout_,
             .palette   = palette_descriptor_set_layout_,
-            .occupancy = occupancy_->get_descriptor_set_layout(),
+            .occupancy   = occupancy_->get_descriptor_set_layout(),
+            .light_cache = light_cache_->get_sampled_layout(),
         },
         fragment_shader_->get_stage_info()
     );
@@ -137,6 +141,7 @@ renderer::~renderer() {
     wait_idle();
 
     occupancy_view_.reset();
+    light_cache_.reset();
     occupancy_.reset();
     model_volumes_.reset();
     post_process_.reset();
@@ -532,6 +537,23 @@ auto renderer::render(
     });
     stats_.occupancy     = occupancy_->get_stats();
     stats_.model_volumes = model_volumes_->get_stats();
+
+    stats_.timing.light_cache_ms = measure_ms([&] {
+        gpu_timer_->begin(cmd, gpu_stage::light_cache);
+        light_cache_->make_ready(cmd);
+        if (light_cache_settings_.enabled) {
+            light_cache_->choose_bricks(
+                occupancy_->centre_voxel(), occupancy_->packed_changes(), light_cache_settings_,
+                current_frame_
+            );
+            light_cache_->dispatch(
+                cmd, occupancy_->get_descriptor_set(current_frame_), occupancy_->centre_chunk(),
+                light_cache_settings_, current_frame_
+            );
+        }
+        gpu_timer_->end(cmd, gpu_stage::light_cache);
+    });
+    stats_.light_cache = light_cache_->get_stats();
 
     stats_.timing.buffer_pool_update_ms = measure_ms([&] {
         gpu_timer_->begin(cmd, gpu_stage::buffer_upload);
@@ -1263,13 +1285,14 @@ auto renderer::create_graphics_pipeline() -> void {
     depth_stencil.depthBoundsTestEnable = vk::False;
     depth_stencil.stencilTestEnable     = vk::False;
 
-    std::array<vk::DescriptorSetLayout, 6> descriptor_set_layouts = {
+    std::array<vk::DescriptorSetLayout, 7> descriptor_set_layouts = {
         uniform_descriptor_set_layout_,
         storage_descriptor_set_layout_,
         shadow_descriptor_set_layout_,
         point_lights_descriptor_set_layout_,
         palette_descriptor_set_layout_,
-        occupancy_->get_descriptor_set_layout()
+        occupancy_->get_descriptor_set_layout(),
+        light_cache_->get_sampled_layout()
     };
 
     vk::PipelineLayoutCreateInfo pipeline_layout_info{};
@@ -1599,7 +1622,12 @@ auto renderer::create_descriptor_pool() -> void {
         vk::DescriptorPoolSize{
             vk::DescriptorType::eCombinedImageSampler,
             static_cast<uint32>(frames_in_flight) + post_process::sampled_image_count +
-                static_cast<uint32>(frames_in_flight * occupancy_clipmap::layout::level_count)
+                static_cast<uint32>(frames_in_flight * occupancy_clipmap::layout::level_count) +
+                static_cast<uint32>(light_cache::cascade_count)
+        },
+        vk::DescriptorPoolSize{
+            vk::DescriptorType::eStorageImage,
+            static_cast<uint32>(frames_in_flight * light_cache::cascade_count)
         }
     };
 
@@ -2038,6 +2066,11 @@ auto renderer::render_world(
         vk::PipelineBindPoint::eGraphics, pipeline_layout_, 5, occupancy_ds, nullptr
     );
 
+    const vk::DescriptorSet light_cache_ds = light_cache_->get_sampled_set();
+    command_buffers_[current_frame_].bindDescriptorSets(
+        vk::PipelineBindPoint::eGraphics, pipeline_layout_, 6, light_cache_ds, nullptr
+    );
+
     const auto& buffers = combined_buffer_pool_->get_buffers();
     for (const auto& buffer : buffers) {
         if (buffer->is_empty()) {
@@ -2081,7 +2114,8 @@ auto renderer::render_world(
                 .shadow  = shadow_map_descriptor_sets_[current_frame_],
                 .lights  = point_lights_descriptor_set,
                 .palette   = palette_ds,
-                .occupancy = occupancy_ds,
+                .occupancy   = occupancy_ds,
+                .light_cache = light_cache_ds,
             }
         );
         draw_call_count_ += grass_->get_stats().draws;
@@ -2192,6 +2226,13 @@ auto renderer::update_uniform_buffer(
         static_cast<float32>(ambient_settings_.corners),
     };
     ubo.occupancy_base = vec4<int32>{base_chunk.x, base_chunk.y, base_chunk.z, 0};
+
+    ubo.light_grid = voxel_grid;
+    for (int32 cascade = 0; cascade < light_cache::cascade_count; ++cascade) {
+        ubo.light_wrap[cascade] = light_cache::wrap_of(cascade, base_chunk);
+    }
+    ubo.light_wrap[0].w = light_cache_settings_.enabled ? 1.0f : 0.0f;
+    ubo.light_wrap[1].w = light_cache_settings_.sky_gain;
     ubo.fog.near_distance = fog_settings_.near_distance;
     ubo.fog.far_distance  = fog_settings_.far_distance;
     ubo.fog.enabled       = fog_settings_.enabled ? 1u : 0u;

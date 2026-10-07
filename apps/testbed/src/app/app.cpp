@@ -68,6 +68,22 @@ testbed_app::testbed_app(
         );
     }
 
+    renderer.get_light_cache_settings().enabled = args.text("--light") == "cache";
+    if (const auto bricks = args.count("--light-bricks", 0); bricks > 0) {
+        renderer.get_light_cache_settings().bricks_per_frame = bricks;
+    }
+
+    if (args.text("--sun-elevation")) {
+        sun_pinned_ = true;
+        const float32 elevation = math::radians(args.real("--sun-elevation", 90.0f));
+        const float32 azimuth   = math::radians(args.real("--sun-azimuth", 0.0f));
+
+        renderer.get_directional_light_settings().direction = vec3f{
+            -std::cos(elevation) * std::cos(azimuth), -std::sin(elevation),
+            -std::cos(elevation) * std::sin(azimuth)
+        };
+    }
+
     if (const auto wanted = args.text("--corners")) {
         const auto found = std::ranges::find(gfx::corner_source_names, *wanted);
         if (found == gfx::corner_source_names.end()) {

@@ -93,6 +93,10 @@ struct uniform_buffer_object {
     alignas(16) vec4f occupancy_eye;
 
     alignas(16) vec4<int32> occupancy_base{};
+
+    alignas(16) vec4f light_grid;
+
+    alignas(16) vec4f light_wrap[4];
 };
 
 static_assert(offsetof(uniform_buffer_object, corner_shading) == 640);
@@ -109,7 +113,9 @@ static_assert(offsetof(uniform_buffer_object, clusters) == 800);
 static_assert(offsetof(uniform_buffer_object, blob_dims) == 832);
 static_assert(offsetof(uniform_buffer_object, occupancy_eye) == 848);
 static_assert(offsetof(uniform_buffer_object, occupancy_base) == 864);
-static_assert(sizeof(uniform_buffer_object) == 880);
+static_assert(offsetof(uniform_buffer_object, light_grid) == 880);
+static_assert(offsetof(uniform_buffer_object, light_wrap) == 896);
+static_assert(sizeof(uniform_buffer_object) == 960);
 
 struct shadow_push_constant_data {
     alignas(16) vec4f wind;

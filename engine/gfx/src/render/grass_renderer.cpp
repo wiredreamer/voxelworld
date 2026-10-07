@@ -111,9 +111,9 @@ auto grass_renderer::create_pipeline_(
     vk::RenderPass render_pass, vk::SampleCountFlagBits samples,
     const grass_pipeline_layouts& layouts, const vk::PipelineShaderStageCreateInfo& fragment_stage
 ) -> void {
-    const std::array<vk::DescriptorSetLayout, 6> set_layouts{
+    const std::array<vk::DescriptorSetLayout, 7> set_layouts{
         layouts.uniform, set_layout_, layouts.shadow, layouts.lights, layouts.palette,
-        layouts.occupancy
+        layouts.occupancy, layouts.light_cache
     };
     const vk::PushConstantRange push_range{
         .stageFlags = vk::ShaderStageFlagBits::eVertex,
@@ -464,7 +464,8 @@ auto grass_renderer::draw(
 
     cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline_);
     const std::array bound{
-        sets.uniform, frames_[frame].set, sets.shadow, sets.lights, sets.palette, sets.occupancy
+        sets.uniform, frames_[frame].set, sets.shadow, sets.lights, sets.palette, sets.occupancy,
+        sets.light_cache
     };
     cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline_layout_, 0, bound, nullptr);
     cmd.pushConstants(

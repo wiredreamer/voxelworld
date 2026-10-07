@@ -116,6 +116,9 @@ public:
     [[nodiscard]] auto get_ambient_settings() -> ambient_settings&;
     [[nodiscard]] auto get_tonemap_settings() -> tonemap_settings&;
     [[nodiscard]] auto get_bloom_settings() -> bloom_settings&;
+    [[nodiscard]] auto get_light_cache_settings() -> light_cache_settings& {
+        return light_cache_settings_;
+    }
     [[nodiscard]] auto get_block_light_settings() -> block_light_settings&;
 
     [[nodiscard]] auto get_blob_strength() -> float32& {
@@ -369,6 +372,8 @@ private:
     std::unique_ptr<model_occupancy_buffer> model_volumes_;
     std::unique_ptr<occupancy_clipmap> occupancy_;
     std::unique_ptr<occupancy_view> occupancy_view_;
+    std::unique_ptr<light_cache> light_cache_;
+    light_cache_settings light_cache_settings_;
 
     std::unique_ptr<cull_pipeline> cull_pipeline_;
 

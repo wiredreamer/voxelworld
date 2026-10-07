@@ -140,6 +140,7 @@ private:
 
     gfx::day_night_cycle day_night_;
     bool sun_in_bench_ = false;
+    bool sun_pinned_   = false;
 
     std::string drop_status_;
     ecs::entity torch_ = ecs::invalid_entity;

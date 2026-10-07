@@ -11,6 +11,7 @@ export import :resource.combined_buffer_pool;
 export import :resource.image;
 export import :resource.model_occupancy;
 export import :resource.occupancy_clipmap;
+export import :resource.light_cache;
 
 import std;
 

@@ -10,7 +10,7 @@ import vw.gfx;
 namespace vw::testbed {
 
 auto testbed_app::tick_day_night_(float delta_time) -> void {
-    if (benching_ && !sun_in_bench_) {
+    if (sun_pinned_ || (benching_ && !sun_in_bench_)) {
         return;
     }
 

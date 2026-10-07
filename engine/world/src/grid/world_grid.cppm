@@ -20,6 +20,15 @@ struct world_light {
     auto operator==(const world_light&) const -> bool = default;
 };
 
+// см. docs/world.md#журнал-занятости
+struct occupancy_change {
+    vec3i chunk{};
+    vec3i voxel{};
+    bool whole_chunk = true;
+
+    auto operator==(const occupancy_change&) const -> bool = default;
+};
+
 class world_grid {
 public:
     explicit world_grid(world& w, int32 world_units_per_voxel = default_world_units_per_voxel);
@@ -68,7 +77,7 @@ public:
     // см. docs/world.md#журнал-занятости
     [[nodiscard]] auto occupancy_serial() const -> uint64;
     [[nodiscard]] auto occupancy_changes_since(uint64 serial) const
-        -> std::optional<std::span<const vec3i>>;
+        -> std::optional<std::span<const occupancy_change>>;
 
     [[nodiscard]] auto world_units_per_voxel() const -> int32;
 
@@ -88,7 +97,7 @@ private:
     [[nodiscard]] auto chunk_holding_(vec3i at) const -> const chunk*;
     [[nodiscard]] auto chunk_holding_(vec3i at) -> chunk*;
     auto set_cover_(vec3i support, uint8 form) -> void;
-    auto note_occupancy_change_(vec3i chunk_coord) -> void;
+    auto note_occupancy_change_(const occupancy_change& change) -> void;
 
     world* world_;
     int32 world_units_per_voxel_{1};
@@ -98,6 +107,6 @@ private:
     uint32 drawn_chunks_ = 0;
 
     uint64 occupancy_first_serial_;
-    std::vector<vec3i> occupancy_log_;
+    std::vector<occupancy_change> occupancy_log_;
 };
 }  // namespace vw::ecs

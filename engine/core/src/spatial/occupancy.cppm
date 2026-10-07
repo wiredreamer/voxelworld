@@ -112,7 +112,7 @@ inline constexpr float32 occupancy_march_nudge     = 1.0e-3F;
 template <typename BrickAt>
 [[nodiscard]] auto march_occupancy(
     vec3i base_chunk, const vec3f& origin, const vec3f& direction, float32 max_distance,
-    BrickAt&& brick_at
+    int32 finest_level, BrickAt&& brick_at
 ) -> std::optional<occupancy_hit> {
     constexpr float32 never = 1.0e30F;
 
@@ -139,7 +139,7 @@ template <typename BrickAt>
         const vec3i voxel{base_voxel.x + local.x, base_voxel.y + local.y, base_voxel.z + local.z};
 
         int32 finest = -1;
-        for (int32 level = 0; level < occupancy_clipmap_layout::level_count; ++level) {
+        for (int32 level = finest_level; level < occupancy_clipmap_layout::level_count; ++level) {
             if (brick_at(voxel, level).has_value()) {
                 finest = level;
                 break;

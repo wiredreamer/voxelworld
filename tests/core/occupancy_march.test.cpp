@@ -78,7 +78,7 @@ private:
 
 auto march(const cell_world& cells, vec3f origin, vec3f direction, float32 reach = 512.0F) {
     return spatial::march_occupancy(
-        vec3i{0, 0, 0}, origin, direction, reach,
+        vec3i{0, 0, 0}, origin, direction, reach, 0,
         [&](vec3i voxel, int32 level) { return cells.brick_at(voxel, level); }
     );
 }
@@ -230,6 +230,25 @@ TEST_CASE("a coarse level answers with its own cell size", "[occupancy]") {
     const auto hit = march(cells, {2.5F, 1.5F, 1.5F}, {1.0F, 0.0F, 0.0F});
 
     REQUIRE(hit);
+    CHECK(hit->level == 2);
+    CHECK(hit->distance == Approx(37.5F).margin(0.01));
+}
+
+TEST_CASE("a ray told to start at a coarse level never reads a finer one", "[occupancy]") {
+    cell_world cells;
+    cells.fill({41, 1, 1});
+
+    int32 finest_read = 99;
+    const auto hit    = spatial::march_occupancy(
+        vec3i{0, 0, 0}, vec3f{2.5F, 1.5F, 1.5F}, vec3f{1.0F, 0.0F, 0.0F}, 512.0F, 2,
+        [&](vec3i voxel, int32 level) {
+            finest_read = std::min(finest_read, level);
+            return cells.brick_at(voxel, level);
+        }
+    );
+
+    REQUIRE(hit);
+    CHECK(finest_read == 2);
     CHECK(hit->level == 2);
     CHECK(hit->distance == Approx(37.5F).margin(0.01));
 }

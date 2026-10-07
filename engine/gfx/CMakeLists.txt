@@ -34,6 +34,7 @@ target_sources(vw_gfx
             src/resource/image.cppm
             src/resource/occupancy_clipmap.cppm
             src/resource/model_occupancy.cppm
+            src/resource/light_cache.cppm
             src/render/render.cppm
             src/render/vulkan_context.cppm
             src/render/gpu_timer.cppm
@@ -75,6 +76,7 @@ target_sources(vw_gfx
         src/resource/image.cpp
         src/resource/occupancy_clipmap.cpp
         src/resource/model_occupancy.cpp
+        src/resource/light_cache.cpp
         src/render/vulkan_context.cpp
         src/render/gpu_timer.cpp
         src/render/shadow_map.cpp

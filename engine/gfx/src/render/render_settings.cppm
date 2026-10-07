@@ -139,6 +139,14 @@ struct tonemap_settings {
     return {channel(display.x), channel(display.y), channel(display.z)};
 }
 
+// см. docs/lighting.md#кеш-освещённости
+struct light_cache_settings {
+    bool enabled             = false;
+    uint32 bricks_per_frame  = 64;
+    float32 sky_reach_cells  = 64.0f;
+    float32 sky_gain         = 2.5f;
+};
+
 struct bloom_settings {
     bool enabled      = true;
     float32 intensity = 0.6f;
@@ -160,17 +168,19 @@ enum class debug_view : uint32 {
     occupancy,
 
     corner_mismatch,
+
+    sun_light,
 };
 
-inline constexpr std::array<std::string_view, 11> debug_view_names{
+inline constexpr std::array<std::string_view, 12> debug_view_names{
     "off",         "ambient occlusion", "normals",
     "sky light",   "convexity",         "block light",
     "blob shadow", "light complexity",  "blob complexity",
-    "occupancy",       "corner-mismatch",
+    "occupancy",       "corner-mismatch",   "sun-light",
 };
 
 static_assert(
-    debug_view_names.size() == static_cast<std::size_t>(debug_view::corner_mismatch) + 1
+    debug_view_names.size() == static_cast<std::size_t>(debug_view::sun_light) + 1
 );
 
 struct block_light_settings {

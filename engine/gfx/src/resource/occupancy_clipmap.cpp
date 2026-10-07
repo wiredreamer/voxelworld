@@ -310,20 +310,32 @@ auto occupancy_clipmap::coarsest_slot_(vec3i chunk) -> slot& {
     )];
 }
 
-auto occupancy_clipmap::touch_(vec3i chunk) -> void {
+auto occupancy_clipmap::touch_(const ecs::occupancy_change& change) -> void {
     constexpr int32 coarsest = layout::level_count - 1;
 
     const auto& widest = levels_[static_cast<std::size_t>(coarsest)];
-    if (!spatial::occupancy_window_holds(chunk, widest.origin, coarsest)) {
+    if (!spatial::occupancy_window_holds(change.chunk, widest.origin, coarsest)) {
         return;
     }
 
-    auto& held = coarsest_slot_(chunk);
+    auto& held = coarsest_slot_(change.chunk);
     if (held.touched) {
+        for (std::size_t at = touched_head_; at < touched_.size(); ++at) {
+            if (touched_[at].chunk == change.chunk && touched_[at] != change) {
+                touched_[at].whole_chunk = true;
+            }
+        }
         return;
     }
     held.touched = true;
-    touched_.push_back(chunk);
+    touched_.push_back(change);
+}
+
+auto occupancy_clipmap::report_packed_(const ecs::occupancy_change& change) -> void {
+    if (!packed_changes_.empty() && packed_changes_.back() == change) {
+        return;
+    }
+    packed_changes_.push_back(change);
 }
 
 auto occupancy_clipmap::update(ecs::world& world, const vec3f& eye, uint32 frame) -> void {
@@ -333,6 +345,7 @@ auto occupancy_clipmap::update(ecs::world& world, const vec3f& eye, uint32 frame
     }
     stats_.packed_frame = 0;
     stats_.pack_ms      = 0.0F;
+    packed_changes_.clear();
 
     const auto* grid = world.system<ecs::world_grid_system>().grid();
     if (grid == nullptr) {
@@ -348,8 +361,9 @@ auto occupancy_clipmap::update(ecs::world& world, const vec3f& eye, uint32 frame
         static_cast<int32>(std::floor(eye.z / units_per_voxel_)),
     };
     centre_chunk_ = spatial::occupancy_chunk_of(centre_voxel);
+    centre_voxel_ = centre_voxel;
 
-    std::optional<std::span<const vec3i>> changes;
+    std::optional<std::span<const ecs::occupancy_change>> changes;
     if (grid == grid_) {
         changes = grid->occupancy_changes_since(seen_serial_);
     }
@@ -367,8 +381,8 @@ auto occupancy_clipmap::update(ecs::world& world, const vec3f& eye, uint32 frame
     }
 
     if (changes) {
-        for (const vec3i chunk : *changes) {
-            touch_(chunk);
+        for (const auto& change : *changes) {
+            touch_(change);
         }
     }
     seen_serial_ = grid->occupancy_serial();
@@ -432,6 +446,7 @@ auto occupancy_clipmap::stage_(
     );
     held.valid = true;
     ++stats_.packed_frame;
+
 }
 
 auto occupancy_clipmap::pack_queued_(const ecs::world_grid& grid, frame_state& frame) -> void {
@@ -452,8 +467,10 @@ auto occupancy_clipmap::pack_queued_(const ecs::world_grid& grid, frame_state& f
             break;
         }
 
-        const vec3i chunk = touched_[touched_head_++];
-        coarsest_slot_(chunk).touched = false;
+        const ecs::occupancy_change change = touched_[touched_head_++];
+        const vec3i chunk                  = change.chunk;
+        coarsest_slot_(chunk).touched      = false;
+        report_packed_(change);
 
         const auto fill = read_chunk_(grid, chunk);
         for (int32 level = 0; level < layout::level_count; ++level) {
@@ -495,6 +512,7 @@ auto occupancy_clipmap::pack_queued_(const ecs::world_grid& grid, frame_state& f
 
             const auto fill = read_chunk_(grid, held.chunk);
             stage_(frame, level, held, fill);
+            report_packed_({.chunk = held.chunk});
 
             out_of_budget = fill == asset::model_fill::mixed && over_time();
         }

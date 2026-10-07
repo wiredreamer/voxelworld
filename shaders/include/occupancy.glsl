@@ -140,7 +140,9 @@ uint occupancyPatch(OccupancyBricks held, int layer, int axis, int u, int v) {
     return solid;
 }
 
-OccupancyHit marchOccupancy(ivec3 baseChunk, vec3 origin, vec3 direction, float maxDistance) {
+OccupancyHit marchOccupancy(
+    ivec3 baseChunk, vec3 origin, vec3 direction, float maxDistance, int finestLevel
+) {
     const float never = 1.0e30;
 
     ivec3 baseVoxel = baseChunk << OCCUPANCY_CHUNK_SHIFT;
@@ -155,7 +157,8 @@ OccupancyHit marchOccupancy(ivec3 baseChunk, vec3 origin, vec3 direction, float 
         ivec3 chunk = voxel >> OCCUPANCY_CHUNK_SHIFT;
 
         bvec3 known = bvec3(
-            occupancyKnows(chunk, 0), occupancyKnows(chunk, 1), occupancyKnows(chunk, 2)
+            finestLevel <= 0 && occupancyKnows(chunk, 0),
+            finestLevel <= 1 && occupancyKnows(chunk, 1), occupancyKnows(chunk, 2)
         );
         int finest = known.x ? 0 : (known.y ? 1 : (known.z ? 2 : -1));
 

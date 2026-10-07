@@ -33,8 +33,8 @@ std430 нет диагностики на расхождение: ошибки �
   `tonemap_params`, `blob_dims`) — он виден только там, где пишут, и там, где
   читают.
 - **Сторож:** `static_assert(offsetof(...))` на каждое поле от `corner_shading`
-  (640) до `occupancy_base` (864), включая `cave_ambient` (656) и `clusters` (800),
-  `sizeof == 880` под структурой и размеры вложенных `corner_shading_data` и
+  (640) до `light_wrap` (896), включая `cave_ambient` (656) и `clusters` (800),
+  `sizeof == 960` под структурой и размеры вложенных `corner_shading_data` и
   `cluster_data`. Шейдер они не видят: сдвинул поле в C++ — сборка встала, это и
   есть момент сдвинуть его в `voxel.frag`. Сдвиг только в шейдере не ловит ничто.
 - **Если разошлись:** неверные пиксели без единой ошибки; а если на чужое место
@@ -43,7 +43,7 @@ std430 нет диагностики на расхождение: ошибки �
 
 Правила:
 
-- Новое поле — только в конец, после `occupancy_base`: префикс не сдвигается, и
+- Новое поле — только в конец, после `light_wrap`: префикс не сдвигается, и
   урезанные копии остаются верны. Добавь `static_assert` на его смещение и
   поправь `sizeof`.
 - `vec3`, `vec4`, матрица, вложенная структура — `alignas(16)`; скаляр —
@@ -351,8 +351,9 @@ std430 нет диагностики на расхождение: ошибки �
   - слово известности: бит `n` лежит в `valid[n >> 7][(n >> 5) & 3]`, разряд
     `n & 31` (`write_params_` ↔ `occupancyKnows`);
   - обход: размеры шага (64, нулевой блок грубого уровня, две клетки, клетка),
-    порядок проверки грубых уровней от самого грубого, сдвиг `1e-3`, предел в 192
-    шага и правило «неизвестный чанк пуст». `marchOccupancy` — построчный перевод
+    порядок проверки грубых уровней от самого грубого, нижняя граница уровня
+    (`finestLevel`), сдвиг `1e-3`, предел в 192 шага и правило «неизвестный чанк
+    пуст». `marchOccupancy` — построчный перевод
     `march_occupancy`; при расхождении прав C++;
   - `occupancy_view_push` (112 байт): `eye` — точка в вокселях от угла
     `base_chunk`, `w` — дальность; `corners` — направления в углы кадра в порядке
@@ -369,6 +370,46 @@ std430 нет диагностики на расхождение: ошибки �
   кубов 64³ (адресация слотов), изрыт дырами по сетке 2 × 2 × 2 (порядок битов),
   либо чанки пропадают целиком (слово известности).
 - Почему так: `docs/rendering.md#занятость-на-gpu`.
+
+## Кеш освещённости
+
+- **C++:** `light_cache` (`resource/light_cache.cppm/.cpp`): каскадов 4, сторона
+  128, блок 8 текселей, `light_cache_push`, `wrap_of`; хвост кадрового uniform
+  `light_grid` (880) и `light_wrap[4]` (896), пишет `update_uniform_buffer`.
+- **GLSL:** `shaders/light_cache.comp` — `LightPush`, `LightBricks`, четыре
+  хранимых образа, `BRICK_TEXELS`, `TEXTURE_MASK`, `SKY_DIRECTIONS`;
+  `voxel.frag` — `lightCascades[4]` (`set = 6`), `cascadeLight`, `cachedLight`,
+  `LIGHT_TEXELS`, `LIGHT_EDGE_TEXELS`.
+- **Менять вместе:**
+  - сторона текстуры и размер блока: `texture_side`/`brick_texels` ↔
+    `TEXTURE_MASK`/`BRICK_TEXELS` в compute и `LIGHT_TEXELS` во фрагменте;
+  - запись очереди `ivec4`: xyz — блок в единицах блоков своего каскада, w —
+    каскад; одна рабочая группа на запись (`dispatch(блоков, 1, 1)`,
+    `local_size` 8³);
+  - `light_cache_push` (32 байта): `sky.x` — дальность луча в клетках каскада;
+    `base_chunk` — xyz чанк камеры, w — проход (0 лучи, 1 сплошные клетки);
+  - каналы: `A` — доля неба, `RGB` свободны под излучатели; пишет compute, читает
+    `cachedLight`. Очистка и «открыто» за последним каскадом — `(0, 0, 0, 1)`:
+    `make_ready` ↔ `LIGHT_OPEN_SKY`;
+  - `light_wrap[1].w` — усиление неба `sky_gain`;
+  - уровень занятости для луча: `min(каскад, 2)` — параметр `finestLevel` у
+    `marchOccupancy` и `finest_level` у эталона `march_occupancy`;
+  - `light_wrap[k].xyz` — доля стороны текстуры, на которую сдвинут угол чанка
+    камеры: без неё тороидальная выборка читает чужой тексель. `light_wrap[0].w`
+    — включён ли кеш;
+  - `LIGHT_EDGE_TEXELS` (48) обязан быть меньше гарантированной половины окна:
+    окно ±64 текселя вокруг угла блока, камера не дальше 4 текселей от него;
+  - образы живут в раскладке `eGeneral` всегда: и хранимый, и выбираемый
+    дескриптор объявлены с ней.
+- **Наборы:** compute — `set = 0` занятость, `set = 1`: 0–3 каскады, 4 очередь
+  блоков (на кадр в полёте). Фрагмент — `set = 6`, один набор на все кадры.
+- **Сторож:** `static_assert` на `light_cache_push` (16, размер 32) и на
+  смещения 880, 896, размер 960 кадрового uniform. Шейдеры не сверяет ничто:
+  режим просмотра `sky light` при `--light=cache`.
+- **Если разошлись:** свет сдвинут на долю каскада или повторяется плиткой
+  (`light_wrap`), блоки 8³ пятнами не на своих местах (очередь), свет обрезан
+  квадратом вокруг камеры (`LIGHT_EDGE_TEXELS`).
+- Почему так: `docs/lighting.md#кеш-освещённости`.
 
 ## Углы из занятости
 
@@ -457,7 +498,8 @@ std430 нет диагностики на расхождение: ошибки �
 | | 2 | `shadow_map_descriptor_sets_` | `shadowMapArray`, только при `SHADOW_ENABLED` |
 | | 3 | набор источников и пятен | см. выше |
 | | 4 | `palette_buffer` | `PaletteBuffer` |
-| | 5 | `occupancy_clipmap::get_descriptor_set` | `OccupancyParams`, `occupancyBricks[3]` |
+| | 5 | `occupancy_clipmap::get_descriptor_set` | `OccupancyParams`, `occupancyBricks[3]`, `ModelOccupancy` |
+| | 6 | `light_cache::get_sampled_set` | `lightCascades[4]` |
 | | push | `world_push_constant_data` (32 байта, вершинный шаг): ветер, затем сетка | `WorldPush` |
 | теневой | 0 | `shadow_uniform_buffer_object` | `ShadowUniformBufferObject` |
 | | 1 | тот же набор квадов | те же три буфера |
@@ -465,7 +507,7 @@ std430 нет диагностики на расхождение: ошибки �
 | оба | location 2 | `quad::get_attribute_descriptions`: `eR32Uint`, по инстансу | `in uint inInstanceIndex` |
 | вид занятости | 0 | `occupancy_clipmap::get_descriptor_set` | `OccupancyParams`, `occupancyBricks[3]` |
 | | push | `occupancy_view_push` (112 байт, фрагментный шаг) | `OccupancyViewPush` |
-| травы | 0, 2, 3, 4, 5 | те же наборы, что у мирового, но привязаны с раскладкой травы | `grass.vert` + общий `voxel.frag` |
+| травы | 0, 2, 3, 4, 5, 6 | те же наборы, что у мирового, но привязаны с раскладкой травы | `grass.vert` + общий `voxel.frag` |
 | | 1 | `grass_renderer::ensure_frame_buffers_`: 0 инстансы, 1 квады | `Instances`, `Quads` |
 | | push | `grass_push_constants` (48 байт, вершинный шаг) | `GrassPush` |
 

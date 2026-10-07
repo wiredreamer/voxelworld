@@ -112,7 +112,7 @@ auto world_grid::set_voxel(
     set_cover_(v.is_empty() ? at : at - vec3i{0, 1, 0}, 0);
 
     mark_light_dirty_(cc, lc);
-    note_occupancy_change_(cc);
+    note_occupancy_change_({.chunk = cc, .voxel = at, .whole_chunk = false});
     refresh_chunk(cc);
 
     for (const face_direction face : all_face_directions) {
@@ -405,7 +405,7 @@ auto world_grid::place_chunk(
     if (inserted && it->second->is_drawn()) {
         ++drawn_chunks_;
     }
-    note_occupancy_change_(chunk_coord);
+    note_occupancy_change_({.chunk = chunk_coord});
 
     return it->second.get();
 }
@@ -431,7 +431,7 @@ auto world_grid::unload_column(
                 --drawn_chunks_;
             }
             chunks_.erase(it);
-            note_occupancy_change_(chunk_coord);
+            note_occupancy_change_({.chunk = chunk_coord});
         }
         column_chunks_.erase(col_it);
     }
@@ -442,16 +442,16 @@ auto world_grid::occupancy_serial() const -> uint64 {
 }
 
 auto world_grid::occupancy_changes_since(uint64 serial) const
-    -> std::optional<std::span<const vec3i>> {
+    -> std::optional<std::span<const occupancy_change>> {
     if (serial < occupancy_first_serial_ || serial > occupancy_serial()) {
         return std::nullopt;
     }
-    return std::span<const vec3i>{occupancy_log_}.subspan(
+    return std::span<const occupancy_change>{occupancy_log_}.subspan(
         static_cast<std::size_t>(serial - occupancy_first_serial_)
     );
 }
 
-auto world_grid::note_occupancy_change_(vec3i chunk_coord) -> void {
+auto world_grid::note_occupancy_change_(const occupancy_change& change) -> void {
     constexpr std::size_t kept_changes = 4096;
 
     if (occupancy_log_.size() >= kept_changes * 2) {
@@ -461,7 +461,7 @@ auto world_grid::note_occupancy_change_(vec3i chunk_coord) -> void {
         );
         occupancy_first_serial_ += kept_changes;
     }
-    occupancy_log_.push_back(chunk_coord);
+    occupancy_log_.push_back(change);
 }
 
 auto world_grid::world_units_per_voxel() const -> int32 {

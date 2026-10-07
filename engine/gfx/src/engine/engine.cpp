@@ -384,6 +384,15 @@ auto engine::write_bench_report_() const -> void {
         renderer_->get_stats().model_volumes.refused
     );
 
+    const auto& lit = renderer_->get_stats().light_cache;
+    std::format_to(
+        std::back_inserter(report_text),
+        "light cache: {} bricks traced, {} waiting now, {} at most\n",
+        lit.bricks_total,
+        lit.waiting,
+        lit.peak_waiting
+    );
+
     const auto& cull = renderer_->get_stats().combined_buffers.chunk_cull;
     std::format_to(
         std::back_inserter(report_text),

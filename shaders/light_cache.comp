@@ -1,0 +1,157 @@
+#version 450
+
+#define OCCUPANCY_SET 0
+#include "occupancy.glsl"
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 8) in;
+
+layout(set = 1, binding = 0, rgba8) uniform image3D cascadeNear;
+layout(set = 1, binding = 1, rgba8) uniform image3D cascadeMid;
+layout(set = 1, binding = 2, rgba8) uniform image3D cascadeFar;
+layout(set = 1, binding = 3, rgba8) uniform image3D cascadeFarthest;
+
+layout(std430, set = 1, binding = 4) readonly buffer LightBricks {
+    ivec4 bricks[];
+} queue;
+
+layout(push_constant) uniform LightPush {
+    vec4 sky;
+    ivec4 base_chunk;
+} push;
+
+const int BRICK_TEXELS  = 8;
+const int TEXTURE_MASK  = 127;
+const int PHASE_TRACE   = 0;
+const int COARSEST_CELL = 3;
+
+const int SKY_RAYS = 8;
+
+const vec3 SKY_DIRECTIONS[SKY_RAYS] = vec3[SKY_RAYS](
+    vec3(0.2303, 0.9682, 0.0974),
+    vec3(-0.4080, 0.9014, 0.1451),
+    vec3(0.2619, 0.8292, -0.4939),
+    vec3(0.1663, 0.7500, 0.6402),
+    vec3(-0.6294, 0.6614, -0.4079),
+    vec3(0.8177, 0.5590, -0.1375),
+    vec3(-0.5545, 0.4330, 0.7106),
+    vec3(-0.0764, 0.2500, -0.9652)
+);
+
+vec4 readCascade(int cascade, ivec3 texel) {
+    if (cascade == 0) {
+        return imageLoad(cascadeNear, texel);
+    }
+    if (cascade == 1) {
+        return imageLoad(cascadeMid, texel);
+    }
+    if (cascade == 2) {
+        return imageLoad(cascadeFar, texel);
+    }
+    return imageLoad(cascadeFarthest, texel);
+}
+
+void writeCascade(int cascade, ivec3 texel, vec4 light) {
+    if (cascade == 0) {
+        imageStore(cascadeNear, texel, light);
+    } else if (cascade == 1) {
+        imageStore(cascadeMid, texel, light);
+    } else if (cascade == 2) {
+        imageStore(cascadeFar, texel, light);
+    } else {
+        imageStore(cascadeFarthest, texel, light);
+    }
+}
+
+bool cellHoldsSolid(ivec3 lowVoxel, int cascade) {
+    int level = min(cascade, OCCUPANCY_LEVELS - 1);
+    if (!occupancyKnows(lowVoxel >> OCCUPANCY_CHUNK_SHIFT, level)) {
+        return false;
+    }
+
+    uint brick = occupancyBrickAt(lowVoxel, level);
+    if (cascade == COARSEST_CELL) {
+        return brick != 0u;
+    }
+    return ((brick >> occupancyBrickBit(lowVoxel >> cascade)) & 1u) != 0u;
+}
+
+bool nearSolid(ivec3 lowVoxel, int cascade) {
+    int level   = min(cascade, OCCUPANCY_LEVELS - 1);
+    int reaches = 2 << level;
+
+    if (occupancyBrickAt(lowVoxel, level) != 0u) {
+        return true;
+    }
+    for (int axis = 0; axis < 3; ++axis) {
+        ivec3 aside = ivec3(0);
+        aside[axis] = reaches;
+        if (occupancyBrickAt(lowVoxel + aside, level) != 0u ||
+            occupancyBrickAt(lowVoxel - aside, level) != 0u) {
+            return true;
+        }
+    }
+    return false;
+}
+
+float seen(vec3 origin, vec3 direction, float reach, int finestLevel) {
+    return marchOccupancy(push.base_chunk.xyz, origin, direction, reach, finestLevel).found
+        ? 0.0 : 1.0;
+}
+
+void main() {
+    ivec4 brick = queue.bricks[gl_WorkGroupID.x];
+    int cascade = brick.w;
+
+    ivec3 texel      = (brick.xyz * BRICK_TEXELS) + ivec3(gl_LocalInvocationID);
+    ivec3 stored     = texel & TEXTURE_MASK;
+    ivec3 lowVoxel   = texel << cascade;
+    float cellVoxels = float(1 << cascade);
+
+    bool solid = cellHoldsSolid(lowVoxel, cascade);
+
+    if (push.base_chunk.w == PHASE_TRACE) {
+        if (solid) {
+            return;
+        }
+
+        if (cascade < COARSEST_CELL && !nearSolid(lowVoxel, cascade)) {
+            writeCascade(cascade, stored, readCascade(cascade + 1, (texel >> 1) & TEXTURE_MASK));
+            return;
+        }
+
+        vec3 origin = vec3(lowVoxel - (push.base_chunk.xyz << OCCUPANCY_CHUNK_SHIFT)) +
+                      vec3(0.5 * cellVoxels);
+
+        float sky = 0.0;
+        for (int ray = 0; ray < SKY_RAYS; ++ray) {
+            sky += seen(
+                origin, SKY_DIRECTIONS[ray], push.sky.x * cellVoxels,
+                min(cascade, OCCUPANCY_LEVELS - 1)
+            );
+        }
+
+        writeCascade(cascade, stored, vec4(0.0, 0.0, 0.0, sky / float(SKY_RAYS)));
+        return;
+    }
+
+    if (!solid) {
+        return;
+    }
+
+    vec4 gathered = vec4(0.0);
+    float open    = 0.0;
+    for (int axis = 0; axis < 3; ++axis) {
+        for (int side = -1; side <= 1; side += 2) {
+            ivec3 towards = ivec3(0);
+            towards[axis] = side;
+
+            if (cellHoldsSolid(lowVoxel + (towards << cascade), cascade)) {
+                continue;
+            }
+            gathered += readCascade(cascade, (texel + towards) & TEXTURE_MASK);
+            open     += 1.0;
+        }
+    }
+
+    writeCascade(cascade, stored, open > 0.0 ? gathered / open : vec4(0.0));
+}
