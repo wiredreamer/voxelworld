@@ -36,7 +36,9 @@ struct movement_tuning final {
     float32 input_buffer_seconds           = 0.15f;
     float32 coyote_seconds                 = 0.1f;
     float32 step_hop_voxels                = 1.0f;
+    float32 step_smooth_seconds            = 0.09f;
     float32 fall_after_seconds             = 0.1f;
+    float32 jump_impulse                   = 150.0f;
     float32 hard_landing_speed             = 155.0f;
     float32 stride_voxels                  = 5.0f;
     float32 stride_lead_pitch_degrees      = 15.0f;

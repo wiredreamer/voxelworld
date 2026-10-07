@@ -857,7 +857,7 @@ TEST_CASE("a strike leaves the guard at once, goes where the body looks and the 
     REQUIRE(s.action_state() == "block");
 }
 
-TEST_CASE("running into a one voxel step hops onto it, a taller wall stops the run", "[game][jump]") {
+TEST_CASE("a run steps onto a one voxel ledge without leaving the ground, a taller wall stops it", "[game][jump]") {
     const int32 wall_voxels = GENERATE(1, 2);
     INFO("wall " << wall_voxels << " voxels");
 
@@ -886,8 +886,8 @@ TEST_CASE("running into a one voxel step hops onto it, a taller wall stops the r
         grid.set_voxel((origin + offset) * units_per_voxel, v);
     };
 
-    constexpr int32 wall_at = 4;
-    for (int32 along = -3; along <= 16; ++along) {
+    constexpr int32 wall_at = 8;
+    for (int32 along = -3; along <= 20; ++along) {
         for (int32 aside = -3; aside <= 3; ++aside) {
             put(along, aside, 0, voxels::red[6]);
             for (int32 up = 1; up <= 8; ++up) {
@@ -899,26 +899,195 @@ TEST_CASE("running into a one voxel step hops onto it, a taller wall stops the r
     g.run_for(0.3F);
     REQUIRE(g.grounded());
 
-    const uint32 hops_before = g.world.get<ecs::character_controller_component>(g.player).get_step_hop_count();
+    const auto& body          = g.world.get<ecs::rigid_body_component>(g.player);
+    const uint32 steps_before = body.get_steps_taken();
+    const auto risen = [&] {
+        return g.world.get<ecs::transform_component>(g.player).get_position().y - start.y;
+    };
+
+    float32 longest_in_the_air = 0.0F;
+    float32 in_the_air         = 0.0F;
+    float32 biggest_jolt       = 0.0F;
+    float32 deepest_sink       = 0.0F;
+    float32 shown_before       = risen() + body.get_step_sink();
+
     mapper.key(keys::W, true);
-    g.run_for(0.7F);
+    for (float32 elapsed = 0.0F; elapsed < 1.0F; elapsed += g.tick_seconds) {
+        g.tick();
+
+        in_the_air         = g.grounded() ? 0.0F : in_the_air + g.tick_seconds;
+        longest_in_the_air = std::max(longest_in_the_air, in_the_air);
+
+        const float32 shown = risen() + body.get_step_sink();
+        biggest_jolt        = std::max(biggest_jolt, std::abs(shown - shown_before));
+        deepest_sink        = std::min(deepest_sink, body.get_step_sink());
+        shown_before        = shown;
+    }
     mapper.key(keys::W, false);
     g.run_for(0.4F);
 
-    const vec3f end      = g.world.get<ecs::transform_component>(g.player).get_position();
-    const uint32 hops    = g.world.get<ecs::character_controller_component>(g.player).get_step_hop_count() - hops_before;
+    const vec3f end   = g.world.get<ecs::transform_component>(g.player).get_position();
+    const uint32 took = body.get_steps_taken() - steps_before;
     const float32 wall_face = (static_cast<float32>(along_x ? origin.x : origin.z) + 0.5F +
                                static_cast<float32>(ahead) * (static_cast<float32>(wall_at) - 0.5F)) * vs;
     const float32 travelled = static_cast<float32>(ahead) * ((along_x ? end.x : end.z) - wall_face);
 
     REQUIRE(g.grounded());
+    REQUIRE(longest_in_the_air == 0.0F);
     if (wall_voxels == 1) {
-        REQUIRE(hops == 1);
+        REQUIRE(took == 1);
         REQUIRE(end.y == Catch::Approx(start.y + vs).margin(0.5F));
         REQUIRE(travelled > 2.0F * vs);
+        REQUIRE(biggest_jolt < 0.45F * vs);
+        REQUIRE(deepest_sink > -0.25F * vs);
     } else {
-        REQUIRE(hops == 0);
+        REQUIRE(took == 0);
         REQUIRE(end.y == Catch::Approx(start.y).margin(0.5F));
         REQUIRE(travelled < 0.0F);
     }
+}
+
+namespace {
+
+struct stair_run {
+    float32 pace_on_the_flat   = 0.0F;
+    float32 slowest_on_stairs  = std::numeric_limits<float32>::max();
+    float32 longest_in_the_air = 0.0F;
+    float32 biggest_jolt       = 0.0F;
+    float32 deepest_sink       = 0.0F;
+    float32 risen              = 0.0F;
+    float32 sink_at_the_end    = 0.0F;
+    uint32 steps_taken         = 0;
+    bool grounded_at_the_end   = false;
+};
+
+auto run_up_stairs(bool across_the_corner) -> stair_run {
+    constexpr int32 stairs_at = 8;
+    constexpr int32 steps     = 6;
+
+    grounded_world g;
+    REQUIRE(g.settle());
+
+    auto& mapper = g.world.system<game::input_system>().mapper();
+    mapper.cursor_at(0.0, 0.0);
+    g.tick();
+
+    const vec3f look = g.world.get<game::player_input_component>(g.player).get_frame().look_forward_flat();
+    const bool along_x = std::abs(look.x) > std::abs(look.z);
+    const int32 ahead  = (along_x ? look.x : look.z) > 0.0F ? 1 : -1;
+
+    const vec3f start = g.world.get<ecs::transform_component>(g.player).get_position();
+    const auto vs     = static_cast<float32>(units_per_voxel);
+    const int32 floor_y = static_cast<int32>(std::lround((start.y - 0.5F) / vs)) - 1;
+    const vec3i origin{
+        static_cast<int32>(std::floor(start.x / vs)), floor_y,
+        static_cast<int32>(std::floor(start.z / vs))
+    };
+
+    auto& grid = *g.world.system<ecs::world_grid_system>().grid();
+    for (int32 along = -3; along <= stairs_at + steps + 14; ++along) {
+        for (int32 aside = -(stairs_at + steps + 14); aside <= stairs_at + steps + 14; ++aside) {
+            const int32 by_run  = along - stairs_at + 1;
+            const int32 by_side = std::abs(aside) - stairs_at + 1;
+            const int32 height  =
+                std::clamp(across_the_corner ? std::max(by_run, by_side) : by_run, 0, steps);
+
+            for (int32 up = 0; up <= steps + 8; ++up) {
+                const vec3i offset = along_x ? vec3i{along * ahead, up, aside}
+                                             : vec3i{aside, up, along * ahead};
+                grid.set_voxel(
+                    (origin + offset) * units_per_voxel, up <= height ? voxels::red[6] : voxels::air
+                );
+            }
+        }
+    }
+    g.run_for(0.3F);
+    REQUIRE(g.grounded());
+
+    const auto& body = g.world.get<ecs::rigid_body_component>(g.player);
+    constexpr int32 pace_window_ticks = 12;
+
+    vec3f stood_at = g.world.get<ecs::transform_component>(g.player).get_position();
+    const auto speed = [&] {
+        const vec3f now = g.world.get<ecs::transform_component>(g.player).get_position();
+        const vec3f gone{now.x - stood_at.x, 0.0F, now.z - stood_at.z};
+        stood_at = now;
+        return math::length(gone) / (g.tick_seconds * static_cast<float32>(pace_window_ticks));
+    };
+    const auto risen = [&] {
+        return g.world.get<ecs::transform_component>(g.player).get_position().y - start.y;
+    };
+
+    stair_run seen;
+    const uint32 steps_before = body.get_steps_taken();
+
+    int32 ticks_in_the_window = 0;
+
+    float32 in_the_air   = 0.0F;
+    float32 shown_before = risen() + body.get_step_sink();
+
+    mapper.key(keys::W, true);
+    if (across_the_corner) {
+        mapper.key(keys::D, true);
+    }
+    for (float32 elapsed = 0.0F; elapsed < 1.8F; elapsed += g.tick_seconds) {
+        g.tick();
+
+        in_the_air              = g.grounded() ? 0.0F : in_the_air + g.tick_seconds;
+        seen.longest_in_the_air = std::max(seen.longest_in_the_air, in_the_air);
+
+        const float32 shown = risen() + body.get_step_sink();
+        seen.biggest_jolt   = std::max(seen.biggest_jolt, std::abs(shown - shown_before));
+        seen.deepest_sink   = std::min(seen.deepest_sink, body.get_step_sink());
+        shown_before        = shown;
+
+        if (++ticks_in_the_window < pace_window_ticks) {
+            continue;
+        }
+        ticks_in_the_window = 0;
+
+        const float32 pace = speed();
+        if (risen() < 0.25F * vs) {
+            seen.pace_on_the_flat = pace;
+        } else if (risen() < (static_cast<float32>(steps) - 0.5F) * vs) {
+            seen.slowest_on_stairs = std::min(seen.slowest_on_stairs, pace);
+        }
+    }
+    mapper.key(keys::W, false);
+    mapper.key(keys::D, false);
+    g.run_for(0.5F);
+
+    seen.risen               = risen() / vs;
+    seen.sink_at_the_end     = body.get_step_sink();
+    seen.steps_taken         = body.get_steps_taken() - steps_before;
+    seen.grounded_at_the_end = g.grounded();
+    return seen;
+}
+
+}  // namespace
+
+TEST_CASE("a run walks up a staircase of one voxel steps without leaving the ground", "[game][jump]") {
+    const stair_run seen = run_up_stairs(false);
+
+    REQUIRE(seen.grounded_at_the_end);
+    REQUIRE(seen.risen == Catch::Approx(6.0F).margin(0.1F));
+    REQUIRE(seen.steps_taken == 6);
+    REQUIRE(seen.pace_on_the_flat > 0.0F);
+    REQUIRE(seen.slowest_on_stairs >= seen.pace_on_the_flat * 0.8F);
+    REQUIRE(seen.longest_in_the_air == 0.0F);
+    REQUIRE(seen.biggest_jolt < 0.45F * static_cast<float32>(units_per_voxel));
+    REQUIRE(seen.deepest_sink > -0.25F * static_cast<float32>(units_per_voxel));
+    REQUIRE(std::abs(seen.sink_at_the_end) < 0.1F);
+}
+
+TEST_CASE("a diagonal run climbs the inside corner of two staircases", "[game][jump]") {
+    const stair_run seen = run_up_stairs(true);
+
+    REQUIRE(seen.grounded_at_the_end);
+    REQUIRE(seen.risen >= 5.9F);
+    REQUIRE(seen.pace_on_the_flat > 0.0F);
+    REQUIRE(seen.slowest_on_stairs >= seen.pace_on_the_flat * 0.8F);
+    REQUIRE(seen.longest_in_the_air == 0.0F);
+    REQUIRE(seen.biggest_jolt < 0.45F * static_cast<float32>(units_per_voxel));
+    REQUIRE(seen.deepest_sink > -0.25F * static_cast<float32>(units_per_voxel));
 }

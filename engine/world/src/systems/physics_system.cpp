@@ -126,10 +126,19 @@ auto physics_system::step(
             );
             const float32 sub_dt = dt / static_cast<float32>(substeps);
 
+            const auto* walker   = reg.try_get<character_controller_component>(ent);
+            const float32 step_height =
+                walker != nullptr ? walker->get_step_hop_voxels() * voxel_size : 0.0f;
+            const bool stood = rb.grounded_;
+            float32 stepped  = 0.0f;
+
             new_position = position;
             rb.grounded_ = false;
             for (int32 sub = 0; sub < substeps; ++sub) {
-                new_position = new_position + rb.velocity_ * sub_dt;
+                const vec3f before = new_position;
+                const vec3f wanted = rb.velocity_ * sub_dt;
+
+                new_position = before + wanted;
 
                 collision_result result{};
                 measure_into(detailed_active_, stats_.voxel_collision_ms, [&] {
@@ -139,9 +148,70 @@ auto physics_system::step(
                 new_position = result.resolved_position - col.offset_;
                 rb.grounded_ = rb.grounded_ || result.grounded;
 
+                // см. docs/ENGINE.md#шаг-на-ступень
+                if (step_height > 0.0f && (stood || rb.grounded_) && wanted.y <= 0.0f) {
+                    const vec3f lost{
+                        wanted.x - (new_position.x - before.x), 0.0f,
+                        wanted.z - (new_position.z - before.z)
+                    };
+                    const float32 planar = (wanted.x * wanted.x) + (wanted.z * wanted.z);
+
+                    if (planar > 0.0f &&
+                        math::dot(lost, lost) > planar * step_blocked_share * step_blocked_share) {
+                        const auto stood_on = step_up_(before + col.offset_, half, wanted, step_height);
+                        if (stood_on) {
+                            const vec3f onto = *stood_on - col.offset_;
+
+                            stepped += onto.y - before.y;
+                            ++rb.steps_taken_;
+
+                            new_position   = onto;
+                            rb.velocity_.x = wanted.x / sub_dt;
+                            rb.velocity_.z = wanted.z / sub_dt;
+                            rb.velocity_.y = 0.0f;
+                            rb.grounded_   = true;
+                        }
+                    }
+                }
+
                 measure_into(detailed_active_, stats_.entity_collision_ms, [&] {
                     resolve_entity_collisions(ent, new_position, rb.velocity_, half, col.offset_);
                 });
+            }
+
+            // см. docs/ENGINE.md#модель-поднимается-заранее
+            if (rb.step_smooth_seconds_ > 0.0f) {
+                const vec3f planar{rb.velocity_.x, 0.0f, rb.velocity_.z};
+                const float32 speed = math::length(planar);
+
+                float32 lead = 0.0f;
+                if (step_height > 0.0f && rb.grounded_ && speed > 1.0f) {
+                    lead = rise_coming_(
+                        new_position + col.offset_, half, planar * (1.0f / speed), step_height,
+                        voxel_size
+                    );
+                }
+
+                const float32 shown_before = rb.step_sink_;
+                const float32 natural = step_lead_slack * speed * dt * (step_height / voxel_size);
+                const float32 jump    = (lead - rb.step_lead_) + stepped;
+                const float32 kept    = std::clamp(jump, -natural, natural);
+
+                rb.step_catch_up_ = (rb.step_catch_up_ - (jump - kept)) *
+                                    std::exp(-dt / rb.step_smooth_seconds_);
+                rb.step_lead_ = lead;
+                rb.step_sink_ = rb.step_lead_ + rb.step_catch_up_;
+
+                if (auto* follower = reg.try_get<transform_component>(rb.step_follower_)) {
+                    const vec3f held = follower->get_position();
+                    world_->system<transform_system>()
+                        .modify(rb.step_follower_)
+                        .set_position({held.x, held.y + (rb.step_sink_ - shown_before), held.z});
+                }
+            } else {
+                rb.step_sink_     = 0.0f;
+                rb.step_lead_     = 0.0f;
+                rb.step_catch_up_ = 0.0f;
             }
         }
 
@@ -181,6 +251,137 @@ auto physics_system::are_chunks_loaded(
     return true;
 }
 
+auto physics_system::box_blocked_(const vec3f& lo, const vec3f& hi) const -> bool {
+    auto* grid       = world_->system<world_grid_system>().grid();
+    const int32 vs_i = grid->world_units_per_voxel();
+    const auto vs    = static_cast<float32>(vs_i);
+
+    const auto first = [vs](float32 v) -> int32 { return static_cast<int32>(std::floor(v / vs)); };
+    const auto last  = [vs](float32 v) -> int32 {
+        return static_cast<int32>(std::ceil(v / vs)) - 1;
+    };
+
+    for (int32 vx = first(lo.x); vx <= last(hi.x); ++vx) {
+        for (int32 vy = first(lo.y); vy <= last(hi.y); ++vy) {
+            for (int32 vz = first(lo.z); vz <= last(hi.z); ++vz) {
+                if (!grid->get_voxel(vec3i{vx * vs_i, vy * vs_i, vz * vs_i}).is_empty()) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+auto physics_system::rise_coming_(
+    const vec3f& center, const vec3f& half_extents, const vec3f& heading, float32 step_height,
+    float32 within
+) const -> float32 {
+    constexpr float32 skin = 0.01f;
+
+    const vec3f shrunk = half_extents - vec3f{skin, skin, skin};
+    const auto blocked_at = [&](float32 along) -> bool {
+        const vec3f at = center + (heading * along);
+        return box_blocked_(at - shrunk, at + shrunk);
+    };
+
+    if (!blocked_at(within)) {
+        return 0.0f;
+    }
+
+    float32 free_until = 0.0f;
+    float32 blocked_from = within;
+    for (int32 halving = 0; halving < step_lead_halvings; ++halving) {
+        const float32 middle = 0.5f * (free_until + blocked_from);
+        if (blocked_at(middle)) {
+            blocked_from = middle;
+        } else {
+            free_until = middle;
+        }
+    }
+
+    const vec3f touching = center + (heading * free_until);
+    const auto stood_on  = step_up_(
+        touching, half_extents, heading * ((blocked_from - free_until) + (2.0f * skin)), step_height
+    );
+    if (!stood_on) {
+        return 0.0f;
+    }
+
+    return (stood_on->y - center.y) * (1.0f - (free_until / within));
+}
+
+auto physics_system::step_up_(
+    const vec3f& center, const vec3f& half_extents, const vec3f& wanted, float32 step_height
+) const -> std::optional<vec3f> {
+    constexpr float32 skin = 0.01f;
+
+    auto* grid       = world_->system<world_grid_system>().grid();
+    const int32 vs_i = grid->world_units_per_voxel();
+    const auto vs    = static_cast<float32>(vs_i);
+
+    const auto first = [vs](float32 v) -> int32 { return static_cast<int32>(std::floor(v / vs)); };
+    const auto last  = [vs](float32 v) -> int32 {
+        return static_cast<int32>(std::ceil(v / vs)) - 1;
+    };
+    const auto holds = [&](int32 vx, int32 vy, int32 vz) -> bool {
+        return !grid->get_voxel(vec3i{vx * vs_i, vy * vs_i, vz * vs_i}).is_empty();
+    };
+    const auto blocked = [&](const vec3f& lo, const vec3f& hi) -> bool {
+        for (int32 vx = first(lo.x); vx <= last(hi.x); ++vx) {
+            for (int32 vy = first(lo.y); vy <= last(hi.y); ++vy) {
+                for (int32 vz = first(lo.z); vz <= last(hi.z); ++vz) {
+                    if (holds(vx, vy, vz)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    };
+
+    const vec3f shrunk = half_extents - vec3f{skin, skin, skin};
+    const vec3f raised = center + vec3f{0.0f, step_height + skin, 0.0f};
+    if (blocked(raised - shrunk, raised + shrunk)) {
+        return std::nullopt;
+    }
+
+    const std::array<vec3f, 3> ways{
+        vec3f{wanted.x, 0.0f, wanted.z}, vec3f{wanted.x, 0.0f, 0.0f}, vec3f{0.0f, 0.0f, wanted.z}
+    };
+
+    for (const vec3f& way : ways) {
+        if (way.x == 0.0f && way.z == 0.0f) {
+            continue;
+        }
+
+        const vec3f ahead = raised + way;
+        const vec3f lo    = ahead - shrunk;
+        const vec3f hi    = ahead + shrunk;
+        if (blocked(lo, hi)) {
+            continue;
+        }
+
+        const float32 feet_then = ahead.y - half_extents.y;
+        const float32 feet_now  = center.y - half_extents.y;
+
+        for (int32 vy = last(feet_then); vy >= first(feet_now + skin); --vy) {
+            bool stands = false;
+            for (int32 vx = first(lo.x); vx <= last(hi.x) && !stands; ++vx) {
+                for (int32 vz = first(lo.z); vz <= last(hi.z) && !stands; ++vz) {
+                    stands = holds(vx, vy, vz);
+                }
+            }
+            if (stands) {
+                const float32 top = static_cast<float32>(vy + 1) * vs;
+                return vec3f{ahead.x, top + half_extents.y, ahead.z};
+            }
+        }
+    }
+
+    return std::nullopt;
+}
+
 auto physics_system::resolve_box_voxel(
     vec3f center, const vec3f& half_extents, vec3f& velocity
 ) const -> collision_result {
@@ -191,6 +392,18 @@ auto physics_system::resolve_box_voxel(
 
     vec3i cached_coord{std::numeric_limits<int32>::min(), 0, 0};
     chunk* cached_chunk = nullptr;
+
+    const auto holds = [&](int32 vx, int32 vy, int32 vz) -> bool {
+        const vec3i world_pos{vx * vs_i, vy * vs_i, vz * vs_i};
+
+        const auto chunk_coord = grid->world_to_chunk_coord(world_pos);
+        if (chunk_coord != cached_coord) {
+            cached_coord = chunk_coord;
+            cached_chunk = grid->get_chunk(chunk_coord);
+        }
+        return cached_chunk != nullptr &&
+               !cached_chunk->get_voxel(grid->world_to_local_coord(world_pos) / vs_i).is_empty();
+    };
 
     for (int32 iter = 0; iter < max_collision_iterations; ++iter) {
         auto entity_min = center - half_extents;
@@ -210,19 +423,7 @@ auto physics_system::resolve_box_voxel(
         for (int32 vx = min_vx; vx <= max_vx; ++vx) {
             for (int32 vy = min_vy; vy <= max_vy; ++vy) {
                 for (int32 vz = min_vz; vz <= max_vz; ++vz) {
-                    auto world_pos = vec3i{vx * vs_i, vy * vs_i, vz * vs_i};
-
-                    const auto chunk_coord = grid->world_to_chunk_coord(world_pos);
-                    if (chunk_coord != cached_coord) {
-                        cached_coord = chunk_coord;
-                        cached_chunk = grid->get_chunk(chunk_coord);
-                    }
-                    if (cached_chunk == nullptr) {
-                        continue;
-                    }
-
-                    auto v = cached_chunk->get_voxel(grid->world_to_local_coord(world_pos) / vs_i);
-                    if (v.is_empty()) {
+                    if (!holds(vx, vy, vz)) {
                         continue;
                     }
 
@@ -248,18 +449,33 @@ auto physics_system::resolve_box_voxel(
                     auto voxel_center = (voxel_min + voxel_max) * 0.5f;
                     auto dir = center - voxel_center;
 
+                    // см. docs/ENGINE.md#стык-вокселей-не-толкает-вбок
+                    const int32 out_x = dir.x >= 0.0f ? 1 : -1;
+                    const int32 out_y = dir.y >= 0.0f ? 1 : -1;
+                    const int32 out_z = dir.z >= 0.0f ? 1 : -1;
+
+                    const bool open_x = !holds(vx + out_x, vy, vz);
+                    const bool open_y = !holds(vx, vy + out_y, vz);
+                    const bool open_z = !holds(vx, vy, vz + out_z);
+                    const bool buried = !open_x && !open_y && !open_z;
+
+                    constexpr float32 no_way = std::numeric_limits<float32>::max();
+                    const float32 cost_x = open_x || buried ? overlap_x : no_way;
+                    const float32 cost_y = open_y || buried ? overlap_y : no_way;
+                    const float32 cost_z = open_z || buried ? overlap_z : no_way;
+
                     vec3f push{0.0f, 0.0f, 0.0f};
                     float32 penetration = 0.0f;
 
-                    if (overlap_x <= overlap_y && overlap_x <= overlap_z) {
+                    if (cost_x <= cost_y && cost_x <= cost_z) {
                         penetration = overlap_x;
-                        push.x = dir.x >= 0.0f ? 1.0f : -1.0f;
-                    } else if (overlap_y <= overlap_x && overlap_y <= overlap_z) {
+                        push.x      = static_cast<float32>(out_x);
+                    } else if (cost_y <= cost_x && cost_y <= cost_z) {
                         penetration = overlap_y;
-                        push.y = dir.y >= 0.0f ? 1.0f : -1.0f;
+                        push.y      = static_cast<float32>(out_y);
                     } else {
                         penetration = overlap_z;
-                        push.z = dir.z >= 0.0f ? 1.0f : -1.0f;
+                        push.z      = static_cast<float32>(out_z);
                     }
 
                     if (penetration < min_penetration) {
@@ -382,6 +598,19 @@ auto physics_system::rigid_body_modifier::set_velocity(
     }
     auto& comp = reg.get<rigid_body_component>(entity_);
     comp.velocity_ = vel;
+    return *this;
+}
+
+auto physics_system::rigid_body_modifier::smooth_steps(
+    entity follower, float32 seconds
+) -> rigid_body_modifier& {
+    auto& reg = system_->world_->registry();
+    if (!reg.has<rigid_body_component>(entity_)) {
+        return *this;
+    }
+    auto& comp = reg.get<rigid_body_component>(entity_);
+    comp.step_follower_       = follower;
+    comp.step_smooth_seconds_ = seconds;
     return *this;
 }
 

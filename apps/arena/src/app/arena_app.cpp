@@ -172,7 +172,8 @@ auto arena_app::render(
     if (is_player_placed_()) {
         const auto& frame = world.get<game::player_input_component>(player_).get_frame();
         camera_controller_.update(
-            player_, frame.look_yaw_degrees, frame.look_pitch_degrees, frame.zoom_delta
+            player_, frame.look_yaw_degrees, frame.look_pitch_degrees, frame.zoom_delta,
+            world.get<ecs::rigid_body_component>(player_).get_step_sink()
         );
     }
 

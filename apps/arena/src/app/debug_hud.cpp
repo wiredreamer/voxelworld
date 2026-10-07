@@ -133,10 +133,18 @@ auto render_lean_panel(game::movement_tuning& tuning) -> void {
     );
 }
 
-auto render_jump_panel(game::movement_tuning& tuning) -> void {
+auto render_jump_panel(ecs::world& world, game::movement_tuning& tuning) -> void {
+    auto& physics = world.system<ecs::physics_system>();
+
+    float32 gravity = -physics.get_gravity();
+    if (ImGui::SliderFloat("gravity, u/s2", &gravity, 100.0f, 4000.0f, "%.0f")) {
+        physics.set_gravity(-gravity);
+    }
+    ImGui::SliderFloat("jump impulse, u/s", &tuning.jump_impulse, 50.0f, 1000.0f, "%.0f");
     ImGui::SliderFloat("input buffer, s", &tuning.input_buffer_seconds, 0.0f, 0.5f, "%.2f");
     ImGui::SliderFloat("coyote time, s", &tuning.coyote_seconds, 0.0f, 0.5f, "%.2f");
-    ImGui::SliderFloat("step hop, voxels (0 off)", &tuning.step_hop_voxels, 0.0f, 2.0f, "%.1f");
+    ImGui::SliderFloat("step height, voxels (0 off)", &tuning.step_hop_voxels, 0.0f, 2.0f, "%.1f");
+    ImGui::SliderFloat("step smoothing, s", &tuning.step_smooth_seconds, 0.0f, 0.3f, "%.2f");
     ImGui::SliderFloat("fall after, s", &tuning.fall_after_seconds, 0.0f, 0.5f, "%.2f");
     ImGui::SliderFloat("hard landing, u/s", &tuning.hard_landing_speed, 50.0f, 400.0f, "%.0f");
     ImGui::SliderFloat("stride, voxels", &tuning.stride_voxels, 0.0f, 10.0f, "%.1f");
@@ -146,8 +154,9 @@ auto render_jump_panel(game::movement_tuning& tuning) -> void {
     ImGui::SliderFloat("stride follow, s", &tuning.stride_follow_seconds, 0.0f, 0.5f, "%.2f");
     defaults_button(
         tuning,
-        {&game::movement_tuning::input_buffer_seconds, &game::movement_tuning::coyote_seconds,
-         &game::movement_tuning::step_hop_voxels,
+        {&game::movement_tuning::jump_impulse, &game::movement_tuning::input_buffer_seconds,
+         &game::movement_tuning::coyote_seconds, &game::movement_tuning::step_hop_voxels,
+         &game::movement_tuning::step_smooth_seconds,
          &game::movement_tuning::fall_after_seconds, &game::movement_tuning::hard_landing_speed,
          &game::movement_tuning::stride_voxels, &game::movement_tuning::stride_lead_pitch_degrees,
          &game::movement_tuning::stride_trail_pitch_degrees,
@@ -277,9 +286,9 @@ auto render_fighter_state(ecs::world& world, ecs::entity player) -> void {
         fighter.is_foot_stepping(1) ? ", RIGHT STEP" : "", fighter.get_turn_steps()
     );
     ImGui::Text(
-        "Landings: soft %u, hard %u, step hops %u%s", fighter.get_soft_landings(),
+        "Landings: soft %u, hard %u, steps up %u%s", fighter.get_soft_landings(),
         fighter.get_hard_landings(),
-        world.get<ecs::character_controller_component>(player).get_step_hop_count(),
+        world.get<ecs::rigid_body_component>(player).get_steps_taken(),
         fighter.is_body_locked() ? ", LOCKED" : ""
     );
     ImGui::Text(
@@ -311,7 +320,7 @@ auto register_debug_panels(
 
     tool.add_panel(menu, "Run", [&tuning] { render_run_panel(tuning); });
     tool.add_panel(menu, "Lean and head", [&tuning] { render_lean_panel(tuning); });
-    tool.add_panel(menu, "Jump", [&tuning] { render_jump_panel(tuning); });
+    tool.add_panel(menu, "Jump", [&world, &tuning] { render_jump_panel(world, tuning); });
     tool.add_panel(menu, "Strike", [&tuning] { render_strike_panel(tuning); });
     tool.add_panel(menu, "Dodge", [&tuning] { render_dodge_panel(tuning); });
     tool.add_panel(menu, "Input", [&world, player] { render_input_panel(world, player); });

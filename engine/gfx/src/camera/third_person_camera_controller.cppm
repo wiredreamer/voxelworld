@@ -36,7 +36,8 @@ public:
 
     // см. docs/ENGINE.md#ввод
     auto update(
-        entity target, float32 look_yaw_degrees, float32 look_pitch_degrees, float32 zoom_delta
+        entity target, float32 look_yaw_degrees, float32 look_pitch_degrees, float32 zoom_delta,
+        float32 focus_lift = 0.0F
     ) -> void;
 
     [[nodiscard]] auto get_params() -> third_person_camera_params&;

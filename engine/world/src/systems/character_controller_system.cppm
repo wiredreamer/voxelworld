@@ -46,7 +46,6 @@ public:
     auto modify(entity ent) -> controller_modifier;
 
 private:
-    [[nodiscard]] auto step_ahead_(entity ent, const vec3f& ahead, float32 rise) const -> bool;
 
     world* world_;
 };

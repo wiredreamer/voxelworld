@@ -340,6 +340,12 @@ auto player_system::lean_(
         : 1.0f;
     auto pose = world_->system<ecs::transform_system>().modify(state.pose_);
 
+    // см. docs/ENGINE.md#шаг-на-ступень
+    world_->system<ecs::physics_system>().modify(ent).smooth_steps(
+        state.pose_, tuning_.step_smooth_seconds
+    );
+    const float32 step_sink = world_->get<ecs::rigid_body_component>(ent).get_step_sink();
+
     if (state.is_rolling()) {
         state.lean_forward_degrees_ = 0.0f;
         state.lean_right_degrees_   = 0.0f;
@@ -354,7 +360,7 @@ auto player_system::lean_(
         state.roll_height_  += (target - state.roll_height_) *
             roll_height_follow(tuning_, target > state.roll_height_, delta_time);
         pose.set_rotation(turn);
-        pose.set_position(swung + vec3f{0.0f, state.roll_height_, 0.0f});
+        pose.set_position(swung + vec3f{0.0f, state.roll_height_ + step_sink, 0.0f});
         return;
     }
 
@@ -366,7 +372,7 @@ auto player_system::lean_(
     pose.set_rotation(math::euler_to_quat(
         {math::radians(state.lean_forward_degrees_), 0.0f, -math::radians(state.lean_right_degrees_)}
     ));
-    pose.set_position({0.0f, state.roll_height_, 0.0f});
+    pose.set_position({0.0f, state.roll_height_ + step_sink, 0.0f});
 }
 
 auto player_system::lowest_point_(
@@ -818,6 +824,7 @@ auto player_system::update(
             }
 
             controller.set_coyote_seconds(tuning_.coyote_seconds)
+                .set_jump_impulse(tuning_.jump_impulse)
                 .set_step_hop_voxels(
                     state.dodging_ || state.swinging_ || state.in_stance_ ? 0.0f
                                                                           : tuning_.step_hop_voxels

@@ -14,7 +14,8 @@ third_person_camera_controller::third_person_camera_controller(
     : camera_(&camera), world_(&world), params_(params), actual_arm_length_(params.arm_length) {}
 
 auto third_person_camera_controller::update(
-    entity target, float32 look_yaw_degrees, float32 look_pitch_degrees, float32 zoom_delta
+    entity target, float32 look_yaw_degrees, float32 look_pitch_degrees, float32 zoom_delta,
+    float32 focus_lift
 ) -> void {
     params_.arm_length -= zoom_delta * params_.zoom_speed;
     params_.arm_length =
@@ -27,7 +28,7 @@ auto third_person_camera_controller::update(
 
     const auto& tc        = registry.get<transform_component>(target);
     const auto player_pos = tc.get_position();
-    const auto focus      = player_pos + params_.target_offset;
+    const auto focus      = player_pos + params_.target_offset + vec3f{0.0f, focus_lift, 0.0f};
 
     const float32 yaw_rad   = math::radians(look_yaw_degrees);
     const float32 pitch_rad = math::radians(look_pitch_degrees);

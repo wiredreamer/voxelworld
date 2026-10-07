@@ -37,6 +37,14 @@ private:
 };
 
 struct rigid_body_component final {
+    [[nodiscard]] auto get_step_sink() const -> float32 {
+        return step_sink_;
+    }
+
+    [[nodiscard]] auto get_steps_taken() const -> uint32 {
+        return steps_taken_;
+    }
+
     [[nodiscard]] auto get_velocity() const -> const vec3f& {
         return velocity_;
     }
@@ -70,6 +78,12 @@ private:
     float32 drag_          = 5.0F;
     bool grounded_         = false;
     bool frozen_           = false;
+    float32 step_sink_           = 0.0F;
+    float32 step_lead_           = 0.0F;
+    float32 step_catch_up_       = 0.0F;
+    float32 step_smooth_seconds_ = 0.0F;
+    entity step_follower_{};
+    uint32 steps_taken_          = 0;
 };
 
 using axis_flags = uint8;
@@ -145,9 +159,6 @@ struct character_controller_component final {
         return step_hop_voxels_;
     }
 
-    [[nodiscard]] auto get_step_hop_count() const -> uint32 {
-        return step_hop_count_;
-    }
 
 private:
     friend class character_controller_system;
@@ -163,7 +174,6 @@ private:
     float32 seconds_off_ground_      = std::numeric_limits<float32>::max();
     float32 step_hop_voxels_         = 0.0F;
     uint32 jump_count_               = 0;
-    uint32 step_hop_count_           = 0;
     bool left_ground_by_jump_        = false;
     bool jump_requested_             = false;
 };
