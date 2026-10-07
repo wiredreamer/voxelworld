@@ -46,6 +46,9 @@ arena_app::arena_app(
     day_night_.set_day_length_seconds(day_length_seconds);
     day_night_.apply(get_engine().get_renderer());
 
+    get_engine().get_renderer().get_light_cache_settings().enabled = true;
+    get_engine().get_renderer().get_ambient_settings().corners     = gfx::corner_source::occupancy_near;
+
     load_assets();
 
     auto& world = get_engine().get_world();
