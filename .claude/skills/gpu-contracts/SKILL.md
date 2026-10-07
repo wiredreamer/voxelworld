@@ -83,35 +83,34 @@ std430 нет диагностики на расхождение: ошибки �
 
 ## Квад: упаковка
 
-- **C++:** `quad` (`resource/meshing.cppm`), `quad::pack` и `quad::sway_flag`
+- **C++:** `quad` (`resource/meshing.cppm`) — два слова, 8 байт
+  (`static_assert(sizeof(quad) == 8)`); `quad::pack` и `quad::sway_flag`
   (`resource/mesh.cpp`).
-- **GLSL:** `struct Quad` и разбор `data0`/`data1`/`data2` в `main` —
-  `voxel.vert`, `shadow.vert` и `grass.vert`; `SWAY_FLAG` в `voxel.vert` и
-  `shadow.vert`. Маски углов разбирает `voxel.frag`: по 2 бита на угол у
-  `fragCornersMask` и `fragConvexMask`, по 4 — у неба в младших 16 битах
-  `fragLightMask` и у блочного света в старших.
+- **GLSL:** `struct Quad` и разбор `data0`/`data1` в `main` — `voxel.vert`,
+  `shadow.vert` и `grass.vert`; `SWAY_FLAG` в `voxel.vert` и `shadow.vert`.
 - **Копия в тестах:** `unpack_min`, `unpack_max`, `unpack_normal`,
-  `unpack_slot`, `unpack_sways`, `unpack_sky`, `unpack_lamp`, `unpack_ao`,
-  `unpack_convex` в `tests/gfx/mesher.test.cpp` — собственный повтор разбора
-  `voxel.vert` литеральными сдвигами и масками, а не обращение к `quad`.
+  `unpack_slot`, `unpack_sways`, `unpack_sway_weights` в
+  `tests/gfx/mesher.test.cpp` — собственный повтор разбора `voxel.vert`
+  литеральными сдвигами и масками, а не обращение к `quad`.
 - **Менять вместе:** сдвиг и маску каждого поля во всех местах. Воксель — 8 бит
   (`0xFF` в шейдерах), каталог живёт в байте, `voxel_type_capacity`
   (`engine/core/src/voxels/voxels.cppm`); бит 22 — флаг качания, бит 23 свободен.
-  Шейдер, читающий воксель старой маской `0x3FF`, захватит флаг, и листва станет
-  чужого цвета. Координата — 7 бит (0…127), протяжённость хранится минус один
-  (1…128); дальше `& 0x7F` молча заворачивает.
-- **Байт `31:24` двузначен.** У квада без флага это выпуклость, с флагом — вес
-  качания по углам; `voxel.vert` при флаге отдаёт фрагменту выпуклость 0. Порядок
-  углов один и тот же — порядок обхода (см. «Порядок углов и обход»).
+  Координата — 7 бит (0…127), протяжённость хранится минус один (1…128); дальше
+  `& 0x7F` молча заворачивает. Шаг записи в буфере `Quads` — `sizeof(quad)`, в
+  std430 это 8 байт: третье поле в `struct Quad` сдвинет все квады.
+- **Байты `31:24`.** У `data0` свободны и нулевые. У `data1` — веса качания по
+  углам в порядке обхода, только при флаге; без флага `quad::pack` пишет ноль.
+  Затенения, выпуклости и света в кваде нет: их считает фрагмент (см. «Занятость»
+  и «Кеш освещённости»).
 - **Сторож:** тесты `[mesh]` через `unpack_*` — только C++-сторона.
   `greedy meshing output is stable` и `full-size greedy meshing output is
-  stable` падают на любой смене упаковки: число квадов и дайджест обновляй
-  только после проверки картинки. Веса качания сверяет с моделью `a leaf corner
-  sways unless wood or ground touches its vertex`, шов — `a leaf on the chunk seam
-  is pinned by wood across it and free beside leaves`. Разбор в шейдерах не
-  проверяет ничто.
-- **Если разошлись:** квады не на месте или растянуты, чужой цвет, свет из
-  соседнего угла.
+  stable` падают на любой смене упаковки и слияния: число квадов и дайджест
+  обновляй только после проверки картинки. Веса качания сверяет с моделью `a leaf
+  corner sways unless wood or ground touches its vertex` (он же стережёт нули в
+  свободных байтах), шов — `a leaf on the chunk seam is pinned by wood across it
+  and free beside leaves`. Разбор в шейдерах не проверяет ничто.
+- **Если разошлись:** квады не на месте или растянуты, чужой цвет, лист качается
+  не тем углом.
 - Почему так: `docs/rendering.md#квад`.
 
 ## Оси касательных
@@ -130,17 +129,14 @@ std430 нет диагностики на расхождение: ошибки �
 
 ## Порядок углов и обход
 
-Мешер нумерует углы по своим касательным (`c0…c3` в `compute_corner_darkness`,
-`compute_corner_light`, `compute_corner_convexity`), шейдер — по порядку обхода.
-Мост между ними — таблицы в `add_quad`.
+Мешер нумерует углы по своим касательным (`c0…c3` в `compute_corner_sway`),
+шейдер — по порядку обхода. Мост между ними — таблицы в `add_quad`.
 
-- **C++:** `winding_to_corner` и `corner_to_ao` в `add_quad` (`mesh.cpp`). Все
-  четыре маски — затенение, выпуклость, небо, блочный свет — проходят одну и ту
-  же перестановку.
-- **GLSL:** `FACE_VERTS` в `voxel.vert` и `shadow.vert` — какой конец коробки
-  берёт каждая вершина обхода; `corner_uvs` в `voxel.vert`; в `voxel.frag` маски
-  читаются в порядке обхода как `a00, a10, a11, a01` (так же `x…`, `s…`, `l…`)
-  и смешиваются по `fragUV`.
+- **C++:** `winding_to_corner` и `corner_to_ao` в `add_quad` (`mesh.cpp`). Через
+  перестановку проходит одна маска — веса качания.
+- **GLSL:** `FACE_VERTS` в `voxel.vert`, `shadow.vert` и `grass.vert` — какой
+  конец коробки берёт каждая вершина обхода; вес угла `voxel.vert` берёт как
+  `(corners_shape >> (corner_id * 2)) & 3`.
 - **Индексы:** `combined_buffer_pool::ensure_index_pattern_` пишет
   `0,1,2,2,3,0` на квад, `combined_buffer::write_draw_command_` ставит
   `vertex_offset` = смещение квада × 4, шейдеры берут квад как
@@ -149,16 +145,12 @@ std430 нет диагностики на расхождение: ошибки �
   eCounterClockwise` и `cullMode` (`eBack` в `renderer::create_graphics_pipeline`,
   `eFront` в `renderer::create_shadow_pipeline`) решает, что отсекается.
 - **Копия в тестах:** `face_verts` в `mesher.test.cpp` — копия `FACE_VERTS`.
-- **Сторож:** `packed occlusion matches the model at every corner` и такие же
-  для `sky light`, `block light`, `convexity` сверяют упакованный угол с моделью
-  через `face_verts`. Поменял `FACE_VERTS`, не тронув копию, — тесты проверяют
-  старый порядок и остаются зелёными. `packed convexity…` видит только +Y
-  (`detail::convex_face`), где две таблицы складываются в тождество:
-  перестановку выпуклости он не поймает. Расширяешь выпуклость на другие грани —
-  расширь и тест.
+- **Сторож:** `a leaf corner sways unless wood or ground touches its vertex`
+  сверяет упакованный вес с моделью через `face_verts`. Поменял `FACE_VERTS`, не
+  тронув копию, — тест проверяет старый порядок и остаётся зелёным.
 - **Если разошлись:** таблица, повёрнутая или отражённая для одной грани из
-  шести, кладёт затенение на чужую сторону этой грани — светлый шов там, где
-  сходятся две грани. Отражённый обход — грань отсекается и пропадает.
+  шести, качает не тот угол листа — крона отрывается от ствола с одной стороны.
+  Отражённый обход — грань отсекается и пропадает.
 
 ## Номер грани: +X, −X, +Y, −Y, +Z, −Z
 
@@ -308,25 +300,25 @@ std430 нет диагностики на расхождение: ошибки �
   на запись (сторож — `static_assert` в `palette_buffer.cpp`).
 - **Если разошлись:** чужие цвета, светится не то.
 
-## Свет инстанса в нормальной матрице
+## Адрес углов в нормальной матрице
 
-- **C++:** `instance_light_column`, `instance_light_offset` и `normal_matrix_of` в
-  `resource/combined_buffer.cpp` — столбец 3 нормальной матрицы (`normal[row, 3]`,
-  float 12…15 в памяти) равен `(1 − sky, block, 0, 1)`; `combined_buffer::write_light`
-  пишет только его; выборку делает `combined_buffer_pool::update_instance_light_`.
-- **GLSL:** `normalMatrix[3].xy` → `fragInstanceLight` (location 8) в `voxel.vert`;
-  в `voxel.frag` `skyRaw *= 1 − x`, `lampRaw = max(lampRaw, y)`.
-- **Менять вместе:** смысл `x` и `y` с обеих сторон; номер location в обоих шейдерах.
-  Нормаль берёт из матрицы только `mat3` — столбец 3 в неё не попадает. Нулевая
-  тень значит «свет меша как есть»: у чанков столбец `(0, 0, 0, 1)` от аффинного
-  трансформа, и переписывать его им не нужно. Смена кодировки на «уровень, а не
-  тень» обязана писать столбец и чанкам.
-- **Сторож:** `a body reads the sky light of the air around it, not of the rock` в
-  `tests/world/sky_light.test.cpp` — только выборка. Столбец в шейдере не сверяет
-  ничто.
-- **Если разошлись:** персонаж светится в пещере или чёрный на солнце; чанки темнеют
-  целиком, если шейдер прочтёт столбец не той стороной.
-- Почему так: `docs/lighting.md#тела-в-пещере`.
+- **C++:** `normal_matrix_of` в `resource/combined_buffer.cpp` — столбец 3
+  нормальной матрицы (`normal[row, 3]`, float 12…15 в памяти) равен
+  `(0, 0, packed_size, word_offset)` из `instance_corners`
+  (`resource/model_occupancy.cppm`). Трава кладёт те же два числа в
+  `grass_instance::light.xy`.
+- **GLSL:** `normalMatrix[3]` → `fragInstanceLight` (location 8) в `voxel.vert`;
+  `grass.vert` собирает `vec4(0, 0, inst.light.xy)`. `voxel.frag` читает только
+  `.z` и `.w`: `z > 0.5` — свой объём (`modelVolumeOf`), `z > −0.5` — мировая
+  сетка, иначе углов нет.
+- **Менять вместе:** смысл `z` и `w` с обеих сторон и у травы; номер location в
+  трёх шейдерах. `x` и `y` свободны и нулевые: света инстанса больше нет, его
+  читает фрагмент из кеша. Нормаль берёт из матрицы только `mat3` — столбец 3 в
+  неё не попадает.
+- **Сторож:** нет.
+- **Если разошлись:** углы модели читаются из чужого объёма (рябь по
+  поверхности) или из мира (затенение не там, где грани).
+- Почему так: `docs/rendering.md#объёмы-моделей`.
 
 ## Занятость
 
@@ -417,8 +409,7 @@ std430 нет диагностики на расхождение: ошибки �
     (16) в C++: свет уходит на пятнадцать вокселей, и блок дальше запаса от
     правки не пересчитывается;
   - `light_wrap[k].xyz` — доля охвата каскада, на которую сдвинут угол чанка
-    камеры: без неё тороидальная выборка читает чужой тексель. `light_wrap[0].w`
-    — включён ли кеш;
+    камеры: без неё тороидальная выборка читает чужой тексель. `w` свободны;
   - `LIGHT_EDGE` (96, 192, 480 вокселей) обязан быть меньше гарантированной
     половины окна: окно — половина охвата вокруг угла блока, камера не дальше
     четырёх текселей от него;
@@ -429,8 +420,7 @@ std430 нет диагностики на расхождение: ошибки �
   одна. Фрагмент — `set = 6`, один набор на все кадры.
 - **Сторож:** `static_assert` на `light_cache_push` (16, размер 64) и на
   смещения 880, 896, размер 960 кадрового uniform. Шейдеры не сверяет ничто:
-  режим просмотра `sky light` при `--light=cache` обязан совпасть с
-  `--light=baked`.
+  правку заливки проверяет глаз по режимам просмотра `sky light` и `block light`.
 - **Если разошлись:** свет сдвинут на долю каскада или повторяется плиткой
   (`light_wrap`), блоки 8³ пятнами не на своих местах (очередь), свет обрезан
   квадратом вокруг камеры (`LIGHT_EDGE`), тени не досчитываются до края (число
@@ -440,11 +430,11 @@ std430 нет диагностики на расхождение: ошибки �
 ## Углы из занятости
 
 - **C++:** `uniform_buffer_object::occupancy_eye` (848: xyz — глаз в вокселях от
-  угла чанка камеры, w — `corner_source`) и `occupancy_base` (864: чанк камеры);
+  угла чанка камеры, w свободна) и `occupancy_base` (864: чанк камеры);
   `world_push_constant_data::grid` (16: xyz — тот же угол в мировых единицах,
   w — единица на размер вокселя), пишет `renderer::grid_push_`;
-  `instance_corners` (`resource/model_occupancy.cppm`), `instance_shading` и
-  `instance_light_column` в `resource/combined_buffer.cpp`;
+  `instance_corners` (`resource/model_occupancy.cppm`) и `normal_matrix_of` в
+  `resource/combined_buffer.cpp`;
   `model_occupancy_buffer` и `model::build_bit_rows`.
 - **GLSL:** `WorldPush.grid` и выход `fragGridPos` (location 9, `centroid`) в
   `voxel.vert`; `fragInstanceLight` — теперь `vec4` (location 8); `FLAT_ONLY`
@@ -453,35 +443,34 @@ std430 нет диагностики на расхождение: ошибки �
   `modelVolumeOf`, `modelSolid`, `modelPatch` в `occupancy.glsl`; хвост
   `UniformBufferObject`, `cornersFromOccupancy`, `cornersAcross`, `cornerLevel`
   в `voxel.frag`; `occupancyBricksAround` и `occupancyPatch` в `occupancy.glsl`.
-  `grass.vert` обязан отдавать те же location 8 и 9: у травы `z = −1`, то есть
-  только запечённые маски.
+  `voxel.vert` и `grass.vert` отдают location 7 (`fragConvexMask`), 8 и 9;
+  location 4–6 свободны. Трава кладёт адрес объёма пучка
+  (`model_occupancy_buffer::keep_copy`) и позицию в вокселях пучка.
 - **Менять вместе:**
   - `fragGridPos` считается **до** `leafSway`; перенос ниже сдвигает клетку у
     качающейся листвы;
-  - правило угла: `cornerLevel` ↔ `corner_level` и `corner_open_level` в
-    `mesh.cpp`; порядок битов слоя — бит `j * 3 + i`, `i` вдоль `u`, `j` вдоль
+  - правило угла живёт только в `cornerLevel` (два занятых ребра дают 3);
+    порядок битов слоя — бит `j * 3 + i`, `i` вдоль `u`, `j` вдоль
     `v`, оси `u = (ось + 1) % 3`, `v = (ось + 2) % 3`;
   - склейка блоков: байт `(вдоль u) + 2 · (вдоль v)` слова `packed`, внутри байта —
     порядок битов блока из раздела «Занятость»;
   - световой столбец: `z = 0` — занятость мира, `z > 0` — свой объём с размерами
-    `w | h << 8 | d << 16`, `z < 0` — только запечённое; `w` — смещение объёма в
-    словах. Пишут `allocate` и `write_transform`; `write_light` обязан трогать
-    только `x` и `y`, иначе модель после смены света потеряет адрес объёма;
+    `w | h << 8 | d << 16`, `z < 0` — углов нет; `w` — смещение объёма в
+    словах. Пишут `allocate` и `write_transform`;
   - `fragGridPos` у инстанса со своим объёмом — локальная позиция вершины, у
     остальных — мировая в сетке; ветка в `voxel.vert` и чтение в `voxel.frag`
     смотрят на один и тот же знак `z`;
   - раскладка объёма: слов в строке `(ширина + 31) >> 5`, слово
     `смещение + (y + высота · z) · слов_в_строке + (x >> 5)` — `build_bit_rows` ↔
     `modelSolid`;
-  - за краем модели: 0 для AO, 1 для выпуклости (`beyond` в `modelPatch`) ↔
-    `is_solid_at` и `is_open_at` в `mesh.cpp`;
+  - за краем модели: 0 для AO, 1 для выпуклости (`beyond` в `modelPatch`);
   - `CORNER_REACH` обязан не превышать гарантированную половину окна уровня 0
     (`occupancy_window_origin`, сейчас 224).
 - **Сторож:** `static_assert` на смещения 848 и 864 и размер 880 у кадрового
   uniform, 16 и размер 32 у `world_push_constant_data`; раскладку объёма модели
   держит тест `bit rows of a model of any size say which voxels are there`. Ядро
-  во фрагменте сверяет только снимок: `--debug-view=corner-mismatch` обязан быть
-  чёрным, кроме синих моделей и неба.
+  во фрагменте не сверяет ничто: запечённых углов, с которыми его сравнивали,
+  больше нет. Правку проверяет глаз по видам `ambient occlusion` и `convexity`.
 - **Если разошлись:** AO на чужой стороне грани или сдвинут на клетку; персонаж
   без AO либо с полосами от рельефа под ним; тёмные точки на кронах в ветер.
 - Почему так: `docs/rendering.md#затенение-углов-во-фрагменте`.
