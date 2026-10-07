@@ -1,6 +1,7 @@
 const int OCCUPANCY_LEVELS       = 3;
 const int OCCUPANCY_CHUNK_SHIFT  = 6;
 const float OCCUPANCY_CHUNK      = 64.0;
+const ivec3 OCCUPANCY_FINE_MASK  = ivec3(511, 255, 511);
 const int OCCUPANCY_TEXTURE_MASK = 255;
 const int OCCUPANCY_COARSE_MASK  = 127;
 const int OCCUPANCY_STEP_LIMIT   = 192;
@@ -8,7 +9,7 @@ const float OCCUPANCY_NUDGE      = 1.0e-3;
 
 layout(set = OCCUPANCY_SET, binding = 0) uniform OccupancyParams {
     ivec4 origin[3];
-    uvec4 valid[68];
+    uvec4 valid[80];
 } occupancy;
 
 layout(set = OCCUPANCY_SET, binding = 1) uniform usampler3D occupancyBricks[3];
@@ -60,25 +61,25 @@ struct OccupancyHit {
 };
 
 int occupancyFirstValidBit(int level) {
-    return level == 0 ? 0 : (level == 1 ? 512 : 4608);
+    return level == 0 ? 0 : (level == 1 ? 2048 : 6144);
 }
 
 bool occupancyKnows(ivec3 chunk, int level) {
-    int side    = level == 0 ? 8 : 16;
+    ivec3 side  = level == 0 ? ivec3(16, 8, 16) : ivec3(16);
     ivec3 local = chunk - occupancy.origin[level].xyz;
-    if (any(lessThan(local, ivec3(0))) || any(greaterThanEqual(local, ivec3(side)))) {
+    if (any(lessThan(local, ivec3(0))) || any(greaterThanEqual(local, side))) {
         return false;
     }
 
     ivec3 slot = chunk & (side - 1);
-    int bit    = occupancyFirstValidBit(level) + slot.x + (side * (slot.y + (side * slot.z)));
+    int bit    = occupancyFirstValidBit(level) + slot.x + (side.x * (slot.y + (side.y * slot.z)));
     uint word  = occupancy.valid[bit >> 7][(bit >> 5) & 3];
     return ((word >> uint(bit & 31)) & 1u) != 0u;
 }
 
 uint occupancyBrickAt(ivec3 voxel, int level) {
     if (level == 0) {
-        return texelFetch(occupancyBricks[0], (voxel >> 1) & OCCUPANCY_TEXTURE_MASK, 0).r;
+        return texelFetch(occupancyBricks[0], (voxel >> 1) & OCCUPANCY_FINE_MASK, 0).r;
     }
     if (level == 1) {
         return texelFetch(occupancyBricks[1], (voxel >> 2) & OCCUPANCY_TEXTURE_MASK, 0).r;
@@ -109,10 +110,10 @@ OccupancyBricks occupancyBricksAround(ivec3 centre, int u, int v) {
     ivec3 brickUV = brickU;
     brickUV[v]   += 1;
 
-    uint low       = texelFetch(occupancyBricks[0], brick & OCCUPANCY_TEXTURE_MASK, 0).r;
-    uint alongU    = texelFetch(occupancyBricks[0], brickU & OCCUPANCY_TEXTURE_MASK, 0).r;
-    uint alongV    = texelFetch(occupancyBricks[0], brickV & OCCUPANCY_TEXTURE_MASK, 0).r;
-    uint alongBoth = texelFetch(occupancyBricks[0], brickUV & OCCUPANCY_TEXTURE_MASK, 0).r;
+    uint low       = texelFetch(occupancyBricks[0], brick & OCCUPANCY_FINE_MASK, 0).r;
+    uint alongU    = texelFetch(occupancyBricks[0], brickU & OCCUPANCY_FINE_MASK, 0).r;
+    uint alongV    = texelFetch(occupancyBricks[0], brickV & OCCUPANCY_FINE_MASK, 0).r;
+    uint alongBoth = texelFetch(occupancyBricks[0], brickUV & OCCUPANCY_FINE_MASK, 0).r;
 
     return OccupancyBricks(
         low | (alongU << 8u) | (alongV << 16u) | (alongBoth << 24u),

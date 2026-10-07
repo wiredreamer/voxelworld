@@ -87,13 +87,15 @@ auto march(const cell_world& cells, vec3f origin, vec3f direction, float32 reach
 
 TEST_CASE("the slots of a window tile the texture without overlap", "[occupancy]") {
     for (int32 level = 0; level < occupancy_clipmap_layout::level_count; ++level) {
-        const int32 side   = occupancy_clipmap_layout::window_chunks(level);
+        const vec3i side   = occupancy_clipmap_layout::window_chunks(level);
         const vec3i origin = spatial::occupancy_window_origin({-1000, 37, 4000}, level);
 
-        std::vector<bool> taken(static_cast<std::size_t>(side * side * side), false);
-        for (int32 z = 0; z < side; ++z) {
-            for (int32 y = 0; y < side; ++y) {
-                for (int32 x = 0; x < side; ++x) {
+        std::vector<bool> taken(
+            static_cast<std::size_t>(occupancy_clipmap_layout::slot_count(level)), false
+        );
+        for (int32 z = 0; z < side.z; ++z) {
+            for (int32 y = 0; y < side.y; ++y) {
+                for (int32 x = 0; x < side.x; ++x) {
                     const vec3i chunk{origin.x + x, origin.y + y, origin.z + z};
                     REQUIRE(spatial::occupancy_window_holds(chunk, origin, level));
 
@@ -108,15 +110,19 @@ TEST_CASE("the slots of a window tile the texture without overlap", "[occupancy]
     }
 }
 
-TEST_CASE("the window keeps the centre at least three and a half chunks inside", "[occupancy]") {
+TEST_CASE("the window keeps the centre half a chunk short of its half on every axis", "[occupancy]") {
+    constexpr int32 chunk = occupancy_clipmap_layout::chunk_voxels;
+
     for (const int32 at : {-130, -64, -33, -32, -1, 0, 31, 32, 63, 64, 500}) {
         const vec3i origin = spatial::occupancy_window_origin({at, at, at}, 0);
-        const int32 low    = origin.x * occupancy_clipmap_layout::chunk_voxels;
-        const int32 high   = low + (occupancy_clipmap_layout::window_chunks(0) *
-                                    occupancy_clipmap_layout::chunk_voxels);
+        const vec3i window = occupancy_clipmap_layout::window_chunks(0);
 
-        CHECK(at - low >= 224);
-        CHECK(high - at > 224);
+        CHECK(at - (origin.x * chunk) >= 480);
+        CHECK(((origin.x + window.x) * chunk) - at > 480);
+        CHECK(at - (origin.y * chunk) >= 224);
+        CHECK(((origin.y + window.y) * chunk) - at > 224);
+        CHECK(at - (origin.z * chunk) >= 480);
+        CHECK(((origin.z + window.z) * chunk) - at > 480);
     }
 }
 

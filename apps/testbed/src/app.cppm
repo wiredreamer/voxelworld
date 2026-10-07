@@ -153,7 +153,7 @@ private:
 
     gfx::quality_tier quality_ = gfx::default_quality;
     uint32 view_distance_ = ecs::default_view_distance;
-    float32 lod_distance_ = static_cast<float32>(ecs::default_lod_base_chunks);
+    float32 lod_distance_ = ecs::lod_base_chunks_behind_fog(ecs::default_view_distance);
     int32 lod_level_       = -1;
 
     float32 bench_altitude_   = 0.0f;

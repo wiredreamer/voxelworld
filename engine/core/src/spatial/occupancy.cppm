@@ -12,9 +12,13 @@ struct occupancy_clipmap_layout {
     static constexpr int32 level_count        = 3;
     static constexpr int32 chunk_voxels       = 64;
     static constexpr int32 chunk_shift        = 6;
-    static constexpr std::array<int32, level_count> window_chunks_at{8, 16, 16};
+    static constexpr std::array<vec3i, level_count> window_chunks_at{{
+        {16, 8, 16},
+        {16, 16, 16},
+        {16, 16, 16},
+    }};
 
-    [[nodiscard]] static constexpr auto window_chunks(int32 level) -> int32 {
+    [[nodiscard]] static constexpr auto window_chunks(int32 level) -> vec3i {
         return window_chunks_at[static_cast<std::size_t>(level)];
     }
 
@@ -22,8 +26,10 @@ struct occupancy_clipmap_layout {
         return (chunk_voxels / 2) >> level;
     }
 
-    [[nodiscard]] static constexpr auto texture_side(int32 level) -> int32 {
-        return window_chunks(level) * bricks_per_chunk(level);
+    [[nodiscard]] static constexpr auto texture_extent(int32 level) -> vec3i {
+        const vec3i window = window_chunks(level);
+        const int32 across = bricks_per_chunk(level);
+        return {window.x * across, window.y * across, window.z * across};
     }
 
     [[nodiscard]] static constexpr auto cell_voxels(int32 level) -> int32 {
@@ -31,8 +37,8 @@ struct occupancy_clipmap_layout {
     }
 
     [[nodiscard]] static constexpr auto slot_count(int32 level) -> int32 {
-        const int32 side = window_chunks(level);
-        return side * side * side;
+        const vec3i window = window_chunks(level);
+        return window.x * window.y * window.z;
     }
 
     [[nodiscard]] static constexpr auto first_valid_bit(int32 level) -> int32 {
@@ -43,7 +49,14 @@ struct occupancy_clipmap_layout {
         return bit;
     }
 
-    static constexpr int32 valid_bit_count  = 512 + 4096 + 4096;
+    [[nodiscard]] static constexpr auto fits_a_torus(int32 level) -> bool {
+        const vec3i extent = texture_extent(level);
+        return std::has_single_bit(static_cast<uint32>(extent.x)) &&
+               std::has_single_bit(static_cast<uint32>(extent.y)) &&
+               std::has_single_bit(static_cast<uint32>(extent.z));
+    }
+
+    static constexpr int32 valid_bit_count  = 2048 + 4096 + 4096;
     static constexpr int32 valid_word_count = valid_bit_count / 32;
 };
 
@@ -51,13 +64,9 @@ static_assert(
     occupancy_clipmap_layout::first_valid_bit(occupancy_clipmap_layout::level_count) ==
     occupancy_clipmap_layout::valid_bit_count
 );
-static_assert(std::has_single_bit(static_cast<uint32>(occupancy_clipmap_layout::texture_side(0))));
-static_assert(std::has_single_bit(static_cast<uint32>(occupancy_clipmap_layout::texture_side(1))));
-static_assert(std::has_single_bit(static_cast<uint32>(occupancy_clipmap_layout::texture_side(2))));
-static_assert(
-    occupancy_clipmap_layout::window_chunks(0) <= occupancy_clipmap_layout::window_chunks(1) &&
-    occupancy_clipmap_layout::window_chunks(1) <= occupancy_clipmap_layout::window_chunks(2)
-);
+static_assert(occupancy_clipmap_layout::fits_a_torus(0));
+static_assert(occupancy_clipmap_layout::fits_a_torus(1));
+static_assert(occupancy_clipmap_layout::fits_a_torus(2));
 
 [[nodiscard]] constexpr auto occupancy_chunk_of(vec3i voxel) -> vec3i {
     constexpr int32 shift = occupancy_clipmap_layout::chunk_shift;
@@ -66,32 +75,32 @@ static_assert(
 
 [[nodiscard]] constexpr auto occupancy_window_origin(vec3i centre_voxel, int32 level) -> vec3i {
     constexpr int32 half_chunk = occupancy_clipmap_layout::chunk_voxels / 2;
-    const int32 half_window    = occupancy_clipmap_layout::window_chunks(level) / 2;
+    const vec3i window         = occupancy_clipmap_layout::window_chunks(level);
 
     const vec3i nearest_corner = occupancy_chunk_of(
         {centre_voxel.x + half_chunk, centre_voxel.y + half_chunk, centre_voxel.z + half_chunk}
     );
     return {
-        nearest_corner.x - half_window, nearest_corner.y - half_window,
-        nearest_corner.z - half_window
+        nearest_corner.x - (window.x / 2), nearest_corner.y - (window.y / 2),
+        nearest_corner.z - (window.z / 2)
     };
 }
 
 [[nodiscard]] constexpr auto occupancy_window_holds(vec3i chunk, vec3i origin, int32 level)
     -> bool {
-    const int32 side = occupancy_clipmap_layout::window_chunks(level);
-    return chunk.x >= origin.x && chunk.x < origin.x + side && chunk.y >= origin.y &&
-           chunk.y < origin.y + side && chunk.z >= origin.z && chunk.z < origin.z + side;
+    const vec3i window = occupancy_clipmap_layout::window_chunks(level);
+    return chunk.x >= origin.x && chunk.x < origin.x + window.x && chunk.y >= origin.y &&
+           chunk.y < origin.y + window.y && chunk.z >= origin.z && chunk.z < origin.z + window.z;
 }
 
 [[nodiscard]] constexpr auto occupancy_slot_of(vec3i chunk, int32 level) -> vec3i {
-    const int32 mask = occupancy_clipmap_layout::window_chunks(level) - 1;
-    return {chunk.x & mask, chunk.y & mask, chunk.z & mask};
+    const vec3i window = occupancy_clipmap_layout::window_chunks(level);
+    return {chunk.x & (window.x - 1), chunk.y & (window.y - 1), chunk.z & (window.z - 1)};
 }
 
 [[nodiscard]] constexpr auto occupancy_slot_index(vec3i slot, int32 level) -> int32 {
-    const int32 side = occupancy_clipmap_layout::window_chunks(level);
-    return slot.x + (side * (slot.y + (side * slot.z)));
+    const vec3i window = occupancy_clipmap_layout::window_chunks(level);
+    return slot.x + (window.x * (slot.y + (window.y * slot.z)));
 }
 
 [[nodiscard]] constexpr auto occupancy_brick_bit(vec3i cell) -> uint32 {

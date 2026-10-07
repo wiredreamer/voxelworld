@@ -41,7 +41,7 @@ auto setup_world_grid(gfx::engine& engine) -> world_setup_result {
         static_cast<float32>(ecs::chunk::size * params.world_units_per_voxel);
 
     world.system<ecs::lod_system>().set_default_base_distance(
-        static_cast<float32>(ecs::default_lod_base_chunks) * chunk_units
+        ecs::lod_base_chunks_behind_fog(ecs::default_view_distance) * chunk_units
     );
 
     return {.generator_params = params};

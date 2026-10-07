@@ -19,12 +19,12 @@ export namespace vw::gfx {
 
 struct occupancy_params {
     alignas(16) std::array<vec4<int32>, spatial::occupancy_clipmap_layout::level_count> origin;
-    alignas(16) std::array<vec4<uint32>, 68> valid;
+    alignas(16) std::array<vec4<uint32>, 80> valid;
 };
 
 static_assert(offsetof(occupancy_params, valid) == 48);
-static_assert(sizeof(occupancy_params) == 1136);
-static_assert(spatial::occupancy_clipmap_layout::valid_word_count <= 68 * 4);
+static_assert(sizeof(occupancy_params) == 1328);
+static_assert(spatial::occupancy_clipmap_layout::valid_word_count <= 80 * 4);
 
 struct occupancy_stats {
     uint32 valid_slots    = 0;

@@ -157,8 +157,8 @@ vec4 cachedLight(vec3 normal) {
 
 const uint FLAT_ONLY     = 1u << 8u;
 const uint FACE_SHIFT    = 9u;
-const float CORNER_REACH = 224.0;
-const float CORNER_FADE  = 16.0;
+const vec3 CORNER_REACH = vec3(416.0, 224.0, 416.0);
+const vec3 CORNER_FADE  = vec3(32.0, 16.0, 32.0);
 
 float cornerLevel(uint a, uint b, uint diagonal) {
     return (a + b == 2u) ? 3.0 : float(a + b + diagonal);
@@ -211,8 +211,8 @@ vec3 cornersFromOccupancy() {
     }
 
     vec3 fromEye = abs(fragGridPos - ubo.occupancy_eye.xyz);
-    float reach  = max(fromEye.x, max(fromEye.y, fromEye.z));
-    float weight = 1.0 - smoothstep(CORNER_REACH - CORNER_FADE, CORNER_REACH, reach);
+    vec3 fading  = smoothstep(CORNER_REACH - CORNER_FADE, CORNER_REACH, fromEye);
+    float weight = 1.0 - max(fading.x, max(fading.y, fading.z));
     if (weight <= 0.0) {
         return vec3(0.0);
     }

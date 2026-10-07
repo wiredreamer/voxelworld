@@ -19,9 +19,7 @@ testbed_app::testbed_app(
     , view_distance_{
           args.count("--view-distance", gfx::preset_of(quality_).view_distance_columns)
       }
-    , lod_distance_{args.real(
-          "--lod-distance", static_cast<float32>(gfx::preset_of(quality_).lod_base_chunks)
-      )}
+    , lod_distance_{args.real("--lod-distance", ecs::lod_base_chunks_behind_fog(view_distance_))}
     , lod_level_{args.text("--lod-level") ? args.integer("--lod-level", 0) : -1}
     , benching_{args.flag("--bench")}
     , clusters_{args.flag("--cluster-stats"), args.count("--verify-lights", 0)} {
@@ -122,8 +120,8 @@ testbed_app::testbed_app(
 
     auto& fog         = renderer.get_fog_settings();
     fog.color         = {0.4f, 0.6f, 0.9f};
-    fog.near_distance = 0.6f * draw_reach;
-    fog.far_distance  = 0.9f * draw_reach;
+    fog.near_distance = ecs::fog_near_share * draw_reach;
+    fog.far_distance  = ecs::fog_far_share * draw_reach;
 
     camera.set_far(fog.far_distance);
 

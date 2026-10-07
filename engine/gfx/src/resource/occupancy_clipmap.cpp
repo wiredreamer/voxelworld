@@ -95,11 +95,14 @@ auto occupancy_clipmap::create_images_() -> void {
     for (std::size_t index = 0; index < levels_.size(); ++index) {
         auto& level = levels_[index];
 
-        const auto side = static_cast<uint32>(layout::texture_side(static_cast<int32>(index)));
+        const vec3i extent = layout::texture_extent(static_cast<int32>(index));
 
         vk::ImageCreateInfo image_info{};
         image_info.imageType = vk::ImageType::e3D;
-        image_info.extent    = vk::Extent3D{side, side, side};
+        image_info.extent    = vk::Extent3D{
+            static_cast<uint32>(extent.x), static_cast<uint32>(extent.y),
+            static_cast<uint32>(extent.z)
+        };
         image_info.mipLevels     = 1;
         image_info.arrayLayers   = 1;
         image_info.format        = brick_format;
@@ -287,10 +290,10 @@ auto occupancy_clipmap::move_window_(int32 level, vec3i origin) -> void {
     params_.origin[static_cast<std::size_t>(level)] = vec4<int32>{origin.x, origin.y, origin.z, 0};
     frames_behind_ = frames_in_flight;
 
-    const int32 side = layout::window_chunks(level);
-    for (int32 z = 0; z < side; ++z) {
-        for (int32 y = 0; y < side; ++y) {
-            for (int32 x = 0; x < side; ++x) {
+    const vec3i side = layout::window_chunks(level);
+    for (int32 z = 0; z < side.z; ++z) {
+        for (int32 y = 0; y < side.y; ++y) {
+            for (int32 x = 0; x < side.x; ++x) {
                 const vec3i chunk{origin.x + x, origin.y + y, origin.z + z};
                 const int32 index =
                     spatial::occupancy_slot_index(spatial::occupancy_slot_of(chunk, level), level);

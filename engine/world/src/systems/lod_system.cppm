@@ -21,15 +21,28 @@ struct lod_system_stats {
     std::array<uint32, asset::lod_level_count> at_level{};
 };
 
-// см. docs/light-plan.md#пресеты-качества
-inline constexpr uint32 default_lod_base_chunks = 3;
+// см. docs/lod-plan.md#переключение-прячется-в-тумане
+inline constexpr float32 fog_near_share = 0.6F;
+inline constexpr float32 fog_far_share  = 0.9F;
+
+[[nodiscard]] constexpr auto lod_base_chunks_behind_fog(uint32 view_distance_columns) -> float32 {
+    constexpr float32 fog_hiding_the_switch = 0.75F;
+    constexpr float32 half_chunk            = 0.5F;
+    constexpr float32 first_level_step      = 2.0F;
+
+    const float32 switch_share =
+        fog_near_share + ((fog_far_share - fog_near_share) * fog_hiding_the_switch);
+
+    return ((switch_share * static_cast<float32>(view_distance_columns)) + half_chunk) /
+           first_level_step;
+}
 
 // см. docs/lod-plan.md#выбор-уровня
 class lod_system {
 public:
     static constexpr std::string_view system_name = "lod";
 
-    static constexpr float32 hysteresis_release = 0.8F;
+    static constexpr float32 hysteresis_release = 0.92F;
 
     explicit lod_system(world& w);
 

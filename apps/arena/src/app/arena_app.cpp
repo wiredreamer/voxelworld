@@ -83,8 +83,8 @@ arena_app::arena_app(
                                static_cast<float32>(generator_params_.world_units_per_voxel);
 
     auto& fog         = get_engine().get_renderer().get_fog_settings();
-    fog.near_distance = 0.6f * draw_reach;
-    fog.far_distance  = 0.9f * draw_reach;
+    fog.near_distance = ecs::fog_near_share * draw_reach;
+    fog.far_distance  = ecs::fog_far_share * draw_reach;
 }
 
 auto arena_app::load_input_bindings_() -> void {

@@ -330,7 +330,7 @@ auto debug_window::render_lod_panel() -> void {
 
     if (reset_button("reset##lod")) {
         lod.set_default_base_distance(
-            static_cast<float32>(ecs::default_lod_base_chunks) * in_chunk
+            ecs::lod_base_chunks_behind_fog(ecs::default_view_distance) * in_chunk
         );
         lod.set_forced_level(-1);
     }

@@ -22,7 +22,6 @@ inline constexpr quality_tier default_quality = quality_tier::medium;
 // см. docs/light-plan.md#пресеты-качества
 struct quality_preset {
     uint32 view_distance_columns;
-    uint32 lod_base_chunks;
     uint32 msaa_samples;
     int32 grass_radius_columns;
     bool bloom;
@@ -31,21 +30,18 @@ struct quality_preset {
 inline constexpr std::array<quality_preset, quality_tier_names.size()> quality_presets{{
     {
         .view_distance_columns = 6,
-        .lod_base_chunks       = 2,
         .msaa_samples          = 2,
         .grass_radius_columns  = 1,
         .bloom                 = false,
     },
     {
         .view_distance_columns = ecs::default_view_distance,
-        .lod_base_chunks       = ecs::default_lod_base_chunks,
         .msaa_samples          = msaa_sample_count,
         .grass_radius_columns  = 2,
         .bloom                 = true,
     },
     {
         .view_distance_columns = 16,
-        .lod_base_chunks       = 6,
         .msaa_samples          = 4,
         .grass_radius_columns  = 2,
         .bloom                 = true,
