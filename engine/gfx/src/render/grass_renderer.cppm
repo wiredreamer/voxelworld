@@ -68,7 +68,8 @@ public:
     grass_renderer(
         vulkan_context& context, vk::DescriptorPool descriptor_pool, vk::RenderPass render_pass,
         vk::SampleCountFlagBits samples, const grass_pipeline_layouts& layouts,
-        const vk::PipelineShaderStageCreateInfo& fragment_stage
+        const vk::PipelineShaderStageCreateInfo& fragment_stage,
+        model_occupancy_buffer& model_volumes
     );
     ~grass_renderer();
 
@@ -90,15 +91,13 @@ private:
     struct tuft_mesh {
         uint32 quad_offset = 0;
         uint32 quad_count  = 0;
+        instance_corners corners{};
     };
 
     struct chunk_grass {
-        uint64 revision                     = 0;
-        const asset::light_field* sky       = nullptr;
-        const asset::light_field* block     = nullptr;
-        const asset::light_field* sky_above = nullptr;
+        uint64 revision = 0;
         std::vector<std::pair<uint16, grass_instance>> instances;
-        uint64 seen                         = 0;
+        uint64 seen = 0;
     };
 
     struct frame_buffers {
@@ -128,6 +127,7 @@ private:
     auto ensure_frame_buffers_(frame_buffers& buffers, uint32 instances) -> void;
 
     vulkan_context* context_;
+    model_occupancy_buffer* model_volumes_;
     vk::DescriptorPool descriptor_pool_ = nullptr;
 
     std::unique_ptr<shader> vertex_shader_;

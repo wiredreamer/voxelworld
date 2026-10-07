@@ -125,7 +125,7 @@ renderer::renderer(
             .occupancy   = occupancy_->get_descriptor_set_layout(),
             .light_cache = light_cache_->get_sampled_layout(),
         },
-        fragment_shader_->get_stage_info()
+        fragment_shader_->get_stage_info(), *model_volumes_
     );
 
     post_process_ = std::make_unique<post_process>(*context_, descriptor_pool_, composite_pass_);
@@ -541,10 +541,10 @@ auto renderer::render(
     stats_.timing.light_cache_ms = measure_ms([&] {
         gpu_timer_->begin(cmd, gpu_stage::light_cache);
         light_cache_->make_ready(cmd);
-        if (light_cache_settings_.enabled) {
+        if (const auto* grid = world.system<ecs::world_grid_system>().grid(); grid != nullptr) {
             light_cache_->choose_bricks(
-                world.system<ecs::world_grid_system>().grid(), occupancy_->centre_voxel(),
-                occupancy_->packed_changes(), light_cache_settings_, current_frame_
+                grid, occupancy_->centre_voxel(), occupancy_->packed_changes(),
+                light_cache_settings_, current_frame_
             );
             light_cache_->dispatch(
                 cmd, occupancy_->get_descriptor_set(current_frame_), occupancy_->centre_chunk(),
@@ -2223,7 +2223,7 @@ auto renderer::update_uniform_buffer(
     ubo.occupancy_eye = vec4f{
         (eye.x - voxel_grid.x) * voxel_grid.w, (eye.y - voxel_grid.y) * voxel_grid.w,
         (eye.z - voxel_grid.z) * voxel_grid.w,
-        static_cast<float32>(ambient_settings_.corners),
+        0.0f,
     };
     ubo.occupancy_base = vec4<int32>{base_chunk.x, base_chunk.y, base_chunk.z, 0};
 
@@ -2231,7 +2231,6 @@ auto renderer::update_uniform_buffer(
     for (int32 cascade = 0; cascade < light_cache::cascade_count; ++cascade) {
         ubo.light_wrap[cascade] = light_cache::wrap_of(cascade, base_chunk);
     }
-    ubo.light_wrap[0].w = light_cache_settings_.enabled ? 1.0f : 0.0f;
     ubo.fog.near_distance = fog_settings_.near_distance;
     ubo.fog.far_distance  = fog_settings_.far_distance;
     ubo.fog.enabled       = fog_settings_.enabled ? 1u : 0u;

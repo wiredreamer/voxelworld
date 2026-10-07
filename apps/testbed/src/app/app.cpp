@@ -68,7 +68,6 @@ testbed_app::testbed_app(
         );
     }
 
-    renderer.get_light_cache_settings().enabled = args.text("--light") == "cache";
     if (const auto bricks = args.count("--light-bricks", 0); bricks > 0) {
         renderer.get_light_cache_settings().bricks_per_frame = bricks;
     }
@@ -82,15 +81,6 @@ testbed_app::testbed_app(
             -std::cos(elevation) * std::cos(azimuth), -std::sin(elevation),
             -std::cos(elevation) * std::sin(azimuth)
         };
-    }
-
-    if (const auto wanted = args.text("--corners")) {
-        const auto found = std::ranges::find(gfx::corner_source_names, *wanted);
-        if (found == gfx::corner_source_names.end()) {
-            throw std::runtime_error(std::format("unknown corner source '{}'", *wanted));
-        }
-        renderer.get_ambient_settings().corners =
-            static_cast<gfx::corner_source>(found - gfx::corner_source_names.begin());
     }
 
     if (clusters_.wanted()) {

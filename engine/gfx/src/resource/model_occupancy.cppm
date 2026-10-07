@@ -51,6 +51,9 @@ public:
 
     [[nodiscard]] auto acquire(const asset::model& voxels) -> instance_corners;
     [[nodiscard]] auto refresh(const asset::model& voxels) -> instance_corners;
+
+    // см. docs/rendering.md#трава
+    [[nodiscard]] auto keep_copy(const asset::model& voxels) -> instance_corners;
     auto release(uint32 model_index) -> void;
 
     auto next_frame() -> void;

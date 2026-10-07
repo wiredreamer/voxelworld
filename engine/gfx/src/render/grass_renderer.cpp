@@ -44,9 +44,10 @@ auto floor_div(float32 value, float32 step) -> int32 {
 grass_renderer::grass_renderer(
     vulkan_context& context, vk::DescriptorPool descriptor_pool, vk::RenderPass render_pass,
     vk::SampleCountFlagBits samples, const grass_pipeline_layouts& layouts,
-    const vk::PipelineShaderStageCreateInfo& fragment_stage
+    const vk::PipelineShaderStageCreateInfo& fragment_stage, model_occupancy_buffer& model_volumes
 )
     : context_(&context)
+    , model_volumes_(&model_volumes)
     , descriptor_pool_(descriptor_pool) {
     vertex_shader_ = std::make_unique<shader>(*context_, "shaders/grass.vert.spv", shader_type::VERTEX);
 
@@ -264,7 +265,11 @@ auto grass_renderer::mesh_for_(
     const mesh built = greedy_mesh_generator::generate_mesh_data(mesh_scratch_, mesh_source{.voxels = *tuft});
 
     const auto count = static_cast<uint32>(std::min<std::size_t>(built.quads.size(), max_tuft_quads));
-    const tuft_mesh entry{.quad_offset = static_cast<uint32>(quads_.size()), .quad_count = count};
+    const tuft_mesh entry{
+        .quad_offset = static_cast<uint32>(quads_.size()),
+        .quad_count  = count,
+        .corners     = model_volumes_->keep_copy(*tuft),
+    };
     quads_.insert(quads_.end(), built.quads.begin(), built.quads.begin() + count);
     ++quads_revision_;
 
@@ -281,14 +286,6 @@ auto grass_renderer::refresh_chunk_(
     const auto& volume = *c.get_volume();
     const auto vs      = static_cast<float32>(grid.world_units_per_voxel());
     const vec3i base   = coord * column_side;
-
-    const ecs::chunk* above = grid.find_chunk(coord + vec3i{0, 1, 0});
-    const asset::chunk_volume* above_volume = above != nullptr ? above->get_volume().get() : nullptr;
-    constexpr auto full = static_cast<float32>(ecs::light_column::max_level);
-
-    const auto level = [](const asset::light_field* field, vec3i at, uint8 fallback) -> float32 {
-        return static_cast<float32>(field != nullptr ? field->level_at(at) : fallback);
-    };
 
     entry.instances.clear();
     volume.cover().for_each([&](const asset::cover_layer::entry& e) {
@@ -308,29 +305,22 @@ auto grass_renderer::refresh_chunk_(
             (static_cast<float32>(cell.x) + 0.5F) * vs, 0.0F, (static_cast<float32>(cell.z) + 0.5F) * vs
         };
 
-        const bool inside = e.support.y + 1 < column_side;
-        const asset::chunk_volume* holder = inside ? &volume : above_volume;
-        const vec3i at{e.support.x, inside ? e.support.y + 1 : 0, e.support.z};
-        const ecs::world_light light{
-            .sky   = level(holder != nullptr ? holder->get_sky_light() : nullptr, at, ecs::light_column::max_level) / full,
-            .block = level(holder != nullptr ? holder->get_block_light() : nullptr, at, 0) / full,
-        };
+        const instance_corners corners = meshes_[mesh].corners;
 
         entry.instances.emplace_back(
             mesh,
             grass_instance{
                 .place = vec4f{centre.x, static_cast<float32>(cell.y) * vs, centre.z, angle},
-                .light = vec4f{1.0F - light.sky, light.block, unit_of(h, 1) * 6.2831853F, fit},
+                .light = vec4f{
+                    corners.packed_size, corners.word_offset, unit_of(h, 1) * 6.2831853F, fit
+                },
             }
         );
     });
 
     std::ranges::sort(entry.instances, {}, &std::pair<uint16, grass_instance>::first);
 
-    entry.revision  = volume.cover().revision();
-    entry.sky       = volume.get_sky_light();
-    entry.block     = volume.get_block_light();
-    entry.sky_above = above_volume != nullptr ? above_volume->get_sky_light() : nullptr;
+    entry.revision = volume.cover().revision();
 }
 
 auto grass_renderer::prepare(
@@ -380,13 +370,8 @@ auto grass_renderer::prepare(
                 const auto& volume = *c->get_volume();
 
                 auto& entry = chunks_[coord];
-                const ecs::chunk* above = grid->find_chunk(coord + vec3i{0, 1, 0});
-                const asset::light_field* sky_above =
-                    above != nullptr ? above->get_volume()->get_sky_light() : nullptr;
                 const bool built = entry.seen != 0;
-                const bool stale = !built || entry.revision != volume.cover().revision() ||
-                                   entry.sky != volume.get_sky_light() ||
-                                   entry.block != volume.get_block_light() || entry.sky_above != sky_above;
+                const bool stale = !built || entry.revision != volume.cover().revision();
                 if (stale && refreshes < refreshes_per_frame) {
                     refresh_chunk_(world, *grid, coord, *c, entry);
                     ++refreshes;

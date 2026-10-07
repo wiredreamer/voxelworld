@@ -111,18 +111,6 @@ auto debug_window::render_lighting_panel() -> void {
         ImGui::SliderFloat("convex strength", &ambient.convex_strength, 0.0f, 1.0f, "%.2f");
         ImGui::SliderFloat("convex curve", &ambient.convex_curve, 0.25f, 4.0f, "%.2f");
 
-        if (ImGui::BeginCombo(
-                "corners from", corner_source_names[static_cast<std::size_t>(ambient.corners)].data()
-            )) {
-            for (std::size_t source = 0; source < corner_source_names.size(); ++source) {
-                const bool chosen = static_cast<std::size_t>(ambient.corners) == source;
-                if (ImGui::Selectable(corner_source_names[source].data(), chosen)) {
-                    ambient.corners = static_cast<corner_source>(source);
-                }
-            }
-            ImGui::EndCombo();
-        }
-
         ImGui::SliderFloat("sky curve", &ambient.sky_curve, 0.25f, 4.0f, "%.2f");
 
         ImGui::SliderFloat("sun curve", &ambient.sun_curve, 0.25f, 8.0f, "%.2f");
@@ -171,7 +159,6 @@ auto debug_window::render_lighting_panel() -> void {
 
         int bricks = static_cast<int>(cache.bricks_per_frame);
 
-        ImGui::Checkbox("enabled##light_cache", &cache.enabled);
         if (ImGui::SliderInt("bricks per frame", &bricks, 1, 2048)) {
             cache.bricks_per_frame = static_cast<uint32>(bricks);
         }

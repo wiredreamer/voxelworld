@@ -44,9 +44,6 @@ layout(location = 1) out vec3 fragNormal;
 layout(location = 2) out vec3 fragColor;
 layout(location = 2, component = 3) out float fragGlow;
 layout(location = 3) out float viewDepth;
-layout(location = 4) centroid out vec2 fragUV;
-layout(location = 5) flat out uint fragCornersMask;
-layout(location = 6) flat out uint fragLightMask;
 layout(location = 7) flat out uint fragConvexMask;
 layout(location = 8) flat out vec4 fragInstanceLight;
 layout(location = 9) centroid out vec3 fragGridPos;
@@ -103,11 +100,9 @@ void main() {
     uvec3 mn = uvec3(q.data0 & 0x7Fu, (q.data0 >> 7) & 0x7Fu, (q.data0 >> 14) & 0x7Fu);
 
     uint normal_id      = (q.data0 >> 21) & 0x7u;
-    uint corners_ao     = (q.data0 >> 24) & 0xFFu;
     uint palette_idx    = (q.data1 >> 14) & 0xFFu;
     bool sways          = (q.data1 & SWAY_FLAG) != 0u;
     uint corners_shape  = (q.data1 >> 24) & 0xFFu;
-    uint corners_convex = sways ? 0u : corners_shape;
 
     uvec3 mx = unpackMax(q.data1, mn, normal_id);
 
@@ -133,16 +128,7 @@ void main() {
     fragColor = palette[palette_idx].color;
     fragGlow  = palette[palette_idx].glow;
 
-    vec2 corner_uvs[4] = vec2[4](
-        vec2(0.0, 0.0),
-        vec2(1.0, 0.0),
-        vec2(1.0, 1.0),
-        vec2(0.0, 1.0)
-    );
-    fragUV = corner_uvs[corner_id];
-    fragCornersMask = corners_ao;
-    fragLightMask = q.data2;
-    fragConvexMask = corners_convex | (sways ? FLAT_ONLY : 0u) | (normal_id << FACE_SHIFT);
+    fragConvexMask = (sways ? FLAT_ONLY : 0u) | (normal_id << FACE_SHIFT);
 
     viewDepth = -(ubo.view * worldPos).z;
 

@@ -5,9 +5,6 @@ layout(location = 1) in vec3 fragNormal;
 layout(location = 2) in vec3 fragColor;
 layout(location = 2, component = 3) in float fragGlow;
 layout(location = 3) in float viewDepth;
-layout(location = 4) centroid in vec2 fragUV;
-layout(location = 5) flat in uint fragCornersMask;
-layout(location = 6) flat in uint fragLightMask;
 layout(location = 7) flat in uint fragConvexMask;
 layout(location = 8) flat in vec4 fragInstanceLight;
 layout(location = 9) centroid in vec3 fragGridPos;
@@ -524,43 +521,10 @@ void main() {
     float shadow = 1.0;
 #endif
 
-    uint m = fragCornersMask;
-    float a00 = float( m        & 3u) * (1.0 / 3.0);
-    float a10 = float((m >> 2)  & 3u) * (1.0 / 3.0);
-    float a11 = float((m >> 4)  & 3u) * (1.0 / 3.0);
-    float a01 = float((m >> 6)  & 3u) * (1.0 / 3.0);
+    vec3 corners = fragInstanceLight.z > -0.5 ? cornersFromOccupancy() : vec3(0.0);
 
-    float occlusion = mix(mix(a00, a10, fragUV.x), mix(a01, a11, fragUV.x), fragUV.y);
-
-    uint cm = fragConvexMask;
-    float x00 = float( cm        & 3u) * (1.0 / 3.0);
-    float x10 = float((cm >> 2)  & 3u) * (1.0 / 3.0);
-    float x11 = float((cm >> 4)  & 3u) * (1.0 / 3.0);
-    float x01 = float((cm >> 6)  & 3u) * (1.0 / 3.0);
-
-    float exposure = mix(mix(x00, x10, fragUV.x), mix(x01, x11, fragUV.x), fragUV.y);
-
-    if (ubo.debug_view == 10u) {
-        vec3 mismatch = vec3(0.0);
-        if (fragInstanceLight.z > -0.5) {
-            vec3 fromGrid = cornersFromOccupancy();
-            mismatch      = vec3(
-                abs(occlusion - fromGrid.x) * fromGrid.z, abs(exposure - fromGrid.y) * fromGrid.z,
-                fragInstanceLight.z > 0.5 ? 0.5 : 0.0
-            );
-        }
-        outColor = shown(mismatch);
-        return;
-    }
-
-    uint cornerSource = uint(ubo.occupancy_eye.w);
-    if (cornerSource != 0u && fragInstanceLight.z > -0.5) {
-        vec3 fromGrid = cornersFromOccupancy();
-        float kept    = cornerSource == 1u ? 1.0 - fromGrid.z : 0.0;
-
-        occlusion = (occlusion * kept) + (fromGrid.x * fromGrid.z);
-        exposure  = (exposure * kept) + (fromGrid.y * fromGrid.z);
-    }
+    float occlusion = corners.x * corners.z;
+    float exposure  = corners.y * corners.z;
 
     occlusion = pow(occlusion, ubo.corner_shading.ao_curve);
     exposure  = pow(exposure, ubo.corner_shading.convex_curve);
@@ -582,27 +546,12 @@ void main() {
         return;
     }
 
-    uint sm = fragLightMask & 0xFFFFu;
-    float s00 = float( sm        & 15u) * (1.0 / 15.0);
-    float s10 = float((sm >> 4)  & 15u) * (1.0 / 15.0);
-    float s11 = float((sm >> 8)  & 15u) * (1.0 / 15.0);
-    float s01 = float((sm >> 12) & 15u) * (1.0 / 15.0);
+    vec4 cacheLight = cachedLight(normal);
 
-    float skyRaw = mix(mix(s00, s10, fragUV.x), mix(s01, s11, fragUV.x), fragUV.y);
-    skyRaw *= 1.0 - fragInstanceLight.x;
+    float skyReach = pow(cacheLight.a, ubo.sky_params.x);
+    float sunReach = pow(cacheLight.a, ubo.sky_params.y);
 
-    float skyReach = pow(skyRaw, ubo.sky_params.x);
-    float sunReach = pow(skyRaw, ubo.sky_params.y);
-
-    bool cached     = ubo.light_wrap[0].w > 0.5;
-    vec4 cacheLight = cached ? cachedLight(normal) : vec4(0.0);
-    if (cached) {
-        skyRaw   = cacheLight.a;
-        skyReach = pow(skyRaw, ubo.sky_params.x);
-        sunReach = pow(skyRaw, ubo.sky_params.y);
-    }
-
-    if (ubo.debug_view == 11u) {
+    if (ubo.debug_view == 10u) {
         outColor = shown(vec3(sunReach));
         return;
     }
@@ -612,15 +561,7 @@ void main() {
         return;
     }
 
-    uint bm = fragLightMask >> 16;
-    float l00 = float( bm        & 15u) * (1.0 / 15.0);
-    float l10 = float((bm >> 4)  & 15u) * (1.0 / 15.0);
-    float l11 = float((bm >> 8)  & 15u) * (1.0 / 15.0);
-    float l01 = float((bm >> 12) & 15u) * (1.0 / 15.0);
-
-    float lampRaw   = mix(mix(l00, l10, fragUV.x), mix(l01, l11, fragUV.x), fragUV.y);
-    lampRaw = cached ? cacheLight.g : max(lampRaw, fragInstanceLight.y);
-    float lampReach = pow(lampRaw, ubo.lamp_params.w);
+    float lampReach = pow(cacheLight.g, ubo.lamp_params.w);
 
     if (ubo.debug_view == 5u) {
         outColor = shown(vec3(lampReach));

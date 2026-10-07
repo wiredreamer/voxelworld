@@ -44,9 +44,6 @@ layout(location = 1) out vec3 fragNormal;
 layout(location = 2) out vec3 fragColor;
 layout(location = 2, component = 3) out float fragGlow;
 layout(location = 3) out float viewDepth;
-layout(location = 4) centroid out vec2 fragUV;
-layout(location = 5) flat out uint fragCornersMask;
-layout(location = 6) flat out uint fragLightMask;
 layout(location = 7) flat out uint fragConvexMask;
 layout(location = 8) flat out vec4 fragInstanceLight;
 layout(location = 9) centroid out vec3 fragGridPos;
@@ -59,6 +56,8 @@ const vec3 NORMALS[6] = vec3[6](
     vec3( 0,  0,  1),
     vec3( 0,  0, -1)
 );
+
+const uint FACE_SHIFT = 9u;
 
 const uint TANGENT_U_AXIS[6] = uint[6](2u, 2u, 0u, 0u, 0u, 0u);
 const uint TANGENT_V_AXIS[6] = uint[6](1u, 1u, 2u, 2u, 1u, 1u);
@@ -91,7 +90,8 @@ void main() {
     float spread = distance(base.xz, grass.eye.xz);
     float fade   = 1.0 - smoothstep(grass.eye.w, grass.shape.x, spread);
 
-    vec3 local = vec3(mix(mn, mx, bvec3(FACE_VERTS[normal_id][corner_id])));
+    vec3 local  = vec3(mix(mn, mx, bvec3(FACE_VERTS[normal_id][corner_id])));
+    fragGridPos = local;
     local.xz -= vec2(grass.shape.y);
     float rise = clamp(local.y / grass.shape.z, 0.0, 1.0);
     local *= inst.light.w * fade;
@@ -112,18 +112,13 @@ void main() {
 
     vec3 n = NORMALS[normal_id];
     fragNormal = vec3(c * n.x + s * n.z, n.y, -s * n.x + c * n.z);
-    fragInstanceLight = vec4(inst.light.xy, -1.0, 0.0);
-    fragGridPos       = vec3(0.0);
+    fragInstanceLight = vec4(0.0, 0.0, inst.light.xy);
 
     uint palette_idx = (q.data1 >> 14) & 0xFFu;
     fragColor = palette[palette_idx].color;
     fragGlow  = palette[palette_idx].glow;
 
-    vec2 corner_uvs[4] = vec2[4](vec2(0.0, 0.0), vec2(1.0, 0.0), vec2(1.0, 1.0), vec2(0.0, 1.0));
-    fragUV = corner_uvs[corner_id];
-    fragCornersMask = (q.data0 >> 24) & 0xFFu;
-    fragLightMask = q.data2;
-    fragConvexMask = (q.data1 >> 24) & 0xFFu;
+    fragConvexMask = normal_id << FACE_SHIFT;
 
     viewDepth = -(ubo.view * worldPos).z;
     gl_Position = ubo.proj * ubo.view * worldPos;

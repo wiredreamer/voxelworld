@@ -103,6 +103,29 @@ auto model_occupancy_buffer::acquire(const asset::model& voxels) -> instance_cor
     return corners_of_(held);
 }
 
+auto model_occupancy_buffer::keep_copy(const asset::model& voxels) -> instance_corners {
+    const vec3i size = voxels.size();
+    if (size.x > longest_side || size.y > longest_side || size.z > longest_side) {
+        ++stats_.refused;
+        return instance_corners::baked();
+    }
+
+    const uint32 words = words_for_(size);
+    const auto offset  = take_range_(words);
+    if (!offset) {
+        ++stats_.refused;
+        return instance_corners::baked();
+    }
+
+    const volume held{.offset = *offset, .words = words, .size = size, .holders = 1};
+    write_(voxels, held);
+
+    ++stats_.volumes;
+    stats_.words_used += words;
+
+    return corners_of_(held);
+}
+
 auto model_occupancy_buffer::refresh(const asset::model& voxels) -> instance_corners {
     const auto found = volumes_.find(voxels.get_identity().index);
     if (found == volumes_.end()) {
