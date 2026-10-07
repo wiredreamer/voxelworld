@@ -210,6 +210,7 @@ private:
     auto render_post_() -> void;
     auto cover_swapchain_() -> void;
     [[nodiscard]] auto tonemap_push_() const -> vec4f;
+    [[nodiscard]] auto grid_push_() const -> vec4f;
     auto render_world(world_type& world, const camera& camera) -> void;
 
     auto sync_meshes_(world_type& world) -> void;
@@ -365,6 +366,7 @@ private:
     std::unique_ptr<palette_buffer> palette_buffer_;
     std::unique_ptr<grass_renderer> grass_;
     std::unique_ptr<post_process> post_process_;
+    std::unique_ptr<model_occupancy_buffer> model_volumes_;
     std::unique_ptr<occupancy_clipmap> occupancy_;
     std::unique_ptr<occupancy_view> occupancy_view_;
 

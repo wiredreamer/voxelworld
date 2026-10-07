@@ -14,6 +14,7 @@ import vw.world;
 import :gpu_buffers;
 import :meshing;
 import :mesh_pool;
+import :resource.model_occupancy;
 import vulkan;
 
 namespace vw::gfx {
@@ -82,6 +83,11 @@ struct std::hash<vw::gfx::instance_key> {
 
 export namespace vw::gfx {
 
+struct instance_shading {
+    world_light light{};
+    instance_corners corners{};
+};
+
 struct instance_allocation {
     uint32 instance_index;
     mesh_key key;
@@ -134,13 +140,14 @@ public:
 
     auto allocate(
         instance_key instance, vw::asset::model_identity model_id, const mesh& mesh_data,
-        const mat4f& transform_matrix, const vw::spatial::aabb& bounds
+        const mat4f& transform_matrix, const vw::spatial::aabb& bounds,
+        const instance_corners& corners
     ) -> void;
     auto allocate_mesh(vw::asset::model_identity model_id, const mesh& mesh_data) -> void;
     auto write_mesh(vw::asset::model_identity model_id, const mesh& mesh_data) -> void;
     auto write_transform(
         instance_key instance, const mat4f& transform_matrix, const vw::spatial::aabb& bounds,
-        const world_light& light = {}
+        const instance_shading& shading = {}
     ) -> void;
     auto write_light(instance_key instance, const world_light& light) -> void;
     auto free(instance_key instance) -> std::optional<instance_key>;

@@ -58,6 +58,11 @@ renderer::renderer(
     create_descriptor_set_layouts();
     create_point_lights_descriptor_set_layout();
     create_palette_descriptor_set_layout();
+    create_descriptor_pool();
+    model_volumes_ = std::make_unique<model_occupancy_buffer>(*context_);
+    occupancy_     = std::make_unique<occupancy_clipmap>(
+        *context_, descriptor_pool_, *model_volumes_
+    );
     create_graphics_pipeline();
     create_wireframe_pipeline();
     create_shadow_pipeline();
@@ -67,7 +72,6 @@ renderer::renderer(
     create_sync_objects();
     create_uniform_buffers();
     create_shadow_uniform_buffers();
-    create_descriptor_pool();
     create_descriptor_sets();
     create_shadow_descriptor_sets();
     create_shadow_map_descriptor_sets();
@@ -84,7 +88,8 @@ renderer::renderer(
         deletion_queue_,
         descriptor_pool_,
         storage_descriptor_set_layout_,
-        cull_pipeline_->get_buffer_descriptor_set_layout()
+        cull_pipeline_->get_buffer_descriptor_set_layout(),
+        *model_volumes_
     );
 
     light_buffer_ = std::make_unique<light_buffer_type>(
@@ -113,7 +118,8 @@ renderer::renderer(
             .uniform = uniform_descriptor_set_layout_,
             .shadow  = shadow_descriptor_set_layout_,
             .lights  = point_lights_descriptor_set_layout_,
-            .palette = palette_descriptor_set_layout_,
+            .palette   = palette_descriptor_set_layout_,
+            .occupancy = occupancy_->get_descriptor_set_layout(),
         },
         fragment_shader_->get_stage_info()
     );
@@ -121,7 +127,6 @@ renderer::renderer(
     post_process_ = std::make_unique<post_process>(*context_, descriptor_pool_, composite_pass_);
     post_process_->resize(swapchain_extent_, scene_image_view_);
 
-    occupancy_      = std::make_unique<occupancy_clipmap>(*context_, descriptor_pool_);
     occupancy_view_ = std::make_unique<occupancy_view>(
         *context_, render_pass_, msaa_samples_, occupancy_->get_descriptor_set_layout()
     );
@@ -133,6 +138,7 @@ renderer::~renderer() {
 
     occupancy_view_.reset();
     occupancy_.reset();
+    model_volumes_.reset();
     post_process_.reset();
     grass_.reset();
     combined_buffer_pool_.reset();
@@ -306,6 +312,21 @@ auto renderer::get_tonemap_settings() -> tonemap_settings& {
 
 auto renderer::get_bloom_settings() -> bloom_settings& {
     return bloom_settings_;
+}
+
+auto renderer::grid_push_() const -> vec4f {
+    constexpr auto chunk_voxels =
+        static_cast<float32>(spatial::occupancy_clipmap_layout::chunk_voxels);
+
+    const float32 units = occupancy_->world_units_per_voxel();
+    const vec3i base    = occupancy_->centre_chunk();
+
+    return {
+        static_cast<float32>(base.x) * chunk_voxels * units,
+        static_cast<float32>(base.y) * chunk_voxels * units,
+        static_cast<float32>(base.z) * chunk_voxels * units,
+        1.0f / units,
+    };
 }
 
 auto renderer::tonemap_push_() const -> vec4f {
@@ -503,11 +524,14 @@ auto renderer::render(
 
     stats_.timing.mesh_sync_ms = measure_ms([&] { sync_meshes_(world); });
 
+    model_volumes_->next_frame();
+
     stats_.timing.occupancy_update_ms = measure_ms([&] {
         occupancy_->update(world, camera.get_position(), current_frame_);
         occupancy_->record_uploads(cmd, current_frame_);
     });
-    stats_.occupancy = occupancy_->get_stats();
+    stats_.occupancy     = occupancy_->get_stats();
+    stats_.model_volumes = model_volumes_->get_stats();
 
     stats_.timing.buffer_pool_update_ms = measure_ms([&] {
         gpu_timer_->begin(cmd, gpu_stage::buffer_upload);
@@ -1239,12 +1263,13 @@ auto renderer::create_graphics_pipeline() -> void {
     depth_stencil.depthBoundsTestEnable = vk::False;
     depth_stencil.stencilTestEnable     = vk::False;
 
-    std::array<vk::DescriptorSetLayout, 5> descriptor_set_layouts = {
+    std::array<vk::DescriptorSetLayout, 6> descriptor_set_layouts = {
         uniform_descriptor_set_layout_,
         storage_descriptor_set_layout_,
         shadow_descriptor_set_layout_,
         point_lights_descriptor_set_layout_,
-        palette_descriptor_set_layout_
+        palette_descriptor_set_layout_,
+        occupancy_->get_descriptor_set_layout()
     };
 
     vk::PipelineLayoutCreateInfo pipeline_layout_info{};
@@ -1968,7 +1993,7 @@ auto renderer::render_world(
         (current_render_mode_ == render_mode::lit) ? graphics_pipeline_ : wireframe_pipeline_;
     command_buffers_[current_frame_].bindPipeline(vk::PipelineBindPoint::eGraphics, current_pipeline);
 
-    const world_push_constant_data world_push{.wind = wind_push_()};
+    const world_push_constant_data world_push{.wind = wind_push_(), .grid = grid_push_()};
     command_buffers_[current_frame_].pushConstants<world_push_constant_data>(
         pipeline_layout_, vk::ShaderStageFlagBits::eVertex, 0, world_push
     );
@@ -2007,6 +2032,11 @@ auto renderer::render_world(
         &palette_ds,
         0,
         nullptr);
+
+    const vk::DescriptorSet occupancy_ds = occupancy_->get_descriptor_set(current_frame_);
+    command_buffers_[current_frame_].bindDescriptorSets(
+        vk::PipelineBindPoint::eGraphics, pipeline_layout_, 5, occupancy_ds, nullptr
+    );
 
     const auto& buffers = combined_buffer_pool_->get_buffers();
     for (const auto& buffer : buffers) {
@@ -2050,7 +2080,8 @@ auto renderer::render_world(
                 .uniform = descriptor_sets_[current_frame_],
                 .shadow  = shadow_map_descriptor_sets_[current_frame_],
                 .lights  = point_lights_descriptor_set,
-                .palette = palette_ds,
+                .palette   = palette_ds,
+                .occupancy = occupancy_ds,
             }
         );
         draw_call_count_ += grass_->get_stats().draws;
@@ -2150,6 +2181,17 @@ auto renderer::update_uniform_buffer(
     };
 
     ubo.fog.color         = scene_from_display(fog_settings_.color, tonemap_settings_);
+
+    const vec4f voxel_grid = grid_push_();
+    const vec3f eye        = camera.get_position();
+    const vec3i base_chunk = occupancy_->centre_chunk();
+
+    ubo.occupancy_eye = vec4f{
+        (eye.x - voxel_grid.x) * voxel_grid.w, (eye.y - voxel_grid.y) * voxel_grid.w,
+        (eye.z - voxel_grid.z) * voxel_grid.w,
+        static_cast<float32>(ambient_settings_.corners),
+    };
+    ubo.occupancy_base = vec4<int32>{base_chunk.x, base_chunk.y, base_chunk.z, 0};
     ubo.fog.near_distance = fog_settings_.near_distance;
     ubo.fog.far_distance  = fog_settings_.far_distance;
     ubo.fog.enabled       = fog_settings_.enabled ? 1u : 0u;

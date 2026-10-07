@@ -12,15 +12,18 @@ struct occupancy_clipmap_layout {
     static constexpr int32 level_count        = 3;
     static constexpr int32 chunk_voxels       = 64;
     static constexpr int32 chunk_shift        = 6;
-    static constexpr int32 base_window_chunks = 4;
-    static constexpr int32 texture_side       = 128;
+    static constexpr std::array<int32, level_count> window_chunks_at{8, 16, 16};
 
     [[nodiscard]] static constexpr auto window_chunks(int32 level) -> int32 {
-        return base_window_chunks << level;
+        return window_chunks_at[static_cast<std::size_t>(level)];
     }
 
     [[nodiscard]] static constexpr auto bricks_per_chunk(int32 level) -> int32 {
         return (chunk_voxels / 2) >> level;
+    }
+
+    [[nodiscard]] static constexpr auto texture_side(int32 level) -> int32 {
+        return window_chunks(level) * bricks_per_chunk(level);
     }
 
     [[nodiscard]] static constexpr auto cell_voxels(int32 level) -> int32 {
@@ -40,7 +43,7 @@ struct occupancy_clipmap_layout {
         return bit;
     }
 
-    static constexpr int32 valid_bit_count  = 64 + 512 + 4096;
+    static constexpr int32 valid_bit_count  = 512 + 4096 + 4096;
     static constexpr int32 valid_word_count = valid_bit_count / 32;
 };
 
@@ -48,9 +51,12 @@ static_assert(
     occupancy_clipmap_layout::first_valid_bit(occupancy_clipmap_layout::level_count) ==
     occupancy_clipmap_layout::valid_bit_count
 );
+static_assert(std::has_single_bit(static_cast<uint32>(occupancy_clipmap_layout::texture_side(0))));
+static_assert(std::has_single_bit(static_cast<uint32>(occupancy_clipmap_layout::texture_side(1))));
+static_assert(std::has_single_bit(static_cast<uint32>(occupancy_clipmap_layout::texture_side(2))));
 static_assert(
-    occupancy_clipmap_layout::window_chunks(2) * occupancy_clipmap_layout::bricks_per_chunk(2) ==
-    occupancy_clipmap_layout::texture_side
+    occupancy_clipmap_layout::window_chunks(0) <= occupancy_clipmap_layout::window_chunks(1) &&
+    occupancy_clipmap_layout::window_chunks(1) <= occupancy_clipmap_layout::window_chunks(2)
 );
 
 [[nodiscard]] constexpr auto occupancy_chunk_of(vec3i voxel) -> vec3i {
@@ -92,15 +98,6 @@ static_assert(
     return static_cast<uint32>((cell.x & 1) | ((cell.y & 1) << 1) | ((cell.z & 1) << 2));
 }
 
-struct occupancy_sample {
-    int32 level = -1;
-    uint8 brick = 0;
-
-    [[nodiscard]] constexpr auto is_known() const -> bool {
-        return level >= 0;
-    }
-};
-
 struct occupancy_hit {
     vec3i voxel{};
     int32 level      = 0;
@@ -112,10 +109,10 @@ struct occupancy_hit {
 inline constexpr uint32 occupancy_march_step_limit = 192;
 inline constexpr float32 occupancy_march_nudge     = 1.0e-3F;
 
-template <typename Sample>
+template <typename BrickAt>
 [[nodiscard]] auto march_occupancy(
     vec3i base_chunk, const vec3f& origin, const vec3f& direction, float32 max_distance,
-    Sample&& sample_at
+    BrickAt&& brick_at
 ) -> std::optional<occupancy_hit> {
     constexpr float32 never = 1.0e30F;
 
@@ -141,25 +138,42 @@ template <typename Sample>
         };
         const vec3i voxel{base_voxel.x + local.x, base_voxel.y + local.y, base_voxel.z + local.z};
 
-        const occupancy_sample found = sample_at(voxel);
+        int32 finest = -1;
+        for (int32 level = 0; level < occupancy_clipmap_layout::level_count; ++level) {
+            if (brick_at(voxel, level).has_value()) {
+                finest = level;
+                break;
+            }
+        }
 
         float32 box = static_cast<float32>(occupancy_clipmap_layout::chunk_voxels);
-        if (found.is_known()) {
-            const vec3i cell{
-                voxel.x >> found.level, voxel.y >> found.level, voxel.z >> found.level
-            };
-            if (found.brick == 0) {
-                box = static_cast<float32>(2 << found.level);
-            } else if (((found.brick >> occupancy_brick_bit(cell)) & 1U) != 0) {
-                return occupancy_hit{
-                    .voxel      = voxel,
-                    .level      = found.level,
-                    .entry_axis = entry_axis,
-                    .distance   = travelled,
-                    .steps      = step,
-                };
-            } else {
-                box = static_cast<float32>(1 << found.level);
+        if (finest >= 0) {
+            bool crossed = false;
+            for (int32 level = occupancy_clipmap_layout::level_count - 1; level > finest; --level) {
+                const std::optional<uint8> coarse = brick_at(voxel, level);
+                if (coarse.has_value() && *coarse == 0) {
+                    box     = static_cast<float32>(2 << level);
+                    crossed = true;
+                    break;
+                }
+            }
+
+            if (!crossed) {
+                const uint8 brick = *brick_at(voxel, finest);
+                const vec3i cell{voxel.x >> finest, voxel.y >> finest, voxel.z >> finest};
+                if (brick == 0) {
+                    box = static_cast<float32>(2 << finest);
+                } else if (((brick >> occupancy_brick_bit(cell)) & 1U) != 0) {
+                    return occupancy_hit{
+                        .voxel      = voxel,
+                        .level      = finest,
+                        .entry_axis = entry_axis,
+                        .distance   = travelled,
+                        .steps      = step,
+                    };
+                } else {
+                    box = static_cast<float32>(1 << finest);
+                }
             }
         }
 

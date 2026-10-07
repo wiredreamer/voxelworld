@@ -34,6 +34,7 @@ struct renderer_stats {
     combined_buffer_pool_stats combined_buffers;
     uint32 draw_call_count = 0;
     occupancy_stats occupancy;
+    model_occupancy_stats model_volumes;
     render_timing_stats timing;
 };
 }  // namespace vw::gfx

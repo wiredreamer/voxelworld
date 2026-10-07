@@ -9,6 +9,7 @@ export import :resource.light_grid;
 export import :resource.combined_buffer;
 export import :resource.combined_buffer_pool;
 export import :resource.image;
+export import :resource.model_occupancy;
 export import :resource.occupancy_clipmap;
 
 import std;

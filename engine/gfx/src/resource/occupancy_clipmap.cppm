@@ -12,18 +12,19 @@ import vw.asset;
 import vw.ecs;
 import vw.world;
 import :gpu_buffers;
+import :resource.model_occupancy;
 import vulkan;
 
 export namespace vw::gfx {
 
 struct occupancy_params {
     alignas(16) std::array<vec4<int32>, spatial::occupancy_clipmap_layout::level_count> origin;
-    alignas(16) std::array<vec4<uint32>, 37> valid;
+    alignas(16) std::array<vec4<uint32>, 68> valid;
 };
 
 static_assert(offsetof(occupancy_params, valid) == 48);
-static_assert(sizeof(occupancy_params) == 640);
-static_assert(spatial::occupancy_clipmap_layout::valid_word_count <= 37 * 4);
+static_assert(sizeof(occupancy_params) == 1136);
+static_assert(spatial::occupancy_clipmap_layout::valid_word_count <= 68 * 4);
 
 struct occupancy_stats {
     uint32 valid_slots    = 0;
@@ -41,7 +42,10 @@ class occupancy_clipmap {
 public:
     using layout = spatial::occupancy_clipmap_layout;
 
-    occupancy_clipmap(vulkan_context& context, vk::DescriptorPool descriptor_pool);
+    occupancy_clipmap(
+        vulkan_context& context, vk::DescriptorPool descriptor_pool,
+        const model_occupancy_buffer& model_volumes
+    );
     ~occupancy_clipmap();
 
     occupancy_clipmap(const occupancy_clipmap&)                    = delete;
@@ -73,7 +77,7 @@ public:
     }
 
 private:
-    static constexpr vk::DeviceSize staging_bytes = vk::DeviceSize{1} << 20;
+    static constexpr vk::DeviceSize staging_bytes = vk::DeviceSize{2} << 20;
     static constexpr float32 pack_budget_ms       = 0.4F;
 
     struct slot {
@@ -100,11 +104,12 @@ private:
         std::unique_ptr<buffer> staging;
         uint8* mapped = nullptr;
         std::unique_ptr<uniform_buffer> params;
+        bool params_written = false;
         std::array<std::vector<vk::BufferImageCopy>, layout::level_count> copies;
     };
 
     auto create_images_() -> void;
-    auto create_sets_() -> void;
+    auto create_sets_(const model_occupancy_buffer& model_volumes) -> void;
 
     auto forget_everything_() -> void;
     auto move_window_(int32 level, vec3i origin) -> void;
@@ -135,6 +140,10 @@ private:
     std::vector<vec3i> touched_;
     std::size_t touched_head_ = 0;
     vk::DeviceSize staged_    = 0;
+
+    occupancy_params params_{};
+    uint32 frames_behind_ = frames_in_flight;
+    auto mark_(const level_state& state, int32 level, std::size_t index, bool known) -> void;
 
     std::unique_ptr<asset::chunk_occupancy> scratch_;
     occupancy_stats stats_;

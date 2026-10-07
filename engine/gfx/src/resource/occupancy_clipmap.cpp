@@ -44,7 +44,10 @@ constexpr vk::PipelineStageFlags reading_stages =
 
 }  // namespace
 
-occupancy_clipmap::occupancy_clipmap(vulkan_context& context, vk::DescriptorPool descriptor_pool)
+occupancy_clipmap::occupancy_clipmap(
+    vulkan_context& context, vk::DescriptorPool descriptor_pool,
+    const model_occupancy_buffer& model_volumes
+)
     : context_{&context}
     , descriptor_pool_{descriptor_pool}
     , scratch_{std::make_unique<asset::chunk_occupancy>()} {
@@ -65,7 +68,7 @@ occupancy_clipmap::occupancy_clipmap(vulkan_context& context, vk::DescriptorPool
     }
 
     create_images_();
-    create_sets_();
+    create_sets_(model_volumes);
 }
 
 occupancy_clipmap::~occupancy_clipmap() {
@@ -89,13 +92,14 @@ occupancy_clipmap::~occupancy_clipmap() {
 auto occupancy_clipmap::create_images_() -> void {
     const vk::Device device = context_->get_device();
 
-    for (auto& level : levels_) {
+    for (std::size_t index = 0; index < levels_.size(); ++index) {
+        auto& level = levels_[index];
+
+        const auto side = static_cast<uint32>(layout::texture_side(static_cast<int32>(index)));
+
         vk::ImageCreateInfo image_info{};
         image_info.imageType = vk::ImageType::e3D;
-        image_info.extent    = vk::Extent3D{
-            static_cast<uint32>(layout::texture_side), static_cast<uint32>(layout::texture_side),
-            static_cast<uint32>(layout::texture_side)
-        };
+        image_info.extent    = vk::Extent3D{side, side, side};
         image_info.mipLevels     = 1;
         image_info.arrayLayers   = 1;
         image_info.format        = brick_format;
@@ -141,13 +145,17 @@ auto occupancy_clipmap::create_images_() -> void {
     sampler_ = vk_must(device.createSampler(sampler_info), "create occupancy sampler");
 }
 
-auto occupancy_clipmap::create_sets_() -> void {
+auto occupancy_clipmap::create_sets_(const model_occupancy_buffer& model_volumes) -> void {
     const vk::Device device = context_->get_device();
 
     constexpr vk::ShaderStageFlags readers =
         vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eCompute;
 
-    std::array<vk::DescriptorSetLayoutBinding, 2> bindings{};
+    std::array<vk::DescriptorSetLayoutBinding, 3> bindings{};
+    bindings[2].binding         = 2;
+    bindings[2].descriptorType  = vk::DescriptorType::eStorageBuffer;
+    bindings[2].descriptorCount = 1;
+    bindings[2].stageFlags      = readers;
     bindings[0].binding         = 0;
     bindings[0].descriptorType  = vk::DescriptorType::eUniformBuffer;
     bindings[0].descriptorCount = 1;
@@ -192,7 +200,17 @@ auto occupancy_clipmap::create_sets_() -> void {
         params_info.offset = 0;
         params_info.range  = sizeof(occupancy_params);
 
-        std::array<vk::WriteDescriptorSet, 2> writes{};
+        vk::DescriptorBufferInfo volumes_info{};
+        volumes_info.buffer = model_volumes.get_buffer();
+        volumes_info.offset = 0;
+        volumes_info.range  = model_occupancy_buffer::byte_size();
+
+        std::array<vk::WriteDescriptorSet, 3> writes{};
+        writes[2].dstSet          = sets_[frame];
+        writes[2].dstBinding      = 2;
+        writes[2].descriptorType  = vk::DescriptorType::eStorageBuffer;
+        writes[2].descriptorCount = 1;
+        writes[2].pBufferInfo     = &volumes_info;
         writes[0].dstSet          = sets_[frame];
         writes[0].dstBinding      = 0;
         writes[0].descriptorType  = vk::DescriptorType::eUniformBuffer;
@@ -208,7 +226,31 @@ auto occupancy_clipmap::create_sets_() -> void {
     }
 }
 
+auto occupancy_clipmap::mark_(
+    const level_state& state, int32 level, std::size_t index, bool known
+) -> void {
+    const slot& held = state.slots[index];
+    if (held.valid == known) {
+        return;
+    }
+
+    const auto bit  = static_cast<std::size_t>(layout::first_valid_bit(level)) + index;
+    const uint32 at = 1U << (bit & 31);
+    if (known) {
+        params_.valid[bit >> 7][(bit >> 5) & 3] |= at;
+        ++stats_.valid_slots;
+    } else {
+        params_.valid[bit >> 7][(bit >> 5) & 3] &= ~at;
+        --stats_.valid_slots;
+    }
+    frames_behind_ = frames_in_flight;
+}
+
 auto occupancy_clipmap::forget_everything_() -> void {
+    params_            = occupancy_params{};
+    stats_.valid_slots = 0;
+    frames_behind_     = frames_in_flight;
+
     for (auto& level : levels_) {
         for (auto& held : level.slots) {
             held = slot{};
@@ -233,6 +275,9 @@ auto occupancy_clipmap::move_window_(int32 level, vec3i origin) -> void {
     auto& state  = levels_[static_cast<std::size_t>(level)];
     state.origin = origin;
 
+    params_.origin[static_cast<std::size_t>(level)] = vec4<int32>{origin.x, origin.y, origin.z, 0};
+    frames_behind_ = frames_in_flight;
+
     const int32 side = layout::window_chunks(level);
     for (int32 z = 0; z < side; ++z) {
         for (int32 y = 0; y < side; ++y) {
@@ -245,6 +290,8 @@ auto occupancy_clipmap::move_window_(int32 level, vec3i origin) -> void {
                 if (held.assigned && held.chunk == chunk) {
                     continue;
                 }
+
+                mark_(state, level, static_cast<std::size_t>(index), false);
 
                 held.chunk    = chunk;
                 held.assigned = true;
@@ -376,6 +423,13 @@ auto occupancy_clipmap::stage_(
     frame.copies[static_cast<std::size_t>(level)].push_back(region);
 
     staged_ += bytes;
+    mark_(
+        levels_[static_cast<std::size_t>(level)], level,
+        static_cast<std::size_t>(
+            spatial::occupancy_slot_index(spatial::occupancy_slot_of(held.chunk, level), level)
+        ),
+        true
+    );
     held.valid = true;
     ++stats_.packed_frame;
 }
@@ -463,30 +517,15 @@ auto occupancy_clipmap::pack_queued_(const ecs::world_grid& grid, frame_state& f
 }
 
 auto occupancy_clipmap::write_params_(frame_state& frame) -> void {
-    occupancy_params params{};
-
-    uint32 valid_slots = 0;
-    for (int32 level = 0; level < layout::level_count; ++level) {
-        const auto& state = levels_[static_cast<std::size_t>(level)];
-
-        params.origin[static_cast<std::size_t>(level)] =
-            vec4<int32>{state.origin.x, state.origin.y, state.origin.z, 0};
-
-        const int32 first_bit = layout::first_valid_bit(level);
-        for (std::size_t index = 0; index < state.slots.size(); ++index) {
-            const auto& held = state.slots[index];
-            if (!held.valid) {
-                continue;
-            }
-
-            const auto bit = static_cast<std::size_t>(first_bit) + index;
-            params.valid[bit >> 7][(bit >> 5) & 3] |= 1U << (bit & 31);
-            ++valid_slots;
-        }
+    if (frames_behind_ == 0 && frame.params_written) {
+        return;
+    }
+    if (frames_behind_ > 0) {
+        --frames_behind_;
     }
 
-    stats_.valid_slots = valid_slots;
-    frame.params->copy_from_struct(params);
+    frame.params->copy_from_struct(params_);
+    frame.params_written = true;
 }
 
 auto occupancy_clipmap::record_uploads(vk::CommandBuffer cmd, uint32 frame) -> void {

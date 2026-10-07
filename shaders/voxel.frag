@@ -9,7 +9,8 @@ layout(location = 4) centroid in vec2 fragUV;
 layout(location = 5) flat in uint fragCornersMask;
 layout(location = 6) flat in uint fragLightMask;
 layout(location = 7) flat in uint fragConvexMask;
-layout(location = 8) flat in vec2 fragInstanceLight;
+layout(location = 8) flat in vec4 fragInstanceLight;
+layout(location = 9) centroid in vec3 fragGridPos;
 
 #define SHADOW_ENABLED 0
 
@@ -101,7 +102,106 @@ layout(set = 0, binding = 0) uniform UniformBufferObject {
     ClusterData clusters;
 
     uvec4 blob_dims;
+
+    vec4 occupancy_eye;
+
+    ivec4 occupancy_base;
 } ubo;
+
+#define OCCUPANCY_SET 5
+#include "occupancy.glsl"
+
+const uint FLAT_ONLY     = 1u << 8u;
+const uint FACE_SHIFT    = 9u;
+const float CORNER_REACH = 224.0;
+const float CORNER_FADE  = 16.0;
+
+float cornerLevel(uint a, uint b, uint diagonal) {
+    return (a + b == 2u) ? 3.0 : float(a + b + diagonal);
+}
+
+float cornersAcross(uint around, vec2 at) {
+    uint minusU = (around >> 3u) & 1u;
+    uint plusU  = (around >> 5u) & 1u;
+    uint minusV = (around >> 1u) & 1u;
+    uint plusV  = (around >> 7u) & 1u;
+
+    float c00 = cornerLevel(minusU, minusV, around & 1u);
+    float c10 = cornerLevel(plusU, minusV, (around >> 2u) & 1u);
+    float c11 = cornerLevel(plusU, plusV, (around >> 8u) & 1u);
+    float c01 = cornerLevel(minusU, plusV, (around >> 6u) & 1u);
+
+    return mix(mix(c00, c10, at.x), mix(c01, c11, at.x), at.y) * (1.0 / 3.0);
+}
+
+vec3 cornersFromOccupancy() {
+    uint face = (fragConvexMask >> FACE_SHIFT) & 7u;
+
+    int axis = int(face >> 1u);
+    int u    = (axis + 1) % 3;
+    int v    = (axis + 2) % 3;
+
+    ivec3 outward = ivec3(0);
+    outward[axis] = (face & 1u) == 0u ? 1 : -1;
+
+    bool wantsExposure = face == 2u && (fragConvexMask & FLAT_ONLY) == 0u;
+
+    vec2 at = vec2(fract(fragGridPos[u]), fract(fragGridPos[v]));
+
+    if (fragInstanceLight.z > 0.5) {
+        ModelVolume volume = modelVolumeOf(fragInstanceLight.zw);
+
+        ivec3 alongU = ivec3(0);
+        alongU[u]    = 1;
+        ivec3 alongV = ivec3(0);
+        alongV[v]    = 1;
+
+        ivec3 within = ivec3(floor(fragGridPos - (0.5 * vec3(outward))));
+
+        float shaded = cornersAcross(modelPatch(volume, within + outward, alongU, alongV, 0u), at);
+        float raised = 0.0;
+        if (wantsExposure) {
+            raised = cornersAcross(~modelPatch(volume, within, alongU, alongV, 1u) & 0x1FFu, at);
+        }
+        return vec3(shaded, raised, 1.0);
+    }
+
+    vec3 fromEye = abs(fragGridPos - ubo.occupancy_eye.xyz);
+    float reach  = max(fromEye.x, max(fromEye.y, fromEye.z));
+    float weight = 1.0 - smoothstep(CORNER_REACH - CORNER_FADE, CORNER_REACH, reach);
+    if (weight <= 0.0) {
+        return vec3(0.0);
+    }
+
+    ivec3 host = (ubo.occupancy_base.xyz << OCCUPANCY_CHUNK_SHIFT) +
+                 ivec3(floor(fragGridPos - (0.5 * vec3(outward))));
+    if (!occupancyKnows(host >> OCCUPANCY_CHUNK_SHIFT, 0)) {
+        return vec3(0.0);
+    }
+
+    ivec3 front = host + outward;
+
+    OccupancyBricks ahead = occupancyBricksAround(front, u, v);
+
+    float occlusion = 0.0;
+    if (ahead.packed != 0u) {
+        occlusion = cornersAcross(occupancyPatch(ahead, front[axis], axis, u, v), at);
+    }
+
+    float exposure = 0.0;
+    if (wantsExposure) {
+        OccupancyBricks under = ahead;
+        if ((host.y >> 1) != (front.y >> 1)) {
+            under = occupancyBricksAround(host, u, v);
+        }
+        if (under.packed != 0xFFFFFFFFu) {
+            uint open = ~occupancyPatch(under, host.y, axis, u, v) & 0x1FFu;
+            exposure  = cornersAcross(open, at);
+        }
+    }
+
+    return vec3(occlusion, exposure, weight);
+}
 
 #if SHADOW_ENABLED
 layout(set = 2, binding = 0) uniform sampler2DArrayShadow shadowMapArray;
@@ -384,7 +484,6 @@ void main() {
     float a01 = float((m >> 6)  & 3u) * (1.0 / 3.0);
 
     float occlusion = mix(mix(a00, a10, fragUV.x), mix(a01, a11, fragUV.x), fragUV.y);
-    occlusion = pow(occlusion, ubo.corner_shading.ao_curve);
 
     uint cm = fragConvexMask;
     float x00 = float( cm        & 3u) * (1.0 / 3.0);
@@ -393,7 +492,31 @@ void main() {
     float x01 = float((cm >> 6)  & 3u) * (1.0 / 3.0);
 
     float exposure = mix(mix(x00, x10, fragUV.x), mix(x01, x11, fragUV.x), fragUV.y);
-    exposure = pow(exposure, ubo.corner_shading.convex_curve);
+
+    if (ubo.debug_view == 10u) {
+        vec3 mismatch = vec3(0.0);
+        if (fragInstanceLight.z > -0.5) {
+            vec3 fromGrid = cornersFromOccupancy();
+            mismatch      = vec3(
+                abs(occlusion - fromGrid.x) * fromGrid.z, abs(exposure - fromGrid.y) * fromGrid.z,
+                fragInstanceLight.z > 0.5 ? 0.5 : 0.0
+            );
+        }
+        outColor = shown(mismatch);
+        return;
+    }
+
+    uint cornerSource = uint(ubo.occupancy_eye.w);
+    if (cornerSource != 0u && fragInstanceLight.z > -0.5) {
+        vec3 fromGrid = cornersFromOccupancy();
+        float kept    = cornerSource == 1u ? 1.0 - fromGrid.z : 0.0;
+
+        occlusion = (occlusion * kept) + (fromGrid.x * fromGrid.z);
+        exposure  = (exposure * kept) + (fromGrid.y * fromGrid.z);
+    }
+
+    occlusion = pow(occlusion, ubo.corner_shading.ao_curve);
+    exposure  = pow(exposure, ubo.corner_shading.convex_curve);
 
     if (ubo.debug_view == 4u) {
         outColor = shown(vec3(exposure));

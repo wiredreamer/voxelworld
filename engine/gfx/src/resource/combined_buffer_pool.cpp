@@ -47,14 +47,24 @@ combined_buffer_pool::combined_buffer_pool(
     deletion_queue& deletion,
     vk::DescriptorPool descriptor_pool,
     vk::DescriptorSetLayout descriptor_set_layout,
-    vk::DescriptorSetLayout compute_descriptor_set_layout
+    vk::DescriptorSetLayout compute_descriptor_set_layout,
+    model_occupancy_buffer& model_volumes
 )
     : context_(&context)
+    , model_volumes_(&model_volumes)
     , deletion_(&deletion)
     , staging_(context, 32 * 1024 * 1024)
     , descriptor_pool_(descriptor_pool)
     , descriptor_set_layout_(descriptor_set_layout)
     , compute_descriptor_set_layout_(compute_descriptor_set_layout) {}
+
+auto combined_buffer_pool::release_volume_(entity_buffer_info& info) -> void {
+    if (info.volume_model == asset::model_identity::invalid_index) {
+        return;
+    }
+    model_volumes_->release(info.volume_model);
+    info.volume_model = asset::model_identity::invalid_index;
+}
 
 auto combined_buffer_pool::track(
     world_type& world
@@ -122,6 +132,7 @@ auto combined_buffer_pool::process_destroyed_(world_type& world) -> void {
         hidden_entities_.erase(ent);
         if (auto* info = entity_buffer_infos_.get(ent)) {
             touched_bounds_.push_back(info->bounds);
+            release_volume_(*info);
             if (const auto swapped = buffers_[info->buffer_index]->free(key_of(ent))) {
                 rewrite_swapped_(world, info->buffer_index, entity_of(*swapped));
             }
@@ -262,6 +273,7 @@ auto combined_buffer_pool::update_meshes_(
             hidden_entities_.erase(ent);
 
             if (auto* buffer_info = entity_buffer_infos_.get(ent)) {
+                release_volume_(*buffer_info);
                 if (const auto swapped = buffers_[buffer_info->buffer_index]->free(key_of(ent))) {
                     rewrite_swapped_(world, buffer_info->buffer_index, entity_of(*swapped));
                 }
@@ -318,6 +330,16 @@ auto combined_buffer_pool::update_meshes_(
                         continue;
                     }
                     buffer->write_mesh(model_id, *mesh_ptr);
+                    if (buffer_info.volume_model != asset::model_identity::invalid_index) {
+                        const auto fresh = model_volumes_->refresh(*model_comp.get_model());
+                        if (fresh != buffer_info.corners) {
+                            buffer_info.corners = fresh;
+                            buffer->write_transform(
+                                key_of(ent), transform_matrix, ent_bounds,
+                                instance_shading{.light = buffer_info.light, .corners = fresh}
+                            );
+                        }
+                    }
                     uploaded_models_.emplace_back(model_id, step);
                     touched_bounds_.push_back(buffer_info.bounds);
                     touched_bounds_.push_back(ent_bounds);
@@ -333,6 +355,7 @@ auto combined_buffer_pool::update_meshes_(
             }
 
             touched_bounds_.push_back(buffer_info.bounds);
+            release_volume_(buffer_info);
 
             if (const auto swapped = buffer->free(key_of(ent))) {
                 rewrite_swapped_(world, buffer_info.buffer_index, entity_of(*swapped));
@@ -345,7 +368,14 @@ auto combined_buffer_pool::update_meshes_(
         auto* buffer            = get_or_create_buffer(required_chunk_size);
         const auto buffer_index = chunk_size_to_buffer_index_[required_chunk_size];
 
-        buffer->allocate(key_of(ent), model_id, *mesh_ptr, transform_matrix, ent_bounds);
+        const bool on_world_grid = model_comp.get_chunk() != nullptr;
+        const auto corners       = on_world_grid
+            ? instance_corners::on_world_grid()
+            : model_volumes_->acquire(*model_comp.get_model());
+
+        buffer->allocate(
+            key_of(ent), model_id, *mesh_ptr, transform_matrix, ent_bounds, corners
+        );
         uploaded_models_.emplace_back(model_id, step);
 
         entity_buffer_infos_.emplace(
@@ -354,7 +384,10 @@ auto combined_buffer_pool::update_meshes_(
                 .chunk_size   = required_chunk_size,
                 .buffer_index = buffer_index,
                 .bounds       = ent_bounds,
-                .lit_by_world = model_comp.get_chunk() == nullptr,
+                .lit_by_world = !on_world_grid,
+                .corners      = corners,
+                .volume_model = corners.has_volume() ? model_id.index
+                                                     : asset::model_identity::invalid_index,
             }
         );
         touched_bounds_.push_back(ent_bounds);
@@ -637,7 +670,7 @@ auto combined_buffer_pool::update_transforms_(
         }
         buffers_[info.buffer_index]->write_transform(
             key_of(ent), model_matrix(transform_comp, world.get<model_component>(ent)), tr_bounds,
-            info.light);
+            instance_shading{.light = info.light, .corners = info.corners});
         touched_bounds_.push_back(info.bounds);
         touched_bounds_.push_back(tr_bounds);
         info.bounds = tr_bounds;
@@ -660,15 +693,15 @@ auto combined_buffer_pool::rewrite_swapped_(
         bounds = world.get<spatial_component>(swapped).get_bounds();
     }
 
-    world_light light{};
+    instance_shading shading{};
     if (const auto* info = entity_buffer_infos_.get(swapped)) {
-        light = info->light;
+        shading = {.light = info->light, .corners = info->corners};
     }
 
     buffers_[buffer_index]->write_transform(
         key_of(swapped),
         model_matrix(world.get<transform_component>(swapped), world.get<model_component>(swapped)),
-        bounds, light
+        bounds, shading
     );
 }
 

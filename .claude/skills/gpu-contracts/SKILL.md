@@ -33,8 +33,8 @@ std430 нет диагностики на расхождение: ошибки �
   `tonemap_params`, `blob_dims`) — он виден только там, где пишут, и там, где
   читают.
 - **Сторож:** `static_assert(offsetof(...))` на каждое поле от `corner_shading`
-  (640) до `blob_dims` (832), включая `cave_ambient` (656) и `clusters` (800),
-  `sizeof == 848` под структурой и размеры вложенных `corner_shading_data` и
+  (640) до `occupancy_base` (864), включая `cave_ambient` (656) и `clusters` (800),
+  `sizeof == 880` под структурой и размеры вложенных `corner_shading_data` и
   `cluster_data`. Шейдер они не видят: сдвинул поле в C++ — сборка встала, это и
   есть момент сдвинуть его в `voxel.frag`. Сдвиг только в шейдере не ловит ничто.
 - **Если разошлись:** неверные пиксели без единой ошибки; а если на чужое место
@@ -43,7 +43,7 @@ std430 нет диагностики на расхождение: ошибки �
 
 Правила:
 
-- Новое поле — только в конец, после `blob_dims`: префикс не сдвигается, и
+- Новое поле — только в конец, после `occupancy_base`: префикс не сдвигается, и
   урезанные копии остаются верны. Добавь `static_assert` на его смещение и
   поправь `sizeof`.
 - `vec3`, `vec4`, матрица, вложенная структура — `alignas(16)`; скаляр —
@@ -342,14 +342,16 @@ std430 нет диагностики на расхождение: ошибки �
   `marchOccupancy`; `OccupancyViewPush` в `occupancy_view.frag`. Включающий файл
   обязан до `#include` задать `OCCUPANCY_SET`.
 - **Менять вместе:**
-  - числа раскладки: окно `4 << level`, сдвиг чанка 6, маска текселя 127, первый
-    бит известности уровня (0, 64, 576) — в шейдере это литералы;
+  - числа раскладки: окно 8, 16 и 16 чанков, сдвиг чанка 6, маска текселя 255,
+    255 и 127, первый бит известности уровня (0, 512, 4608), 68 слов `uvec4` — в
+    шейдере это литералы;
   - порядок битов в блоке `x | y << 1 | z << 2` — упаковщик, эталон и шейдер;
   - порядок текселей при записи: `x` быстрее всех, затем `y`, затем `z` — так
     пишет `pack_occupancy_bricks` и так читает `copyBufferToImage`;
   - слово известности: бит `n` лежит в `valid[n >> 7][(n >> 5) & 3]`, разряд
     `n & 31` (`write_params_` ↔ `occupancyKnows`);
-  - обход: размеры шага (64, две клетки, клетка), сдвиг `1e-3`, предел в 192
+  - обход: размеры шага (64, нулевой блок грубого уровня, две клетки, клетка),
+    порядок проверки грубых уровней от самого грубого, сдвиг `1e-3`, предел в 192
     шага и правило «неизвестный чанк пуст». `marchOccupancy` — построчный перевод
     `march_occupancy`; при расхождении прав C++;
   - `occupancy_view_push` (112 байт): `eye` — точка в вокселях от угла
@@ -358,7 +360,7 @@ std430 нет диагностики на расхождение: ошибки �
 - **Наборы:** у вида занятости `set = 0`: 0 — `OccupancyParams`, 1 — три
   `usampler3D`. Набор на кадр в полёте: параметры у каждого кадра свои, текстуры
   общие.
-- **Сторож:** `static_assert` на `occupancy_params` (`valid` 48, размер 640) и на
+- **Сторож:** `static_assert` на `occupancy_params` (`valid` 48, размер 1136) и на
   `occupancy_view_push` (16, 80, 96, размер 112); тесты `[occupancy]` в
   `tests/core/occupancy_march.test.cpp` и `tests/asset/occupancy_bricks.test.cpp`
   — только C++. Шейдер не сверяет ничто, кроме глаза: `--debug-view=occupancy`
@@ -367,6 +369,55 @@ std430 нет диагностики на расхождение: ошибки �
   кубов 64³ (адресация слотов), изрыт дырами по сетке 2 × 2 × 2 (порядок битов),
   либо чанки пропадают целиком (слово известности).
 - Почему так: `docs/rendering.md#занятость-на-gpu`.
+
+## Углы из занятости
+
+- **C++:** `uniform_buffer_object::occupancy_eye` (848: xyz — глаз в вокселях от
+  угла чанка камеры, w — `corner_source`) и `occupancy_base` (864: чанк камеры);
+  `world_push_constant_data::grid` (16: xyz — тот же угол в мировых единицах,
+  w — единица на размер вокселя), пишет `renderer::grid_push_`;
+  `instance_corners` (`resource/model_occupancy.cppm`), `instance_shading` и
+  `instance_light_column` в `resource/combined_buffer.cpp`;
+  `model_occupancy_buffer` и `model::build_bit_rows`.
+- **GLSL:** `WorldPush.grid` и выход `fragGridPos` (location 9, `centroid`) в
+  `voxel.vert`; `fragInstanceLight` — теперь `vec4` (location 8); `FLAT_ONLY`
+  (бит 8 маски выпуклости) и `FACE_SHIFT` (номер грани в битах 9–11) в
+  `voxel.vert` и `voxel.frag`; `ModelOccupancy` (привязка 2 набора занятости),
+  `modelVolumeOf`, `modelSolid`, `modelPatch` в `occupancy.glsl`; хвост
+  `UniformBufferObject`, `cornersFromOccupancy`, `cornersAcross`, `cornerLevel`
+  в `voxel.frag`; `occupancyBricksAround` и `occupancyPatch` в `occupancy.glsl`.
+  `grass.vert` обязан отдавать те же location 8 и 9: у травы `z = −1`, то есть
+  только запечённые маски.
+- **Менять вместе:**
+  - `fragGridPos` считается **до** `leafSway`; перенос ниже сдвигает клетку у
+    качающейся листвы;
+  - правило угла: `cornerLevel` ↔ `corner_level` и `corner_open_level` в
+    `mesh.cpp`; порядок битов слоя — бит `j * 3 + i`, `i` вдоль `u`, `j` вдоль
+    `v`, оси `u = (ось + 1) % 3`, `v = (ось + 2) % 3`;
+  - склейка блоков: байт `(вдоль u) + 2 · (вдоль v)` слова `packed`, внутри байта —
+    порядок битов блока из раздела «Занятость»;
+  - световой столбец: `z = 0` — занятость мира, `z > 0` — свой объём с размерами
+    `w | h << 8 | d << 16`, `z < 0` — только запечённое; `w` — смещение объёма в
+    словах. Пишут `allocate` и `write_transform`; `write_light` обязан трогать
+    только `x` и `y`, иначе модель после смены света потеряет адрес объёма;
+  - `fragGridPos` у инстанса со своим объёмом — локальная позиция вершины, у
+    остальных — мировая в сетке; ветка в `voxel.vert` и чтение в `voxel.frag`
+    смотрят на один и тот же знак `z`;
+  - раскладка объёма: слов в строке `(ширина + 31) >> 5`, слово
+    `смещение + (y + высота · z) · слов_в_строке + (x >> 5)` — `build_bit_rows` ↔
+    `modelSolid`;
+  - за краем модели: 0 для AO, 1 для выпуклости (`beyond` в `modelPatch`) ↔
+    `is_solid_at` и `is_open_at` в `mesh.cpp`;
+  - `CORNER_REACH` обязан не превышать гарантированную половину окна уровня 0
+    (`occupancy_window_origin`, сейчас 224).
+- **Сторож:** `static_assert` на смещения 848 и 864 и размер 880 у кадрового
+  uniform, 16 и размер 32 у `world_push_constant_data`; раскладку объёма модели
+  держит тест `bit rows of a model of any size say which voxels are there`. Ядро
+  во фрагменте сверяет только снимок: `--debug-view=corner-mismatch` обязан быть
+  чёрным, кроме синих моделей и неба.
+- **Если разошлись:** AO на чужой стороне грани или сдвинут на клетку; персонаж
+  без AO либо с полосами от рельефа под ним; тёмные точки на кронах в ветер.
+- Почему так: `docs/rendering.md#затенение-углов-во-фрагменте`.
 
 ## Тоновая кривая и композит
 
@@ -406,14 +457,15 @@ std430 нет диагностики на расхождение: ошибки �
 | | 2 | `shadow_map_descriptor_sets_` | `shadowMapArray`, только при `SHADOW_ENABLED` |
 | | 3 | набор источников и пятен | см. выше |
 | | 4 | `palette_buffer` | `PaletteBuffer` |
-| | push | `world_push_constant_data` (16 байт, вершинный шаг): ветер | `WorldPush` |
+| | 5 | `occupancy_clipmap::get_descriptor_set` | `OccupancyParams`, `occupancyBricks[3]` |
+| | push | `world_push_constant_data` (32 байта, вершинный шаг): ветер, затем сетка | `WorldPush` |
 | теневой | 0 | `shadow_uniform_buffer_object` | `ShadowUniformBufferObject` |
 | | 1 | тот же набор квадов | те же три буфера |
 | | push | `shadow_push_constant_data` (32 байта): ветер, затем номер каскада | `ShadowPushConstants` |
 | оба | location 2 | `quad::get_attribute_descriptions`: `eR32Uint`, по инстансу | `in uint inInstanceIndex` |
 | вид занятости | 0 | `occupancy_clipmap::get_descriptor_set` | `OccupancyParams`, `occupancyBricks[3]` |
 | | push | `occupancy_view_push` (112 байт, фрагментный шаг) | `OccupancyViewPush` |
-| травы | 0, 2, 3, 4 | те же наборы, что у мирового, но привязаны с раскладкой травы | `grass.vert` + общий `voxel.frag` |
+| травы | 0, 2, 3, 4, 5 | те же наборы, что у мирового, но привязаны с раскладкой травы | `grass.vert` + общий `voxel.frag` |
 | | 1 | `grass_renderer::ensure_frame_buffers_`: 0 инстансы, 1 квады | `Instances`, `Quads` |
 | | push | `grass_push_constants` (48 байт, вершинный шаг) | `GrassPush` |
 

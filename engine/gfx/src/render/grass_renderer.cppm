@@ -49,6 +49,7 @@ struct grass_pipeline_layouts {
     vk::DescriptorSetLayout shadow;
     vk::DescriptorSetLayout lights;
     vk::DescriptorSetLayout palette;
+    vk::DescriptorSetLayout occupancy;
 };
 
 struct grass_bound_sets {
@@ -56,6 +57,7 @@ struct grass_bound_sets {
     vk::DescriptorSet shadow;
     vk::DescriptorSet lights;
     vk::DescriptorSet palette;
+    vk::DescriptorSet occupancy;
 };
 
 // см. docs/rendering.md#трава

@@ -100,6 +100,48 @@ TEST_CASE("rows built page by page match the ones the mesher reads", "[occupancy
     CHECK(meshed->rows == paged->rows);
 }
 
+TEST_CASE("bit rows of a model of any size say which voxels are there", "[occupancy]") {
+    asset::model_identity_pool ids;
+    asset::page_pool pages;
+
+    for (const vec3i size : {vec3i{5, 9, 3}, vec3i{32, 16, 8}, vec3i{37, 21, 70}, vec3i{128, 4, 4}}) {
+        asset::model figure{ids, pages, size.x, size.y, size.z};
+
+        std::mt19937 rng{static_cast<uint32>(size.x * 31 + size.z)};
+        std::bernoulli_distribution filled{0.35};
+        for (int32 z = 0; z < size.z; ++z) {
+            for (int32 y = 0; y < size.y; ++y) {
+                for (int32 x = 0; x < size.x; ++x) {
+                    if (filled(rng) || y == 0) {
+                        figure.set_voxel(x, y, z, voxels::gray[8]);
+                    }
+                }
+            }
+        }
+        static_cast<void>(figure.compact_pages());
+
+        const uint32 row_words = asset::bit_row_words(size.x);
+        std::vector<uint32> rows(
+            static_cast<std::size_t>(row_words) * static_cast<std::size_t>(size.y * size.z),
+            ~uint32{0}
+        );
+        figure.build_bit_rows(rows);
+
+        for (int32 z = 0; z < size.z; ++z) {
+            for (int32 y = 0; y < size.y; ++y) {
+                const auto row = static_cast<std::size_t>(y + (size.y * z)) * row_words;
+                for (int32 x = 0; x < static_cast<int32>(row_words) * 32; ++x) {
+                    const bool bit =
+                        ((rows[row + static_cast<std::size_t>(x >> 5)] >> (x & 31)) & 1U) != 0;
+                    const bool there = x < size.x && !figure.is_empty(x, y, z);
+
+                    REQUIRE(bit == there);
+                }
+            }
+        }
+    }
+}
+
 TEST_CASE("cost of reading and packing one chunk of hills", "[.occupancy_cost]") {
     asset::model_identity_pool ids;
     asset::page_pool pages;

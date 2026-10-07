@@ -48,7 +48,8 @@ layout(location = 4) centroid out vec2 fragUV;
 layout(location = 5) flat out uint fragCornersMask;
 layout(location = 6) flat out uint fragLightMask;
 layout(location = 7) flat out uint fragConvexMask;
-layout(location = 8) flat out vec2 fragInstanceLight;
+layout(location = 8) flat out vec4 fragInstanceLight;
+layout(location = 9) centroid out vec3 fragGridPos;
 
 const vec3 NORMALS[6] = vec3[6](
     vec3( 1,  0,  0),
@@ -111,7 +112,8 @@ void main() {
 
     vec3 n = NORMALS[normal_id];
     fragNormal = vec3(c * n.x + s * n.z, n.y, -s * n.x + c * n.z);
-    fragInstanceLight = inst.light.xy;
+    fragInstanceLight = vec4(inst.light.xy, -1.0, 0.0);
+    fragGridPos       = vec3(0.0);
 
     uint palette_idx = (q.data1 >> 14) & 0xFFu;
     fragColor = palette[palette_idx].color;

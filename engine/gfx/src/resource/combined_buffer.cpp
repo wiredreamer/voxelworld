@@ -34,20 +34,23 @@ auto is_axis_aligned(
 
 // см. docs/lighting.md#тела-в-пещере
 auto instance_light_column(
-    const world_light& light
+    const instance_shading& shading
 ) -> std::array<float32, 4> {
-    return {1.0f - light.sky, light.block, 0.0f, 1.0f};
+    return {
+        1.0f - shading.light.sky, shading.light.block, shading.corners.packed_size,
+        shading.corners.word_offset
+    };
 }
 
 constexpr std::size_t instance_light_offset = 12 * sizeof(float32);
 
 auto normal_matrix_of(
-    const mat4f& transform_matrix, const world_light& light
+    const mat4f& transform_matrix, const instance_shading& shading
 ) -> mat4f {
     auto normal = math::transpose_matrix(
         math::inverse_matrix(transform_matrix).value_or(transform_matrix)
     );
-    const auto column = instance_light_column(light);
+    const auto column = instance_light_column(shading);
     for (int32 row = 0; row < 4; ++row) {
         normal[row, 3] = column[static_cast<std::size_t>(row)];
     }
@@ -160,7 +163,8 @@ combined_buffer::combined_buffer(
 
 auto combined_buffer::allocate(
     instance_key instance, vw::asset::model_identity model_id, const mesh& mesh_data,
-    const mat4f& transform_matrix, const vw::spatial::aabb& bounds
+    const mat4f& transform_matrix, const vw::spatial::aabb& bounds,
+    const instance_corners& corners
 ) -> void {
 
     const auto key = mesh_key_of(model_id, mesh_data.lod_step);
@@ -196,7 +200,8 @@ auto combined_buffer::allocate(
         sizeof(mat4f)
     );
 
-    const auto normal_matrix = normal_matrix_of(transform_matrix, world_light{});
+    const auto normal_matrix =
+        normal_matrix_of(transform_matrix, instance_shading{.corners = corners});
     const auto normal_staged = staging_->stage_struct(normal_matrix);
     staging_->copy_to(
         normal_matrix_buffer_->get_buffer(),
@@ -333,7 +338,7 @@ auto combined_buffer::write_mesh(
 
 auto combined_buffer::write_transform(
     instance_key instance, const mat4f& transform_matrix, const vw::spatial::aabb& bounds,
-    const world_light& light
+    const instance_shading& shading
 ) -> void {
     auto& [instance_index, key] = allocations_[instance];
     const auto model_staged = staging_->stage_struct(transform_matrix);
@@ -344,7 +349,7 @@ auto combined_buffer::write_transform(
         sizeof(mat4f)
     );
 
-    const auto normal_matrix = normal_matrix_of(transform_matrix, light);
+    const auto normal_matrix = normal_matrix_of(transform_matrix, shading);
     const auto normal_staged = staging_->stage_struct(normal_matrix);
     staging_->copy_to(
         normal_matrix_buffer_->get_buffer(),
@@ -360,8 +365,8 @@ auto combined_buffer::write_light(
     instance_key instance, const world_light& light
 ) -> void {
     const auto instance_index = allocations_[instance].instance_index;
-    const auto column         = instance_light_column(light);
-    const auto staged         = staging_->stage_struct(column);
+    const std::array<float32, 2> column{1.0f - light.sky, light.block};
+    const auto staged = staging_->stage_struct(column);
     staging_->copy_to(
         normal_matrix_buffer_->get_buffer(),
         (instance_index * sizeof(mat4f)) + instance_light_offset,

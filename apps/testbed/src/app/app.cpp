@@ -68,6 +68,15 @@ testbed_app::testbed_app(
         );
     }
 
+    if (const auto wanted = args.text("--corners")) {
+        const auto found = std::ranges::find(gfx::corner_source_names, *wanted);
+        if (found == gfx::corner_source_names.end()) {
+            throw std::runtime_error(std::format("unknown corner source '{}'", *wanted));
+        }
+        renderer.get_ambient_settings().corners =
+            static_cast<gfx::corner_source>(found - gfx::corner_source_names.begin());
+    }
+
     if (clusters_.wanted()) {
         renderer.set_cluster_readback(clusters_.readback_level());
     }

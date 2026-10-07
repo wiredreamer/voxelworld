@@ -89,6 +89,10 @@ struct uniform_buffer_object {
     alignas(16) cluster_data clusters{};
 
     alignas(16) vec4<uint32> blob_dims{};
+
+    alignas(16) vec4f occupancy_eye;
+
+    alignas(16) vec4<int32> occupancy_base{};
 };
 
 static_assert(offsetof(uniform_buffer_object, corner_shading) == 640);
@@ -103,7 +107,9 @@ static_assert(offsetof(uniform_buffer_object, fog) == 752);
 static_assert(offsetof(uniform_buffer_object, blob_strength) == 784);
 static_assert(offsetof(uniform_buffer_object, clusters) == 800);
 static_assert(offsetof(uniform_buffer_object, blob_dims) == 832);
-static_assert(sizeof(uniform_buffer_object) == 848);
+static_assert(offsetof(uniform_buffer_object, occupancy_eye) == 848);
+static_assert(offsetof(uniform_buffer_object, occupancy_base) == 864);
+static_assert(sizeof(uniform_buffer_object) == 880);
 
 struct shadow_push_constant_data {
     alignas(16) vec4f wind;
@@ -116,9 +122,11 @@ static_assert(sizeof(shadow_push_constant_data) == 32);
 // см. docs/rendering.md#ветер
 struct world_push_constant_data {
     alignas(16) vec4f wind;
+    alignas(16) vec4f grid;
 };
 
-static_assert(sizeof(world_push_constant_data) == 16);
+static_assert(offsetof(world_push_constant_data, grid) == 16);
+static_assert(sizeof(world_push_constant_data) == 32);
 
 struct shadow_uniform_buffer_object {
     alignas(16) mat4f light_space_matrices[shadow_map::cascade_count];

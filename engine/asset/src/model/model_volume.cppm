@@ -123,6 +123,9 @@ public:
 
     [[nodiscard]] auto build_rows_page_by_page(chunk_occupancy& out) const -> bool;
 
+    // см. docs/rendering.md#затенение-углов-во-фрагменте
+    auto build_bit_rows(std::span<uint32> out) const -> void;
+
     [[nodiscard]] auto page_may_hold(int32 px, int32 py, int32 pz, const voxel_set& wanted) const -> bool;
 
     // см. docs/rendering.md#качание-листвы

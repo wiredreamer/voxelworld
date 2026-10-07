@@ -386,6 +386,60 @@ auto model::build_rows_page_by_page(chunk_occupancy& out) const -> bool {
     return true;
 }
 
+auto model::build_bit_rows(std::span<uint32> out) const -> void {
+    constexpr int32 ps = page_size;
+
+    const uint32 row_words = bit_row_words(width_);
+    const auto needed      = static_cast<std::size_t>(row_words) *
+                             static_cast<std::size_t>(height_) * static_cast<std::size_t>(depth_);
+    if (out.size() != needed) {
+        throw std::invalid_argument("bit rows need a span of exactly the model volume");
+    }
+
+    std::ranges::fill(out, uint32{0});
+
+    const uint32 tail_bits = static_cast<uint32>(width_) & 31U;
+    const uint32 tail_mask = tail_bits == 0 ? ~uint32{0} : (uint32{1} << tail_bits) - 1;
+
+    for (int32 pz = 0; pz < pages_z_; ++pz) {
+        for (int32 py = 0; py < pages_y_; ++py) {
+            for (int32 px = 0; px < pages_x_; ++px) {
+                const auto mode = get_page_mode(px, py, pz);
+                if (mode == page_mode::empty) {
+                    continue;
+                }
+
+                const bool whole  = mode == page_mode::uniform;
+                const auto page   = whole ? page_view{} : get_page(px, py, pz);
+                const auto word   = static_cast<std::size_t>((px * ps) >> 5);
+                const uint32 from = static_cast<uint32>(px * ps) & 31U;
+
+                for (int32 lz = 0; lz < ps; ++lz) {
+                    const int32 z = (pz * ps) + lz;
+                    if (z >= depth_) {
+                        break;
+                    }
+                    for (int32 ly = 0; ly < ps; ++ly) {
+                        const int32 y = (py * ps) + ly;
+                        if (y >= height_) {
+                            break;
+                        }
+
+                        const uint32 bits = whole ? 0xFFU : uint32{page.row_bits(ly, lz)};
+                        const auto row    = static_cast<std::size_t>(y + (height_ * z)) *
+                                            row_words;
+                        out[row + word] |= bits << from;
+                    }
+                }
+            }
+        }
+    }
+
+    for (std::size_t row = 0; row < needed; row += row_words) {
+        out[row + row_words - 1] &= tail_mask;
+    }
+}
+
 auto model::build_x_rows(
     chunk_occupancy& out, int32 px0, int32 px1, int32 pz0, int32 pz1
 ) const -> bool {

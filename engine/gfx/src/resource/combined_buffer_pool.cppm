@@ -28,6 +28,8 @@ struct entity_buffer_info {
     vw::spatial::aabb bounds{};
     world_light light{};
     bool lit_by_world = false;
+    instance_corners corners{};
+    uint32 volume_model = asset::model_identity::invalid_index;
 };
 
 struct buffer_pool_timing_stats {
@@ -77,7 +79,8 @@ public:
         deletion_queue& deletion,
         vk::DescriptorPool descriptor_pool,
         vk::DescriptorSetLayout descriptor_set_layout,
-        vk::DescriptorSetLayout compute_descriptor_set_layout = nullptr
+        vk::DescriptorSetLayout compute_descriptor_set_layout,
+        model_occupancy_buffer& model_volumes
     );
     ~combined_buffer_pool() = default;
 
@@ -129,6 +132,7 @@ private:
     auto update_transforms_(world_type& world) -> void;
     auto update_instance_light_(world_type& world) -> void;
     auto rewrite_swapped_(world_type& world, std::size_t buffer_index, entity swapped) -> void;
+    auto release_volume_(entity_buffer_info& info) -> void;
     auto update_chunk_visibility_(
         world_type& world, const vec3f& camera_pos, bool sight_starts_at_a_point
     ) -> void;
@@ -136,6 +140,7 @@ private:
     auto evict_uploaded_(world_type& world, mesh_pool& pool) -> void;
 
     vulkan_context* context_;
+    model_occupancy_buffer* model_volumes_;
     deletion_queue* deletion_;
     staging_buffer staging_;
     auto ensure_index_pattern_(uint32 quads) -> void;

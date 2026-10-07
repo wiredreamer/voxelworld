@@ -371,13 +371,17 @@ auto engine::write_bench_report_() const -> void {
     std::format_to(
         std::back_inserter(report_text),
         "\noccupancy: {} of {} slots known, {} queued; {} chunks packed, {:.1f} MB sent\n"
-        "  packing peak {:.3f} ms in a frame\n",
+        "  packing peak {:.3f} ms in a frame\n"
+        "  model volumes: {}, {:.1f} KB, {} refused\n",
         occupancy.valid_slots,
         occupancy.slot_count,
         occupancy.queued,
         occupancy.packed_total,
         static_cast<float32>(occupancy.uploaded_bytes) / (1024.0F * 1024.0F),
-        occupancy.pack_peak_ms
+        occupancy.pack_peak_ms,
+        renderer_->get_stats().model_volumes.volumes,
+        static_cast<float32>(renderer_->get_stats().model_volumes.words_used) * 4.0F / 1024.0F,
+        renderer_->get_stats().model_volumes.refused
     );
 
     const auto& cull = renderer_->get_stats().combined_buffers.chunk_cull;

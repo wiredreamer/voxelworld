@@ -96,6 +96,10 @@ struct chunk_occupancy {
     }
 };
 
+[[nodiscard]] constexpr auto bit_row_words(int32 width) -> uint32 {
+    return static_cast<uint32>(width + 31) >> 5;
+}
+
 [[nodiscard]] auto occupancy_brick_count(int32 level) -> std::size_t;
 
 // см. docs/rendering.md#занятость-на-gpu

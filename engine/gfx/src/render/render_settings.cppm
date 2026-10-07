@@ -77,6 +77,15 @@ struct directional_light_settings {
     float32 wrap{0.5f};
 };
 
+// см. docs/rendering.md#затенение-углов-во-фрагменте
+enum class corner_source : uint32 { baked, occupancy_near, occupancy_only };
+
+inline constexpr std::array<std::string_view, 3> corner_source_names{
+    "baked",
+    "occupancy-near",
+    "occupancy-only",
+};
+
 struct ambient_settings {
     vec3f sky{0.34f, 0.42f, 0.52f};
     vec3f ground{0.16f, 0.14f, 0.13f};
@@ -87,6 +96,8 @@ struct ambient_settings {
 
     float32 convex_strength = 0.35f;
     float32 convex_curve    = 2.0f;
+
+    corner_source corners = corner_source::baked;
 
     vec3f cave{0.05f, 0.055f, 0.07f};
 
@@ -147,17 +158,19 @@ enum class debug_view : uint32 {
     blob_complexity,
 
     occupancy,
+
+    corner_mismatch,
 };
 
-inline constexpr std::array<std::string_view, 10> debug_view_names{
+inline constexpr std::array<std::string_view, 11> debug_view_names{
     "off",         "ambient occlusion", "normals",
     "sky light",   "convexity",         "block light",
     "blob shadow", "light complexity",  "blob complexity",
-    "occupancy",
+    "occupancy",       "corner-mismatch",
 };
 
 static_assert(
-    debug_view_names.size() == static_cast<std::size_t>(debug_view::occupancy) + 1
+    debug_view_names.size() == static_cast<std::size_t>(debug_view::corner_mismatch) + 1
 );
 
 struct block_light_settings {

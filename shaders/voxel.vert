@@ -36,6 +36,7 @@ layout(set = 4, binding = 0, std430) readonly buffer PaletteBuffer {
 
 layout(push_constant) uniform WorldPush {
     vec4 wind;
+    vec4 grid;
 } world;
 
 layout(location = 0) out vec3 fragPos;
@@ -47,7 +48,8 @@ layout(location = 4) centroid out vec2 fragUV;
 layout(location = 5) flat out uint fragCornersMask;
 layout(location = 6) flat out uint fragLightMask;
 layout(location = 7) flat out uint fragConvexMask;
-layout(location = 8) flat out vec2 fragInstanceLight;
+layout(location = 8) flat out vec4 fragInstanceLight;
+layout(location = 9) centroid out vec3 fragGridPos;
 
 const vec3 NORMALS[6] = vec3[6](
     vec3( 1,  0,  0),
@@ -57,6 +59,9 @@ const vec3 NORMALS[6] = vec3[6](
     vec3( 0,  0,  1),
     vec3( 0,  0, -1)
 );
+
+const uint FLAT_ONLY  = 1u << 8u;
+const uint FACE_SHIFT = 9u;
 
 const uint TANGENT_U_AXIS[6] = uint[6](2u, 2u, 0u, 0u, 0u, 0u);
 const uint TANGENT_V_AXIS[6] = uint[6](1u, 1u, 2u, 2u, 1u, 1u);
@@ -112,15 +117,18 @@ void main() {
 
     vec3 localPos = vec3(mix(mn, mx, bvec3(pick)));
     vec4 worldPos = model * vec4(localPos, 1.0);
+
+    mat4 normalMatrix = normalMatrices.normals[inInstanceIndex];
+    fragGridPos = normalMatrix[3].z > 0.5 ? localPos
+                                          : (worldPos.xyz - world.grid.xyz) * world.grid.w;
     if (sways) {
         float weight = float((corners_shape >> (corner_id * 2u)) & 0x3u) / 3.0;
         worldPos.xyz += leafSway(worldPos.xyz, world.wind, length(model[0].xyz), weight);
     }
     fragPos = worldPos.xyz;
 
-    mat4 normalMatrix = normalMatrices.normals[inInstanceIndex];
     fragNormal = normalize(mat3(normalMatrix) * NORMALS[normal_id]);
-    fragInstanceLight = normalMatrix[3].xy;
+    fragInstanceLight = normalMatrix[3];
 
     fragColor = palette[palette_idx].color;
     fragGlow  = palette[palette_idx].glow;
@@ -134,7 +142,7 @@ void main() {
     fragUV = corner_uvs[corner_id];
     fragCornersMask = corners_ao;
     fragLightMask = q.data2;
-    fragConvexMask = corners_convex;
+    fragConvexMask = corners_convex | (sways ? FLAT_ONLY : 0u) | (normal_id << FACE_SHIFT);
 
     viewDepth = -(ubo.view * worldPos).z;
 

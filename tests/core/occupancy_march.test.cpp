@@ -7,7 +7,6 @@ import vw.core;
 using namespace vw;
 using Catch::Approx;
 using spatial::occupancy_clipmap_layout;
-using spatial::occupancy_sample;
 
 namespace {
 
@@ -18,19 +17,22 @@ public:
     }
 
     auto know_only(int32 level) -> void {
-        level_ = level;
+        only_level_ = level;
     }
 
     auto forget(vec3i chunk) -> void {
         unknown_.insert(key_of(chunk));
     }
 
-    [[nodiscard]] auto sample(vec3i voxel) const -> occupancy_sample {
+    [[nodiscard]] auto brick_at(vec3i voxel, int32 level) const -> std::optional<uint8> {
         if (unknown_.contains(key_of(spatial::occupancy_chunk_of(voxel)))) {
-            return {};
+            return std::nullopt;
+        }
+        if (only_level_ >= 0 && level != only_level_) {
+            return std::nullopt;
         }
 
-        const vec3i cell{voxel.x >> level_, voxel.y >> level_, voxel.z >> level_};
+        const vec3i cell{voxel.x >> level, voxel.y >> level, voxel.z >> level};
         const vec3i brick{cell.x >> 1, cell.y >> 1, cell.z >> 1};
 
         uint8 bits = 0;
@@ -39,11 +41,11 @@ public:
                 (brick.x * 2) + (corner & 1), (brick.y * 2) + ((corner >> 1) & 1),
                 (brick.z * 2) + ((corner >> 2) & 1)
             };
-            if (cell_holds_(member)) {
+            if (cell_holds_(member, level)) {
                 bits |= static_cast<uint8>(1U << spatial::occupancy_brick_bit(member));
             }
         }
-        return {.level = level_, .brick = bits};
+        return bits;
     }
 
 private:
@@ -52,8 +54,8 @@ private:
         return part(at.x) | (part(at.y) << 21) | (part(at.z) << 42);
     }
 
-    [[nodiscard]] auto cell_holds_(vec3i cell) const -> bool {
-        const int32 span = 1 << level_;
+    [[nodiscard]] auto cell_holds_(vec3i cell, int32 level) const -> bool {
+        const int32 span = 1 << level;
         for (int32 z = 0; z < span; ++z) {
             for (int32 y = 0; y < span; ++y) {
                 for (int32 x = 0; x < span; ++x) {
@@ -71,13 +73,13 @@ private:
 
     std::unordered_set<uint64> solid_;
     std::unordered_set<uint64> unknown_;
-    int32 level_ = 0;
+    int32 only_level_ = -1;
 };
 
 auto march(const cell_world& cells, vec3f origin, vec3f direction, float32 reach = 512.0F) {
     return spatial::march_occupancy(
         vec3i{0, 0, 0}, origin, direction, reach,
-        [&](vec3i voxel) { return cells.sample(voxel); }
+        [&](vec3i voxel, int32 level) { return cells.brick_at(voxel, level); }
     );
 }
 
@@ -106,14 +108,15 @@ TEST_CASE("the slots of a window tile the texture without overlap", "[occupancy]
     }
 }
 
-TEST_CASE("the window keeps the centre at least a chunk and a half inside", "[occupancy]") {
+TEST_CASE("the window keeps the centre at least three and a half chunks inside", "[occupancy]") {
     for (const int32 at : {-130, -64, -33, -32, -1, 0, 31, 32, 63, 64, 500}) {
         const vec3i origin = spatial::occupancy_window_origin({at, at, at}, 0);
         const int32 low    = origin.x * occupancy_clipmap_layout::chunk_voxels;
-        const int32 high   = low + (4 * occupancy_clipmap_layout::chunk_voxels);
+        const int32 high   = low + (occupancy_clipmap_layout::window_chunks(0) *
+                                    occupancy_clipmap_layout::chunk_voxels);
 
-        CHECK(at - low >= 96);
-        CHECK(high - at > 96);
+        CHECK(at - low >= 224);
+        CHECK(high - at > 224);
     }
 }
 
@@ -205,6 +208,18 @@ TEST_CASE("skipping an empty brick never skips a solid neighbour", "[occupancy]"
             CHECK_FALSE(hit);
         }
     }
+}
+
+TEST_CASE("open air is crossed in strides of the coarsest empty brick", "[occupancy]") {
+    cell_world cells;
+    cells.fill({400, 5, 5});
+
+    const auto hit = march(cells, {2.5F, 5.5F, 5.5F}, {1.0F, 0.0F, 0.0F}, 600.0F);
+
+    REQUIRE(hit);
+    CHECK(hit->voxel == vec3i{400, 5, 5});
+    CHECK(hit->level == 0);
+    CHECK(hit->steps < 60);
 }
 
 TEST_CASE("a coarse level answers with its own cell size", "[occupancy]") {
