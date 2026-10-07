@@ -328,6 +328,35 @@ std430 нет диагностики на расхождение: ошибки �
   целиком, если шейдер прочтёт столбец не той стороной.
 - Почему так: `docs/lighting.md#тела-в-пещере`.
 
+## Тоновая кривая и композит
+
+- **GLSL:** `displayFromScene` и `sceneFromDisplay` в
+  `shaders/include/tonemap.glsl`; включают его `composite.frag` (прямая),
+  `voxel.frag` (обратная в `shown` для режимов `debug_view`) и `debug.frag`
+  (обратная для цвета примитива).
+- **C++:** `display_from_scene` и `scene_from_display` в
+  `render/render_settings.cppm`; обратной рендерер переводит цвет очистки
+  (`render_world_pass`) и цвет тумана (`update_uniform_buffer`).
+- **Параметры** — `(exposure, max(white_point, 0.01))`, одна функция
+  `renderer::tonemap_push_`: в `tonemap_params` кадрового uniform, в
+  push-константу отладочных конвейеров (`DebugPush`, 16 байт, фрагментный шаг) и,
+  отдельно, в `post_process::draw_composite`.
+- **`post_push_constants`** (`render/post_process.cppm`, 16 байт) ↔ `PostPush` в
+  `bloom_down.frag`, `bloom_up.frag`, `composite.frag`. У bloom `xy` — размер
+  текселя источника, `z` — «источник несёт долю свечения в альфе» (первый шаг);
+  у композита `xy` — параметры кривой, `z` — сила bloom, ноль выключает выборку.
+- **Альфа образа сцены** — доля свечения: пишет `voxel.frag` (`glowShare`),
+  читает первый шаг `bloom_down.frag` как `rgb * a`. Конвейер, пишущий в сцену
+  что-то кроме вокселей, обязан либо не писать альфу, либо писать ноль.
+- **Наборы:** у bloom `set = 0` — источник; у композита `set = 0` — сцена,
+  `set = 1` — уровень bloom либо та же сцена, когда bloom выключен.
+- **Сторож:** `a display colour survives the trip into the scene and back` в
+  `tests/gfx/tonemap.test.cpp` — только пара на CPU. Совпадение GLSL с C++ не
+  сверяет ничто.
+- **Если разошлись:** небо и туман не того цвета, что задан; отладочные линии
+  и тепловые карты тусклее или ярче; свечение от того, что не светится.
+- Почему так: `docs/rendering.md#кадр-в-hdr`.
+
 ## Наборы и вершинный вход
 
 | Конвейер | Набор | C++ | GLSL |

@@ -23,6 +23,8 @@ enum class gpu_stage : uint32 {
     world_geometry,
     world_debug,
     world_imgui,
+    bloom,
+    composite,
     count,
 };
 
@@ -43,6 +45,8 @@ inline constexpr std::array<std::string_view, gpu_stage_count> gpu_stage_names{
     "gpu_world_geometry",
     "gpu_world_debug",
     "gpu_world_imgui",
+    "gpu_bloom",
+    "gpu_composite",
 };
 
 struct gpu_timing_stats {

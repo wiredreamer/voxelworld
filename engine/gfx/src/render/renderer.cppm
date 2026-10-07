@@ -115,6 +115,7 @@ public:
     [[nodiscard]] auto get_grass_stats() const -> const grass_stats&;
     [[nodiscard]] auto get_ambient_settings() -> ambient_settings&;
     [[nodiscard]] auto get_tonemap_settings() -> tonemap_settings&;
+    [[nodiscard]] auto get_bloom_settings() -> bloom_settings&;
     [[nodiscard]] auto get_block_light_settings() -> block_light_settings&;
 
     [[nodiscard]] auto get_blob_strength() -> float32& {
@@ -161,6 +162,7 @@ private:
     auto create_color_resources() -> void;
     auto create_depth_resources() -> void;
     auto create_render_pass() -> void;
+    auto create_composite_pass() -> void;
     auto create_descriptor_set_layouts() -> void;
     auto create_graphics_pipeline() -> void;
     auto create_wireframe_pipeline() -> void;
@@ -205,6 +207,9 @@ private:
 
 
     auto render_world_pass(world_type& world, const camera& camera) -> void;
+    auto render_post_() -> void;
+    auto cover_swapchain_() -> void;
+    [[nodiscard]] auto tonemap_push_() const -> vec4f;
     auto render_world(world_type& world, const camera& camera) -> void;
 
     auto sync_meshes_(world_type& world) -> void;
@@ -276,11 +281,16 @@ private:
     vk::DeviceMemory color_image_memory_ = nullptr;
     vk::ImageView color_image_view_      = nullptr;
 
+    vk::Image scene_image_               = nullptr;
+    vk::DeviceMemory scene_image_memory_ = nullptr;
+    vk::ImageView scene_image_view_      = nullptr;
+
     vk::Image depth_image_               = nullptr;
     vk::DeviceMemory depth_image_memory_ = nullptr;
     vk::ImageView depth_image_view_      = nullptr;
 
     vk::RenderPass render_pass_                                 = nullptr;
+    vk::RenderPass composite_pass_                              = nullptr;
     vk::DescriptorSetLayout uniform_descriptor_set_layout_      = nullptr;
     vk::DescriptorSetLayout storage_descriptor_set_layout_      = nullptr;
     vk::DescriptorSetLayout shadow_descriptor_set_layout_       = nullptr;
@@ -292,6 +302,7 @@ private:
     vk::Pipeline shadow_pipeline_                               = nullptr;
     vk::PipelineLayout shadow_pipeline_layout_                  = nullptr;
 
+    vk::Framebuffer scene_framebuffer_ = nullptr;
     std::vector<vk::Framebuffer> framebuffers_;
     std::vector<vk::CommandBuffer> command_buffers_;
 
@@ -353,6 +364,7 @@ private:
     const voxel_registry* voxel_registry_;
     std::unique_ptr<palette_buffer> palette_buffer_;
     std::unique_ptr<grass_renderer> grass_;
+    std::unique_ptr<post_process> post_process_;
 
     std::unique_ptr<cull_pipeline> cull_pipeline_;
 
@@ -371,6 +383,7 @@ private:
     [[nodiscard]] auto wind_push_() const -> vec4f;
     ambient_settings ambient_settings_;
     tonemap_settings tonemap_settings_;
+    bloom_settings bloom_settings_;
     block_light_settings block_light_settings_;
     cluster_settings cluster_settings_;
     float32 blob_strength_ = 1.0f;

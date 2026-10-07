@@ -82,6 +82,8 @@ constexpr std::array gpu_stages{
     gpu_stage_desc<gpu_stage::world_geometry>(),
     gpu_stage_desc<gpu_stage::world_debug>(),
     gpu_stage_desc<gpu_stage::world_imgui>(),
+    gpu_stage_desc<gpu_stage::bloom>(),
+    gpu_stage_desc<gpu_stage::composite>(),
 };
 
 }  // namespace

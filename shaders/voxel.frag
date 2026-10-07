@@ -13,6 +13,8 @@ layout(location = 8) flat in vec2 fragInstanceLight;
 
 #define SHADOW_ENABLED 0
 
+#include "tonemap.glsl"
+
 const int SHADOW_CASCADES = 5;
 
 #if SHADOW_ENABLED
@@ -360,6 +362,10 @@ vec3 calculateHemisphereAmbient(vec3 normal) {
 
 layout(location = 0) out vec4 outColor;
 
+vec4 shown(vec3 display) {
+    return vec4(sceneFromDisplay(display, ubo.tonemap_params.xy), 0.0);
+}
+
 void main() {
     vec3 normal = normalize(fragNormal);
 
@@ -390,7 +396,7 @@ void main() {
     exposure = pow(exposure, ubo.corner_shading.convex_curve);
 
     if (ubo.debug_view == 4u) {
-        outColor = vec4(vec3(exposure), 1.0);
+        outColor = shown(vec3(exposure));
         return;
     }
 
@@ -398,11 +404,11 @@ void main() {
     float convexFactor = 1.0 + (exposure * ubo.corner_shading.convex_strength);
 
     if (ubo.debug_view == 1u) {
-        outColor = vec4(vec3(aoFactor), 1.0);
+        outColor = shown(vec3(aoFactor));
         return;
     }
     if (ubo.debug_view == 2u) {
-        outColor = vec4((normal * 0.5) + 0.5, 1.0);
+        outColor = shown((normal * 0.5) + 0.5);
         return;
     }
 
@@ -419,7 +425,7 @@ void main() {
     float sunReach = pow(skyRaw, ubo.sky_params.y);
 
     if (ubo.debug_view == 3u) {
-        outColor = vec4(vec3(skyReach), 1.0);
+        outColor = shown(vec3(skyReach));
         return;
     }
 
@@ -434,24 +440,24 @@ void main() {
     float lampReach = pow(lampRaw, ubo.lamp_params.w);
 
     if (ubo.debug_view == 5u) {
-        outColor = vec4(vec3(lampReach), 1.0);
+        outColor = shown(vec3(lampReach));
         return;
     }
 
     if (ubo.debug_view == 6u) {
-        outColor = vec4(vec3(blobShadow(fragPos, normal)), 1.0);
+        outColor = shown(vec3(blobShadow(fragPos, normal)));
         return;
     }
 
     if (ubo.debug_view == 7u) {
         uint cluster = clusterOf(gl_FragCoord.xy, viewDepth);
-        outColor = vec4(clusterHeat(clusterCounts.counts[cluster], ubo.clusters.cap), 1.0);
+        outColor = shown(clusterHeat(clusterCounts.counts[cluster], ubo.clusters.cap));
         return;
     }
 
     if (ubo.debug_view == 8u) {
         uint cluster = clusterOf(gl_FragCoord.xy, viewDepth);
-        outColor = vec4(clusterHeat(blobCounts.counts[cluster], ubo.blob_dims.x), 1.0);
+        outColor = shown(clusterHeat(blobCounts.counts[cluster], ubo.blob_dims.x));
         return;
     }
 
@@ -483,11 +489,8 @@ void main() {
     vec3 lighting = (ambient + directional + lamp + pointLighting) * convexFactor * blob;
     vec3 result = lighting * fragColor;
 
-    result += fragColor * fragGlow * ubo.glow_params.x;
-
-    result *= ubo.tonemap_params.x;
-    vec3 white = vec3(ubo.tonemap_params.y);
-    result = result * (1.0 + (result / (white * white))) / (1.0 + result);
+    vec3 glow = fragColor * fragGlow * ubo.glow_params.x;
+    result += glow;
 
     if (ubo.fog.enabled != 0u) {
         float fogFactor = clamp(
@@ -495,7 +498,11 @@ void main() {
             0.0, 1.0
         );
         result = mix(ubo.fog.color, result, fogFactor);
+        glow *= fogFactor;
     }
 
-    outColor = vec4(result, 1.0);
+    const vec3 luma = vec3(0.2126, 0.7152, 0.0722);
+    float glowShare = clamp(dot(glow, luma) / max(dot(result, luma), 1e-4), 0.0, 1.0);
+
+    outColor = vec4(result, glowShare);
 }

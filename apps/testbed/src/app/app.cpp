@@ -41,6 +41,8 @@ testbed_app::testbed_app(
     renderer.set_chunk_cull_enabled(args.flag("--chunk-cull"));
     renderer.get_grass_settings().enabled = !args.flag("--no-grass");
     renderer.get_grass_settings().radius_columns = gfx::preset_of(quality_).grass_radius_columns;
+    renderer.get_bloom_settings().enabled =
+        gfx::preset_of(quality_).bloom && !args.flag("--no-bloom");
     renderer.get_cluster_settings().enabled = !args.flag("--no-clusters");
 
     if (const auto visible = args.count("--max-visible-lights", 0); visible > 0) {

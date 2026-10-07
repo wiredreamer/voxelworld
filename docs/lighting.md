@@ -316,7 +316,8 @@ sun      = directional(N, shadow) · skyRaw ^ sun_curve
 lamp     = lamp_params.rgb · lampRaw ^ lamp_curve · ao
 points   = Σ color · (intensity · max(1 − d / range, 0)) ^ lamp_curve
 lighting = (ambient + sun + lamp + points) · convex · blob
-color    = tonemap(lighting · albedo + albedo · glow), затем туман
+scene    = fog(lighting · albedo + albedo · glow)
+color    = tonemap(scene + bloom), уже в композите
 ```
 
 | Терм | Небесный свет | AO | Пятно под телом |

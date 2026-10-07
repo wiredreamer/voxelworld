@@ -25,6 +25,7 @@ struct quality_preset {
     uint32 lod_base_chunks;
     uint32 msaa_samples;
     int32 grass_radius_columns;
+    bool bloom;
 };
 
 inline constexpr std::array<quality_preset, quality_tier_names.size()> quality_presets{{
@@ -33,18 +34,21 @@ inline constexpr std::array<quality_preset, quality_tier_names.size()> quality_p
         .lod_base_chunks       = 2,
         .msaa_samples          = 2,
         .grass_radius_columns  = 1,
+        .bloom                 = false,
     },
     {
         .view_distance_columns = ecs::default_view_distance,
         .lod_base_chunks       = ecs::default_lod_base_chunks,
         .msaa_samples          = msaa_sample_count,
         .grass_radius_columns  = 2,
+        .bloom                 = true,
     },
     {
         .view_distance_columns = 16,
         .lod_base_chunks       = 6,
         .msaa_samples          = 4,
         .grass_radius_columns  = 2,
+        .bloom                 = true,
     },
 }};
 
@@ -95,6 +99,38 @@ struct tonemap_settings {
     float32 exposure = 1.3f;
 
     float32 white_point = 1.75f;
+};
+
+// см. docs/rendering.md#кадр-в-hdr
+[[nodiscard]] inline auto display_from_scene(const vec3f& scene, const tonemap_settings& tonemap)
+    -> vec3f {
+    const float32 white_squared = tonemap.white_point * tonemap.white_point;
+
+    const auto channel = [&](float32 value) -> float32 {
+        const float32 exposed = value * tonemap.exposure;
+        return exposed * (1.0f + (exposed / white_squared)) / (1.0f + exposed);
+    };
+
+    return {channel(scene.x), channel(scene.y), channel(scene.z)};
+}
+
+[[nodiscard]] inline auto scene_from_display(const vec3f& display, const tonemap_settings& tonemap)
+    -> vec3f {
+    const float32 white_squared = tonemap.white_point * tonemap.white_point;
+
+    const auto channel = [&](float32 value) -> float32 {
+        const float32 gap     = 1.0f - value;
+        const float32 exposed =
+            0.5f * white_squared * (std::sqrt((gap * gap) + (4.0f * value / white_squared)) - gap);
+        return exposed / tonemap.exposure;
+    };
+
+    return {channel(display.x), channel(display.y), channel(display.z)};
+}
+
+struct bloom_settings {
+    bool enabled      = true;
+    float32 intensity = 0.6f;
 };
 
 enum class debug_view : uint32 {

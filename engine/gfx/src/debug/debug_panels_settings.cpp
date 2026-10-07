@@ -154,6 +154,18 @@ auto debug_window::render_lighting_panel() -> void {
         ImGui::TreePop();
     }
 
+    if (ImGui::TreeNode("Bloom")) {
+        auto& bloom = renderer.get_bloom_settings();
+
+        ImGui::Checkbox("enabled##bloom", &bloom.enabled);
+        ImGui::SliderFloat("intensity##bloom", &bloom.intensity, 0.0f, 3.0f, "%.2f");
+
+        if (reset_button("reset##bloom")) {
+            bloom = bloom_settings{};
+        }
+        ImGui::TreePop();
+    }
+
     ImGui::PopItemWidth();
 }
 

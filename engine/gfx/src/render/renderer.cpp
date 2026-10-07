@@ -54,6 +54,7 @@ renderer::renderer(
     create_color_resources();
     create_depth_resources();
     create_render_pass();
+    create_composite_pass();
     create_descriptor_set_layouts();
     create_point_lights_descriptor_set_layout();
     create_palette_descriptor_set_layout();
@@ -116,12 +117,16 @@ renderer::renderer(
         },
         fragment_shader_->get_stage_info()
     );
+
+    post_process_ = std::make_unique<post_process>(*context_, descriptor_pool_, composite_pass_);
+    post_process_->resize(swapchain_extent_, scene_image_view_);
 }
 
 renderer::~renderer() {
     mesh_pool_.stop_gen_threads();
     wait_idle();
 
+    post_process_.reset();
     grass_.reset();
     combined_buffer_pool_.reset();
     cull_pipeline_.reset();
@@ -290,6 +295,14 @@ auto renderer::get_fog_settings() -> fog_settings& {
 
 auto renderer::get_tonemap_settings() -> tonemap_settings& {
     return tonemap_settings_;
+}
+
+auto renderer::get_bloom_settings() -> bloom_settings& {
+    return bloom_settings_;
+}
+
+auto renderer::tonemap_push_() const -> vec4f {
+    return {tonemap_settings_.exposure, std::max(tonemap_settings_.white_point, 0.01f), 0.0f, 0.0f};
 }
 
 auto renderer::get_block_light_settings() -> block_light_settings& {
@@ -601,6 +614,8 @@ auto renderer::render(
         gpu_timer_->end(cmd, gpu_stage::world_pass);
     });
 
+    render_post_();
+
     gpu_timer_->end(cmd, gpu_stage::frame);
 
     record_capture_();
@@ -900,6 +915,18 @@ auto renderer::choose_msaa_samples() -> void {
 }
 
 auto renderer::create_color_resources() -> void {
+    create_image(
+        scene_image_,
+        scene_image_memory_,
+        swapchain_extent_,
+        post_process::scene_format,
+        vk::ImageTiling::eOptimal,
+        vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled,
+        vk::MemoryPropertyFlagBits::eDeviceLocal
+    );
+    scene_image_view_ =
+        create_image_view(scene_image_, post_process::scene_format, vk::ImageAspectFlagBits::eColor);
+
     if (msaa_samples_ == vk::SampleCountFlagBits::e1) {
         return;
     }
@@ -908,14 +935,14 @@ auto renderer::create_color_resources() -> void {
         color_image_,
         color_image_memory_,
         swapchain_extent_,
-        swapchain_image_format_,
+        post_process::scene_format,
         vk::ImageTiling::eOptimal,
         vk::ImageUsageFlagBits::eTransientAttachment | vk::ImageUsageFlagBits::eColorAttachment,
         vk::MemoryPropertyFlagBits::eDeviceLocal,
         msaa_samples_
     );
     color_image_view_ =
-        create_image_view(color_image_, swapchain_image_format_, vk::ImageAspectFlagBits::eColor);
+        create_image_view(color_image_, post_process::scene_format, vk::ImageAspectFlagBits::eColor);
 }
 
 auto renderer::create_depth_resources() -> void {
@@ -938,7 +965,7 @@ auto renderer::create_render_pass() -> void {
     const bool multisampled = msaa_samples_ != vk::SampleCountFlagBits::e1;
 
     vk::AttachmentDescription color_attachment{};
-    color_attachment.format         = swapchain_image_format_;
+    color_attachment.format         = post_process::scene_format;
     color_attachment.samples        = msaa_samples_;
     color_attachment.loadOp         = vk::AttachmentLoadOp::eClear;
     color_attachment.storeOp =
@@ -947,21 +974,21 @@ auto renderer::create_render_pass() -> void {
     color_attachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
     color_attachment.initialLayout  = vk::ImageLayout::eUndefined;
     color_attachment.finalLayout    = multisampled ? vk::ImageLayout::eColorAttachmentOptimal
-                                                   : vk::ImageLayout::ePresentSrcKHR;
+                                                   : vk::ImageLayout::eShaderReadOnlyOptimal;
 
     vk::AttachmentReference color_attachment_ref{};
     color_attachment_ref.attachment = 0;
     color_attachment_ref.layout     = vk::ImageLayout::eColorAttachmentOptimal;
 
     vk::AttachmentDescription resolve_attachment{};
-    resolve_attachment.format         = swapchain_image_format_;
+    resolve_attachment.format         = post_process::scene_format;
     resolve_attachment.samples        = vk::SampleCountFlagBits::e1;
     resolve_attachment.loadOp         = vk::AttachmentLoadOp::eDontCare;
     resolve_attachment.storeOp        = vk::AttachmentStoreOp::eStore;
     resolve_attachment.stencilLoadOp  = vk::AttachmentLoadOp::eDontCare;
     resolve_attachment.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
     resolve_attachment.initialLayout  = vk::ImageLayout::eUndefined;
-    resolve_attachment.finalLayout    = vk::ImageLayout::ePresentSrcKHR;
+    resolve_attachment.finalLayout    = vk::ImageLayout::eShaderReadOnlyOptimal;
 
     vk::AttachmentReference resolve_attachment_ref{};
     resolve_attachment_ref.attachment = 2;
@@ -993,22 +1020,16 @@ auto renderer::create_render_pass() -> void {
     subpass_debug.colorAttachmentCount    = 1;
     subpass_debug.pColorAttachments       = &color_attachment_ref;
     subpass_debug.pDepthStencilAttachment = &depth_attachment_ref;
-    subpass_debug.pResolveAttachments     = nullptr;
+    subpass_debug.pResolveAttachments = multisampled ? &resolve_attachment_ref : nullptr;
 
-    vk::SubpassDescription subpass_imgui    = {};
-    subpass_imgui.pipelineBindPoint       = vk::PipelineBindPoint::eGraphics;
-    subpass_imgui.colorAttachmentCount    = 1;
-    subpass_imgui.pColorAttachments       = &color_attachment_ref;
-    subpass_imgui.pDepthStencilAttachment = nullptr;
-    subpass_imgui.pResolveAttachments = multisampled ? &resolve_attachment_ref : nullptr;
-
-    vk::SubpassDescription subpasses[] = {subpass_3d, subpass_debug, subpass_imgui};
+    vk::SubpassDescription subpasses[] = {subpass_3d, subpass_debug};
 
     vk::SubpassDependency dependency_3d = {};
     dependency_3d.srcSubpass          = vk::SubpassExternal;
     dependency_3d.dstSubpass          = 0;
-    dependency_3d.srcStageMask        = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-    dependency_3d.srcAccessMask       = {};
+    dependency_3d.srcStageMask        = vk::PipelineStageFlagBits::eColorAttachmentOutput |
+                                        vk::PipelineStageFlagBits::eFragmentShader;
+    dependency_3d.srcAccessMask       = vk::AccessFlagBits::eShaderRead;
     dependency_3d.dstStageMask        = vk::PipelineStageFlagBits::eColorAttachmentOutput;
     dependency_3d.dstAccessMask       = vk::AccessFlagBits::eColorAttachmentWrite;
 
@@ -1020,16 +1041,15 @@ auto renderer::create_render_pass() -> void {
     dependency_debug.dstStageMask        = vk::PipelineStageFlagBits::eColorAttachmentOutput;
     dependency_debug.dstAccessMask       = vk::AccessFlagBits::eColorAttachmentWrite;
 
-    vk::SubpassDependency dependency_imgui = {};
-    dependency_imgui.srcSubpass          = 1;
-    dependency_imgui.dstSubpass          = 2;
-    dependency_imgui.srcStageMask        = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-    dependency_imgui.srcAccessMask       = vk::AccessFlagBits::eColorAttachmentWrite;
-    dependency_imgui.dstStageMask        = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-    dependency_imgui.dstAccessMask =
-        vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
+    vk::SubpassDependency dependency_sampled = {};
+    dependency_sampled.srcSubpass          = 1;
+    dependency_sampled.dstSubpass          = vk::SubpassExternal;
+    dependency_sampled.srcStageMask        = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+    dependency_sampled.srcAccessMask       = vk::AccessFlagBits::eColorAttachmentWrite;
+    dependency_sampled.dstStageMask        = vk::PipelineStageFlagBits::eFragmentShader;
+    dependency_sampled.dstAccessMask       = vk::AccessFlagBits::eShaderRead;
 
-    vk::SubpassDependency dependencies[] = {dependency_3d, dependency_debug, dependency_imgui};
+    vk::SubpassDependency dependencies[] = {dependency_3d, dependency_debug, dependency_sampled};
 
     vk::AttachmentDescription attachments[] = {
         color_attachment, depth_attachment, resolve_attachment
@@ -1038,12 +1058,54 @@ auto renderer::create_render_pass() -> void {
     vk::RenderPassCreateInfo render_pass_info{};
     render_pass_info.attachmentCount = multisampled ? 3u : 2u;
     render_pass_info.pAttachments    = attachments;
-    render_pass_info.subpassCount    = 3;
+    render_pass_info.subpassCount    = 2;
     render_pass_info.pSubpasses      = subpasses;
     render_pass_info.dependencyCount = 3;
     render_pass_info.pDependencies   = dependencies;
 
     render_pass_ = vk_must(context_->get_device().createRenderPass(render_pass_info), "failed to create render pass");
+}
+
+auto renderer::create_composite_pass() -> void {
+    vk::AttachmentDescription shown{};
+    shown.format         = swapchain_image_format_;
+    shown.samples        = vk::SampleCountFlagBits::e1;
+    shown.loadOp         = vk::AttachmentLoadOp::eDontCare;
+    shown.storeOp        = vk::AttachmentStoreOp::eStore;
+    shown.stencilLoadOp  = vk::AttachmentLoadOp::eDontCare;
+    shown.stencilStoreOp = vk::AttachmentStoreOp::eDontCare;
+    shown.initialLayout  = vk::ImageLayout::eUndefined;
+    shown.finalLayout    = vk::ImageLayout::ePresentSrcKHR;
+
+    vk::AttachmentReference shown_ref{};
+    shown_ref.attachment = 0;
+    shown_ref.layout     = vk::ImageLayout::eColorAttachmentOptimal;
+
+    vk::SubpassDescription subpass{};
+    subpass.pipelineBindPoint    = vk::PipelineBindPoint::eGraphics;
+    subpass.colorAttachmentCount = 1;
+    subpass.pColorAttachments    = &shown_ref;
+
+    vk::SubpassDependency dependency{};
+    dependency.srcSubpass    = vk::SubpassExternal;
+    dependency.dstSubpass    = 0;
+    dependency.srcStageMask  = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+    dependency.srcAccessMask = {};
+    dependency.dstStageMask  = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+    dependency.dstAccessMask =
+        vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite;
+
+    vk::RenderPassCreateInfo pass_info{};
+    pass_info.attachmentCount = 1;
+    pass_info.pAttachments    = &shown;
+    pass_info.subpassCount    = 1;
+    pass_info.pSubpasses      = &subpass;
+    pass_info.dependencyCount = 1;
+    pass_info.pDependencies   = &dependency;
+
+    composite_pass_ = vk_must(
+        context_->get_device().createRenderPass(pass_info), "create composite render pass"
+    );
 }
 
 auto renderer::create_descriptor_set_layouts() -> void {
@@ -1339,8 +1401,8 @@ auto renderer::create_debug_pipeline() -> void {
     multisampling.rasterizationSamples = msaa_samples_;
 
     vk::PipelineColorBlendAttachmentState color_blend_attachment{};
-    color_blend_attachment.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
-        vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
+    color_blend_attachment.colorWriteMask = vk::ColorComponentFlagBits::eR |
+        vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB;
     color_blend_attachment.blendEnable = vk::False;
 
     vk::PipelineColorBlendStateCreateInfo color_blending{};
@@ -1358,9 +1420,14 @@ auto renderer::create_debug_pipeline() -> void {
 
     vk::PipelineLayoutCreateInfo pipeline_layout_info{};
     pipeline_layout_info.setLayoutCount         = 1;
+    vk::PushConstantRange tonemap_range{};
+    tonemap_range.offset     = 0;
+    tonemap_range.size       = sizeof(vec4f);
+    tonemap_range.stageFlags = vk::ShaderStageFlagBits::eFragment;
+
     pipeline_layout_info.pSetLayouts            = &uniform_descriptor_set_layout_;
-    pipeline_layout_info.pushConstantRangeCount = 0;
-    pipeline_layout_info.pPushConstantRanges    = nullptr;
+    pipeline_layout_info.pushConstantRangeCount = 1;
+    pipeline_layout_info.pPushConstantRanges    = &tonemap_range;
 
     debug_pipeline_layout_ = vk_must(context_->get_device().createPipelineLayout(pipeline_layout_info), "failed to create debug pipeline layout");
 
@@ -1407,17 +1474,28 @@ auto renderer::create_framebuffers() -> void {
 
     const bool multisampled = msaa_samples_ != vk::SampleCountFlagBits::e1;
 
-    for (std::size_t i = 0; i < swapchain_image_views_.size(); i++) {
-        vk::ImageView attachments[] = {
-            multisampled ? color_image_view_ : swapchain_image_views_[i],
-            depth_image_view_,
-            swapchain_image_views_[i],
-        };
+    vk::ImageView scene_attachments[] = {
+        multisampled ? color_image_view_ : scene_image_view_,
+        depth_image_view_,
+        scene_image_view_,
+    };
 
+    vk::FramebufferCreateInfo scene_info{};
+    scene_info.renderPass      = render_pass_;
+    scene_info.attachmentCount = multisampled ? 3u : 2u;
+    scene_info.pAttachments    = scene_attachments;
+    scene_info.width           = swapchain_extent_.width;
+    scene_info.height          = swapchain_extent_.height;
+    scene_info.layers          = 1;
+
+    scene_framebuffer_ =
+        vk_must(context_->get_device().createFramebuffer(scene_info), "create scene framebuffer");
+
+    for (std::size_t i = 0; i < swapchain_image_views_.size(); i++) {
         vk::FramebufferCreateInfo framebuffer_info{};
-        framebuffer_info.renderPass      = render_pass_;
-        framebuffer_info.attachmentCount = multisampled ? 3u : 2u;
-        framebuffer_info.pAttachments    = attachments;
+        framebuffer_info.renderPass      = composite_pass_;
+        framebuffer_info.attachmentCount = 1;
+        framebuffer_info.pAttachments    = &swapchain_image_views_[i];
         framebuffer_info.width           = swapchain_extent_.width;
         framebuffer_info.height          = swapchain_extent_.height;
         framebuffer_info.layers          = 1;
@@ -1482,7 +1560,7 @@ auto renderer::create_descriptor_pool() -> void {
         vk::DescriptorPoolSize{vk::DescriptorType::eStorageBuffer, STORAGE_BUFFER_COUNT},
         vk::DescriptorPoolSize{
             vk::DescriptorType::eCombinedImageSampler,
-            static_cast<uint32>(frames_in_flight)
+            static_cast<uint32>(frames_in_flight) + post_process::sampled_image_count
         }
     };
 
@@ -1549,9 +1627,9 @@ auto renderer::init_imgui() -> void {
     init_info.Allocator                 = nullptr;
     init_info.CheckVkResultFn           = nullptr;
 
-    init_info.PipelineInfoMain.RenderPass  = render_pass_;
-    init_info.PipelineInfoMain.Subpass     = 2;
-    init_info.PipelineInfoMain.MSAASamples = static_cast<VkSampleCountFlagBits>(msaa_samples_);
+    init_info.PipelineInfoMain.RenderPass  = composite_pass_;
+    init_info.PipelineInfoMain.Subpass     = 0;
+    init_info.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
 
     if (!ImGui_ImplVulkan_Init(&init_info)) {
         throw std::runtime_error("failed to initialize imgui");
@@ -1607,6 +1685,10 @@ auto renderer::cleanup_render_pass() -> void {
     if (render_pass_ != nullptr) {
         context_->get_device().destroyRenderPass(render_pass_);
         render_pass_ = nullptr;
+    }
+    if (composite_pass_ != nullptr) {
+        context_->get_device().destroyRenderPass(composite_pass_);
+        composite_pass_ = nullptr;
     }
 }
 
@@ -1670,6 +1752,8 @@ auto renderer::cleanup_swapchain() -> void {
     for (auto framebuffer : framebuffers_) {
         context_->get_device().destroyFramebuffer(framebuffer);
     }
+    context_->get_device().destroyFramebuffer(scene_framebuffer_);
+    scene_framebuffer_ = nullptr;
 
     for (auto image_view : swapchain_image_views_) {
         context_->get_device().destroyImageView(image_view);
@@ -1690,6 +1774,18 @@ auto renderer::cleanup_swapchain() -> void {
 }
 
 auto renderer::cleanup_color_resources() -> void {
+    if (scene_image_view_ != nullptr) {
+        context_->get_device().destroyImageView(scene_image_view_);
+        scene_image_view_ = nullptr;
+    }
+    if (scene_image_ != nullptr) {
+        context_->get_device().destroyImage(scene_image_);
+        scene_image_ = nullptr;
+    }
+    if (scene_image_memory_ != nullptr) {
+        context_->get_device().freeMemory(scene_image_memory_);
+        scene_image_memory_ = nullptr;
+    }
     if (color_image_view_ != nullptr) {
         context_->get_device().destroyImageView(color_image_view_);
         color_image_view_ = nullptr;
@@ -1738,6 +1834,8 @@ auto renderer::recreate_swapchain() -> void {
     create_framebuffers();
     create_sync_objects();
 
+    post_process_->resize(swapchain_extent_, scene_image_view_);
+
     current_frame_       = 0;
     current_image_index_ = 0;
 }
@@ -1750,12 +1848,17 @@ auto renderer::render_world_pass(
 
     vk::RenderPassBeginInfo render_pass_info{};
     render_pass_info.renderPass        = render_pass_;
-    render_pass_info.framebuffer       = framebuffers_[current_image_index_];
+    render_pass_info.framebuffer       = scene_framebuffer_;
     render_pass_info.renderArea.offset = {0, 0};
     render_pass_info.renderArea.extent = swapchain_extent_;
 
+    const vec3f sky = scene_from_display(
+        vec3f{clear_color_.x, clear_color_.y, clear_color_.z}, tonemap_settings_
+    );
+    const vec4f scene_clear{sky.x, sky.y, sky.z, 0.0f};
+
     vk::ClearValue clear_values[2]{};
-    memcpy(&clear_values[0].color, &clear_color_, sizeof(vec4f));
+    memcpy(&clear_values[0].color, &scene_clear, sizeof(vec4f));
     clear_values[1].depthStencil = {0.0f, 0};
 
     render_pass_info.clearValueCount = 2;
@@ -1763,21 +1866,7 @@ auto renderer::render_world_pass(
 
     command_buffers_[current_frame_].beginRenderPass(render_pass_info, vk::SubpassContents::eInline);
 
-    vk::Viewport viewport{};
-    viewport.x        = 0.0f;
-    viewport.y        = 0.0f;
-    viewport.width    = static_cast<float>(swapchain_extent_.width);
-    viewport.height   = static_cast<float>(swapchain_extent_.height);
-    viewport.minDepth = 0.0f;
-    viewport.maxDepth = 1.0f;
-
-    command_buffers_[current_frame_].setViewport(0, viewport);
-
-    vk::Rect2D scissor{};
-    scissor.offset = {0, 0};
-    scissor.extent = swapchain_extent_;
-
-    command_buffers_[current_frame_].setScissor(0, scissor);
+    cover_swapchain_();
 
     auto cmd = command_buffers_[current_frame_];
 
@@ -1798,7 +1887,48 @@ auto renderer::render_world_pass(
         gpu_timer_->end(cmd, gpu_stage::world_debug);
     });
 
-    command_buffers_[current_frame_].nextSubpass(vk::SubpassContents::eInline);
+    command_buffers_[current_frame_].endRenderPass();
+}
+
+auto renderer::cover_swapchain_() -> void {
+    vk::Viewport viewport{};
+    viewport.x        = 0.0f;
+    viewport.y        = 0.0f;
+    viewport.width    = static_cast<float>(swapchain_extent_.width);
+    viewport.height   = static_cast<float>(swapchain_extent_.height);
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+
+    command_buffers_[current_frame_].setViewport(0, viewport);
+
+    vk::Rect2D scissor{};
+    scissor.offset = {0, 0};
+    scissor.extent = swapchain_extent_;
+
+    command_buffers_[current_frame_].setScissor(0, scissor);
+}
+
+auto renderer::render_post_() -> void {
+    const auto cmd = command_buffers_[current_frame_];
+
+    gpu_timer_->begin(cmd, gpu_stage::bloom);
+    if (bloom_settings_.enabled) {
+        post_process_->record_bloom(cmd);
+    }
+    gpu_timer_->end(cmd, gpu_stage::bloom);
+
+    vk::RenderPassBeginInfo pass_info{};
+    pass_info.renderPass        = composite_pass_;
+    pass_info.framebuffer       = framebuffers_[current_image_index_];
+    pass_info.renderArea.offset = {0, 0};
+    pass_info.renderArea.extent = swapchain_extent_;
+
+    cmd.beginRenderPass(pass_info, vk::SubpassContents::eInline);
+    cover_swapchain_();
+
+    gpu_timer_->begin(cmd, gpu_stage::composite);
+    post_process_->draw_composite(cmd, tonemap_settings_, bloom_settings_);
+    gpu_timer_->end(cmd, gpu_stage::composite);
 
     stats_.timing.world_pass_imgui_ms = measure_ms([&] {
         gpu_timer_->begin(cmd, gpu_stage::world_imgui);
@@ -1806,7 +1936,7 @@ auto renderer::render_world_pass(
         gpu_timer_->end(cmd, gpu_stage::world_imgui);
     });
 
-    command_buffers_[current_frame_].endRenderPass();
+    cmd.endRenderPass();
 }
 
 auto renderer::render_world(
@@ -1973,9 +2103,7 @@ auto renderer::update_uniform_buffer(
 
     ubo.glow_params = vec4f{block_light_settings_.glow, 0.0f, 0.0f, 0.0f};
 
-    ubo.tonemap_params = vec4f{
-        tonemap_settings_.exposure, std::max(tonemap_settings_.white_point, 0.01f), 0.0f, 0.0f
-    };
+    ubo.tonemap_params = tonemap_push_();
 
     ubo.debug_view = static_cast<uint32>(debug_view_);
 
@@ -1999,7 +2127,7 @@ auto renderer::update_uniform_buffer(
         .enabled   = cluster_settings_.enabled ? 1u : 0u,
     };
 
-    ubo.fog.color         = fog_settings_.color;
+    ubo.fog.color         = scene_from_display(fog_settings_.color, tonemap_settings_);
     ubo.fog.near_distance = fog_settings_.near_distance;
     ubo.fog.far_distance  = fog_settings_.far_distance;
     ubo.fog.enabled       = fog_settings_.enabled ? 1u : 0u;
@@ -2015,6 +2143,9 @@ auto renderer::render_debug_primitives() -> void {
     update_debug_vertex_buffer();
 
     command_buffers_[current_frame_].bindPipeline(vk::PipelineBindPoint::eGraphics, debug_pipeline_);
+    command_buffers_[current_frame_].pushConstants<vec4f>(
+        debug_pipeline_layout_, vk::ShaderStageFlagBits::eFragment, 0, tonemap_push_()
+    );
 
     command_buffers_[current_frame_].bindDescriptorSets(
         vk::PipelineBindPoint::eGraphics,
@@ -2057,6 +2188,9 @@ auto renderer::render_debug_solids() -> void {
     auto cmd = command_buffers_[current_frame_];
 
     cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, debug_solid_pipeline_);
+    cmd.pushConstants<vec4f>(
+        debug_pipeline_layout_, vk::ShaderStageFlagBits::eFragment, 0, tonemap_push_()
+    );
     cmd.bindDescriptorSets(
         vk::PipelineBindPoint::eGraphics, debug_pipeline_layout_, 0, descriptor_sets_[current_frame_],
         nullptr

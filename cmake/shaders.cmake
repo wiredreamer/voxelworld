@@ -11,6 +11,7 @@ function(vw_compile_shaders)
     file(GLOB SHADER_VERTS CONFIGURE_DEPENDS ${VW_SHADERS_SRC_DIR}/*.vert)
     file(GLOB SHADER_FRAGS CONFIGURE_DEPENDS ${VW_SHADERS_SRC_DIR}/*.frag)
     file(GLOB SHADER_COMPS CONFIGURE_DEPENDS ${VW_SHADERS_SRC_DIR}/*.comp)
+    set(SHADER_INCLUDE_DIR ${VW_SHADERS_SRC_DIR}/include)
     set(SHADER_SOURCES ${SHADER_VERTS} ${SHADER_FRAGS} ${SHADER_COMPS})
 
     set(SHADER_SPV_OUTPUTS)
@@ -21,8 +22,10 @@ function(vw_compile_shaders)
         add_custom_command(
                 OUTPUT ${SPV_OUT}
                 COMMAND ${CMAKE_COMMAND} -E make_directory ${VW_SHADERS_BIN_DIR}
-                COMMAND ${GLSLC_EXECUTABLE} ${SHADER} -o ${SPV_OUT}
+                COMMAND ${GLSLC_EXECUTABLE} -I ${SHADER_INCLUDE_DIR} -MD -MF ${SPV_OUT}.d
+                        ${SHADER} -o ${SPV_OUT}
                 DEPENDS ${SHADER}
+                DEPFILE ${SPV_OUT}.d
                 VERBATIM
                 COMMENT "Compiling shader ${SHADER_NAME}"
         )

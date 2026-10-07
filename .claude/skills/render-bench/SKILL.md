@@ -259,6 +259,7 @@ cd build/release/apps/testbed
 | `--cluster-stats` | выкл | вычитка счётчиков (`cluster_counts`, `overflow_count`) каждый кадр: занятость сетки и переполнение. Печатается в **stdout**, не в `--bench-out` |
 | `--verify-lights=N` | выкл | раз в N кадров сверяет списки GPU с эталоном `vw::spatial`. Значение обязательно: голый `--verify-lights` читается как 0 и не проверяет ничего |
 | `--quality=low\|medium\|high` | `medium` | пресет качества: дальность, база LOD, MSAA и радиус травы разом (`docs/light-plan.md#пресеты-качества`). `high` — умолчания до 07.10.2026 (16 колонок, база 6). Имя пресета, дальность и база попадают в блок `stand:` отчёта |
+| `--no-bloom` | выкл | выключает bloom, заданный пресетом; проходы bloom не записываются вовсе, `gpu_bloom` — ноль |
 | `--workers=N` | 0 | воркеров в общем пуле фоновых задач; 0 — умолчание движка (`hardware_concurrency − 1`, но не больше потолка). Читается и без `--bench` |
 | `--chunk-cull` | выкл | отсечение по связности чанков |
 | `--sun` | выкл | солнце ходит по небу; числа с ним несравнимы с остальными |
@@ -430,6 +431,7 @@ p50/p95/p99/max (`stages`), системы (`systems`), сводка мешин�
 | Правка | Метрики |
 |---|---|
 | шейдер, освещение | `gpu_world_geometry`, `gpu_world_pass`, `gpu_frame` |
+| пост-обработка | `gpu_bloom`, `gpu_composite`, `gpu_frame`; `gpu_world_pass` — только проход сцены, без композита и ImGui |
 | отсечение, indirect | `gpu_compute_cull`, `world_pass_geometry` |
 | мешер | `meshing:` — время на чанк, число квадов |
 | генерация, стриминг | `terrain:`, `scene ready after N frames`, пики очередей |
