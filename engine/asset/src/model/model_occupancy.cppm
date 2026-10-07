@@ -31,6 +31,10 @@ struct model_boundary {
     std::array<uint64, shell_edge_count> edges{};
     uint8 corners = 0;
 
+    per_face<face_occupancy> leaf_faces{};
+    std::array<uint64, shell_edge_count> leaf_edges{};
+    uint8 leaf_corners = 0;
+
     uint8 valid         = 0;
     uint16 edges_valid  = 0;
     uint8 corners_valid = 0;
@@ -49,6 +53,14 @@ struct model_boundary {
 
     [[nodiscard]] auto corner_holds(vec3i step) const -> bool {
         return ((corners >> shell_corner_index(step)) & 1U) != 0;
+    }
+
+    [[nodiscard]] auto edge_holds_leaf(vec3i step, int32 along) const -> bool {
+        return ((leaf_edges[static_cast<std::size_t>(shell_edge_index(step))] >> along) & 1U) != 0;
+    }
+
+    [[nodiscard]] auto corner_holds_leaf(vec3i step) const -> bool {
+        return ((leaf_corners >> shell_corner_index(step)) & 1U) != 0;
     }
 };
 

@@ -61,9 +61,11 @@ auto testbed_app::render_ui() -> void {
         ImGui::Checkbox("Draw grass", &grass.enabled);
         ImGui::SliderInt("Radius, columns", &grass.radius_columns, 1, 6);
         ImGui::SliderFloat("Fade from", &grass.fade_share, 0.0f, 0.99f, "%.2f");
-        ImGui::SliderFloat2("Wind direction", &grass.wind_direction.x, -1.0f, 1.0f, "%.2f");
-        ImGui::SliderFloat("Wind strength", &grass.wind_strength, 0.0f, 8.0f, "%.1f");
-        ImGui::SliderFloat("Wind speed", &grass.wind_speed, 0.0f, 6.0f, "%.1f");
+        auto& wind = get_engine().get_renderer().get_wind_settings();
+        ImGui::SliderFloat2("Wind direction", &wind.direction.x, -1.0f, 1.0f, "%.2f");
+        ImGui::SliderFloat("Wind speed", &wind.speed, 0.0f, 6.0f, "%.1f");
+        ImGui::SliderFloat("Grass bend", &wind.grass_bend, 0.0f, 8.0f, "%.1f");
+        ImGui::SliderFloat("Leaf sway, voxels", &wind.leaf_sway_voxels, 0.0f, 0.5f, "%.2f");
         ImGui::Text(
             "%u tufts, %u meshes, %u draws, %u chunks", stats.instances, stats.meshes, stats.draws,
             stats.chunks

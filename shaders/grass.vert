@@ -113,7 +113,7 @@ void main() {
     fragNormal = vec3(c * n.x + s * n.z, n.y, -s * n.x + c * n.z);
     fragInstanceLight = inst.light.xy;
 
-    uint palette_idx = (q.data1 >> 14) & 0x3FFu;
+    uint palette_idx = (q.data1 >> 14) & 0xFFu;
     fragColor = palette[palette_idx].color;
     fragGlow  = palette[palette_idx].glow;
 

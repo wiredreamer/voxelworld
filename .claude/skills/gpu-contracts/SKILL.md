@@ -83,24 +83,33 @@ std430 нет диагностики на расхождение: ошибки �
 
 ## Квад: упаковка
 
-- **C++:** `quad` (`resource/meshing.cppm`), `quad::pack` (`resource/mesh.cpp`).
+- **C++:** `quad` (`resource/meshing.cppm`), `quad::pack` и `quad::sway_flag`
+  (`resource/mesh.cpp`).
 - **GLSL:** `struct Quad` и разбор `data0`/`data1`/`data2` в `main` —
-  `voxel.vert` и `shadow.vert`. Маски углов разбирает `voxel.frag`: по 2 бита на
-  угол у `fragCornersMask` и `fragConvexMask`, по 4 — у неба в младших 16 битах
+  `voxel.vert`, `shadow.vert` и `grass.vert`; `SWAY_FLAG` в `voxel.vert` и
+  `shadow.vert`. Маски углов разбирает `voxel.frag`: по 2 бита на угол у
+  `fragCornersMask` и `fragConvexMask`, по 4 — у неба в младших 16 битах
   `fragLightMask` и у блочного света в старших.
 - **Копия в тестах:** `unpack_min`, `unpack_max`, `unpack_normal`,
-  `unpack_slot`, `unpack_sky`, `unpack_lamp`, `unpack_ao`, `unpack_convex` в
-  `tests/gfx/mesher.test.cpp` — собственный повтор разбора `voxel.vert`
-  литеральными сдвигами и масками, а не обращение к `quad`.
-- **Менять вместе:** сдвиг и маску каждого поля во всех трёх местах. Ширина
-  вокселя (10 бит, `0x3FF` в `voxel.vert`) — каталог живёт в байте, `voxel_type_capacity`
-  (`engine/core/src/voxels/voxels.cppm`). Координата — 7 бит (0…127),
-  протяжённость хранится минус один (1…128); дальше `& 0x7F` молча заворачивает.
+  `unpack_slot`, `unpack_sways`, `unpack_sky`, `unpack_lamp`, `unpack_ao`,
+  `unpack_convex` в `tests/gfx/mesher.test.cpp` — собственный повтор разбора
+  `voxel.vert` литеральными сдвигами и масками, а не обращение к `quad`.
+- **Менять вместе:** сдвиг и маску каждого поля во всех местах. Воксель — 8 бит
+  (`0xFF` в шейдерах), каталог живёт в байте, `voxel_type_capacity`
+  (`engine/core/src/voxels/voxels.cppm`); бит 22 — флаг качания, бит 23 свободен.
+  Шейдер, читающий воксель старой маской `0x3FF`, захватит флаг, и листва станет
+  чужого цвета. Координата — 7 бит (0…127), протяжённость хранится минус один
+  (1…128); дальше `& 0x7F` молча заворачивает.
+- **Байт `31:24` двузначен.** У квада без флага это выпуклость, с флагом — вес
+  качания по углам; `voxel.vert` при флаге отдаёт фрагменту выпуклость 0. Порядок
+  углов один и тот же — порядок обхода (см. «Порядок углов и обход»).
 - **Сторож:** тесты `[mesh]` через `unpack_*` — только C++-сторона.
   `greedy meshing output is stable` и `full-size greedy meshing output is
   stable` падают на любой смене упаковки: число квадов и дайджест обновляй
-  только после проверки картинки. `slots are dense and within the quad's ten
-  bits` в `tests/core/voxels.test.cpp`. Разбор в шейдерах не проверяет ничто.
+  только после проверки картинки. Веса качания сверяет с моделью `a leaf corner
+  sways unless wood or ground touches its vertex`, шов — `a leaf on the chunk seam
+  is pinned by wood across it and free beside leaves`. Разбор в шейдерах не
+  проверяет ничто.
 - **Если разошлись:** квады не на месте или растянуты, чужой цвет, свет из
   соседнего угла.
 - Почему так: `docs/rendering.md#квад`.
@@ -328,8 +337,10 @@ std430 нет диагностики на расхождение: ошибки �
 | | 2 | `shadow_map_descriptor_sets_` | `shadowMapArray`, только при `SHADOW_ENABLED` |
 | | 3 | набор источников и пятен | см. выше |
 | | 4 | `palette_buffer` | `PaletteBuffer` |
+| | push | `world_push_constant_data` (16 байт, вершинный шаг): ветер | `WorldPush` |
 | теневой | 0 | `shadow_uniform_buffer_object` | `ShadowUniformBufferObject` |
 | | 1 | тот же набор квадов | те же три буфера |
+| | push | `shadow_push_constant_data` (32 байта): ветер, затем номер каскада | `ShadowPushConstants` |
 | оба | location 2 | `quad::get_attribute_descriptions`: `eR32Uint`, по инстансу | `in uint inInstanceIndex` |
 | травы | 0, 2, 3, 4 | те же наборы, что у мирового, но привязаны с раскладкой травы | `grass.vert` + общий `voxel.frag` |
 | | 1 | `grass_renderer::ensure_frame_buffers_`: 0 инстансы, 1 квады | `Instances`, `Quads` |
@@ -346,6 +357,14 @@ std430 нет диагностики на расхождение: ошибки �
 вход фрагментного шейдера — правь оба вершинных. `shape.y` — половина
 `grass_tuft_footprint`, `shape.z` — `grass_tuft_max_height`: шейдер центрирует модель и
 считает высоту для ветра по ним. Почему так — `docs/rendering.md#трава`.
+
+Ветер: `wind` в `WorldPush` и `ShadowPushConstants` — `xy` направление, `z` размах
+листвы в вокселях, `w` время, умноженное на скорость; пишет `renderer::wind_push_`.
+У травы `GrassPush.wind.w` — время без скорости, скорость в `shape.w`. Формула порыва
+одна в `grass.vert` и в `leafSway` (`voxel.vert`, `shadow.vert`): правишь одну —
+правь все три, иначе трава и кроны качаются врозь. `static_assert` на размеры обеих
+push-структур стоят в `render_uniforms.cppm`; шейдер они не видят. Почему так —
+`docs/rendering.md#ветер`.
 
 ## Как проверить правку
 

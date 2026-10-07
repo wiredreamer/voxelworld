@@ -21,9 +21,10 @@ auto quad::pack(
     face_direction face,
     voxel v,
     uint8 corners_ao,
-    uint8 corners_convex,
+    uint8 corners_shape,
     uint16 corners_sky,
-    uint16 corners_block
+    uint16 corners_block,
+    bool sways
 ) -> quad {
     const int32 u_axis = tangent_u_axis[face];
     const int32 v_axis = tangent_v_axis[face];
@@ -43,7 +44,8 @@ auto quad::pack(
         (span_u & 0x7Fu) |                                  //
         ((span_v & 0x7Fu) << 7) |                           //
         (static_cast<uint32>(v.value) << 14) |               //
-        (static_cast<uint32>(corners_convex) << 24);
+        (sways ? sway_flag : 0U) |                           //
+        (static_cast<uint32>(corners_shape) << 24);
 
     q.data2 = static_cast<uint32>(corners_sky) | (static_cast<uint32>(corners_block) << 16);
 
@@ -145,6 +147,11 @@ struct face_axis_mapping {
                                             face_direction face) -> uint8;
 [[nodiscard]] auto compute_corner_light(mesh_source src, int32 x, int32 y, int32 z,
                                         face_direction face) -> corner_light;
+[[nodiscard]] auto compute_corner_sway(mesh_source src, int32 x, int32 y, int32 z, face_direction face)
+    -> uint8;
+[[nodiscard]] auto compute_corner_shape(mesh_source src, int32 x, int32 y, int32 z, face_direction face,
+                                        voxel v) -> uint8;
+[[nodiscard]] auto is_leaf_voxel(voxel v) -> bool;
 
 inline constexpr face_direction convex_face = face_direction::pos_y;
 
@@ -363,6 +370,122 @@ auto is_solid_at(
     const uint8 c3 = corner_open_level(open_mu, open_pv, diag_c3);
 
     return static_cast<uint8>(c0 | (c1 << 2) | (c2 << 4) | (c3 << 6));
+}
+
+auto is_leaf_voxel(
+    voxel v
+) -> bool {
+    static const voxel_set leaves = default_voxel_registry().of_kind(voxel_kind::leaf);
+    return leaves.test(v.value);
+}
+
+enum class sway_sample : uint8 { open, leaf, hard };
+
+// см. docs/rendering.md#качание-листвы
+auto sway_sample_at(
+    mesh_source src, vec3i p
+) -> sway_sample {
+    const auto beyond = [](int32 v, int32 cells) -> int32 {
+        return v < 0 ? -1 : (v >= cells ? 1 : 0);
+    };
+    const vec3i step{
+        beyond(p.x, src.cells_x()), beyond(p.y, src.cells_y()), beyond(p.z, src.cells_z())
+    };
+    const auto answer = [](bool solid, bool leaf) -> sway_sample {
+        return !solid ? sway_sample::open : (leaf ? sway_sample::leaf : sway_sample::hard);
+    };
+
+    switch (shell_span(step)) {
+        case 0: {
+            if (src.solid != nullptr) {
+                return answer(src.solid->test(p.x, p.y, p.z), src.leaves->test(p.x, p.y, p.z));
+            }
+            if (src.cell_empty(p.x, p.y, p.z)) {
+                return sway_sample::open;
+            }
+            const bool leaf = src.leaves != nullptr ? src.leaves->test(p.x, p.y, p.z)
+                                                    : is_leaf_voxel(src.voxels.get_voxel(p.x, p.y, p.z));
+            return leaf ? sway_sample::leaf : sway_sample::hard;
+        }
+        case 1: {
+            const face_direction face = shell_face(step);
+            if (!src.has_boundary_slice(face)) {
+                return sway_sample::open;
+            }
+            const vec2i on_plane = project_onto_face_plane(face, p);
+            return answer(src.boundary->faces[face].test(on_plane.x, on_plane.y),
+                          src.boundary->leaf_faces[face].test(on_plane.x, on_plane.y));
+        }
+        case 2: {
+            if (!src.has_boundary_edge(step)) {
+                return sway_sample::open;
+            }
+            const int32 along = p[shell_free_axis(step)];
+            return answer(src.shell().edge_holds(step, along), src.shell().edge_holds_leaf(step, along));
+        }
+        default:
+            if (!src.has_boundary_corner(step)) {
+                return sway_sample::open;
+            }
+            return answer(src.shell().corner_holds(step), src.shell().corner_holds_leaf(step));
+    }
+}
+
+auto compute_corner_sway(
+    mesh_source src, int32 x, int32 y, int32 z, face_direction face
+) -> uint8 {
+    constexpr uint8 free_corner = 3;
+
+    const vec3i host = vec3i{x, y, z};
+    const vec3i n    = host + offset_of(face);
+    const vec3i u    = ao_tangent_u[face];
+    const vec3i v    = ao_tangent_v[face];
+
+    const bool inside = src.solid != nullptr && x > 0 && y > 0 && z > 0 && x + 1 < src.cells_x() &&
+                        y + 1 < src.cells_y() && z + 1 < src.cells_z() && src.cell_inside(n - u - v) &&
+                        src.cell_inside(n + u + v);
+    const auto hard_at = [&](vec3i p) -> bool {
+        if (inside) {
+            return src.solid->test(p.x, p.y, p.z) && !src.leaves->test(p.x, p.y, p.z);
+        }
+        return sway_sample_at(src, p) == sway_sample::hard;
+    };
+
+    std::array<bool, 18> hard{};
+    for (int32 layer = 0; layer < 2; ++layer) {
+        const vec3i base = layer == 0 ? host : n;
+        for (int32 dv = -1; dv <= 1; ++dv) {
+            for (int32 du = -1; du <= 1; ++du) {
+                const vec3i p = base + (u * du) + (v * dv);
+                hard[static_cast<std::size_t>((layer * 9) + ((dv + 1) * 3) + (du + 1))] =
+                    (layer != 0 || du != 0 || dv != 0) && hard_at(p);
+            }
+        }
+    }
+    const auto corner = [&hard](int32 su, int32 sv) -> uint8 {
+        for (int32 layer = 0; layer < 2; ++layer) {
+            for (const int32 dv : {0, sv}) {
+                for (const int32 du : {0, su}) {
+                    if (hard[static_cast<std::size_t>((layer * 9) + ((dv + 1) * 3) + (du + 1))]) {
+                        return 0;
+                    }
+                }
+            }
+        }
+        return free_corner;
+    };
+
+    return static_cast<uint8>(corner(-1, -1) | (corner(1, -1) << 2) | (corner(1, 1) << 4) |
+                              (corner(-1, 1) << 6));
+}
+
+auto compute_corner_shape(
+    mesh_source src, int32 x, int32 y, int32 z, face_direction face, voxel v
+) -> uint8 {
+    if (!is_leaf_voxel(v)) {
+        return compute_corner_convexity(src, x, y, z, face);
+    }
+    return src.lod_step == 1 ? compute_corner_sway(src, x, y, z, face) : uint8{0};
 }
 
 auto compute_corner_darkness(
@@ -660,7 +783,7 @@ auto build_face_mask(
                                 fid,
                                 compute_corner_darkness(src, mx, my, mz, face),
                                 compute_corner_light(src, mx, my, mz, face),
-                                compute_corner_convexity(src, mx, my, mz, face)
+                                compute_corner_shape(src, mx, my, mz, face, fid)
                             };
                         } else {
                             storage.mask[idx(u, v)] = empty_cell;
@@ -680,7 +803,7 @@ auto build_face_mask(
                             vx,
                             compute_corner_darkness(src, mx, my, mz, face),
                             compute_corner_light(src, mx, my, mz, face),
-                            compute_corner_convexity(src, mx, my, mz, face)
+                            compute_corner_shape(src, mx, my, mz, face, vx)
                         };
                     } else {
                         storage.mask[idx(u, v)] = empty_cell;
@@ -743,7 +866,7 @@ auto add_quad(
 
     quads.push_back(quad::pack(
         min_pos, max_pos, face, v, ao_winding, convex_winding, sky_winding,
-        block_winding
+        block_winding, is_leaf_voxel(v)
     ));
 }
 
@@ -1109,7 +1232,7 @@ auto simple_mesh_generator::add_cube_face(
         {x + 1, y + 1, z + 1},
         voxel_id,
         detail::compute_corner_darkness(src, x, y, z, face),
-        detail::compute_corner_convexity(src, x, y, z, face),
+        detail::compute_corner_shape(src, x, y, z, face, voxel_id),
         detail::compute_corner_light(src, x, y, z, face)
     );
 }
@@ -1288,6 +1411,17 @@ auto greedy_mesh_generator::generate_mesh_data(
         src.lod_step    = step;
         src.lod_cells   = storage.lod_cells.get();
         src.lod_indices = storage.lod_indices.data();
+    }
+
+    if (step == 1 && storage.occupancy_valid) {
+        static const voxel_set leaf_set = default_voxel_registry().of_kind(voxel_kind::leaf);
+        if (!storage.leaves) {
+            storage.leaves = std::make_unique<vw::asset::chunk_occupancy>();
+        }
+        if (src.voxels.build_rows_of(*storage.leaves, leaf_set)) {
+            src.leaves = storage.leaves.get();
+            src.solid  = storage.occupancy.get();
+        }
     }
 
     std::array<uint32, 6> face_counts{};
@@ -1497,13 +1631,16 @@ auto greedy_mesh_generator::generate_face_quads(
                     auto [mx, my, mz] = axes.to_model_coords(u, v, layer);
 
                     const bool interior = bit_ao && u > 0 && u + 1 < axes.width;
+                    const voxel here    = src.cell_index(mx, my, mz);
 
                     const uint8 dark   = interior ? detail::pack_corners(samples, u)
                                                   : detail::compute_corner_darkness(
                                                         src, mx, my, mz, face
                                                     );
                     uint8 convex = 0;
-                    if (wants_convex) {
+                    if (src.leaves != nullptr && src.leaves->test(mx, my, mz)) {
+                        convex = detail::compute_corner_sway(src, mx, my, mz, face);
+                    } else if (wants_convex && !detail::is_leaf_voxel(here)) {
                         convex = interior
                             ? detail::pack_corners_convex(own_samples, u)
                             : detail::compute_corner_convexity(src, mx, my, mz, face);
@@ -1513,9 +1650,7 @@ auto greedy_mesh_generator::generate_face_quads(
                             ? detail::light_from_rows(src, rows, u, v, mx, my, mz, face)
                             : detail::compute_corner_light(src, mx, my, mz, face);
 
-                    storage.mask[idx(u, v)] = {
-                        src.cell_index(mx, my, mz), dark, light, convex
-                    };
+                    storage.mask[idx(u, v)] = {here, dark, light, convex};
                 }
             }
 

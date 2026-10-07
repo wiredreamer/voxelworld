@@ -111,6 +111,7 @@ public:
     [[nodiscard]] auto get_directional_light_settings() -> directional_light_settings&;
     [[nodiscard]] auto get_fog_settings() -> fog_settings&;
     [[nodiscard]] auto get_grass_settings() -> grass_settings&;
+    [[nodiscard]] auto get_wind_settings() -> wind_settings&;
     [[nodiscard]] auto get_grass_stats() const -> const grass_stats&;
     [[nodiscard]] auto get_ambient_settings() -> ambient_settings&;
     [[nodiscard]] auto get_tonemap_settings() -> tonemap_settings&;
@@ -363,6 +364,11 @@ private:
 
     fog_settings fog_settings_;
     grass_settings grass_settings_;
+    wind_settings wind_settings_;
+    std::chrono::steady_clock::time_point wind_start_ = std::chrono::steady_clock::now();
+    float32 wind_time_ = 0.0F;
+
+    [[nodiscard]] auto wind_push_() const -> vec4f;
     ambient_settings ambient_settings_;
     tonemap_settings tonemap_settings_;
     block_light_settings block_light_settings_;

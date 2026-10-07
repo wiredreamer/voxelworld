@@ -94,12 +94,17 @@ struct fog_settings {
 };
 
 struct grass_settings {
-    bool enabled             = true;
-    int32 radius_columns     = 2;
-    float32 fade_share       = 0.7F;
-    vec2f wind_direction     = {0.8F, 0.6F};
-    float32 wind_strength    = 1.5F;
-    float32 wind_speed       = 1.6F;
+    bool enabled         = true;
+    int32 radius_columns = 2;
+    float32 fade_share   = 0.7F;
+};
+
+// см. docs/rendering.md#ветер
+struct wind_settings {
+    vec2f direction          = {0.8F, 0.6F};
+    float32 speed            = 1.6F;
+    float32 grass_bend       = 1.5F;
+    float32 leaf_sway_voxels = 0.12F;
 };
 
 }  // namespace vw::gfx

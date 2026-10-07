@@ -51,6 +51,18 @@ auto default_voxel_registry() -> const voxel_registry& {
     return registry;
 }
 
+auto voxel_registry::of_kind(
+    voxel_kind kind
+) const -> voxel_set {
+    voxel_set out;
+    for (const voxel_type& type : by_value_) {
+        if (known_[type.id.value] && type.kind == kind) {
+            out.set(type.id.value);
+        }
+    }
+    return out;
+}
+
 auto voxel_registry::find(
     std::string_view name
 ) const -> std::optional<voxel> {

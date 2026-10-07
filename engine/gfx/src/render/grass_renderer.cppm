@@ -73,7 +73,8 @@ public:
     grass_renderer(grass_renderer&&)                         = delete;
     auto operator=(grass_renderer&&) -> grass_renderer&      = delete;
 
-    auto prepare(ecs::world& world, const camera& camera, const grass_settings& settings, uint32 frame)
+    auto prepare(ecs::world& world, const camera& camera, const grass_settings& settings,
+                 const wind_settings& wind, float32 wind_time, uint32 frame)
         -> void;
     auto draw(vk::CommandBuffer cmd, uint32 frame, const grass_bound_sets& sets) -> void;
 
@@ -140,7 +141,6 @@ private:
 
     std::unordered_map<vec3i, chunk_grass> chunks_;
     uint64 frame_number_ = 0;
-    std::chrono::steady_clock::time_point start_ = std::chrono::steady_clock::now();
 
     std::array<frame_buffers, frames_in_flight> frames_{};
     std::vector<mesh_draw> draws_;

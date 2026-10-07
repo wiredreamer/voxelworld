@@ -245,3 +245,15 @@ TEST_CASE("bark and leaves wear the plain shades they grew from", "[voxels]") {
     REQUIRE(registry.get(voxels::bark[0]).material.clr == registry.get(voxels::amber[2]).material.clr);
     REQUIRE(registry.get(voxels::leaves[0]).material.clr == registry.get(voxels::green[1]).material.clr);
 }
+
+TEST_CASE("a kind gathers exactly the voxels that carry it", "[voxels]") {
+    const voxel_registry registry;
+
+    const voxel_set leaves = registry.of_kind(voxel_kind::leaf);
+    REQUIRE(leaves.count() == voxels::leaves.count);
+    for (uint8 i = 0; i < voxels::leaves.count; ++i) {
+        REQUIRE(leaves.test(voxels::leaves[i].value));
+    }
+    REQUIRE_FALSE(leaves.test(voxels::green[4].value));
+    REQUIRE_FALSE(registry.of_kind(voxel_kind::wood).test(voxels::leaves[0].value));
+}

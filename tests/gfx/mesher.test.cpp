@@ -51,7 +51,11 @@ auto unpack_max(const gfx::quad& q) -> vec3i {
 }
 
 auto unpack_slot(const gfx::quad& q) -> uint16 {
-    return static_cast<uint16>((q.data1 >> 14) & 0x3FFU);
+    return static_cast<uint16>((q.data1 >> 14) & 0xFFU);
+}
+
+auto unpack_sways(const gfx::quad& q) -> bool {
+    return ((q.data1 >> 22) & 0x1U) != 0;
 }
 
 auto unpack_sky(const gfx::quad& q) -> std::array<uint8, 4> {
@@ -310,7 +314,7 @@ auto quads_facing(const gfx::mesh& m, uint8 normal) -> std::vector<gfx::quad> {
 
 auto quad_carries(const gfx::mesh& m, voxel v) -> bool {
     return std::ranges::all_of(m.quads, [v](const gfx::quad& q) {
-        return ((q.data1 >> 14) & 0x3FFu) == v.value;
+        return ((q.data1 >> 14) & 0xFFu) == v.value;
     });
 }
 
@@ -1930,4 +1934,144 @@ TEST_CASE("a coarse face lands on the cell boundary the shader draws it at", "[m
             REQUIRE(drawn_at % step == 0);
         }
     }
+}
+
+namespace {
+
+auto expected_corner_sway(const asset::model& m, vec3i corner) -> uint8 {
+    for (int32 dz = -1; dz <= 0; ++dz) {
+        for (int32 dy = -1; dy <= 0; ++dy) {
+            for (int32 dx = -1; dx <= 0; ++dx) {
+                const vec3i cell = corner + vec3i{dx, dy, dz};
+                if (cell.x < 0 || cell.y < 0 || cell.z < 0 || cell.x >= m.width() || cell.y >= m.height() ||
+                    cell.z >= m.depth()) {
+                    continue;
+                }
+                const voxel v = m.get_voxel(cell.x, cell.y, cell.z);
+                if (!v.is_empty() && !voxels::leaves.contains(v)) {
+                    return 0;
+                }
+            }
+        }
+    }
+    return 3;
+}
+
+auto quad_corner(const gfx::quad& q, int32 slot) -> vec3i {
+    const int32 face = unpack_normal(q);
+    const auto lo    = unpack_min(q);
+    const auto hi    = unpack_max(q);
+    vec3i corner{};
+    for (std::size_t i = 0; i < 3; ++i) {
+        corner[i] = face_verts[face][slot][i] != 0 ? hi[i] : lo[i];
+    }
+    return corner;
+}
+
+auto grow_test_tree(asset::model& m) -> void {
+    for (int32 x = 0; x < m.width(); ++x) {
+        for (int32 z = 0; z < m.depth(); ++z) {
+            m.set_voxel(x, 2, z, voxels::gray[10]);
+        }
+    }
+    for (int32 y = 3; y < 12; ++y) {
+        m.set_voxel(20, y, 20, voxels::bark[2]);
+    }
+    uint32 state = 77;
+    for (int32 x = 14; x <= 26; ++x) {
+        for (int32 y = 9; y <= 17; ++y) {
+            for (int32 z = 14; z <= 26; ++z) {
+                state           = (state * 1664525U) + 1013904223U;
+                const int32 dx  = x - 20;
+                const int32 dy  = y - 13;
+                const int32 dz  = z - 20;
+                const bool keep = (dx * dx) + (dy * dy) + (dz * dz) <= 30 && ((state >> 28) % 5) != 0;
+                if (keep && m.is_empty(x, y, z)) {
+                    m.set_voxel(x, y, z, voxels::leaves[(state >> 20) % voxels::leaves.count]);
+                }
+            }
+        }
+    }
+}
+
+}  // namespace
+
+TEST_CASE("a leaf corner sways unless wood or ground touches its vertex", "[mesh][sway]") {
+    model_fixture fixture{64};
+    grow_test_tree(*fixture.get());
+
+    const auto check = [&fixture](const gfx::mesh& m, std::string_view what) -> std::pair<int32, int32> {
+        int32 free   = 0;
+        int32 pinned = 0;
+        for (const auto& q : m.quads) {
+            const voxel v = voxel{static_cast<uint8>(unpack_slot(q))};
+            REQUIRE(unpack_sways(q) == voxels::leaves.contains(v));
+            if (!unpack_sways(q)) {
+                continue;
+            }
+            const auto shape = unpack_convex(q);
+            for (int32 slot = 0; slot < 4; ++slot) {
+                const vec3i corner = quad_corner(q, slot);
+                const uint8 want   = expected_corner_sway(*fixture.get(), corner);
+                if (shape[slot] != want) {
+                    INFO(what << ": corner " << corner.x << "," << corner.y << "," << corner.z << " slot " << slot
+                              << " packed " << int32{shape[slot]} << " expected " << int32{want});
+                    FAIL();
+                }
+                (want == 3 ? free : pinned) += 1;
+            }
+        }
+        return {free, pinned};
+    };
+
+    const auto [simple_free, simple_pinned] = check(fixture.simple(), "simple");
+    REQUIRE(simple_free > 100);
+    REQUIRE(simple_pinned > 4);
+
+    const auto [greedy_free, greedy_pinned] = check(fixture.greedy(), "greedy");
+    REQUIRE(greedy_free > 50);
+    REQUIRE(greedy_pinned > 4);
+}
+
+TEST_CASE("a leaf on the chunk seam is pinned by wood across it and free beside leaves", "[mesh][sway]") {
+    const auto seam_corner = [](const gfx::mesh& m) -> std::optional<std::array<uint8, 4>> {
+        for (const auto& q : m.quads) {
+            if (unpack_sways(q) && unpack_normal(q) == 2) {
+                return unpack_convex(q);
+            }
+        }
+        return std::nullopt;
+    };
+
+    for (const bool wood : {true, false}) {
+        INFO((wood ? "wood" : "leaf") << " across the seam");
+        model_fixture left{64};
+        model_fixture right{64};
+        left.get()->set_voxel(63, 10, 10, voxels::leaves[3]);
+        right.get()->set_voxel(0, 10, 10, wood ? voxels::bark[2] : voxels::leaves[3]);
+        left.chunk().set_boundary_slice(face_direction::pos_x, *right.get());
+
+        const auto corners = seam_corner(left.greedy());
+        REQUIRE(corners.has_value());
+        int32 pinned = 0;
+        for (const uint8 c : *corners) {
+            pinned += c == 0 ? 1 : 0;
+        }
+        REQUIRE(pinned == (wood ? 2 : 0));
+    }
+}
+
+TEST_CASE("a coarse leaf quad keeps its flag but never sways", "[mesh][sway][lod]") {
+    model_fixture fixture{64};
+    grow_test_tree(*fixture.get());
+
+    const auto mesh = fixture.greedy({.lod_step = 2});
+    int32 leaf_quads = 0;
+    for (const auto& q : mesh.quads) {
+        if (unpack_sways(q)) {
+            ++leaf_quads;
+            REQUIRE(((q.data1 >> 24) & 0xFFU) == 0);
+        }
+    }
+    REQUIRE(leaf_quads > 0);
 }

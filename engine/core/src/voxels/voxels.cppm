@@ -26,6 +26,8 @@ struct voxel {
 
 inline constexpr uint32 voxel_type_capacity = 256;
 
+using voxel_set = std::bitset<voxel_type_capacity>;
+
 namespace voxels {
 inline constexpr auto air = voxel{};
 }  // namespace voxels
@@ -136,6 +138,8 @@ public:
     [[nodiscard]] auto all() const -> std::span<const voxel_type> {
         return by_value_;
     }
+
+    [[nodiscard]] auto of_kind(voxel_kind kind) const -> voxel_set;
 
 private:
     auto add_(const voxel_desc& desc) -> void;

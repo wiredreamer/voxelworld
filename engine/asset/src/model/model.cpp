@@ -763,6 +763,141 @@ auto model::extract_face(face_direction face, face_occupancy& out) const -> bool
     return true;
 }
 
+auto model::page_may_hold(
+    int32 px, int32 py, int32 pz, const voxel_set& wanted
+) const -> bool {
+    const page_entry& entry = pages_[page_index(px, py, pz)];
+    switch (entry.mode()) {
+        case page_mode::empty:
+            return false;
+        case page_mode::uniform:
+        case page_mode::binary:
+            return wanted.test(entry.fill_voxel().value);
+        case page_mode::palette:
+            return std::ranges::any_of(pool_ptr_->get_palette(entry.palette_slot()).palette, [&](voxel v) {
+                return !v.is_empty() && wanted.test(v.value);
+            });
+        default:
+            return true;
+    }
+}
+
+auto model::build_rows_of(
+    chunk_occupancy& out, const voxel_set& wanted
+) const -> bool {
+    constexpr int32 ps   = page_size;
+    constexpr int32 side = chunk_occupancy::side;
+
+    out.rows.fill(0);
+    if (width_ != side || height_ != side || depth_ != side) {
+        return false;
+    }
+
+    bool any = false;
+    for (int32 pz = 0; pz < pages_z_; ++pz) {
+        for (int32 py = 0; py < pages_y_; ++py) {
+            for (int32 px = 0; px < pages_x_; ++px) {
+                if (!page_may_hold(px, py, pz, wanted)) {
+                    continue;
+                }
+                any            = true;
+                const int32 x0 = px * ps;
+                const int32 y0 = py * ps;
+                const int32 z0 = pz * ps;
+
+                if (get_page_mode(px, py, pz) == page_mode::uniform) {
+                    for (int32 ly = 0; ly < ps; ++ly) {
+                        for (int32 lz = 0; lz < ps; ++lz) {
+                            out.set_row(y0 + ly, z0 + lz, uint64{0xFF} << x0);
+                        }
+                    }
+                    continue;
+                }
+
+                const auto page = get_page(px, py, pz);
+                for (int32 ly = 0; ly < ps; ++ly) {
+                    for (int32 lz = 0; lz < ps; ++lz) {
+                        uint64 bits = 0;
+                        for (int32 lx = 0; lx < ps; ++lx) {
+                            const voxel v = page.voxel_at(lx, ly, lz);
+                            if (!v.is_empty() && wanted.test(v.value)) {
+                                bits |= uint64{1} << lx;
+                            }
+                        }
+                        if (bits != 0) {
+                            out.set_row(y0 + ly, z0 + lz, bits << x0);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return any;
+}
+
+auto model::extract_face(
+    face_direction face, face_occupancy& out, const voxel_set& wanted, face_occupancy& wanted_out
+) const -> bool {
+    constexpr int32 side  = face_occupancy::side;
+    constexpr int32 ps    = page_size;
+    constexpr int32 pages = side / ps;
+
+    out.clear();
+    wanted_out.clear();
+    if (width_ != side || height_ != side || depth_ != side) {
+        return false;
+    }
+
+    const int32 layer = boundary_layer(face, side);
+    const int32 pl    = layer / ps;
+    const int32 ll    = layer % ps;
+
+    for (int32 pb = 0; pb < pages; ++pb) {
+        for (int32 pa = 0; pa < pages; ++pa) {
+            const auto page       = lift_off_face_plane(face, vec2i{pa, pb}, pl);
+            const page_entry& entry = pages_[page_index(page.x, page.y, page.z)];
+            const auto mode       = entry.mode();
+
+            if (mode == page_mode::empty) {
+                continue;
+            }
+
+            if (mode == page_mode::uniform) {
+                const uint64 bits = uint64{0xFF} << (pa * ps);
+                const bool held   = wanted.test(entry.fill_voxel().value);
+                for (int32 b = 0; b < ps; ++b) {
+                    out.rows[(pb * ps) + b] |= bits;
+                    if (held) {
+                        wanted_out.rows[(pb * ps) + b] |= bits;
+                    }
+                }
+                continue;
+            }
+
+            const auto data = view_of(entry);
+
+            for (int32 b = 0; b < ps; ++b) {
+                uint64 bits      = 0;
+                uint64 held_bits = 0;
+                for (int32 a = 0; a < ps; ++a) {
+                    const auto cell = lift_off_face_plane(face, vec2i{a, b}, ll);
+                    const voxel v   = data.voxel_at(cell.x, cell.y, cell.z);
+                    if (!v.is_empty()) {
+                        bits |= uint64{1} << a;
+                        if (wanted.test(v.value)) {
+                            held_bits |= uint64{1} << a;
+                        }
+                    }
+                }
+                out.rows[(pb * ps) + b] |= bits << (pa * ps);
+                wanted_out.rows[(pb * ps) + b] |= held_bits << (pa * ps);
+            }
+        }
+    }
+
+    return true;
+}
+
 auto model::invalidate() -> void {
     increment_generation_();
 }

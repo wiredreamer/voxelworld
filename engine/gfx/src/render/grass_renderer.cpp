@@ -333,7 +333,8 @@ auto grass_renderer::refresh_chunk_(
 }
 
 auto grass_renderer::prepare(
-    ecs::world& world, const camera& camera, const grass_settings& settings, uint32 frame
+    ecs::world& world, const camera& camera, const grass_settings& settings, const wind_settings& wind,
+    float32 wind_time, uint32 frame
 ) -> void {
     ++frame_number_;
     draws_.clear();
@@ -437,16 +438,14 @@ auto grass_renderer::prepare(
         }
     }
 
-    const vec2f dir   = settings.wind_direction;
+    const vec2f dir   = wind.direction;
     const float32 len = std::max(std::sqrt((dir.x * dir.x) + (dir.y * dir.y)), 0.0001F);
-    const float32 time =
-        std::chrono::duration<float32>(std::chrono::steady_clock::now() - start_).count();
 
-    push_.wind  = vec4f{dir.x / len, dir.y / len, settings.wind_strength, time};
+    push_.wind  = vec4f{dir.x / len, dir.y / len, wind.grass_bend, wind_time};
     push_.eye   = vec4f{eye.x, eye.y, eye.z, fade_from};
     push_.shape = vec4f{
         fade_end, static_cast<float32>(ecs::grass_tuft_footprint) * 0.5F,
-        static_cast<float32>(ecs::grass_tuft_max_height), settings.wind_speed
+        static_cast<float32>(ecs::grass_tuft_max_height), wind.speed
     };
 
     stats_.instances = total;

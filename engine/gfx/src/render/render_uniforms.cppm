@@ -106,8 +106,19 @@ static_assert(offsetof(uniform_buffer_object, blob_dims) == 832);
 static_assert(sizeof(uniform_buffer_object) == 848);
 
 struct shadow_push_constant_data {
+    alignas(16) vec4f wind;
     alignas(4) uint32 cascade_index = 0;
 };
+
+static_assert(offsetof(shadow_push_constant_data, cascade_index) == 16);
+static_assert(sizeof(shadow_push_constant_data) == 32);
+
+// см. docs/rendering.md#ветер
+struct world_push_constant_data {
+    alignas(16) vec4f wind;
+};
+
+static_assert(sizeof(world_push_constant_data) == 16);
 
 struct shadow_uniform_buffer_object {
     alignas(16) mat4f light_space_matrices[shadow_map::cascade_count];

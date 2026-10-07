@@ -18,15 +18,18 @@ struct quad {
     static constexpr per_face<int32> tangent_u_axis{2, 2, 0, 0, 0, 0};
     static constexpr per_face<int32> tangent_v_axis{1, 1, 2, 2, 1, 1};
 
+    static constexpr uint32 sway_flag = 1U << 22U;
+
     uint32 data0 = 0;
     uint32 data1 = 0;
     uint32 data2 = 0;
 
     quad() = default;
 
+    // см. docs/rendering.md#качание-листвы
     [[nodiscard]] static auto pack(
         vec3i min_pos, vec3i max_pos, face_direction face, voxel v, uint8 corners_ao,
-        uint8 corners_convex, uint16 corners_sky, uint16 corners_block
+        uint8 corners_shape, uint16 corners_sky, uint16 corners_block, bool sways
     ) -> quad;
 
     [[nodiscard]] static auto get_binding_descriptions()
@@ -85,6 +88,9 @@ struct mesh_source {
     const voxel* lod_indices                 = nullptr;
 
     const vw::asset::model_boundary* boundary_touched = nullptr;
+
+    const vw::asset::chunk_occupancy* solid  = nullptr;
+    const vw::asset::chunk_occupancy* leaves = nullptr;
 
     // см. docs/lod-plan.md#свет-сворачивается-тем-же-правилом-что-занятость
     const uint8* lod_sky   = nullptr;
@@ -238,6 +244,7 @@ struct mesh_generation_storage {
     bool occupancy_valid = false;
 
     std::unique_ptr<vw::asset::chunk_occupancy> lod_cells;
+    std::unique_ptr<vw::asset::chunk_occupancy> leaves;
     std::vector<voxel> lod_indices;
     vw::asset::model_boundary lod_boundary;
     vw::asset::model_boundary lod_boundary_touched;

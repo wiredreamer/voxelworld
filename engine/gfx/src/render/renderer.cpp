@@ -269,6 +269,17 @@ auto renderer::get_grass_settings() -> grass_settings& {
     return grass_settings_;
 }
 
+auto renderer::get_wind_settings() -> wind_settings& {
+    return wind_settings_;
+}
+
+// см. docs/rendering.md#ветер
+auto renderer::wind_push_() const -> vec4f {
+    const vec2f dir   = wind_settings_.direction;
+    const float32 len = std::max(std::sqrt((dir.x * dir.x) + (dir.y * dir.y)), 0.0001F);
+    return vec4f{dir.x / len, dir.y / len, wind_settings_.leaf_sway_voxels, wind_time_ * wind_settings_.speed};
+}
+
 auto renderer::get_grass_stats() const -> const grass_stats& {
     return grass_->get_stats();
 }
@@ -501,7 +512,8 @@ auto renderer::render(
     });
 
     stats_.timing.grass_prepare_ms = measure_ms([&] {
-        grass_->prepare(world, camera, grass_settings_, current_frame_);
+        wind_time_ = std::chrono::duration<float32>(std::chrono::steady_clock::now() - wind_start_).count();
+        grass_->prepare(world, camera, grass_settings_, wind_settings_, wind_time_, current_frame_);
     });
 
     stats_.timing.light_cull_ms = measure_ms([&] {
@@ -1161,10 +1173,15 @@ auto renderer::create_graphics_pipeline() -> void {
     };
 
     vk::PipelineLayoutCreateInfo pipeline_layout_info{};
+    vk::PushConstantRange world_push_range{};
+    world_push_range.offset     = 0;
+    world_push_range.size       = sizeof(world_push_constant_data);
+    world_push_range.stageFlags = vk::ShaderStageFlagBits::eVertex;
+
     pipeline_layout_info.setLayoutCount = static_cast<uint32>(descriptor_set_layouts.size());
     pipeline_layout_info.pSetLayouts    = descriptor_set_layouts.data();
-    pipeline_layout_info.pushConstantRangeCount = 0;
-    pipeline_layout_info.pPushConstantRanges    = nullptr;
+    pipeline_layout_info.pushConstantRangeCount = 1;
+    pipeline_layout_info.pPushConstantRanges    = &world_push_range;
 
     pipeline_layout_ = vk_must(context_->get_device().createPipelineLayout(pipeline_layout_info), "failed to create pipeline layout");
 
@@ -1798,6 +1815,11 @@ auto renderer::render_world(
     vk::Pipeline current_pipeline =
         (current_render_mode_ == render_mode::lit) ? graphics_pipeline_ : wireframe_pipeline_;
     command_buffers_[current_frame_].bindPipeline(vk::PipelineBindPoint::eGraphics, current_pipeline);
+
+    const world_push_constant_data world_push{.wind = wind_push_()};
+    command_buffers_[current_frame_].pushConstants<world_push_constant_data>(
+        pipeline_layout_, vk::ShaderStageFlagBits::eVertex, 0, world_push
+    );
 
     command_buffers_[current_frame_].bindDescriptorSets(
         vk::PipelineBindPoint::eGraphics,
@@ -2552,6 +2574,7 @@ auto renderer::render_shadow_pass(
     );
 
         shadow_push_constant_data push_constants{
+            .wind          = wind_push_(),
             .cascade_index = cascade_index,
         };
         command_buffers_[current_frame_].pushConstants<shadow_push_constant_data>(shadow_pipeline_layout_, vk::ShaderStageFlagBits::eVertex, 0, push_constants);

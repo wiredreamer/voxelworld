@@ -121,6 +121,14 @@ public:
 
     [[nodiscard]] auto build_occupancy(chunk_occupancy& out) const -> bool;
 
+    [[nodiscard]] auto page_may_hold(int32 px, int32 py, int32 pz, const voxel_set& wanted) const -> bool;
+
+    // см. docs/rendering.md#качание-листвы
+    [[nodiscard]] auto build_rows_of(chunk_occupancy& out, const voxel_set& wanted) const -> bool;
+
+    [[nodiscard]] auto extract_face(face_direction face, face_occupancy& out, const voxel_set& wanted,
+                                    face_occupancy& wanted_out) const -> bool;
+
     [[nodiscard]] auto build_x_rows(
         chunk_occupancy& out, int32 px0, int32 px1, int32 pz0, int32 pz1
     ) const -> bool;

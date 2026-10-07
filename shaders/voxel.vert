@@ -34,6 +34,10 @@ layout(set = 4, binding = 0, std430) readonly buffer PaletteBuffer {
     PaletteEntry palette[];
 };
 
+layout(push_constant) uniform WorldPush {
+    vec4 wind;
+} world;
+
 layout(location = 0) out vec3 fragPos;
 layout(location = 1) out vec3 fragNormal;
 layout(location = 2) out vec3 fragColor;
@@ -74,6 +78,19 @@ const uvec3 FACE_VERTS[6][4] = uvec3[6][4](
     uvec3[4](uvec3(1, 0, 0), uvec3(1, 1, 0), uvec3(0, 1, 0), uvec3(0, 0, 0))
 );
 
+const uint SWAY_FLAG = 1u << 22u;
+
+// см. docs/rendering.md#качание-листвы
+vec3 leafSway(vec3 worldPos, vec4 wind, float unitsPerVoxel, float weight) {
+    float phase   = dot(worldPos.xz, vec2(0.031, 0.023));
+    float t       = wind.w;
+    float gust    = 0.6 * sin(t + phase) + 0.4 * sin((t * 2.3) + (phase * 1.7));
+    float flutter = sin((t * 3.7) + dot(worldPos, vec3(0.037, 0.029, 0.023)));
+    float lean    = 0.3 + 0.7 * gust;
+    vec3 offset   = vec3(wind.x * lean, 0.35 * flutter, wind.y * lean);
+    return offset * (wind.z * unitsPerVoxel * weight);
+}
+
 void main() {
     Quad q = quads[uint(gl_VertexIndex) / 4u];
     uint corner_id = uint(gl_VertexIndex) % 4u;
@@ -82,8 +99,10 @@ void main() {
 
     uint normal_id      = (q.data0 >> 21) & 0x7u;
     uint corners_ao     = (q.data0 >> 24) & 0xFFu;
-    uint palette_idx    = (q.data1 >> 14) & 0x3FFu;
-    uint corners_convex = (q.data1 >> 24) & 0xFFu;
+    uint palette_idx    = (q.data1 >> 14) & 0xFFu;
+    bool sways          = (q.data1 & SWAY_FLAG) != 0u;
+    uint corners_shape  = (q.data1 >> 24) & 0xFFu;
+    uint corners_convex = sways ? 0u : corners_shape;
 
     uvec3 mx = unpackMax(q.data1, mn, normal_id);
 
@@ -93,6 +112,10 @@ void main() {
 
     vec3 localPos = vec3(mix(mn, mx, bvec3(pick)));
     vec4 worldPos = model * vec4(localPos, 1.0);
+    if (sways) {
+        float weight = float((corners_shape >> (corner_id * 2u)) & 0x3u) / 3.0;
+        worldPos.xyz += leafSway(worldPos.xyz, world.wind, length(model[0].xyz), weight);
+    }
     fragPos = worldPos.xyz;
 
     mat4 normalMatrix = normalMatrices.normals[inInstanceIndex];
