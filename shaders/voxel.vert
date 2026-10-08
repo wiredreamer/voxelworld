@@ -81,16 +81,7 @@ const uvec3 FACE_VERTS[6][4] = uvec3[6][4](
 
 const uint SWAY_FLAG = 1u << 22u;
 
-// см. docs/rendering.md#качание-листвы
-vec3 leafSway(vec3 worldPos, vec4 wind, float unitsPerVoxel, float weight) {
-    float phase   = dot(worldPos.xz, vec2(0.031, 0.023));
-    float t       = wind.w;
-    float gust    = 0.6 * sin(t + phase) + 0.4 * sin((t * 2.3) + (phase * 1.7));
-    float flutter = sin((t * 3.7) + dot(worldPos, vec3(0.037, 0.029, 0.023)));
-    float lean    = 0.3 + 0.7 * gust;
-    vec3 offset   = vec3(wind.x * lean, 0.35 * flutter, wind.y * lean);
-    return offset * (wind.z * unitsPerVoxel * weight);
-}
+#include "leaf_sway.glsl"
 
 void main() {
     Quad q = quads[uint(gl_VertexIndex) / 4u];
@@ -101,7 +92,6 @@ void main() {
     uint normal_id      = (q.data0 >> 21) & 0x7u;
     uint palette_idx    = (q.data1 >> 14) & 0xFFu;
     bool sways          = (q.data1 & SWAY_FLAG) != 0u;
-    uint corners_shape  = (q.data1 >> 24) & 0xFFu;
 
     uvec3 mx = unpackMax(q.data1, mn, normal_id);
 
@@ -116,8 +106,7 @@ void main() {
     fragGridPos = normalMatrix[3].z > 0.5 ? localPos
                                           : (worldPos.xyz - world.grid.xyz) * world.grid.w;
     if (sways) {
-        float weight = float((corners_shape >> (corner_id * 2u)) & 0x3u) / 3.0;
-        worldPos.xyz += leafSway(worldPos.xyz, world.wind, length(model[0].xyz), weight);
+        worldPos.xyz += leafSway(localPos, model, world.wind);
     }
     fragPos = worldPos.xyz;
 

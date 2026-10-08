@@ -937,7 +937,7 @@ auto model::build_rows_of(
     constexpr int32 ps   = page_size;
     constexpr int32 side = chunk_occupancy::side;
 
-    out.rows.fill(0);
+    out.clear();
     if (width_ != side || height_ != side || depth_ != side) {
         return false;
     }
@@ -956,8 +956,9 @@ auto model::build_rows_of(
 
                 if (get_page_mode(px, py, pz) == page_mode::uniform) {
                     for (int32 ly = 0; ly < ps; ++ly) {
-                        for (int32 lz = 0; lz < ps; ++lz) {
-                            out.set_row(y0 + ly, z0 + lz, uint64{0xFF} << x0);
+                        for (int32 l = 0; l < ps; ++l) {
+                            out.set_row(y0 + ly, z0 + l, uint64{0xFF} << x0);
+                            out.set_zrow(y0 + ly, x0 + l, uint64{0xFF} << z0);
                         }
                     }
                     continue;
@@ -971,6 +972,7 @@ auto model::build_rows_of(
                             const voxel v = page.voxel_at(lx, ly, lz);
                             if (!v.is_empty() && wanted.test(v.value)) {
                                 bits |= uint64{1} << lx;
+                                out.set_zrow(y0 + ly, x0 + lx, uint64{1} << (z0 + lz));
                             }
                         }
                         if (bits != 0) {

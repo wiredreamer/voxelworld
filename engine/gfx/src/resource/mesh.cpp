@@ -20,7 +20,6 @@ auto quad::pack(
     vec3i max_pos,
     face_direction face,
     voxel v,
-    uint8 corners_sway,
     bool sways
 ) -> quad {
     const int32 u_axis = tangent_u_axis[face];
@@ -40,7 +39,7 @@ auto quad::pack(
         (span_u & 0x7Fu) |                                  //
         ((span_v & 0x7Fu) << 7) |                           //
         (static_cast<uint32>(v.value) << 14) |               //
-        (sways ? sway_flag | (static_cast<uint32>(corners_sway) << 24) : 0U);
+        (sways ? sway_flag : 0U);
 
     return q;
 }
@@ -98,25 +97,6 @@ auto quad::get_attribute_descriptions() -> std::vector<vk::VertexInputAttributeD
 }
 
 
-static constexpr per_face<vec3i> ao_tangent_u = {
-    vec3i{0, 0, 1},
-    vec3i{0, 0, 1},
-    vec3i{1, 0, 0},
-    vec3i{1, 0, 0},
-    vec3i{1, 0, 0},
-    vec3i{1, 0, 0},
-};
-
-static constexpr per_face<vec3i> ao_tangent_v = {
-    vec3i{0, 1, 0},
-    vec3i{0, 1, 0},
-    vec3i{0, 0, 1},
-    vec3i{0, 0, 1},
-    vec3i{0, 1, 0},
-    vec3i{0, 1, 0},
-};
-
-
 namespace detail {
 
 struct face_axis_mapping {
@@ -134,10 +114,6 @@ struct face_axis_mapping {
         -> std::pair<vec3i, vec3i>;
 };
 
-[[nodiscard]] auto compute_corner_sway(mesh_source src, int32 x, int32 y, int32 z, face_direction face)
-    -> uint8;
-[[nodiscard]] auto compute_corner_shape(mesh_source src, int32 x, int32 y, int32 z, face_direction face,
-                                        voxel v) -> uint8;
 [[nodiscard]] auto is_leaf_voxel(voxel v) -> bool;
 
 [[nodiscard]] auto is_face_visible(mesh_source src, int32 x, int32 y, int32 z,
@@ -158,7 +134,7 @@ auto add_quad(
     vec3i min_pos,
     vec3i max_pos,
     voxel v,
-    uint8 corner_sway
+    bool sways
 ) -> void;
 
 struct layer_rows {
@@ -256,115 +232,6 @@ auto is_leaf_voxel(
     return leaves.test(v.value);
 }
 
-enum class sway_sample : uint8 { open, leaf, hard };
-
-// см. docs/rendering.md#качание-листвы
-auto sway_sample_at(
-    mesh_source src, vec3i p
-) -> sway_sample {
-    const auto beyond = [](int32 v, int32 cells) -> int32 {
-        return v < 0 ? -1 : (v >= cells ? 1 : 0);
-    };
-    const vec3i step{
-        beyond(p.x, src.cells_x()), beyond(p.y, src.cells_y()), beyond(p.z, src.cells_z())
-    };
-    const auto answer = [](bool solid, bool leaf) -> sway_sample {
-        return !solid ? sway_sample::open : (leaf ? sway_sample::leaf : sway_sample::hard);
-    };
-
-    switch (shell_span(step)) {
-        case 0: {
-            if (src.solid != nullptr) {
-                return answer(src.solid->test(p.x, p.y, p.z), src.leaves->test(p.x, p.y, p.z));
-            }
-            if (src.cell_empty(p.x, p.y, p.z)) {
-                return sway_sample::open;
-            }
-            const bool leaf = src.leaves != nullptr ? src.leaves->test(p.x, p.y, p.z)
-                                                    : is_leaf_voxel(src.voxels.get_voxel(p.x, p.y, p.z));
-            return leaf ? sway_sample::leaf : sway_sample::hard;
-        }
-        case 1: {
-            const face_direction face = shell_face(step);
-            if (!src.has_boundary_slice(face)) {
-                return sway_sample::open;
-            }
-            const vec2i on_plane = project_onto_face_plane(face, p);
-            return answer(src.boundary->faces[face].test(on_plane.x, on_plane.y),
-                          src.boundary->leaf_faces[face].test(on_plane.x, on_plane.y));
-        }
-        case 2: {
-            if (!src.has_boundary_edge(step)) {
-                return sway_sample::open;
-            }
-            const int32 along = p[shell_free_axis(step)];
-            return answer(src.boundary->edge_holds(step, along), src.boundary->edge_holds_leaf(step, along));
-        }
-        default:
-            if (!src.has_boundary_corner(step)) {
-                return sway_sample::open;
-            }
-            return answer(src.boundary->corner_holds(step), src.boundary->corner_holds_leaf(step));
-    }
-}
-
-auto compute_corner_sway(
-    mesh_source src, int32 x, int32 y, int32 z, face_direction face
-) -> uint8 {
-    constexpr uint8 free_corner = 3;
-
-    const vec3i host = vec3i{x, y, z};
-    const vec3i n    = host + offset_of(face);
-    const vec3i u    = ao_tangent_u[face];
-    const vec3i v    = ao_tangent_v[face];
-
-    const bool inside = src.solid != nullptr && x > 0 && y > 0 && z > 0 && x + 1 < src.cells_x() &&
-                        y + 1 < src.cells_y() && z + 1 < src.cells_z() && src.cell_inside(n - u - v) &&
-                        src.cell_inside(n + u + v);
-    const auto hard_at = [&](vec3i p) -> bool {
-        if (inside) {
-            return src.solid->test(p.x, p.y, p.z) && !src.leaves->test(p.x, p.y, p.z);
-        }
-        return sway_sample_at(src, p) == sway_sample::hard;
-    };
-
-    std::array<bool, 18> hard{};
-    for (int32 layer = 0; layer < 2; ++layer) {
-        const vec3i base = layer == 0 ? host : n;
-        for (int32 dv = -1; dv <= 1; ++dv) {
-            for (int32 du = -1; du <= 1; ++du) {
-                const vec3i p = base + (u * du) + (v * dv);
-                hard[static_cast<std::size_t>((layer * 9) + ((dv + 1) * 3) + (du + 1))] =
-                    (layer != 0 || du != 0 || dv != 0) && hard_at(p);
-            }
-        }
-    }
-    const auto corner = [&hard](int32 su, int32 sv) -> uint8 {
-        for (int32 layer = 0; layer < 2; ++layer) {
-            for (const int32 dv : {0, sv}) {
-                for (const int32 du : {0, su}) {
-                    if (hard[static_cast<std::size_t>((layer * 9) + ((dv + 1) * 3) + (du + 1))]) {
-                        return 0;
-                    }
-                }
-            }
-        }
-        return free_corner;
-    };
-
-    return static_cast<uint8>(corner(-1, -1) | (corner(1, -1) << 2) | (corner(1, 1) << 4) |
-                              (corner(-1, 1) << 6));
-}
-
-auto compute_corner_shape(
-    mesh_source src, int32 x, int32 y, int32 z, face_direction face, voxel v
-) -> uint8 {
-    if (!is_leaf_voxel(v) || src.lod_step != 1) {
-        return 0;
-    }
-    return compute_corner_sway(src, x, y, z, face);
-}
-
 auto is_face_visible(
     mesh_source src, int32 x, int32 y, int32 z, face_direction face
 ) -> bool {
@@ -376,13 +243,24 @@ auto is_face_visible(
 
     if (nx < 0 || nx >= src.cells_x() || ny < 0 || ny >= src.cells_y() || nz < 0 ||
         nz >= src.cells_z()) {
-        if (src.has_boundary_slice(face)) {
-            return !src.covers_boundary_cell(face, x, y, z);
+        if (!src.has_boundary_slice(face) || !src.covers_boundary_cell(face, x, y, z)) {
+            return true;
         }
+        if (src.lod_step != 1) {
+            return false;
+        }
+        const vec2i on_plane = project_onto_face_plane(face, vec3i{x, y, z});
+        return src.boundary->leaf_faces[face].test(on_plane.x, on_plane.y) !=
+               is_leaf_voxel(src.voxels.get_voxel(x, y, z));
+    }
+
+    if (src.cell_empty(nx, ny, nz)) {
         return true;
     }
 
-    return src.cell_empty(nx, ny, nz);
+    // см. docs/rendering.md#качание-листвы
+    return src.lod_step == 1 && is_leaf_voxel(src.voxels.get_voxel(nx, ny, nz)) !=
+                                    is_leaf_voxel(src.voxels.get_voxel(x, y, z));
 }
 
 auto build_face_mask(
@@ -424,9 +302,7 @@ auto build_face_mask(
                     for (int v = v_block; v < v_end; v++) {
                         auto [mx, my, mz] = axes.to_model_coords(u, v, layer);
                         if (is_face_visible(src, mx, my, mz, face)) {
-                            storage.mask[idx(u, v)] = {
-                                fid, compute_corner_shape(src, mx, my, mz, face, fid)
-                            };
+                            storage.mask[idx(u, v)] = {fid};
                         } else {
                             storage.mask[idx(u, v)] = empty_cell;
                         }
@@ -441,9 +317,7 @@ auto build_face_mask(
                     auto [mx, my, mz] = axes.to_model_coords(u, v, layer);
                     const auto vx     = page.voxel_at(mx % ps, my % ps, mz % ps);
                     if (!vx.is_empty() && is_face_visible(src, mx, my, mz, face)) {
-                        storage.mask[idx(u, v)] = {
-                            vx, compute_corner_shape(src, mx, my, mz, face, vx)
-                        };
+                        storage.mask[idx(u, v)] = {vx};
                     } else {
                         storage.mask[idx(u, v)] = empty_cell;
                     }
@@ -459,41 +333,15 @@ auto add_quad(
     vec3i min_pos,
     vec3i max_pos,
     voxel v,
-    uint8 corner_sway
+    bool sways
 ) -> void {
-    using corner_order = std::array<uint8, 4>;
-
-    static constexpr per_face<corner_order> winding_to_corner = {
-        corner_order{0, 1, 3, 2},
-        corner_order{0, 2, 3, 1},
-        corner_order{0, 1, 3, 2},
-        corner_order{0, 2, 3, 1},
-        corner_order{0, 2, 3, 1},
-        corner_order{1, 3, 2, 0},
-    };
-
-    static constexpr uint8 corner_to_ao[4] = {0, 1, 3, 2};
-
-    // см. docs/rendering.md#порядок-углов
-    uint8 sway_winding = 0;
-    for (int i = 0; i < 4; i++) {
-        const uint8 ao_i  = corner_to_ao[winding_to_corner[face][i]];
-        const auto weight = static_cast<uint8>((corner_sway >> (ao_i * 2)) & 0x3u);
-        sway_winding |= static_cast<uint8>(weight << (i * 2));
-    }
-
-    quads.push_back(quad::pack(min_pos, max_pos, face, v, sway_winding, is_leaf_voxel(v)));
+    quads.push_back(quad::pack(min_pos, max_pos, face, v, sways));
 }
 
 
 auto boundary_row(
-    mesh_source src, face_direction face, int32 v, int32 width
+    const vw::asset::face_occupancy& plane, face_direction face, int32 v, int32 width
 ) -> uint64 {
-    if (!src.has_boundary_slice(face)) {
-        return 0;
-    }
-
-    const auto& plane = src.boundary_face(face);
 
     if (axis_of(face) == 0) {
         uint64 bits = 0;
@@ -521,32 +369,57 @@ auto build_layer_rows(
     const int32 nd    = d + step;
     const bool inside = nd >= 0 && nd < axes.depth;
 
+    const bool seam = !inside && src.has_boundary_slice(face);
+
+    const auto across = [&](
+                            const vw::asset::chunk_occupancy& cells,
+                            const vw::asset::face_occupancy& plane, int32 v
+                        ) -> std::pair<uint64, uint64> {
+        const uint64 beyond = seam ? boundary_row(plane, face, v, axes.width) : 0;
+        switch (axis_of(face)) {
+            case 0:
+                return {cells.zrow(v, d), inside ? cells.zrow(v, nd) : beyond};
+            case 1:
+                return {cells.row(d, v), inside ? cells.row(nd, v) : beyond};
+            default:
+                return {cells.row(v, d), inside ? cells.row(v, nd) : beyond};
+        }
+    };
+
+    static const vw::asset::face_occupancy no_plane{};
+
     uint64 any = 0;
 
     for (int32 v = 0; v < axes.height; ++v) {
-        uint64 own  = 0;
-        uint64 front = 0;
+        const auto [own, front] = across(occupancy, seam ? src.boundary_face(face) : no_plane, v);
 
-        switch (axis_of(face)) {
-            case 0:
-                own   = occupancy.zrow(v, d);
-                front = inside ? occupancy.zrow(v, nd) : boundary_row(src, face, v, axes.width);
-                break;
-            case 1:
-                own   = occupancy.row(d, v);
-                front = inside ? occupancy.row(nd, v) : boundary_row(src, face, v, axes.width);
-                break;
-            default:
-                own   = occupancy.row(v, d);
-                front = inside ? occupancy.row(v, nd) : boundary_row(src, face, v, axes.width);
-                break;
+        // см. docs/rendering.md#качание-листвы
+        uint64 parted = 0;
+        if (src.leaves != nullptr) {
+            const auto [own_leaf, front_leaf] =
+                across(*src.leaves, seam ? src.boundary->leaf_faces[face] : no_plane, v);
+            parted = own_leaf ^ front_leaf;
         }
 
-        out.visible[v] = own & ~front;
+        out.visible[v] = own & (~front | parted);
         any |= out.visible[v];
     }
 
     return any != 0;
+}
+
+// см. docs/rendering.md#качание-листвы
+[[nodiscard]] auto sways(const face_mask_cell& cell, const face_axis_mapping& axes) -> bool {
+    return axes.step == 1 && is_leaf_voxel(cell.index);
+}
+
+[[nodiscard]] auto merge_reach(
+    const face_mask_cell& cell, const face_axis_mapping& axes, int32 from, int32 extent
+) -> int32 {
+    if (!sways(cell, axes)) {
+        return extent;
+    }
+    return std::min(extent, ((from / quad::sway_lattice) + 1) * quad::sway_lattice);
 }
 
 auto emit_rect(
@@ -562,7 +435,7 @@ auto emit_rect(
 ) -> void {
     auto [min_pos, max_pos] = axes.to_local_min_max(u_start, v_start, w, h, layer);
 
-    add_quad(storage.quads, face, min_pos, max_pos, cell.index, cell.corner_sway);
+    add_quad(storage.quads, face, min_pos, max_pos, cell.index, sways(cell, axes));
 }
 
 [[nodiscard]] auto cell_span_mask(int32 step) -> uint64 {
@@ -725,7 +598,7 @@ auto simple_mesh_generator::generate_mesh_data(
 
 auto simple_mesh_generator::add_cube_face(
     std::vector<quad>& quads,
-    mesh_source src,
+    mesh_source,
     int x,
     int y,
     int z,
@@ -734,12 +607,7 @@ auto simple_mesh_generator::add_cube_face(
     [[maybe_unused]] mesh_options opts
 ) -> void {
     detail::add_quad(
-        quads,
-        face,
-        {x, y, z},
-        {x + 1, y + 1, z + 1},
-        voxel_id,
-        detail::compute_corner_shape(src, x, y, z, face, voxel_id)
+        quads, face, {x, y, z}, {x + 1, y + 1, z + 1}, voxel_id, detail::is_leaf_voxel(voxel_id)
     );
 }
 
@@ -757,7 +625,9 @@ auto simple_mesh_generator::is_face_visible(
         return true;
     }
 
-    return src.voxels.is_empty(nx, ny, nz);
+    return src.voxels.is_empty(nx, ny, nz) ||
+           detail::is_leaf_voxel(src.voxels.get_voxel(nx, ny, nz)) !=
+               detail::is_leaf_voxel(src.voxels.get_voxel(x, y, z));
 }
 
 
@@ -808,7 +678,8 @@ auto strip_mesh_generator::merge_and_emit_strips(
 
             int strip_start = u;
             u++;
-            while (u < axes.width && storage.mask[idx(u, v)] == cell) {
+            const int reach = detail::merge_reach(cell, axes, strip_start, axes.width);
+            while (u < reach && storage.mask[idx(u, v)] == cell) {
                 u++;
             }
             int w = u - strip_start;
@@ -914,7 +785,6 @@ auto greedy_mesh_generator::generate_mesh_data(
         }
         if (src.voxels.build_rows_of(*storage.leaves, leaf_set)) {
             src.leaves = storage.leaves.get();
-            src.solid  = storage.occupancy.get();
         }
     }
 
@@ -965,9 +835,11 @@ auto greedy_mesh_generator::merge_and_emit_rects_bits(
         while (row != 0) {
             const int u = std::countr_zero(row);
             const face_mask_cell key = storage.mask[idx(u, v)];
+            const int reach_u        = detail::merge_reach(key, axes, u, axes.width);
+            const int reach_v        = detail::merge_reach(key, axes, v, axes.height);
 
             int w = 1;
-            while (u + w < axes.width && ((row >> (u + w)) & 1U) != 0 &&
+            while (u + w < reach_u && ((row >> (u + w)) & 1U) != 0 &&
                    storage.mask[idx(u + w, v)] == key) {
                 ++w;
             }
@@ -976,7 +848,7 @@ auto greedy_mesh_generator::merge_and_emit_rects_bits(
                 (w == 64) ? ~uint64{0} : (((uint64{1} << w) - 1) << u);
 
             int h = 1;
-            while (v + h < axes.height && (rows.visible[v + h] & span) == span &&
+            while (v + h < reach_v && (rows.visible[v + h] & span) == span &&
                    keys_match(v + h, u, w, key)) {
                 rows.visible[v + h] &= ~span;
                 ++h;
@@ -1009,13 +881,16 @@ auto greedy_mesh_generator::merge_and_emit_rects(
             if (cell.is_empty())
                 continue;
 
+            const int reach_u = detail::merge_reach(cell, axes, u, axes.width);
+            const int reach_v = detail::merge_reach(cell, axes, v, axes.height);
+
             int w = 1;
-            while (u + w < axes.width && storage.mask[idx(u + w, v)] == cell) {
+            while (u + w < reach_u && storage.mask[idx(u + w, v)] == cell) {
                 w++;
             }
 
             int h = 1;
-            while (v + h < axes.height) {
+            while (v + h < reach_v) {
                 bool row_ok = true;
                 for (int du = 0; du < w; du++) {
                     if (storage.mask[idx(u + du, v + h)] != cell) {
@@ -1107,12 +982,7 @@ auto greedy_mesh_generator::generate_face_quads(
 
                     auto [mx, my, mz] = axes.to_model_coords(u, v, layer);
 
-                    const bool leaf = src.leaves != nullptr && src.leaves->test(mx, my, mz);
-
-                    storage.mask[idx(u, v)] = {
-                        src.cell_index(mx, my, mz),
-                        leaf ? detail::compute_corner_sway(src, mx, my, mz, face) : uint8{0}
-                    };
+                    storage.mask[idx(u, v)] = {src.cell_index(mx, my, mz)};
                 }
             }
 

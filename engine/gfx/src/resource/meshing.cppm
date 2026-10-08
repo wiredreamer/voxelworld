@@ -20,6 +20,9 @@ struct quad {
 
     static constexpr uint32 sway_flag = 1U << 22U;
 
+    // см. docs/rendering.md#качание-листвы
+    static constexpr int32 sway_lattice = 8;
+
     uint32 data0 = 0;
     uint32 data1 = 0;
 
@@ -27,7 +30,7 @@ struct quad {
 
     // см. docs/rendering.md#качание-листвы
     [[nodiscard]] static auto pack(
-        vec3i min_pos, vec3i max_pos, face_direction face, voxel v, uint8 corners_sway, bool sways
+        vec3i min_pos, vec3i max_pos, face_direction face, voxel v, bool sways
     ) -> quad;
 
     [[nodiscard]] static auto get_binding_descriptions()
@@ -85,7 +88,6 @@ struct mesh_source {
     const vw::asset::chunk_occupancy* lod_cells    = nullptr;
     const voxel* lod_indices                 = nullptr;
 
-    const vw::asset::chunk_occupancy* solid  = nullptr;
     const vw::asset::chunk_occupancy* leaves = nullptr;
 
     [[nodiscard]] auto has_boundary_slice(face_direction face) const -> bool {
@@ -101,14 +103,6 @@ struct mesh_source {
     [[nodiscard]] auto boundary_face(face_direction face) const
         -> const vw::asset::face_occupancy& {
         return boundary->faces[face];
-    }
-
-    [[nodiscard]] auto has_boundary_edge(vec3i step) const -> bool {
-        return boundary != nullptr && boundary->has_edge(step);
-    }
-
-    [[nodiscard]] auto has_boundary_corner(vec3i step) const -> bool {
-        return boundary != nullptr && boundary->has_corner(step);
     }
 
     [[nodiscard]] auto cells_x() const -> int32 {
@@ -176,7 +170,6 @@ private:
 
 struct face_mask_cell {
     voxel index;
-    uint8 corner_sway = 0;
 
     [[nodiscard]]
     auto operator==(const face_mask_cell&) const -> bool = default;

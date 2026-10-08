@@ -89,26 +89,32 @@ std430 нет диагностики на расхождение: ошибки �
 - **GLSL:** `struct Quad` и разбор `data0`/`data1` в `main` — `voxel.vert`,
   `shadow.vert` и `grass.vert`; `SWAY_FLAG` в `voxel.vert` и `shadow.vert`.
 - **Копия в тестах:** `unpack_min`, `unpack_max`, `unpack_normal`,
-  `unpack_slot`, `unpack_sways`, `unpack_sway_weights` в
+  `unpack_slot`, `unpack_sways` в
   `tests/gfx/mesher.test.cpp` — собственный повтор разбора `voxel.vert`
   литеральными сдвигами и масками, а не обращение к `quad`.
 - **Менять вместе:** сдвиг и маску каждого поля во всех местах. Воксель — 8 бит
   (`0xFF` в шейдерах), каталог живёт в байте, `voxel_type_capacity`
-  (`engine/core/src/voxels/voxels.cppm`); бит 22 — флаг качания, бит 23 свободен.
+  (`engine/core/src/voxels/voxels.cppm`); бит 22 — флаг качания, биты `31:23` свободны.
   Координата — 7 бит (0…127), протяжённость хранится минус один (1…128); дальше
   `& 0x7F` молча заворачивает. Шаг записи в буфере `Quads` — `sizeof(quad)`, в
   std430 это 8 байт: третье поле в `struct Quad` сдвинет все квады.
-- **Байты `31:24`.** У `data0` свободны и нулевые. У `data1` — веса качания по
-  углам в порядке обхода, только при флаге; без флага `quad::pack` пишет ноль.
-  Затенения, выпуклости и света в кваде нет: их считает фрагмент (см. «Занятость»
+- **Решётка ветра.** `quad::sway_lattice` (`meshing.cppm`) и `SWAY_LATTICE` в
+  `shaders/include/leaf_sway.glsl` — одно число, 8. Мешер не сливает листву
+  через плоскости решётки, шейдер смешивает ветер между её узлами. Разойдутся —
+  в кронах щели, в которые видно небо; сторож только у стороны C++ (`a block of
+  one leaf tone merges up to the wind lattice and no further`).
+- **Байты `31:24`.** Свободны и нулевые у обоих слов. Весов качания по углам
+  больше нет: листва движется вся одинаково, а мешер оставляет грани на её стыке
+  с остальным (`docs/rendering.md#качание-листвы`). Затенения, выпуклости и света в кваде нет: их считает фрагмент (см. «Занятость»
   и «Кеш освещённости»).
 - **Сторож:** тесты `[mesh]` через `unpack_*` — только C++-сторона.
   `greedy meshing output is stable` и `full-size greedy meshing output is
   stable` падают на любой смене упаковки и слияния: число квадов и дайджест
-  обновляй только после проверки картинки. Веса качания сверяет с моделью `a leaf
-  corner sways unless wood or ground touches its vertex` (он же стережёт нули в
-  свободных байтах), шов — `a leaf on the chunk seam is pinned by wood across it
-  and free beside leaves`. Разбор в шейдерах не проверяет ничто.
+  обновляй только после проверки картинки. Флаг и нули в свободных битах стережёт
+  `every leaf quad sways, stays inside one lattice cell and carries nothing above
+  the flag`, грани на стыке — `a
+  leaf and the wood it touches both keep the face between them`, шов — `a leaf on
+  the chunk seam keeps its face against wood and drops it against leaves`. Разбор в шейдерах не проверяет ничто.
 - **Если разошлись:** квады не на месте или растянуты, чужой цвет, лист качается
   не тем углом.
 - Почему так: `docs/rendering.md#квад`.
@@ -127,16 +133,13 @@ std430 нет диагностики на расхождение: ошибки �
 - **Если разошлись:** протяжённости меняются местами, прямоугольник повёрнут на
   четверть оборота — дыры и нахлёсты на неквадратных гранях.
 
-## Порядок углов и обход
+## Обход
 
-Мешер нумерует углы по своим касательным (`c0…c3` в `compute_corner_sway`),
-шейдер — по порядку обхода. Мост между ними — таблицы в `add_quad`.
+Масок по углам в кваде нет, поэтому порядок углов мешера шейдеру больше не
+нужен: остался только порядок обхода.
 
-- **C++:** `winding_to_corner` и `corner_to_ao` в `add_quad` (`mesh.cpp`). Через
-  перестановку проходит одна маска — веса качания.
 - **GLSL:** `FACE_VERTS` в `voxel.vert`, `shadow.vert` и `grass.vert` — какой
-  конец коробки берёт каждая вершина обхода; вес угла `voxel.vert` берёт как
-  `(corners_shape >> (corner_id * 2)) & 3`.
+  конец коробки берёт каждая вершина обхода.
 - **Индексы:** `combined_buffer_pool::ensure_index_pattern_` пишет
   `0,1,2,2,3,0` на квад, `combined_buffer::write_draw_command_` ставит
   `vertex_offset` = смещение квада × 4, шейдеры берут квад как
@@ -144,12 +147,7 @@ std430 нет диагностики на расхождение: ошибки �
 - **Лицевая сторона:** обход в `FACE_VERTS` вместе с `frontFace =
   eCounterClockwise` и `cullMode` (`eBack` в `renderer::create_graphics_pipeline`,
   `eFront` в `renderer::create_shadow_pipeline`) решает, что отсекается.
-- **Копия в тестах:** `face_verts` в `mesher.test.cpp` — копия `FACE_VERTS`.
-- **Сторож:** `a leaf corner sways unless wood or ground touches its vertex`
-  сверяет упакованный вес с моделью через `face_verts`. Поменял `FACE_VERTS`, не
-  тронув копию, — тест проверяет старый порядок и остаётся зелёным.
-- **Если разошлись:** таблица, повёрнутая или отражённая для одной грани из
-  шести, качает не тот угол листа — крона отрывается от ствола с одной стороны.
+- **Сторож:** нет. Отражённый обход — грань отсекается и пропадает.
   Отражённый обход — грань отсекается и пропадает.
 
 ## Номер грани: +X, −X, +Y, −Y, +Z, −Z
