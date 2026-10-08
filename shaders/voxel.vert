@@ -65,6 +65,7 @@ const vec3 NORMALS[6] = vec3[6](
 
 const uint FLAT_ONLY  = 1u << 8u;
 const uint FACE_SHIFT = 9u;
+const uint STATE_SHIFT = 12u;
 
 const uint TANGENT_U_AXIS[6] = uint[6](2u, 2u, 0u, 0u, 0u, 0u);
 const uint TANGENT_V_AXIS[6] = uint[6](1u, 1u, 2u, 2u, 1u, 1u);
@@ -123,7 +124,8 @@ void main() {
     fragColor = palette[palette_idx].color.rgb;
     fragGlow  = materials[q.data0 >> 24].look.x;
 
-    fragConvexMask = (sways ? FLAT_ONLY : 0u) | (normal_id << FACE_SHIFT);
+    fragConvexMask = (sways ? FLAT_ONLY : 0u) | (normal_id << FACE_SHIFT) |
+                     ((q.data1 >> 26) << STATE_SHIFT);
 
     viewDepth = -(ubo.view * worldPos).z;
 

@@ -57,6 +57,7 @@ add_executable(asset_tests
     asset/page_format.test.cpp
     asset/model_emitters.test.cpp
     asset/model_materials.test.cpp
+    asset/model_states.test.cpp
     asset/model_fill.test.cpp
     asset/occupancy_bricks.test.cpp
     asset/model_edit.test.cpp

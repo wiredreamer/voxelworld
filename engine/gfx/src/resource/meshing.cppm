@@ -32,7 +32,8 @@ struct quad {
 
     // см. docs/rendering.md#качание-листвы
     [[nodiscard]] static auto pack(
-        vec3i min_pos, vec3i max_pos, face_direction face, voxel v, material made_of, bool sways
+        vec3i min_pos, vec3i max_pos, face_direction face, voxel v, material made_of,
+        uint8 state_code, bool sways
     ) -> quad;
 
     [[nodiscard]] static auto get_binding_descriptions()
@@ -90,6 +91,7 @@ struct mesh_source {
     const vw::asset::chunk_occupancy* lod_cells    = nullptr;
     const voxel* lod_indices                 = nullptr;
     const material* lod_materials            = nullptr;
+    const uint8* lod_state_codes             = nullptr;
 
     const vw::asset::chunk_occupancy* leaves = nullptr;
 
@@ -149,6 +151,13 @@ struct mesh_source {
         }
         return lod_materials[cell_offset(x, y, z)];
     }
+
+    [[nodiscard]] auto cell_state_code(int32 x, int32 y, int32 z) const -> uint8 {
+        if (lod_step == 1) {
+            return shown_code(voxels.get_state(x, y, z));
+        }
+        return lod_state_codes[cell_offset(x, y, z)];
+    }
 };
 
 class simple_mesh_generator {
@@ -181,6 +190,7 @@ private:
 struct face_mask_cell {
     voxel index;
     material made_of;
+    uint8 state_code = 0;
 
     [[nodiscard]]
     auto operator==(const face_mask_cell&) const -> bool = default;
@@ -203,6 +213,7 @@ struct mesh_generation_storage {
     std::unique_ptr<vw::asset::chunk_occupancy> leaves;
     std::vector<voxel> lod_indices;
     std::vector<material> lod_materials;
+    std::vector<uint8> lod_state_codes;
     vw::asset::model_boundary lod_boundary;
 
     vw::asset::chunk_link_scratch link_scratch;

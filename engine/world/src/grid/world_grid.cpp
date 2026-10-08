@@ -68,6 +68,37 @@ auto world_grid::set_voxel(
     }
 }
 
+auto world_grid::get_state(
+    vec3i world_pos
+) const -> voxel_state {
+    const auto it = chunks_.find(world_to_chunk_coord(world_pos));
+    if (it == chunks_.end()) {
+        return voxel_state{};
+    }
+    return it->second->get_model()->get_state(
+        world_to_local_coord(world_pos) / world_units_per_voxel_
+    );
+}
+
+auto world_grid::set_state(
+    vec3i world_pos, voxel_state state
+) -> void {
+    const auto cc = world_to_chunk_coord(world_pos);
+    const auto it = chunks_.find(cc);
+    if (it == chunks_.end()) {
+        return;
+    }
+
+    const auto lc = world_to_local_coord(world_pos) / world_units_per_voxel_;
+    auto& voxels  = *it->second->get_model();
+    if (voxels.get_state(lc) == state || voxels.is_empty(lc)) {
+        return;
+    }
+
+    voxels.set_state(lc, state);
+    refresh_chunk(cc);
+}
+
 auto world_grid::cell_of(
     const vec3f& world_pos
 ) const -> vec3i {

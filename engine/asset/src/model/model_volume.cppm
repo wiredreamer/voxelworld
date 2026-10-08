@@ -86,6 +86,36 @@ public:
         return materials_.whole_page(static_cast<std::size_t>(page_index(px, py, pz)));
     }
 
+    // см. docs/ENGINE.md#слой-состояния
+    [[nodiscard]] auto get_state(
+        int32 x, int32 y, int32 z
+    ) const -> voxel_state {
+        return states_.get(
+            static_cast<std::size_t>(page_index(x / page_size, y / page_size, z / page_size)),
+            voxel_page_local_index(x % page_size, y % page_size, z % page_size)
+        );
+    }
+
+    [[nodiscard]] auto get_state(
+        vec3i pos
+    ) const -> voxel_state {
+        return get_state(pos.x, pos.y, pos.z);
+    }
+
+    auto set_state(int32 x, int32 y, int32 z, voxel_state state) -> void;
+
+    auto set_state(
+        vec3i pos, voxel_state state
+    ) -> void {
+        set_state(pos.x, pos.y, pos.z, state);
+    }
+
+    [[nodiscard]] auto get_page_state(
+        int32 px, int32 py, int32 pz
+    ) const -> std::optional<voxel_state> {
+        return states_.whole_page(static_cast<std::size_t>(page_index(px, py, pz)));
+    }
+
     [[nodiscard]] auto get_voxel(
         int32 x, int32 y, int32 z
     ) const -> voxel {
@@ -281,6 +311,7 @@ private:
     std::vector<uint32> owned_binary_;
     std::vector<uint32> owned_palette_;
     material_layer materials_;
+    state_layer states_;
     model_identity identity_;
     mutable model_fill fill_ = model_fill::mixed;
     mutable bool fill_known_ = false;

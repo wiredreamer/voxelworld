@@ -84,3 +84,33 @@ TEST_CASE("serials of two grids never answer for each other", "[world][grid]") {
     CHECK_FALSE(second.occupancy_changes_since(first.occupancy_serial()));
     CHECK_FALSE(first.occupancy_changes_since(second.occupancy_serial()));
 }
+
+TEST_CASE("a state change reaches the chunk's model and leaves occupancy alone", "[world][grid][state]") {
+    world w;
+    world_grid grid{w};
+
+    static_cast<void>(grid.place_chunk({0, 0, 0}, ground_chunk(w)));
+    grid.register_column({0, 0}, {0});
+
+    const int32 units    = grid.world_units_per_voxel();
+    const vec3i ground   = {5 * units, 0, 5 * units};
+    const vec3i air      = {5 * units, 9 * units, 5 * units};
+    const auto& voxels   = *grid.find_chunk({0, 0, 0})->get_model();
+    const uint64 settled = grid.occupancy_serial();
+    const auto before    = voxels.get_identity();
+
+    grid.set_state(ground, voxel_state{9});
+
+    REQUIRE(grid.get_state(ground) == voxel_state{9});
+    REQUIRE(voxels.get_identity() != before);
+    REQUIRE(grid.occupancy_serial() == settled);
+    REQUIRE(grid.occupancy_changes_since(settled)->empty());
+
+    const auto marked = voxels.get_identity();
+    grid.set_state(ground, voxel_state{9});
+    grid.set_state(air, voxel_state{9});
+
+    REQUIRE(voxels.get_identity() == marked);
+    REQUIRE(grid.get_state(air) == voxel_state{});
+    REQUIRE(grid.get_state({900 * units, 0, 0}) == voxel_state{});
+}

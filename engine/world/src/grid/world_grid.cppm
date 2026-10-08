@@ -35,6 +35,10 @@ public:
     [[nodiscard]] auto get_matter(vec3i world_pos) const -> matter;
     auto set_voxel(vec3i world_pos, matter v) -> void;
 
+    // см. docs/ENGINE.md#слой-состояния
+    [[nodiscard]] auto get_state(vec3i world_pos) const -> voxel_state;
+    auto set_state(vec3i world_pos, voxel_state state) -> void;
+
     [[nodiscard]] auto cell_of(const vec3f& world_pos) const -> vec3i;
     [[nodiscard]] auto cell_at(vec3i at) const -> std::optional<cell>;
     auto plant_cover(vec3i at, uint8 form) -> std::expected<void, std::string>;

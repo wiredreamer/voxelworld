@@ -21,6 +21,7 @@ enum class edit_tool : int32 {
     none = 0,
     place,
     remove,
+    state,
 };
 
 struct voxel_choice {
@@ -149,6 +150,7 @@ private:
 
     edit_tool tool_     = edit_tool::none;
     int32 place_choice_ = 0;
+    int32 state_bits_   = 1;
     int32 reach_voxels_ = 12;
     int32 edit_clicks_  = 0;
     std::optional<voxel_pick> hovered_;

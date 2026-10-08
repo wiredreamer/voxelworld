@@ -56,6 +56,10 @@ auto unpack_material(const gfx::quad& q) -> material {
     return material{static_cast<uint8>(q.data0 >> 24)};
 }
 
+auto unpack_state_code(const gfx::quad& q) -> uint8 {
+    return static_cast<uint8>(q.data1 >> 26);
+}
+
 auto unpack_sways(const gfx::quad& q) -> bool {
     return ((q.data1 >> 22) & 0x1U) != 0;
 }
@@ -1151,4 +1155,60 @@ TEST_CASE("neighbours of one colour merge only when they are of one material", "
 
     REQUIRE(top_quads(material{}) == std::vector<material>{material{}});
     REQUIRE(top_quads(glowing) == std::vector<material>{material{}, glowing});
+}
+
+TEST_CASE("a quad carries the shown code of its voxel's state and zero without one", "[mesh][state]") {
+    model_fixture fixture{64};
+    fixture.get()->set_voxel(3, 3, 3, voxels::gray[10]);
+    fixture.get()->set_voxel(9, 3, 3, voxels::gray[10]);
+    fixture.get()->set_state(9, 3, 3, voxel_state{64 + 21});
+
+    const auto check = [](const gfx::mesh& m) -> void {
+        REQUIRE(m.quads.size() == 12);
+        for (const auto& q : m.quads) {
+            REQUIRE(unpack_state_code(q) == (unpack_min(q).x >= 9 ? 21 : 0));
+            REQUIRE(((q.data1 >> 23) & 0x7U) == 0);
+        }
+    };
+
+    check(fixture.simple());
+    check(fixture.greedy());
+}
+
+TEST_CASE("neighbours of one colour and material merge only under one state code", "[mesh][state]") {
+    const auto top_quads = [](voxel_state second) -> std::vector<uint8> {
+        model_fixture fixture{64};
+        fixture.get()->set_voxel(3, 3, 3, voxels::amber[4]);
+        fixture.get()->set_voxel(4, 3, 3, voxels::amber[4]);
+        fixture.get()->set_state(4, 3, 3, second);
+
+        std::vector<uint8> found;
+        for (const auto& q : fixture.greedy().quads) {
+            if (unpack_normal(q) == 2) {
+                found.push_back(unpack_state_code(q));
+            }
+        }
+        std::ranges::sort(found);
+        return found;
+    };
+
+    REQUIRE(top_quads(voxel_state{}) == std::vector<uint8>{0});
+    REQUIRE(top_quads(voxel_state{64}) == std::vector<uint8>{0});
+    REQUIRE(top_quads(voxel_state{5}) == std::vector<uint8>{0, 5});
+}
+
+TEST_CASE("a coarse quad takes the state code of the voxel that gave it its colour", "[mesh][state][lod]") {
+    model_fixture fixture{64};
+    for (int32 x = 0; x < 64; ++x) {
+        for (int32 z = 0; z < 64; ++z) {
+            fixture.get()->set_voxel(x, 1, z, voxels::gray[10]);
+            fixture.get()->set_state(x, 1, z, voxel_state{7});
+        }
+    }
+
+    const auto mesh = fixture.greedy({.lod_step = 2});
+    REQUIRE_FALSE(mesh.quads.empty());
+    for (const auto& q : mesh.quads) {
+        REQUIRE(unpack_state_code(q) == 7);
+    }
 }

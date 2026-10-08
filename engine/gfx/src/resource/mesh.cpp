@@ -21,6 +21,7 @@ auto quad::pack(
     face_direction face,
     voxel v,
     material made_of,
+    uint8 state_code,
     bool sways
 ) -> quad {
     const int32 u_axis = tangent_u_axis[face];
@@ -41,7 +42,8 @@ auto quad::pack(
         (span_u & 0x7Fu) |                                  //
         ((span_v & 0x7Fu) << 7) |                           //
         (static_cast<uint32>(v.value) << 14) |               //
-        (sways ? sway_flag : 0U);
+        (sways ? sway_flag : 0U) |                           //
+        (static_cast<uint32>(state_code) << state_shift);
 
     return q;
 }
@@ -135,8 +137,7 @@ auto add_quad(
     face_direction face,
     vec3i min_pos,
     vec3i max_pos,
-    voxel v,
-    material made_of,
+    const face_mask_cell& cell,
     bool at_full_detail
 ) -> void;
 
@@ -302,7 +303,9 @@ auto build_face_mask(
                     for (int v = v_block; v < v_end; v++) {
                         auto [mx, my, mz] = axes.to_model_coords(u, v, layer);
                         if (is_face_visible(src, mx, my, mz, face)) {
-                            storage.mask[idx(u, v)] = {fid, src.cell_material(mx, my, mz)};
+                            storage.mask[idx(u, v)] = {
+                                fid, src.cell_material(mx, my, mz), src.cell_state_code(mx, my, mz)
+                            };
                         } else {
                             storage.mask[idx(u, v)] = empty_cell;
                         }
@@ -317,7 +320,9 @@ auto build_face_mask(
                     auto [mx, my, mz] = axes.to_model_coords(u, v, layer);
                     const auto vx     = page.voxel_at(mx % ps, my % ps, mz % ps);
                     if (!vx.is_empty() && is_face_visible(src, mx, my, mz, face)) {
-                        storage.mask[idx(u, v)] = {vx, src.cell_material(mx, my, mz)};
+                        storage.mask[idx(u, v)] = {
+                            vx, src.cell_material(mx, my, mz), src.cell_state_code(mx, my, mz)
+                        };
                     } else {
                         storage.mask[idx(u, v)] = empty_cell;
                     }
@@ -332,13 +337,12 @@ auto add_quad(
     face_direction face,
     vec3i min_pos,
     vec3i max_pos,
-    voxel v,
-    material made_of,
+    const face_mask_cell& cell,
     bool at_full_detail
 ) -> void {
     quads.push_back(quad::pack(
-        min_pos, max_pos, face, v, made_of,
-        at_full_detail && default_material_table().get(made_of).sways
+        min_pos, max_pos, face, cell.index, cell.made_of, cell.state_code,
+        at_full_detail && default_material_table().get(cell.made_of).sways
     ));
 }
 
@@ -439,7 +443,7 @@ auto emit_rect(
 ) -> void {
     auto [min_pos, max_pos] = axes.to_local_min_max(u_start, v_start, w, h, layer);
 
-    add_quad(storage.quads, face, min_pos, max_pos, cell.index, cell.made_of, axes.step == 1);
+    add_quad(storage.quads, face, min_pos, max_pos, cell, axes.step == 1);
 }
 
 [[nodiscard]] auto cell_span_mask(int32 step) -> uint64 {
@@ -503,7 +507,7 @@ auto build_cell_occupancy(
 
 auto build_cell_indices(
     const vw::asset::model& voxels, const vw::asset::chunk_occupancy& fine, int32 step,
-    std::vector<voxel>& out, std::vector<material>& made_of
+    std::vector<voxel>& out, std::vector<material>& made_of, std::vector<uint8>& state_codes
 ) -> void {
     const int32 cells = vw::asset::chunk_occupancy::side / step;
     const uint64 span = cell_span_mask(step);
@@ -514,12 +518,14 @@ auto build_cell_indices(
         voxel{}
     );
     made_of.assign(out.size(), material{});
+    state_codes.assign(out.size(), uint8{0});
 
     for (int32 cz = 0; cz < cells; ++cz) {
         for (int32 cy = 0; cy < cells; ++cy) {
             for (int32 cx = 0; cx < cells; ++cx) {
                 voxel pick{};
                 material pick_made_of{};
+                uint8 pick_state_code = 0;
 
                 for (int32 dy = step - 1; dy >= 0 && pick.is_empty(); --dy) {
                     for (int32 dz = 0; dz < step && pick.is_empty(); ++dz) {
@@ -531,13 +537,15 @@ auto build_cell_indices(
                         }
                         const int32 fx = (cx * step) + static_cast<int32>(std::countr_zero(bits));
                         pick           = voxels.get_voxel(fx, fy, fz);
-                        pick_made_of   = voxels.get_material(fx, fy, fz);
+                        pick_made_of    = voxels.get_material(fx, fy, fz);
+                        pick_state_code = shown_code(voxels.get_state(fx, fy, fz));
                     }
                 }
 
                 const auto at = (((static_cast<std::size_t>(cz) * cells) + cy) * cells) + cx;
                 out[at]       = pick;
                 made_of[at]   = pick_made_of;
+                state_codes[at] = pick_state_code;
             }
         }
     }
@@ -614,7 +622,10 @@ auto simple_mesh_generator::add_cube_face(
     [[maybe_unused]] mesh_options opts
 ) -> void {
     detail::add_quad(
-        quads, face, {x, y, z}, {x + 1, y + 1, z + 1}, voxel_id, src.voxels.get_material(x, y, z),
+        quads, face, {x, y, z}, {x + 1, y + 1, z + 1},
+        face_mask_cell{
+            voxel_id, src.voxels.get_material(x, y, z), shown_code(src.voxels.get_state(x, y, z))
+        },
         true
     );
 }
@@ -774,7 +785,8 @@ auto greedy_mesh_generator::generate_mesh_data(
 
         detail::build_cell_occupancy(*storage.occupancy, step, *storage.lod_cells);
         detail::build_cell_indices(
-            src.voxels, *storage.occupancy, step, storage.lod_indices, storage.lod_materials
+            src.voxels, *storage.occupancy, step, storage.lod_indices, storage.lod_materials,
+            storage.lod_state_codes
         );
 
         if (src.boundary != nullptr) {
@@ -785,7 +797,8 @@ auto greedy_mesh_generator::generate_mesh_data(
         src.lod_step    = step;
         src.lod_cells   = storage.lod_cells.get();
         src.lod_indices   = storage.lod_indices.data();
-        src.lod_materials = storage.lod_materials.data();
+        src.lod_materials   = storage.lod_materials.data();
+        src.lod_state_codes = storage.lod_state_codes.data();
     }
 
     if (step == 1 && storage.occupancy_valid) {
@@ -1002,7 +1015,8 @@ auto greedy_mesh_generator::generate_face_quads(
                     auto [mx, my, mz] = axes.to_model_coords(u, v, layer);
 
                     storage.mask[idx(u, v)] = {
-                        src.cell_index(mx, my, mz), src.cell_material(mx, my, mz)
+                        src.cell_index(mx, my, mz), src.cell_material(mx, my, mz),
+                        src.cell_state_code(mx, my, mz)
                     };
                 }
             }

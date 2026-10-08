@@ -62,6 +62,19 @@ struct matter {
     [[nodiscard]] constexpr auto operator==(const matter&) const -> bool = default;
 };
 
+// см. docs/ENGINE.md#слой-состояния
+struct voxel_state {
+    uint8 bits = 0;
+
+    [[nodiscard]] constexpr auto operator==(const voxel_state&) const -> bool = default;
+};
+
+inline constexpr int32 shown_code_bits = 6;
+
+[[nodiscard]] constexpr auto shown_code(voxel_state state) -> uint8 {
+    return static_cast<uint8>(state.bits & ((1U << shown_code_bits) - 1U));
+}
+
 using material_set    = std::bitset<material_capacity>;
 using material_levels = std::array<uint8, material_capacity>;
 

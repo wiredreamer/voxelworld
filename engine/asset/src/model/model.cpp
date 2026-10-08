@@ -170,6 +170,7 @@ model::model(model_identity_pool& identity_pool, page_pool& pool, int32 width, i
     pages_.resize(static_cast<std::size_t>(pages_x_) * static_cast<std::size_t>(pages_y_) *
                   static_cast<std::size_t>(pages_z_));
     materials_ = material_layer{pages_.size()};
+    states_    = state_layer{pages_.size()};
     identity_  = identity_pool_->create();
 }
 
@@ -196,6 +197,7 @@ model::model(model&& other) noexcept
     , owned_binary_(std::move(other.owned_binary_))
     , owned_palette_(std::move(other.owned_palette_))
     , materials_(std::move(other.materials_))
+    , states_(std::move(other.states_))
     , identity_(other.identity_)
     , fill_(other.fill_)
     , fill_known_(other.fill_known_) {
@@ -224,6 +226,7 @@ auto model::operator=(model&& other) noexcept -> model& {
         owned_binary_        = std::move(other.owned_binary_);
         owned_palette_       = std::move(other.owned_palette_);
         materials_           = std::move(other.materials_);
+        states_              = std::move(other.states_);
         identity_            = other.identity_;
         fill_                = other.fill_;
         fill_known_          = other.fill_known_;
@@ -238,8 +241,27 @@ auto model::set_voxel(int32 x, int32 y, int32 z, matter value) -> void {
     increment_generation_();
 }
 
+auto model::set_state(int32 x, int32 y, int32 z, voxel_state state) -> void {
+    if (is_empty(x, y, z)) {
+        return;
+    }
+
+    states_.set(
+        static_cast<std::size_t>(page_index(x / page_size, y / page_size, z / page_size)),
+        voxel_page_local_index(x % page_size, y % page_size, z % page_size), state
+    );
+    increment_generation_();
+}
+
 auto model::set_voxel_raw_(int32 x, int32 y, int32 z, matter value) -> void {
     const voxel index = value.color;
+
+    if (!states_.blank() && get_matter(x, y, z) != value) {
+        states_.set(
+            static_cast<std::size_t>(page_index(x / page_size, y / page_size, z / page_size)),
+            voxel_page_local_index(x % page_size, y % page_size, z % page_size), voxel_state{}
+        );
+    }
 
     fill_known_    = false;
     const int32 px = x / page_size;
@@ -704,6 +726,7 @@ auto model::compact_pages() -> uint32 {
     uint32 compacted = 0;
 
     materials_.fold();
+    states_.fold();
 
     for (auto& entry : pages_) {
         const page_entry was = entry;
@@ -868,7 +891,7 @@ auto model::collect_emitters(
 ) const -> void {
     constexpr int32 ps = page_size;
 
-    if (materials_.all_inert()) {
+    if (materials_.blank()) {
         return;
     }
 
@@ -912,7 +935,7 @@ auto model::build_rows_of(
     constexpr int32 side = chunk_occupancy::side;
 
     out.clear();
-    if (width_ != side || height_ != side || depth_ != side || materials_.all_inert()) {
+    if (width_ != side || height_ != side || depth_ != side || materials_.blank()) {
         return false;
     }
 
@@ -976,7 +999,7 @@ auto model::extract_face(
     if (!extract_face(face, out)) {
         return false;
     }
-    if (materials_.all_inert()) {
+    if (materials_.blank()) {
         return true;
     }
 
@@ -1027,6 +1050,7 @@ auto model::fill(matter value) -> void {
 
     release_all_pages_();
     materials_.fill(v.is_empty() ? material{} : value.made_of);
+    states_.fill(voxel_state{});
 
     if (v.is_empty()) {
         std::ranges::fill(pages_, page_entry::make_empty());
@@ -1048,6 +1072,7 @@ auto model::fill_page_raw_(int32 px, int32 py, int32 pz, matter value) -> void {
     materials_.fill_page(
         static_cast<std::size_t>(page_index(px, py, pz)), v.is_empty() ? material{} : value.made_of
     );
+    states_.fill_page(static_cast<std::size_t>(page_index(px, py, pz)), voxel_state{});
 
     release_page_(entry);
 
@@ -1060,6 +1085,7 @@ auto model::clone_pages_from(const model& source) -> void {
 
     pages_     = source.pages_;
     materials_ = source.materials_;
+    states_    = source.states_;
 
     for (auto& entry : pages_) {
         switch (entry.mode()) {

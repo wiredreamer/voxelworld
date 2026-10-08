@@ -73,7 +73,7 @@ auto testbed_app::render_ui() -> void {
     }
 
     if (ImGui::CollapsingHeader("Editing")) {
-        static constexpr std::array<const char*, 3> tool_names{"none", "place", "remove"};
+        static constexpr std::array<const char*, 4> tool_names{"none", "place", "remove", "state"};
 
         auto tool = static_cast<int32>(tool_);
         if (ImGui::Combo(
@@ -88,6 +88,10 @@ auto testbed_app::render_ui() -> void {
                 names[i] = voxel_menu[i].name;
             }
             ImGui::Combo("Voxel", &place_choice_, names.data(), static_cast<int32>(names.size()));
+        }
+
+        if (tool_ == edit_tool::state) {
+            ImGui::SliderInt("State", &state_bits_, 0, 63);
         }
 
         ImGui::SliderInt("Reach (voxels)", &reach_voxels_, 2, 32);

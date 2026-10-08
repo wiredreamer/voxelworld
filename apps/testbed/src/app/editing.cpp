@@ -128,7 +128,18 @@ auto testbed_app::apply_tool_() -> void {
         return;
     }
 
-    const int32 scale  = generator_params_.world_units_per_voxel;
+    const int32 scale = generator_params_.world_units_per_voxel;
+
+    if (tool_ == edit_tool::state) {
+        const vec3i& held = hovered_->solid_voxel_pos;
+        world_grid_->set_state(
+            {held.x * scale, held.y * scale, held.z * scale},
+            voxel_state{static_cast<uint8>(state_bits_)}
+        );
+        ++edit_clicks_;
+        return;
+    }
+
     const bool placing = tool_ == edit_tool::place;
     const vec3i cell   = placing ? hovered_->empty_voxel_pos : hovered_->solid_voxel_pos;
 
