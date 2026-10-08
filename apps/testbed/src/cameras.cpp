@@ -7,6 +7,8 @@ import vw.gfx;
 namespace vw::testbed {
 namespace {
 
+constexpr log::log_category lc_{"cameras"};
+
 auto eye(const testbed_app& stand, const camera_hint& hint) -> vec3f {
     return vec3f{hint.offset.x, stand.altitude() + hint.offset.y, hint.offset.z};
 }
@@ -73,11 +75,21 @@ auto cave_rig::find_pocket_() const -> std::optional<vec3f> {
     const auto scale  = stand().world_units_per_voxel();
     const auto scalef = static_cast<float32>(scale);
 
-    const auto air_around = [&grid](vec3i at) -> bool {
+    enum class cell : uint8 { unknown, air, solid };
+
+    const auto cell_at = [&grid, scale](vec3i at) -> cell {
+        const vec3i world{at.x * scale, at.y * scale, at.z * scale};
+        if (!grid.has_chunk(grid.world_to_chunk_coord(world))) {
+            return cell::unknown;
+        }
+        return grid.get_voxel(world).is_empty() ? cell::air : cell::solid;
+    };
+
+    const auto air_around = [&cell_at](vec3i at) -> bool {
         for (int32 dy = -clearance; dy <= clearance; ++dy) {
             for (int32 dz = -clearance; dz <= clearance; ++dz) {
                 for (int32 dx = -clearance; dx <= clearance; ++dx) {
-                    if (!grid.get_voxel({at.x + dx, at.y + dy, at.z + dz}).is_empty()) {
+                    if (cell_at({at.x + dx, at.y + dy, at.z + dz}) != cell::air) {
                         return false;
                     }
                 }
@@ -86,31 +98,52 @@ auto cave_rig::find_pocket_() const -> std::optional<vec3f> {
         return true;
     };
 
-    for (int32 ring = 0; ring < 12; ++ring) {
-        for (int32 side = 0; side < 4; ++side) {
-            const int32 span = ring * 8;
-            const vec3i column{
-                side % 2 == 0 ? span : -span,
-                0,
-                side / 2 == 0 ? span : -span,
-            };
+    static constexpr std::array<vec3i, 6> ways{{
+        {1, 0, 0}, {-1, 0, 0}, {0, 1, 0}, {0, -1, 0}, {0, 0, 1}, {0, 0, -1},
+    }};
 
-            const auto surface = grid.get_surface_voxel_y(column.x, column.z);
-            if (!surface) {
-                continue;
+    const auto walled_in = [&cell_at](vec3i at) -> bool {
+        return std::ranges::all_of(ways, [&](vec3i way) {
+            for (int32 step = clearance + 1; step <= wall_reach; ++step) {
+                const cell found = cell_at({
+                    at.x + (way.x * step),
+                    at.y + (way.y * step),
+                    at.z + (way.z * step),
+                });
+                if (found != cell::air) {
+                    return found == cell::solid;
+                }
             }
+            return false;
+        });
+    };
 
-            for (int32 y = *surface - probe_step; y > probe_bottom; y -= probe_step) {
-                const vec3i at{column.x, y, column.z};
-                if (!grid.get_voxel(at).is_empty() || !air_around(at)) {
+    for (int32 ring = 0; ring <= search_rings; ++ring) {
+        for (int32 cz = -ring; cz <= ring; ++cz) {
+            for (int32 cx = -ring; cx <= ring; ++cx) {
+                if (std::max(std::abs(cx), std::abs(cz)) != ring) {
                     continue;
                 }
 
-                return vec3f{
-                    static_cast<float32>(at.x) * scalef,
-                    static_cast<float32>(at.y) * scalef,
-                    static_cast<float32>(at.z) * scalef,
-                };
+                const vec3i column{cx * column_step, 0, cz * column_step};
+
+                const auto surface = grid.get_surface_voxel_y(column.x, column.z);
+                if (!surface) {
+                    continue;
+                }
+
+                for (int32 y = *surface - min_depth; y > probe_bottom; y -= probe_step) {
+                    const vec3i at{column.x, y, column.z};
+                    if (cell_at(at) != cell::air || !air_around(at) || !walled_in(at)) {
+                        continue;
+                    }
+
+                    return vec3f{
+                        static_cast<float32>(at.x) * scalef,
+                        static_cast<float32>(at.y) * scalef,
+                        static_cast<float32>(at.z) * scalef,
+                    };
+                }
             }
         }
     }
@@ -121,8 +154,14 @@ auto cave_rig::find_pocket_() const -> std::optional<vec3f> {
 auto cave_rig::drive(
     const camera_hint& hint, float32
 ) -> void {
-    if (!pocket_) {
+    if (!pocket_ && stand().is_bench_ready()) {
         pocket_ = find_pocket_();
+        if (pocket_) {
+            log::info(lc_, "cave: standing in a pocket at {}, {}, {}", pocket_->x, pocket_->y, pocket_->z);
+        } else if (!warned_) {
+            log::warn(lc_, "cave: no walled pocket in reach, the camera stays above ground");
+            warned_ = true;
+        }
     }
 
     auto& camera = stand().camera();

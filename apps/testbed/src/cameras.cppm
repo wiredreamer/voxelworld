@@ -77,13 +77,18 @@ public:
     auto drive(const camera_hint& hint, float32 delta_time) -> void override;
 
 private:
-    static constexpr int32 probe_step   = 4;
-    static constexpr int32 probe_bottom = -448;
-    static constexpr int32 clearance    = 3;
+    static constexpr int32 probe_step    = 2;
+    static constexpr int32 probe_bottom  = -448;
+    static constexpr int32 clearance     = 3;
+    static constexpr int32 min_depth     = 12;
+    static constexpr int32 wall_reach    = 64;
+    static constexpr int32 column_step   = 8;
+    static constexpr int32 search_rings  = 24;
 
     [[nodiscard]] auto find_pocket_() const -> std::optional<vec3f>;
 
     std::optional<vec3f> pocket_;
+    bool warned_  = false;
     uint64 frame_ = 0;
 };
 
