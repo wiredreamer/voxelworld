@@ -153,13 +153,18 @@ auto cull_pipeline::update_frustums(
     uint32 frame_index,
     const vw::spatial::frustum& view_frustum,
     std::span<const vw::spatial::frustum> shadow_frustums,
-    const vec4f& eye
+    const vec4f& eye,
+    const cull_rings& rings
 ) -> void {
     cull_frustum_ubo ubo{};
     ubo.pass_count =
         std::min(combined_buffer::cull_pass_count,
                  1 + static_cast<uint32>(shadow_frustums.size()));
     ubo.eye        = eye;
+
+    ubo.ring_count         = combined_buffer::cull_ring_count;
+    ubo.rings_per_doubling = rings_per_doubling;
+    ubo.rings = vec4f{rings.origin.x, rings.origin.y, rings.origin.z, rings.first_width};
 
     for (uint32 i = 0; i < 6; i++) {
         const auto& p = view_frustum.planes[i];
@@ -190,7 +195,7 @@ auto cull_pipeline::dispatch(
         }
         any = true;
         cmd.fillBuffer(
-            buffer->get_count_buffer(), 0, combined_buffer::cull_pass_count * sizeof(uint32), 0
+            buffer->get_count_buffer(), 0, combined_buffer::cull_region_count * sizeof(uint32), 0
         );
     }
 

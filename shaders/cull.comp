@@ -19,6 +19,9 @@ layout(set = 0, binding = 0) uniform CullFrustumData {
     vec4 planes[36];
     vec4 eye;
     uint pass_count;
+    uint ring_count;
+    float rings_per_doubling;
+    vec4 rings;
 } frustum_data;
 
 layout(set = 1, binding = 0, std430) readonly buffer InputCommands {
@@ -67,6 +70,27 @@ bool faces_away(uint dir, vec3 bmin, vec3 bmax) {
     }
 }
 
+// см. docs/rendering.md#кольца-расстояния
+uint ring_of(vec3 bmin, vec3 bmax) {
+    vec4 eye    = frustum_data.eye;
+    vec3 origin = frustum_data.rings.xyz;
+
+    float away;
+    if (eye.w == 0.0) {
+        vec3 nearest = mix(bmin, bmax, greaterThan(eye.xyz, vec3(0.0)));
+        away         = max(dot(eye.xyz, origin - nearest), 0.0);
+    } else {
+        away = length(max(max(bmin - origin, origin - bmax), vec3(0.0)));
+    }
+
+    float first = frustum_data.rings.w;
+    if (away < first) {
+        return 0u;
+    }
+    uint beyond = 1u + uint(log2(away / first) * frustum_data.rings_per_doubling);
+    return min(beyond, frustum_data.ring_count - 1u);
+}
+
 void main() {
     uint idx = gl_GlobalInvocationID.x;
     if (idx >= instance_count) return;
@@ -79,6 +103,7 @@ void main() {
 
     const uint faces = 6u;
     uint stride = instance_count * faces;
+    uint ring   = ring_of(bmin, bmax);
 
     for (uint pass = 0; pass < frustum_data.pass_count; pass++) {
         if (!frustum_test(pass, bmin, bmax)) {
@@ -94,8 +119,9 @@ void main() {
                 continue;
             }
 
-            uint slot = atomicAdd(count_buffer.counts[pass], 1);
-            output_commands.commands[pass * stride + slot] = cmd;
+            uint region = pass == 0u ? ring : frustum_data.ring_count - 1u + pass;
+            uint slot   = atomicAdd(count_buffer.counts[region], 1);
+            output_commands.commands[region * stride + slot] = cmd;
         }
     }
 }

@@ -16,6 +16,9 @@ constexpr auto counted_statistics =
 
 constexpr std::size_t counted_statistic_count = 3;
 
+constexpr vk::DeviceSize counts_bytes =
+    vk::DeviceSize{combined_buffer::cull_ring_count} * sizeof(uint32);
+
 }  // namespace
 
 frame_probe::frame_probe(
@@ -25,7 +28,7 @@ frame_probe::frame_probe(
     frames_.resize(frames_in_flight);
     for (frame_state& frame : frames_) {
         frame.counts = std::make_unique<storage_buffer>(
-            *context_, vk::DeviceSize{most_buffers} * sizeof(uint32),
+            *context_, vk::DeviceSize{most_buffers} * counts_bytes,
             vk::BufferUsageFlagBits::eTransferDst
         );
     }
@@ -101,8 +104,8 @@ auto frame_probe::copy_cull_counts(
             buffer->get_count_buffer(), frame.counts->get_buffer(),
             vk::BufferCopy{
                 .srcOffset = 0,
-                .dstOffset = vk::DeviceSize{frame.buffers_copied} * sizeof(uint32),
-                .size      = sizeof(uint32),
+                .dstOffset = vk::DeviceSize{frame.buffers_copied} * counts_bytes,
+                .size      = counts_bytes,
             }
         );
 
@@ -135,12 +138,12 @@ auto frame_probe::resolve(
     stats_ = frame_probe_stats{};
 
     if (frame.buffers_copied > 0) {
-        std::array<uint32, most_buffers> drawn{};
-        frame.counts->copy_to(drawn.data(), vk::DeviceSize{frame.buffers_copied} * sizeof(uint32));
+        std::array<uint32, std::size_t{most_buffers} * combined_buffer::cull_ring_count> drawn{};
+        frame.counts->copy_to(drawn.data(), vk::DeviceSize{frame.buffers_copied} * counts_bytes);
 
         stats_.cull_counted     = true;
         stats_.commands_offered = frame.commands_offered;
-        for (uint32 held = 0; held < frame.buffers_copied; ++held) {
+        for (uint32 held = 0; held < frame.buffers_copied * combined_buffer::cull_ring_count; ++held) {
             stats_.commands_drawn += drawn[held];
         }
     }

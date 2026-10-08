@@ -118,6 +118,10 @@ class combined_buffer {
 public:
     static constexpr uint32 cull_pass_count = 6;
 
+    // см. docs/rendering.md#кольца-расстояния
+    static constexpr uint32 cull_ring_count   = 12;
+    static constexpr uint32 cull_region_count = cull_ring_count + cull_pass_count - 1;
+
     static constexpr uint32 faces_per_mesh = 6;
 
     explicit combined_buffer(

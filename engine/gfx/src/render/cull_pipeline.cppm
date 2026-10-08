@@ -33,17 +33,31 @@ struct cull_frustum_ubo {
     alignas(16) vec4f eye;
 
     alignas(4) uint32 pass_count;
-    alignas(4) uint32 pad[3];
+    alignas(4) uint32 ring_count;
+    alignas(4) float32 rings_per_doubling;
+    alignas(4) uint32 pad;
+
+    alignas(16) vec4f rings;
 };
 
 static_assert(offsetof(cull_frustum_ubo, planes) == 0);
 static_assert(offsetof(cull_frustum_ubo, eye) == 576);
 static_assert(offsetof(cull_frustum_ubo, pass_count) == 592);
-static_assert(offsetof(cull_frustum_ubo, pad) == 596);
-static_assert(sizeof(cull_frustum_ubo) == 608);
+static_assert(offsetof(cull_frustum_ubo, ring_count) == 596);
+static_assert(offsetof(cull_frustum_ubo, rings_per_doubling) == 600);
+static_assert(offsetof(cull_frustum_ubo, rings) == 608);
+static_assert(sizeof(cull_frustum_ubo) == 624);
+
+// см. docs/rendering.md#кольца-расстояния
+struct cull_rings {
+    vec3f origin{0.0F, 0.0F, 0.0F};
+    float32 first_width = 1.0F;
+};
 
 class cull_pipeline {
 public:
+
+    static constexpr float32 rings_per_doubling = 2.0F;
 
     explicit cull_pipeline(
         vulkan_context& context,
@@ -60,7 +74,8 @@ public:
         uint32 frame_index,
         const vw::spatial::frustum& view_frustum,
         std::span<const vw::spatial::frustum> shadow_frustums,
-        const vec4f& eye
+        const vec4f& eye,
+        const cull_rings& rings
     ) -> void;
 
     auto dispatch(

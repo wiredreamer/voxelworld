@@ -202,24 +202,43 @@ std430 нет диагностики на расхождение: ошибки �
     глаза (перспектива), `w = 0` — направление на камеру (ортогональная
     проекция). `faces_away` умножает грань коробки на `eye.w`; убрать умножение
     — и ортогональный вид потеряет грани по одну сторону от начала координат.
-  - Проход 0 — камера, проход `1 + каскад` — тень. Выход пишется в
-    `pass * instance_count * 6 + slot`, счёт — в `counts[pass]`;
-    `render_shadow_pass` читает команды со смещения
-    `pass_index * max_draws * sizeof(draw_command)`, счёт — с
-    `pass_index * sizeof(uint32)`.
+  - Проход 0 — камера, проход `1 + каскад` — тень. Выход делится на области:
+    `cull_ring_count` колец расстояния для камеры, за ними по области на каскад;
+    всего `combined_buffer::cull_region_count`. Команда пишется в
+    `region * instance_count * 6 + slot`, счёт — в `counts[region]`, где
+    `region` — кольцо у прохода 0 и `ring_count − 1 + pass` у теней.
+    `render_world` читает кольцо `r` со смещения
+    `r * max_draws * sizeof(draw_command)` и счёт с `r * sizeof(uint32)`,
+    `render_shadow_pass` — область `cull_ring_count + каскад`. Размер буфера
+    команд и буфера счётчиков, обнуление счётчиков в `cull_pipeline::dispatch`
+    и копия в `frame_probe::copy_cull_counts` считают по `cull_region_count` и
+    `cull_ring_count` — поменял число колец, проверь все четыре.
+  - Кольца: `ring_count` и `rings_per_doubling` приходят в шейдер полями
+    uniform, а не константами GLSL, так что источник один —
+    `combined_buffer::cull_ring_count` и `cull_pipeline::rings_per_doubling`.
+    `rings.xyz` — положение камеры, `rings.w` — ширина первого кольца в мировых
+    единицах (сторона чанка). В ортогональной проекции `ring_of` берёт глубину
+    вдоль `eye.xyz`, поэтому `rings.xyz` обязано быть положением камеры и там.
   - Привязки набора 1: 0 входные команды, 1 AABB, 2 выход, 3 счётчики,
     4 видимость.
   - `DrawCommand` и `draw_command` повторяют `vk::DrawIndexedIndirectCommand`.
 - **Сторож:** `static_assert` на смещения и размер у обеих структур:
-  `cull_frustum_ubo` (`planes` 0, `eye` 576, `pass_count` 592, `pad` 596,
-  `sizeof == 608` при пяти каскадах) в `cull_pipeline.cppm` и `draw_command`
+  `cull_frustum_ubo` (`planes` 0, `eye` 576, `pass_count` 592, `ring_count` 596,
+  `rings_per_doubling` 600, `rings` 608, `sizeof == 624` при пяти каскадах) в
+  `cull_pipeline.cppm` и `draw_command`
   (0, 4, 8, 12, 16, `sizeof == 20` и равенство
   `sizeof(vk::DrawIndexedIndirectCommand)`) в `combined_buffer.cppm`. Сдвинул
   поле в C++ — сборка встала, это и есть момент сдвинуть его в `cull.comp`.
   Сдвиг только в шейдере не ловит ничто. Слои валидации в Debug ловят привязки и
   размеры; смысл полей — ничто.
 - **Если разошлись:** модели пропадают или мигают при повороте камеры, тень
-  рисует список чужого прохода.
+  рисует список чужого прохода. Кольцо за пределом `cull_ring_count` пишет в
+  область тени или за конец буфера. Сам порядок колец на картинку не влияет —
+  ошибка в `ring_of` видна только счётчиком фрагментов (`--pipeline-stats`) и
+  видом `overdraw`.
+- **Индексный буфер** в `render_world` привязывается при первой непустой паре
+  «кольцо, буфер», а не до цикла: пока мешей нет, буфера индексов не существует,
+  и слой валидации ругается на `VK_NULL_HANDLE`.
 
 ## Набор источников и пятен
 

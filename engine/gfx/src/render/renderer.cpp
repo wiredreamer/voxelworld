@@ -636,8 +636,16 @@ auto renderer::render(
             shadows_on ? std::span<const vw::spatial::frustum>{cascade_frustums}
                        : std::span<const vw::spatial::frustum>{};
 
+        constexpr auto chunk_voxels =
+            static_cast<float32>(spatial::occupancy_clipmap_layout::chunk_voxels);
+
         cull_pipeline_->update_frustums(
-            current_frame_, view_frustum, cull_cascades, camera.culling_eye());
+            current_frame_, view_frustum, cull_cascades, camera.culling_eye(),
+            cull_rings{
+                .origin      = camera.get_position(),
+                .first_width = chunk_voxels * occupancy_->world_units_per_voxel(),
+            }
+        );
 
         cull_pipeline_->dispatch(
             command_buffers_[current_frame_],
@@ -2104,34 +2112,43 @@ auto renderer::render_world(
     );
 
     const auto& buffers = combined_buffer_pool_->get_buffers();
-    for (const auto& buffer : buffers) {
-        if (buffer->is_empty()) {
-            continue;
-        }
 
-        vk::Buffer instance_index_buffer = buffer->get_instance_index_buffer();
+    bool index_bound = false;
 
-        vk::DescriptorSet buffer_descriptor_set = buffer->get_descriptor_set(current_frame_);
-        command_buffers_[current_frame_].bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
-            pipeline_layout_,
-            1,
-            1,
-            &buffer_descriptor_set,
-            0,
-            nullptr);
+    // см. docs/rendering.md#кольца-расстояния
+    for (uint32 ring = 0; ring < combined_buffer::cull_ring_count; ++ring) {
+        for (const auto& buffer : buffers) {
+            const uint32 max_draws = buffer->is_empty() ? 0 : buffer->get_draw_command_count();
+            if (max_draws == 0) {
+                continue;
+            }
 
-        constexpr vk::DeviceSize instance_offset = 0;
-        command_buffers_[current_frame_].bindVertexBuffers(
-            0, instance_index_buffer, instance_offset);
-        command_buffers_[current_frame_].bindIndexBuffer(
-            combined_buffer_pool_->get_index_buffer(), 0, vk::IndexType::eUint32);
+            if (!index_bound) {
+                command_buffers_[current_frame_].bindIndexBuffer(
+                    combined_buffer_pool_->get_index_buffer(), 0, vk::IndexType::eUint32);
+                index_bound = true;
+            }
 
-        const uint32 max_draws = buffer->get_draw_command_count();
-        if (max_draws > 0) {
-            command_buffers_[current_frame_].drawIndexedIndirectCount(buffer->get_culled_indirect_buffer(),
+            vk::Buffer instance_index_buffer = buffer->get_instance_index_buffer();
+
+            vk::DescriptorSet buffer_descriptor_set = buffer->get_descriptor_set(current_frame_);
+            command_buffers_[current_frame_].bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+                pipeline_layout_,
+                1,
+                1,
+                &buffer_descriptor_set,
                 0,
+                nullptr);
+
+            constexpr vk::DeviceSize instance_offset = 0;
+            command_buffers_[current_frame_].bindVertexBuffers(
+                0, instance_index_buffer, instance_offset);
+
+            command_buffers_[current_frame_].drawIndexedIndirectCount(
+                buffer->get_culled_indirect_buffer(),
+                static_cast<vk::DeviceSize>(ring) * max_draws * sizeof(draw_command),
                 buffer->get_count_buffer(),
-                0,
+                ring * sizeof(uint32),
                 max_draws,
                 sizeof(draw_command));
             draw_call_count_++;
@@ -2885,7 +2902,7 @@ auto renderer::render_shadow_pass(
                 combined_buffer_pool_->get_index_buffer(), 0, vk::IndexType::eUint32);
 
             const uint32 max_draws  = buffer->get_draw_command_count();
-            const uint32 pass_index = cascade_index + 1;
+            const uint32 pass_index = combined_buffer::cull_ring_count + cascade_index;
             if (max_draws > 0) {
                 command_buffers_[current_frame_].drawIndexedIndirectCount(buffer->get_culled_indirect_buffer(),
                     static_cast<vk::DeviceSize>(pass_index) * max_draws * sizeof(draw_command),

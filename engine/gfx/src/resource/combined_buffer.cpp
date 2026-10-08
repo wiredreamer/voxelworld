@@ -113,12 +113,12 @@ combined_buffer::combined_buffer(
     );
     culled_indirect_buffer_ = std::make_unique<device_storage_buffer>(
         *context_,
-        instance_capacity_ * faces_per_mesh * cull_pass_count * sizeof(draw_command),
+        instance_capacity_ * faces_per_mesh * cull_region_count * sizeof(draw_command),
         vk::BufferUsageFlagBits::eIndirectBuffer
     );
     count_buffer_ = std::make_unique<device_storage_buffer>(
         *context_,
-        cull_pass_count * sizeof(uint32),
+        cull_region_count * sizeof(uint32),
         vk::BufferUsageFlagBits::eIndirectBuffer | vk::BufferUsageFlagBits::eTransferDst
     );
     visibility_buffer_ = std::make_unique<device_storage_buffer>(
@@ -514,7 +514,7 @@ auto combined_buffer::expand_instance_buffers_() -> void {
         culled_indirect_buffer_,
         std::make_unique<device_storage_buffer>(
             *context_,
-            instance_capacity_ * faces_per_mesh * cull_pass_count * sizeof(draw_command),
+            instance_capacity_ * faces_per_mesh * cull_region_count * sizeof(draw_command),
             vk::BufferUsageFlagBits::eIndirectBuffer
         )
     ));
@@ -522,7 +522,7 @@ auto combined_buffer::expand_instance_buffers_() -> void {
         count_buffer_,
         std::make_unique<device_storage_buffer>(
             *context_,
-            cull_pass_count * sizeof(uint32),
+            cull_region_count * sizeof(uint32),
             vk::BufferUsageFlagBits::eIndirectBuffer | vk::BufferUsageFlagBits::eTransferDst
         )
     ));
