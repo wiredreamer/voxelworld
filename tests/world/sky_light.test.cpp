@@ -550,7 +550,7 @@ TEST_CASE("sky light cost on real terrain", "[.sky_light_measure]") {
             }
 
             const auto held_from = std::chrono::steady_clock::now();
-            ecs::light_column light{around, asset::emission_table{}, std::move(scratch)};
+            ecs::light_column light{around, material_levels{}, std::move(scratch)};
             const auto flooded = std::chrono::steady_clock::now();
 
             if (scratch_first) {

@@ -35,9 +35,9 @@ public:
     using neighbourhood = std::array<column_slice, 9>;
 
     explicit light_column(const neighbourhood& around)
-        : light_column{around, emission_table{}, {}} {}
+        : light_column{around, material_levels{}, {}} {}
 
-    light_column(const neighbourhood& around, const emission_table& emission,
+    light_column(const neighbourhood& around, const material_levels& emission,
                  light_scratch scratch);
 
     explicit light_column(std::span<const chunk_occupancy* const> chunks_bottom_up);
@@ -79,7 +79,7 @@ private:
 
     auto seed_sky_() -> void;
 
-    auto seed_block_(const neighbourhood& around, const emission_table& emission) -> void;
+    auto seed_block_(const neighbourhood& around, const material_levels& emission) -> void;
 
     auto spread_(light_channel channel) -> void;
 

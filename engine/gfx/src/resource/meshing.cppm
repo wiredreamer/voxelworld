@@ -89,6 +89,7 @@ struct mesh_source {
     int32 lod_step                                 = 1;
     const vw::asset::chunk_occupancy* lod_cells    = nullptr;
     const voxel* lod_indices                 = nullptr;
+    const material* lod_materials            = nullptr;
 
     const vw::asset::chunk_occupancy* leaves = nullptr;
 
@@ -141,6 +142,13 @@ struct mesh_source {
         }
         return lod_indices[cell_offset(x, y, z)];
     }
+
+    [[nodiscard]] auto cell_material(int32 x, int32 y, int32 z) const -> material {
+        if (lod_step == 1) {
+            return voxels.get_material(x, y, z);
+        }
+        return lod_materials[cell_offset(x, y, z)];
+    }
 };
 
 class simple_mesh_generator {
@@ -172,6 +180,7 @@ private:
 
 struct face_mask_cell {
     voxel index;
+    material made_of;
 
     [[nodiscard]]
     auto operator==(const face_mask_cell&) const -> bool = default;
@@ -193,6 +202,7 @@ struct mesh_generation_storage {
     std::unique_ptr<vw::asset::chunk_occupancy> lod_cells;
     std::unique_ptr<vw::asset::chunk_occupancy> leaves;
     std::vector<voxel> lod_indices;
+    std::vector<material> lod_materials;
     vw::asset::model_boundary lod_boundary;
 
     vw::asset::chunk_link_scratch link_scratch;

@@ -6,6 +6,7 @@ import vw.core;
 import :model.identity;
 import :model.occupancy;
 import :model.links;
+import :model.materials;
 
 export namespace vw::asset {
 
@@ -37,6 +38,36 @@ public:
         vec3i pos, voxel v
     ) -> void {
         set_voxel(pos.x, pos.y, pos.z, v);
+    }
+
+    // см. docs/ENGINE.md#слой-материала
+    auto set_voxel(int32 x, int32 y, int32 z, voxel v, material made_of) -> void;
+
+    auto set_voxel(
+        vec3i pos, voxel v, material made_of
+    ) -> void {
+        set_voxel(pos.x, pos.y, pos.z, v, made_of);
+    }
+
+    [[nodiscard]] auto get_material(
+        int32 x, int32 y, int32 z
+    ) const -> material {
+        return materials_.get(
+            static_cast<std::size_t>(page_index(x / page_size, y / page_size, z / page_size)),
+            voxel_page_local_index(x % page_size, y % page_size, z % page_size)
+        );
+    }
+
+    [[nodiscard]] auto get_material(
+        vec3i pos
+    ) const -> material {
+        return get_material(pos.x, pos.y, pos.z);
+    }
+
+    [[nodiscard]] auto get_page_material(
+        int32 px, int32 py, int32 pz
+    ) const -> std::optional<material> {
+        return materials_.whole_page(static_cast<std::size_t>(page_index(px, py, pz)));
     }
 
     [[nodiscard]] auto get_voxel(
@@ -126,18 +157,15 @@ public:
     // см. docs/rendering.md#затенение-углов-во-фрагменте
     auto build_bit_rows(std::span<uint32> out) const -> void;
 
-    [[nodiscard]] auto page_may_hold(int32 px, int32 py, int32 pz, const voxel_set& wanted) const -> bool;
-
     // см. docs/lighting.md#излучатели-в-кеше
     auto collect_emitters(
-        std::span<const uint8, voxel_type_capacity> emission_of_type,
-        std::vector<emitting_voxel>& out
+        const material_levels& emission_of_material, std::vector<emitting_voxel>& out
     ) const -> void;
 
     // см. docs/rendering.md#качание-листвы
-    [[nodiscard]] auto build_rows_of(chunk_occupancy& out, const voxel_set& wanted) const -> bool;
+    [[nodiscard]] auto build_rows_of(chunk_occupancy& out, const material_set& wanted) const -> bool;
 
-    [[nodiscard]] auto extract_face(face_direction face, face_occupancy& out, const voxel_set& wanted,
+    [[nodiscard]] auto extract_face(face_direction face, face_occupancy& out, const material_set& wanted,
                                     face_occupancy& wanted_out) const -> bool;
 
     [[nodiscard]] auto build_x_rows(
@@ -194,7 +222,9 @@ private:
     friend class model_writer;
 
     auto set_voxel_raw_(int32 x, int32 y, int32 z, voxel v) -> void;
+    auto set_voxel_raw_(int32 x, int32 y, int32 z, voxel v, material made_of) -> void;
     auto fill_page_raw_(int32 px, int32 py, int32 pz, voxel v) -> void;
+    auto fill_page_raw_(int32 px, int32 py, int32 pz, voxel v, material made_of) -> void;
 
     [[nodiscard]] auto page_index(
         int32 px, int32 py, int32 pz
@@ -236,6 +266,7 @@ private:
     std::vector<uint32> owned_dense_;
     std::vector<uint32> owned_binary_;
     std::vector<uint32> owned_palette_;
+    material_layer materials_;
     model_identity identity_;
     mutable model_fill fill_ = model_fill::mixed;
     mutable bool fill_known_ = false;

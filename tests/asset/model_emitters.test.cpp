@@ -11,10 +11,13 @@ namespace {
 
 constexpr int32 side = 64;
 
-auto emission_of_lamps() -> std::array<uint8, voxel_type_capacity> {
-    std::array<uint8, voxel_type_capacity> emission{};
-    emission[voxels::lamp_amber.value] = 14;
-    emission[voxels::lamp_blue.value]  = 9;
+constexpr material amber_lamp{5};
+constexpr material blue_lamp{9};
+
+auto emission_of_lamps() -> material_levels {
+    material_levels emission{};
+    emission[amber_lamp.value] = 14;
+    emission[blue_lamp.value]  = 9;
     return emission;
 }
 
@@ -47,9 +50,9 @@ TEST_CASE("every lamp is named once with the level of its type", "[model][light]
 
     asset::model m{ids, pages, side, side, side};
     m.set_voxel(1, 2, 3, voxels::gray[8]);
-    m.set_voxel(9, 2, 3, voxels::lamp_amber);
-    m.set_voxel(63, 63, 63, voxels::lamp_blue);
-    m.set_voxel(40, 17, 8, voxels::lamp_amber);
+    m.set_voxel(9, 2, 3, voxels::amber[8], amber_lamp);
+    m.set_voxel(63, 63, 63, voxels::blue[8], blue_lamp);
+    m.set_voxel(40, 17, 8, voxels::amber[8], amber_lamp);
     m.set_voxel(41, 17, 8, voxels::gray[3]);
 
     std::vector<asset::emitting_voxel> found;
@@ -71,7 +74,7 @@ TEST_CASE("a page filled with one lamp type names all of its voxels", "[model][l
     for (int32 z = 8; z < 16; ++z) {
         for (int32 y = 0; y < 8; ++y) {
             for (int32 x = 16; x < 24; ++x) {
-                m.set_voxel(x, y, z, voxels::lamp_blue);
+                m.set_voxel(x, y, z, voxels::blue[8], blue_lamp);
             }
         }
     }

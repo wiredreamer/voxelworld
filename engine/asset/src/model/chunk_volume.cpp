@@ -7,9 +7,9 @@ namespace vw::asset {
 
 namespace {
 
-[[nodiscard]] auto leaf_voxels() -> const voxel_set& {
-    static const voxel_set leaves = default_voxel_registry().of_kind(voxel_kind::leaf);
-    return leaves;
+[[nodiscard]] auto swaying_materials() -> const material_set& {
+    static const material_set swaying = default_material_table().swaying();
+    return swaying;
 }
 
 }  // namespace
@@ -49,7 +49,7 @@ auto chunk_volume::set_boundary_slice(face_direction face, const model& neighbor
             leaves.clear();
             break;
         case model_fill::mixed:
-            static_cast<void>(neighbor.extract_face(opposite(face), plane, leaf_voxels(), leaves));
+            static_cast<void>(neighbor.extract_face(opposite(face), plane, swaying_materials(), leaves));
             break;
     }
 
@@ -88,23 +88,17 @@ auto chunk_volume::set_boundary_shell(vec3i step, const model& neighbor) -> void
             }
         }
 
-        uint64 bits   = 0;
-        uint64 leaves = 0;
+        uint64 bits = 0;
         for (int32 along = 0; along < side; ++along) {
-            at[free]      = along;
-            const voxel v = neighbor.get_voxel(at.x, at.y, at.z);
-            if (!v.is_empty()) {
+            at[free] = along;
+            if (!neighbor.is_empty(at.x, at.y, at.z)) {
                 bits |= uint64{1} << along;
-                if (leaf_voxels().test(v.value)) {
-                    leaves |= uint64{1} << along;
-                }
             }
         }
 
         const auto slot = static_cast<std::size_t>(shell_edge_index(step));
 
-        boundary_->edges[slot]      = bits;
-        boundary_->leaf_edges[slot] = leaves;
+        boundary_->edges[slot] = bits;
         boundary_->edges_valid |= static_cast<uint16>(1U << slot);
         return;
     }
@@ -119,11 +113,6 @@ auto chunk_volume::set_boundary_shell(vec3i step, const model& neighbor) -> void
         boundary_->corners &= static_cast<uint8>(~(1U << slot));
     } else {
         boundary_->corners |= static_cast<uint8>(1U << slot);
-    }
-    if (!v.is_empty() && leaf_voxels().test(v.value)) {
-        boundary_->leaf_corners |= static_cast<uint8>(1U << slot);
-    } else {
-        boundary_->leaf_corners &= static_cast<uint8>(~(1U << slot));
     }
     boundary_->corners_valid |= static_cast<uint8>(1U << slot);
 }
@@ -141,8 +130,7 @@ auto chunk_volume::set_boundary_shell_air(vec3i step) -> void {
     if (shell_span(step) == 2) {
         const auto slot = static_cast<std::size_t>(shell_edge_index(step));
 
-        boundary_->edges[slot]      = 0;
-        boundary_->leaf_edges[slot] = 0;
+        boundary_->edges[slot] = 0;
         boundary_->edges_valid |= static_cast<uint16>(1U << slot);
         return;
     }
@@ -150,7 +138,6 @@ auto chunk_volume::set_boundary_shell_air(vec3i step) -> void {
     const auto slot = static_cast<uint8>(shell_corner_index(step));
 
     boundary_->corners &= static_cast<uint8>(~(1U << slot));
-    boundary_->leaf_corners &= static_cast<uint8>(~(1U << slot));
     boundary_->corners_valid |= static_cast<uint8>(1U << slot);
 }
 

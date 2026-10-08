@@ -78,7 +78,7 @@ light_cache::light_cache(
     , descriptor_pool_{descriptor_pool}
     , compute_{context, "shaders/light_cache.comp.spv", shader_type::COMPUTE}
     , scatter_{context, "shaders/light_sources.comp.spv", shader_type::COMPUTE}
-    , emission_{asset::build_emission_table(registry)} {
+    , emission_{material_table{registry}.emission()} {
     for (std::size_t cascade = 0; cascade < cascades_.size(); ++cascade) {
         const auto slots = static_cast<std::size_t>(shapes[cascade].slot_count());
 
@@ -521,7 +521,7 @@ auto light_cache::note_sources_(
             change.voxel.y - (change.chunk.y * chunk_voxels),
             change.voxel.z - (change.chunk.z * chunk_voxels)
         };
-        if (emission_[placed->get_voxel(local).value] == 0) {
+        if (emission_[placed->get_model()->get_material(local).value] == 0) {
             return;
         }
     }

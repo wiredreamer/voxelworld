@@ -167,7 +167,7 @@ private:
 
     shader compute_;
     shader scatter_;
-    asset::emission_table emission_;
+    material_levels emission_;
 
     vk::Sampler sampler_                     = nullptr;
     vk::DescriptorSetLayout sampled_layout_  = nullptr;

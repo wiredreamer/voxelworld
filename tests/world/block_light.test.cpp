@@ -51,7 +51,7 @@ public:
         around[4] = ecs::light_column::column_slice{.occupancy = occ_, .models = emitters_};
 
         return ecs::light_column{
-            around, asset::build_emission_table(voxel_registry{}), {}
+            around, material_table{voxel_registry{}}.emission(), {}
         };
     }
 

@@ -4,6 +4,7 @@ export import :model.identity;
 export import :model.lod;
 export import :model.occupancy;
 export import :model.links;
+export import :model.materials;
 export import :model.light_channel;
 export import :model.light_field;
 export import :model.volume;

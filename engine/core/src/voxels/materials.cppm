@@ -24,6 +24,9 @@ struct material_type {
     [[nodiscard]] constexpr auto operator==(const material_type&) const -> bool = default;
 };
 
+using material_set    = std::bitset<material_capacity>;
+using material_levels = std::array<uint8, material_capacity>;
+
 class material_table {
 public:
     explicit material_table(const voxel_registry& registry);
@@ -39,6 +42,10 @@ public:
     [[nodiscard]] auto of(voxel id) const -> material {
         return by_voxel_[id.value];
     }
+
+    [[nodiscard]] auto swaying() const -> material_set;
+
+    [[nodiscard]] auto emission() const -> material_levels;
 
 private:
     std::vector<material_type> rows_;

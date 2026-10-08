@@ -169,7 +169,8 @@ model::model(model_identity_pool& identity_pool, page_pool& pool, int32 width, i
     , pages_z_((depth + page_size - 1) / page_size) {
     pages_.resize(static_cast<std::size_t>(pages_x_) * static_cast<std::size_t>(pages_y_) *
                   static_cast<std::size_t>(pages_z_));
-    identity_ = identity_pool_->create();
+    materials_ = material_layer{pages_.size()};
+    identity_  = identity_pool_->create();
 }
 
 model::~model() {
@@ -194,6 +195,7 @@ model::model(model&& other) noexcept
     , owned_dense_(std::move(other.owned_dense_))
     , owned_binary_(std::move(other.owned_binary_))
     , owned_palette_(std::move(other.owned_palette_))
+    , materials_(std::move(other.materials_))
     , identity_(other.identity_)
     , fill_(other.fill_)
     , fill_known_(other.fill_known_) {
@@ -221,6 +223,7 @@ auto model::operator=(model&& other) noexcept -> model& {
         owned_dense_         = std::move(other.owned_dense_);
         owned_binary_        = std::move(other.owned_binary_);
         owned_palette_       = std::move(other.owned_palette_);
+        materials_           = std::move(other.materials_);
         identity_            = other.identity_;
         fill_                = other.fill_;
         fill_known_          = other.fill_known_;
@@ -235,7 +238,16 @@ auto model::set_voxel(int32 x, int32 y, int32 z, voxel v) -> void {
     increment_generation_();
 }
 
+auto model::set_voxel(int32 x, int32 y, int32 z, voxel v, material made_of) -> void {
+    set_voxel_raw_(x, y, z, v, made_of);
+    increment_generation_();
+}
+
 auto model::set_voxel_raw_(int32 x, int32 y, int32 z, voxel v) -> void {
+    set_voxel_raw_(x, y, z, v, default_material_table().of(v));
+}
+
+auto model::set_voxel_raw_(int32 x, int32 y, int32 z, voxel v, material made_of) -> void {
     const voxel index = v;
 
     fill_known_    = false;
@@ -244,6 +256,10 @@ auto model::set_voxel_raw_(int32 x, int32 y, int32 z, voxel v) -> void {
     const int32 pz = z / page_size;
     const int32 li = voxel_page_local_index(x % page_size, y % page_size, z % page_size);
     auto& entry    = pages_[page_index(px, py, pz)];
+
+    materials_.set(
+        static_cast<std::size_t>(page_index(px, py, pz)), li, v.is_empty() ? material{} : made_of
+    );
 
     switch (entry.mode()) {
         case page_mode::empty:
@@ -484,18 +500,6 @@ auto model::build_x_rows(
     return true;
 }
 
-auto build_emission_table(
-    const voxel_registry& registry
-) -> emission_table {
-    emission_table table{};
-
-    for (const voxel_type& type : registry.all()) {
-        table[type.id.value] = type.material.emission;
-    }
-
-    return table;
-}
-
 namespace {
 
 auto build_cell_links(
@@ -707,6 +711,8 @@ auto model::compact_pages() -> uint32 {
     fill_known_      = false;
     uint32 compacted = 0;
 
+    materials_.fold();
+
     for (auto& entry : pages_) {
         const page_entry was = entry;
 
@@ -865,54 +871,30 @@ auto model::extract_face(face_direction face, face_occupancy& out) const -> bool
     return true;
 }
 
-auto model::page_may_hold(
-    int32 px, int32 py, int32 pz, const voxel_set& wanted
-) const -> bool {
-    const page_entry& entry = pages_[page_index(px, py, pz)];
-    switch (entry.mode()) {
-        case page_mode::empty:
-            return false;
-        case page_mode::uniform:
-        case page_mode::binary:
-            return wanted.test(entry.fill_voxel().value);
-        case page_mode::palette:
-            return std::ranges::any_of(pool_ptr_->get_palette(entry.palette_slot()).palette, [&](voxel v) {
-                return !v.is_empty() && wanted.test(v.value);
-            });
-        default:
-            return true;
-    }
-}
-
 auto model::collect_emitters(
-    std::span<const uint8, voxel_type_capacity> emission_of_type, std::vector<emitting_voxel>& out
+    const material_levels& emission_of_material, std::vector<emitting_voxel>& out
 ) const -> void {
     constexpr int32 ps = page_size;
 
-    voxel_set emitting;
-    for (std::size_t type = 0; type < emission_of_type.size(); ++type) {
-        emitting.set(type, emission_of_type[type] != 0);
-    }
-    if (emitting.none()) {
+    if (materials_.all_inert()) {
         return;
     }
 
     for (int32 pz = 0; pz < pages_z_; ++pz) {
         for (int32 py = 0; py < pages_y_; ++py) {
             for (int32 px = 0; px < pages_x_; ++px) {
-                if (!page_may_hold(px, py, pz, emitting)) {
+                const auto at    = static_cast<std::size_t>(page_index(px, py, pz));
+                const auto whole = materials_.whole_page(at);
+                if (whole.has_value() && emission_of_material[whole->value] == 0) {
                     continue;
                 }
-
-                const bool whole = get_page_mode(px, py, pz) == page_mode::uniform;
-                const auto page  = whole ? page_view{} : get_page(px, py, pz);
-                const voxel fill = get_page_fill(px, py, pz);
 
                 for (int32 lz = 0; lz < ps; ++lz) {
                     for (int32 ly = 0; ly < ps; ++ly) {
                         for (int32 lx = 0; lx < ps; ++lx) {
-                            const voxel held  = whole ? fill : page.voxel_at(lx, ly, lz);
-                            const uint8 level = emission_of_type[held.value];
+                            const material held =
+                                materials_.get(at, voxel_page_local_index(lx, ly, lz));
+                            const uint8 level = emission_of_material[held.value];
                             if (level == 0) {
                                 continue;
                             }
@@ -932,13 +914,13 @@ auto model::collect_emitters(
 }
 
 auto model::build_rows_of(
-    chunk_occupancy& out, const voxel_set& wanted
+    chunk_occupancy& out, const material_set& wanted
 ) const -> bool {
     constexpr int32 ps   = page_size;
     constexpr int32 side = chunk_occupancy::side;
 
     out.clear();
-    if (width_ != side || height_ != side || depth_ != side) {
+    if (width_ != side || height_ != side || depth_ != side || materials_.all_inert()) {
         return false;
     }
 
@@ -946,15 +928,18 @@ auto model::build_rows_of(
     for (int32 pz = 0; pz < pages_z_; ++pz) {
         for (int32 py = 0; py < pages_y_; ++py) {
             for (int32 px = 0; px < pages_x_; ++px) {
-                if (!page_may_hold(px, py, pz, wanted)) {
+                const auto at    = static_cast<std::size_t>(page_index(px, py, pz));
+                const auto whole = materials_.whole_page(at);
+                if (whole.has_value() && !wanted.test(whole->value)) {
                     continue;
                 }
-                any            = true;
+
                 const int32 x0 = px * ps;
                 const int32 y0 = py * ps;
                 const int32 z0 = pz * ps;
 
-                if (get_page_mode(px, py, pz) == page_mode::uniform) {
+                if (whole.has_value()) {
+                    any = true;
                     for (int32 ly = 0; ly < ps; ++ly) {
                         for (int32 l = 0; l < ps; ++l) {
                             out.set_row(y0 + ly, z0 + l, uint64{0xFF} << x0);
@@ -964,18 +949,20 @@ auto model::build_rows_of(
                     continue;
                 }
 
-                const auto page = get_page(px, py, pz);
+                const auto& cells = materials_.cells_of(at);
                 for (int32 ly = 0; ly < ps; ++ly) {
                     for (int32 lz = 0; lz < ps; ++lz) {
                         uint64 bits = 0;
                         for (int32 lx = 0; lx < ps; ++lx) {
-                            const voxel v = page.voxel_at(lx, ly, lz);
-                            if (!v.is_empty() && wanted.test(v.value)) {
+                            const material held =
+                                cells[static_cast<std::size_t>(voxel_page_local_index(lx, ly, lz))];
+                            if (wanted.test(held.value)) {
                                 bits |= uint64{1} << lx;
                                 out.set_zrow(y0 + ly, x0 + lx, uint64{1} << (z0 + lz));
                             }
                         }
                         if (bits != 0) {
+                            any = true;
                             out.set_row(y0 + ly, z0 + lz, bits << x0);
                         }
                     }
@@ -987,16 +974,18 @@ auto model::build_rows_of(
 }
 
 auto model::extract_face(
-    face_direction face, face_occupancy& out, const voxel_set& wanted, face_occupancy& wanted_out
+    face_direction face, face_occupancy& out, const material_set& wanted, face_occupancy& wanted_out
 ) const -> bool {
     constexpr int32 side  = face_occupancy::side;
     constexpr int32 ps    = page_size;
     constexpr int32 pages = side / ps;
 
-    out.clear();
     wanted_out.clear();
-    if (width_ != side || height_ != side || depth_ != side) {
+    if (!extract_face(face, out)) {
         return false;
+    }
+    if (materials_.all_inert()) {
+        return true;
     }
 
     const int32 layer = boundary_layer(face, side);
@@ -1005,42 +994,30 @@ auto model::extract_face(
 
     for (int32 pb = 0; pb < pages; ++pb) {
         for (int32 pa = 0; pa < pages; ++pa) {
-            const auto page       = lift_off_face_plane(face, vec2i{pa, pb}, pl);
-            const page_entry& entry = pages_[page_index(page.x, page.y, page.z)];
-            const auto mode       = entry.mode();
+            const auto page  = lift_off_face_plane(face, vec2i{pa, pb}, pl);
+            const auto at    = static_cast<std::size_t>(page_index(page.x, page.y, page.z));
+            const auto whole = materials_.whole_page(at);
 
-            if (mode == page_mode::empty) {
-                continue;
-            }
-
-            if (mode == page_mode::uniform) {
-                const uint64 bits = uint64{0xFF} << (pa * ps);
-                const bool held   = wanted.test(entry.fill_voxel().value);
-                for (int32 b = 0; b < ps; ++b) {
-                    out.rows[(pb * ps) + b] |= bits;
-                    if (held) {
-                        wanted_out.rows[(pb * ps) + b] |= bits;
+            if (whole.has_value()) {
+                if (wanted.test(whole->value)) {
+                    for (int32 b = 0; b < ps; ++b) {
+                        wanted_out.rows[(pb * ps) + b] |= uint64{0xFF} << (pa * ps);
                     }
                 }
                 continue;
             }
 
-            const auto data = view_of(entry);
-
+            const auto& cells = materials_.cells_of(at);
             for (int32 b = 0; b < ps; ++b) {
-                uint64 bits      = 0;
                 uint64 held_bits = 0;
                 for (int32 a = 0; a < ps; ++a) {
                     const auto cell = lift_off_face_plane(face, vec2i{a, b}, ll);
-                    const voxel v   = data.voxel_at(cell.x, cell.y, cell.z);
-                    if (!v.is_empty()) {
-                        bits |= uint64{1} << a;
-                        if (wanted.test(v.value)) {
-                            held_bits |= uint64{1} << a;
-                        }
+                    const material held =
+                        cells[static_cast<std::size_t>(voxel_page_local_index(cell.x, cell.y, cell.z))];
+                    if (wanted.test(held.value)) {
+                        held_bits |= uint64{1} << a;
                     }
                 }
-                out.rows[(pb * ps) + b] |= bits << (pa * ps);
                 wanted_out.rows[(pb * ps) + b] |= held_bits << (pa * ps);
             }
         }
@@ -1055,6 +1032,7 @@ auto model::invalidate() -> void {
 
 auto model::fill(voxel v) -> void {
     release_all_pages_();
+    materials_.fill(v.is_empty() ? material{} : default_material_table().of(v));
 
     if (v.is_empty()) {
         std::ranges::fill(pages_, page_entry::make_empty());
@@ -1068,8 +1046,16 @@ auto model::fill(voxel v) -> void {
 }
 
 auto model::fill_page_raw_(int32 px, int32 py, int32 pz, voxel v) -> void {
+    fill_page_raw_(px, py, pz, v, default_material_table().of(v));
+}
+
+auto model::fill_page_raw_(int32 px, int32 py, int32 pz, voxel v, material made_of) -> void {
     fill_known_ = false;
     auto& entry = pages_[page_index(px, py, pz)];
+
+    materials_.fill_page(
+        static_cast<std::size_t>(page_index(px, py, pz)), v.is_empty() ? material{} : made_of
+    );
 
     release_page_(entry);
 
@@ -1080,7 +1066,8 @@ auto model::clone_pages_from(const model& source) -> void {
     fill_known_ = false;
     release_all_pages_();
 
-    pages_ = source.pages_;
+    pages_     = source.pages_;
+    materials_ = source.materials_;
 
     for (auto& entry : pages_) {
         switch (entry.mode()) {

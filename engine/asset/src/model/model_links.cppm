@@ -51,8 +51,6 @@ struct chunk_link_scratch {
 
 [[nodiscard]] auto build_chunk_links(const chunk_occupancy& occupancy) -> chunk_links;
 
-using emission_table = std::array<uint8, voxel_type_capacity>;
 
-[[nodiscard]] auto build_emission_table(const voxel_registry& registry) -> emission_table;
 
 }  // namespace vw::asset

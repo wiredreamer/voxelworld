@@ -1123,3 +1123,26 @@ TEST_CASE("a coarse mesh neither sways nor opens faces between leaves and wood",
         REQUIRE_FALSE(unpack_sways(q));
     }
 }
+
+TEST_CASE("neighbours of one colour merge only when they are of one material", "[mesh][material]") {
+    const material glowing = default_material_table().of(voxels::glow_amber);
+    REQUIRE(glowing != material{});
+
+    const auto top_quads = [](material second) -> std::vector<material> {
+        model_fixture fixture{64};
+        fixture.get()->set_voxel(3, 3, 3, voxels::amber[4], material{});
+        fixture.get()->set_voxel(4, 3, 3, voxels::amber[4], second);
+
+        std::vector<material> found;
+        for (const auto& q : fixture.greedy().quads) {
+            if (unpack_normal(q) == 2) {
+                found.push_back(unpack_material(q));
+            }
+        }
+        std::ranges::sort(found, {}, &material::value);
+        return found;
+    };
+
+    REQUIRE(top_quads(material{}) == std::vector<material>{material{}});
+    REQUIRE(top_quads(glowing) == std::vector<material>{material{}, glowing});
+}

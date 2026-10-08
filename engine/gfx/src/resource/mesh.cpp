@@ -116,7 +116,7 @@ struct face_axis_mapping {
         -> std::pair<vec3i, vec3i>;
 };
 
-[[nodiscard]] auto is_leaf_voxel(voxel v) -> bool;
+[[nodiscard]] auto sways_at(mesh_source src, int32 x, int32 y, int32 z) -> bool;
 
 [[nodiscard]] auto is_face_visible(mesh_source src, int32 x, int32 y, int32 z,
                                    face_direction face) -> bool;
@@ -136,6 +136,7 @@ auto add_quad(
     vec3i min_pos,
     vec3i max_pos,
     voxel v,
+    material made_of,
     bool at_full_detail
 ) -> void;
 
@@ -227,11 +228,10 @@ face_axis_mapping::face_axis_mapping(
     }
 }
 
-auto is_leaf_voxel(
-    voxel v
+auto sways_at(
+    mesh_source src, int32 x, int32 y, int32 z
 ) -> bool {
-    static const voxel_set leaves = default_voxel_registry().of_kind(voxel_kind::leaf);
-    return leaves.test(v.value);
+    return default_material_table().get(src.voxels.get_material(x, y, z)).sways;
 }
 
 auto is_face_visible(
@@ -252,8 +252,7 @@ auto is_face_visible(
             return false;
         }
         const vec2i on_plane = project_onto_face_plane(face, vec3i{x, y, z});
-        return src.boundary->leaf_faces[face].test(on_plane.x, on_plane.y) !=
-               is_leaf_voxel(src.voxels.get_voxel(x, y, z));
+        return src.boundary->leaf_faces[face].test(on_plane.x, on_plane.y) != sways_at(src, x, y, z);
     }
 
     if (src.cell_empty(nx, ny, nz)) {
@@ -261,8 +260,7 @@ auto is_face_visible(
     }
 
     // см. docs/rendering.md#качание-листвы
-    return src.lod_step == 1 && is_leaf_voxel(src.voxels.get_voxel(nx, ny, nz)) !=
-                                    is_leaf_voxel(src.voxels.get_voxel(x, y, z));
+    return src.lod_step == 1 && sways_at(src, nx, ny, nz) != sways_at(src, x, y, z);
 }
 
 auto build_face_mask(
@@ -304,7 +302,7 @@ auto build_face_mask(
                     for (int v = v_block; v < v_end; v++) {
                         auto [mx, my, mz] = axes.to_model_coords(u, v, layer);
                         if (is_face_visible(src, mx, my, mz, face)) {
-                            storage.mask[idx(u, v)] = {fid};
+                            storage.mask[idx(u, v)] = {fid, src.cell_material(mx, my, mz)};
                         } else {
                             storage.mask[idx(u, v)] = empty_cell;
                         }
@@ -319,7 +317,7 @@ auto build_face_mask(
                     auto [mx, my, mz] = axes.to_model_coords(u, v, layer);
                     const auto vx     = page.voxel_at(mx % ps, my % ps, mz % ps);
                     if (!vx.is_empty() && is_face_visible(src, mx, my, mz, face)) {
-                        storage.mask[idx(u, v)] = {vx};
+                        storage.mask[idx(u, v)] = {vx, src.cell_material(mx, my, mz)};
                     } else {
                         storage.mask[idx(u, v)] = empty_cell;
                     }
@@ -335,13 +333,12 @@ auto add_quad(
     vec3i min_pos,
     vec3i max_pos,
     voxel v,
+    material made_of,
     bool at_full_detail
 ) -> void {
-    const material_table& materials = default_material_table();
-    const material made_of          = materials.of(v);
-
     quads.push_back(quad::pack(
-        min_pos, max_pos, face, v, made_of, at_full_detail && materials.get(made_of).sways
+        min_pos, max_pos, face, v, made_of,
+        at_full_detail && default_material_table().get(made_of).sways
     ));
 }
 
@@ -417,8 +414,7 @@ auto build_layer_rows(
 
 // см. docs/rendering.md#качание-листвы
 [[nodiscard]] auto sways(const face_mask_cell& cell, const face_axis_mapping& axes) -> bool {
-    const material_table& materials = default_material_table();
-    return axes.step == 1 && materials.get(materials.of(cell.index)).sways;
+    return axes.step == 1 && default_material_table().get(cell.made_of).sways;
 }
 
 [[nodiscard]] auto merge_reach(
@@ -443,7 +439,7 @@ auto emit_rect(
 ) -> void {
     auto [min_pos, max_pos] = axes.to_local_min_max(u_start, v_start, w, h, layer);
 
-    add_quad(storage.quads, face, min_pos, max_pos, cell.index, axes.step == 1);
+    add_quad(storage.quads, face, min_pos, max_pos, cell.index, cell.made_of, axes.step == 1);
 }
 
 [[nodiscard]] auto cell_span_mask(int32 step) -> uint64 {
@@ -507,7 +503,7 @@ auto build_cell_occupancy(
 
 auto build_cell_indices(
     const vw::asset::model& voxels, const vw::asset::chunk_occupancy& fine, int32 step,
-    std::vector<voxel>& out
+    std::vector<voxel>& out, std::vector<material>& made_of
 ) -> void {
     const int32 cells = vw::asset::chunk_occupancy::side / step;
     const uint64 span = cell_span_mask(step);
@@ -517,11 +513,13 @@ auto build_cell_indices(
             static_cast<std::size_t>(cells),
         voxel{}
     );
+    made_of.assign(out.size(), material{});
 
     for (int32 cz = 0; cz < cells; ++cz) {
         for (int32 cy = 0; cy < cells; ++cy) {
             for (int32 cx = 0; cx < cells; ++cx) {
                 voxel pick{};
+                material pick_made_of{};
 
                 for (int32 dy = step - 1; dy >= 0 && pick.is_empty(); --dy) {
                     for (int32 dz = 0; dz < step && pick.is_empty(); ++dz) {
@@ -531,14 +529,15 @@ auto build_cell_indices(
                         if (bits == 0) {
                             continue;
                         }
-                        pick = voxels.get_voxel(
-                            (cx * step) + static_cast<int32>(std::countr_zero(bits)), fy, fz
-                        );
+                        const int32 fx = (cx * step) + static_cast<int32>(std::countr_zero(bits));
+                        pick           = voxels.get_voxel(fx, fy, fz);
+                        pick_made_of   = voxels.get_material(fx, fy, fz);
                     }
                 }
 
                 const auto at = (((static_cast<std::size_t>(cz) * cells) + cy) * cells) + cx;
                 out[at]       = pick;
+                made_of[at]   = pick_made_of;
             }
         }
     }
@@ -606,7 +605,7 @@ auto simple_mesh_generator::generate_mesh_data(
 
 auto simple_mesh_generator::add_cube_face(
     std::vector<quad>& quads,
-    mesh_source,
+    mesh_source src,
     int x,
     int y,
     int z,
@@ -615,7 +614,8 @@ auto simple_mesh_generator::add_cube_face(
     [[maybe_unused]] mesh_options opts
 ) -> void {
     detail::add_quad(
-        quads, face, {x, y, z}, {x + 1, y + 1, z + 1}, voxel_id, true
+        quads, face, {x, y, z}, {x + 1, y + 1, z + 1}, voxel_id, src.voxels.get_material(x, y, z),
+        true
     );
 }
 
@@ -634,8 +634,7 @@ auto simple_mesh_generator::is_face_visible(
     }
 
     return src.voxels.is_empty(nx, ny, nz) ||
-           detail::is_leaf_voxel(src.voxels.get_voxel(nx, ny, nz)) !=
-               detail::is_leaf_voxel(src.voxels.get_voxel(x, y, z));
+           detail::sways_at(src, nx, ny, nz) != detail::sways_at(src, x, y, z);
 }
 
 
@@ -774,7 +773,9 @@ auto greedy_mesh_generator::generate_mesh_data(
         }
 
         detail::build_cell_occupancy(*storage.occupancy, step, *storage.lod_cells);
-        detail::build_cell_indices(src.voxels, *storage.occupancy, step, storage.lod_indices);
+        detail::build_cell_indices(
+            src.voxels, *storage.occupancy, step, storage.lod_indices, storage.lod_materials
+        );
 
         if (src.boundary != nullptr) {
             detail::build_cell_boundary(*src.boundary, step, storage.lod_boundary);
@@ -783,15 +784,25 @@ auto greedy_mesh_generator::generate_mesh_data(
 
         src.lod_step    = step;
         src.lod_cells   = storage.lod_cells.get();
-        src.lod_indices = storage.lod_indices.data();
+        src.lod_indices   = storage.lod_indices.data();
+        src.lod_materials = storage.lod_materials.data();
     }
 
     if (step == 1 && storage.occupancy_valid) {
-        static const voxel_set leaf_set = default_voxel_registry().of_kind(voxel_kind::leaf);
+        static const material_set leaf_set = default_material_table().swaying();
         if (!storage.leaves) {
             storage.leaves = std::make_unique<vw::asset::chunk_occupancy>();
         }
-        if (src.voxels.build_rows_of(*storage.leaves, leaf_set)) {
+        const bool sways_inside = src.voxels.build_rows_of(*storage.leaves, leaf_set);
+        const bool sways_beyond =
+            src.boundary != nullptr &&
+            std::ranges::any_of(all_face_directions, [&](face_direction face) {
+                return src.has_boundary_slice(face) &&
+                       std::ranges::any_of(src.boundary->leaf_faces[face].rows, [](uint64 row) {
+                           return row != 0;
+                       });
+            });
+        if (sways_inside || sways_beyond) {
             src.leaves = storage.leaves.get();
         }
     }
@@ -990,7 +1001,9 @@ auto greedy_mesh_generator::generate_face_quads(
 
                     auto [mx, my, mz] = axes.to_model_coords(u, v, layer);
 
-                    storage.mask[idx(u, v)] = {src.cell_index(mx, my, mz)};
+                    storage.mask[idx(u, v)] = {
+                        src.cell_index(mx, my, mz), src.cell_material(mx, my, mz)
+                    };
                 }
             }
 

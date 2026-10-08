@@ -60,12 +60,12 @@ light_column::light_column(std::span<const chunk_occupancy* const> chunks_bottom
               {}, {}, {}, {}, column_slice{.occupancy = chunks_bottom_up, .models = {}},
               {}, {}, {}, {}
           }},
-          emission_table{},
+          material_levels{},
           {}
       } {}
 
 light_column::light_column(
-    const neighbourhood& around, const emission_table& emission, light_scratch scratch
+    const neighbourhood& around, const material_levels& emission, light_scratch scratch
 )
     : buffers_{std::move(scratch)} {
     int32 chunks = 0;
@@ -222,7 +222,7 @@ auto light_column::seed_sky_() -> void {
 }
 
 auto light_column::seed_block_(
-    const neighbourhood& around, const emission_table& emission
+    const neighbourhood& around, const material_levels& emission
 ) -> void {
     auto& levels = buffers_.levels;
 
@@ -260,10 +260,9 @@ auto light_column::seed_block_(
                                     continue;
                                 }
 
-                                const bool uniform = mode == page_mode::uniform;
-                                const uint8 fill =
-                                    uniform ? emission[mdl->get_page_fill(px, py, pz).value]
-                                            : uint8{0};
+                                const auto whole   = mdl->get_page_material(px, py, pz);
+                                const bool uniform = whole.has_value();
+                                const uint8 fill   = uniform ? emission[whole->value] : uint8{0};
 
                                 if (uniform && fill == 0) {
                                     continue;
@@ -282,8 +281,6 @@ auto light_column::seed_block_(
 
     each_page([&](const model& mdl, int32 px, int32 py, int32 pz, int32 x0, int32 y0,
                   int32 z0, bool uniform, uint8 fill) {
-        const page_view page = uniform ? page_view{} : mdl.get_page(px, py, pz);
-
         for (int32 lz = 0; lz < ps; ++lz) {
             const int32 z = z0 + lz;
             if (z < 0 || z >= span) {
@@ -300,7 +297,9 @@ auto light_column::seed_block_(
                     }
 
                     const uint8 level =
-                        uniform ? fill : emission[page.voxel_at(lx, ly, lz).value];
+                        uniform ? fill
+                                : emission[mdl.get_material((px * ps) + lx, (py * ps) + ly, (pz * ps) + lz)
+                                               .value];
                     if (level == 0) {
                         continue;
                     }

@@ -28,6 +28,24 @@ material_table::material_table(
 
         by_voxel_[type.id.value] = material{static_cast<uint8>(row - rows_.begin())};
     }
+
+    rows_.resize(material_capacity);
+}
+
+auto material_table::swaying() const -> material_set {
+    material_set out;
+    for (std::size_t row = 0; row < rows_.size(); ++row) {
+        out.set(row, rows_[row].sways);
+    }
+    return out;
+}
+
+auto material_table::emission() const -> material_levels {
+    material_levels out{};
+    for (std::size_t row = 0; row < rows_.size(); ++row) {
+        out[row] = rows_[row].emission;
+    }
+    return out;
 }
 
 auto default_material_table() -> const material_table& {
