@@ -26,7 +26,7 @@ inline constexpr float32 fog_near_share = 0.6F;
 inline constexpr float32 fog_far_share  = 0.9F;
 
 [[nodiscard]] constexpr auto lod_base_chunks_behind_fog(uint32 view_distance_columns) -> float32 {
-    constexpr float32 fog_hiding_the_switch = 0.75F;
+    constexpr float32 fog_hiding_the_switch = 0.9F;
     constexpr float32 half_chunk            = 0.5F;
     constexpr float32 first_level_step      = 2.0F;
 
