@@ -71,7 +71,7 @@ public:
 
     light_cache(
         vulkan_context& context, vk::DescriptorPool descriptor_pool,
-        vk::DescriptorSetLayout occupancy_layout, const voxel_registry& registry
+        vk::DescriptorSetLayout occupancy_layout
     );
     ~light_cache();
 

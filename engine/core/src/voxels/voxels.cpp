@@ -41,7 +41,7 @@ voxel_registry::voxel_registry(
 auto voxel_registry::add_(
     const voxel_desc& desc
 ) -> void {
-    by_value_[desc.id.value] = voxel_type{desc.id, desc.name, desc.material, desc.surface, desc.kind};
+    by_value_[desc.id.value] = voxel_type{desc.id, desc.name, desc.material, desc.surface};
     known_.set(desc.id.value);
     by_name_.insert_or_assign(desc.name, desc.id);
 }
@@ -49,18 +49,6 @@ auto voxel_registry::add_(
 auto default_voxel_registry() -> const voxel_registry& {
     static const voxel_registry registry;
     return registry;
-}
-
-auto voxel_registry::of_kind(
-    voxel_kind kind
-) const -> voxel_set {
-    voxel_set out;
-    for (const voxel_type& type : by_value_) {
-        if (known_[type.id.value] && type.kind == kind) {
-            out.set(type.id.value);
-        }
-    }
-    return out;
 }
 
 auto voxel_registry::find(

@@ -18,30 +18,6 @@ inline constexpr auto gray   = voxel_span{67, 19};
 inline constexpr auto white  = voxel{86};
 inline constexpr auto black  = voxel{87};
 
-inline constexpr auto glow_blue    = voxel{88};
-inline constexpr auto glow_green   = voxel{89};
-inline constexpr auto glow_amber   = voxel{90};
-inline constexpr auto glow_red     = voxel{91};
-inline constexpr auto glow_purple  = voxel{92};
-inline constexpr auto glow_white   = voxel{93};
-
-inline constexpr auto lamp_blue    = voxel{94};
-inline constexpr auto lamp_green   = voxel{95};
-inline constexpr auto lamp_amber   = voxel{96};
-inline constexpr auto lamp_red     = voxel{97};
-inline constexpr auto lamp_purple  = voxel{98};
-inline constexpr auto lamp_white   = voxel{99};
-
-inline constexpr auto fire_blue    = voxel{100};
-inline constexpr auto fire_green   = voxel{101};
-inline constexpr auto fire_amber   = voxel{102};
-inline constexpr auto fire_red     = voxel{103};
-inline constexpr auto fire_purple  = voxel{104};
-inline constexpr auto fire_white   = voxel{105};
-
-inline constexpr auto bark   = voxel_span{106, 5};
-inline constexpr auto leaves = voxel_span{111, 8};
-
 inline constexpr std::array groups = {
     voxel_group{"blue", blue[0], 11},
     voxel_group{"green", green[0], 11},
@@ -51,11 +27,6 @@ inline constexpr std::array groups = {
     voxel_group{"purple", purple[0], 11},
     voxel_group{"gray", gray[0], 19},
     voxel_group{"mono", white, 2},
-    voxel_group{"glow", glow_blue, 6},
-    voxel_group{"lamp", lamp_blue, 6},
-    voxel_group{"fire", fire_blue, 6},
-    voxel_group{"bark", bark[0], 5},
-    voxel_group{"leaves", leaves[0], 8},
 };
 
 }  // namespace vw::voxels
@@ -151,37 +122,6 @@ inline constexpr std::array default_voxel_catalog = {
     voxel_desc{voxels::gray[18], "gray_18", {colors::gray_18}},
     voxel_desc{voxels::white, "white", {colors::white}},
     voxel_desc{voxels::black, "black", {colors::black}},
-    voxel_desc{voxels::glow_blue, "glow_blue", {colors::blue_8, 0, 200}},
-    voxel_desc{voxels::glow_green, "glow_green", {colors::green_8, 0, 200}},
-    voxel_desc{voxels::glow_amber, "glow_amber", {colors::amber_8, 0, 200}},
-    voxel_desc{voxels::glow_red, "glow_red", {colors::red_8, 0, 200}},
-    voxel_desc{voxels::glow_purple, "glow_purple", {colors::purple_8, 0, 200}},
-    voxel_desc{voxels::glow_white, "glow_white", {colors::white, 0, 200}},
-    voxel_desc{voxels::lamp_blue, "lamp_blue", {colors::blue_8, 14, 200}},
-    voxel_desc{voxels::lamp_green, "lamp_green", {colors::green_8, 14, 200}},
-    voxel_desc{voxels::lamp_amber, "lamp_amber", {colors::amber_8, 14, 200}},
-    voxel_desc{voxels::lamp_red, "lamp_red", {colors::red_8, 14, 200}},
-    voxel_desc{voxels::lamp_purple, "lamp_purple", {colors::purple_8, 14, 200}},
-    voxel_desc{voxels::lamp_white, "lamp_white", {colors::white, 14, 200}},
-    voxel_desc{voxels::fire_blue, "fire_blue", {colors::blue_8, 15, 255}},
-    voxel_desc{voxels::fire_green, "fire_green", {colors::green_8, 15, 255}},
-    voxel_desc{voxels::fire_amber, "fire_amber", {colors::amber_8, 15, 255}},
-    voxel_desc{voxels::fire_red, "fire_red", {colors::red_8, 15, 255}},
-    voxel_desc{voxels::fire_purple, "fire_purple", {colors::purple_8, 15, 255}},
-    voxel_desc{voxels::fire_white, "fire_white", {colors::white, 15, 255}},
-    voxel_desc{voxels::bark[0], "bark_0", {colors::amber_2}, voxel_surface::opaque, voxel_kind::wood},
-    voxel_desc{voxels::bark[1], "bark_1", {colors::amber_3}, voxel_surface::opaque, voxel_kind::wood},
-    voxel_desc{voxels::bark[2], "bark_2", {colors::amber_4}, voxel_surface::opaque, voxel_kind::wood},
-    voxel_desc{voxels::bark[3], "bark_3", {colors::amber_5}, voxel_surface::opaque, voxel_kind::wood},
-    voxel_desc{voxels::bark[4], "bark_4", {colors::amber_6}, voxel_surface::opaque, voxel_kind::wood},
-    voxel_desc{voxels::leaves[0], "leaves_0", {colors::green_1}, voxel_surface::opaque, voxel_kind::leaf},
-    voxel_desc{voxels::leaves[1], "leaves_1", {colors::green_2}, voxel_surface::opaque, voxel_kind::leaf},
-    voxel_desc{voxels::leaves[2], "leaves_2", {colors::green_3}, voxel_surface::opaque, voxel_kind::leaf},
-    voxel_desc{voxels::leaves[3], "leaves_3", {colors::green_4}, voxel_surface::opaque, voxel_kind::leaf},
-    voxel_desc{voxels::leaves[4], "leaves_4", {colors::green_5}, voxel_surface::opaque, voxel_kind::leaf},
-    voxel_desc{voxels::leaves[5], "leaves_5", {colors::green_6}, voxel_surface::opaque, voxel_kind::leaf},
-    voxel_desc{voxels::leaves[6], "leaves_6", {colors::green_7}, voxel_surface::opaque, voxel_kind::leaf},
-    voxel_desc{voxels::leaves[7], "leaves_7", {colors::green_8}, voxel_surface::opaque, voxel_kind::leaf},
 };
 
 }  // namespace vw

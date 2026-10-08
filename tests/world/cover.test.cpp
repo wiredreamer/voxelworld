@@ -317,3 +317,19 @@ TEST_CASE("a planted flower is a cell of its own kind", "[world][cover]") {
     m.grid().clear_cell({3, ground + 1, 3});
     REQUIRE(m.grid().cell_at({3, ground + 1, 3}) == cell{});
 }
+
+TEST_CASE("the grid keeps the material a voxel was put with and drops it with the voxel", "[world][material]") {
+    meadow m;
+    auto& grid = m.grid();
+
+    const vec3i at = m.units_at({5, ground + 1, 5});
+    grid.set_voxel(at, matter{voxels::amber[8], materials::lamp});
+
+    REQUIRE(grid.get_voxel(at) == voxels::amber[8]);
+    REQUIRE(grid.get_matter(at) == matter{voxels::amber[8], materials::lamp});
+    REQUIRE(grid.get_matter(m.units_at({5, ground, 5})) == matter{voxels::green[4]});
+
+    grid.set_voxel(at, voxels::air);
+    REQUIRE(grid.get_matter(at) == matter{});
+    REQUIRE(m.volume().voxels().get_material(5, ground + 1, 5) == materials::inert);
+}

@@ -90,13 +90,13 @@ TEST_CASE("a batch can be applied to more than one model", "[model]") {
     asset::model second{ids, pages, side, side, side};
 
     asset::voxel_batch batch;
-    batch.set(vec3i{2, 2, 2}, voxels::lamp_amber);
+    batch.set(vec3i{2, 2, 2}, matter{voxels::amber[8], materials::lamp});
 
     batch.apply_to(first);
     batch.apply_to(second);
 
-    REQUIRE(first.get_voxel(2, 2, 2) == voxels::lamp_amber);
-    REQUIRE(second.get_voxel(2, 2, 2) == voxels::lamp_amber);
+    REQUIRE(first.get_matter(2, 2, 2) == matter{voxels::amber[8], materials::lamp});
+    REQUIRE(second.get_matter(2, 2, 2) == matter{voxels::amber[8], materials::lamp});
 
     batch.clear();
     REQUIRE(batch.empty());

@@ -54,7 +54,7 @@ palette_buffer::palette_buffer(
         });
     }
 
-    const material_table materials{registry};
+    const material_table& materials = default_material_table();
 
     std::vector<material_entry> material_data;
     material_data.reserve(materials.all().size());

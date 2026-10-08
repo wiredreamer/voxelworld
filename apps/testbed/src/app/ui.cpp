@@ -114,11 +114,11 @@ auto testbed_app::render_ui() -> void {
 
         if (world_grid_ != nullptr) {
             if (ImGui::Button("Drop lamp")) {
-                drop_emitter(voxels::lamp_amber, 1);
+                drop_emitter(matter{voxels::amber[8], materials::lamp}, 1);
             }
             ImGui::SameLine();
             if (ImGui::Button("Pour lava")) {
-                drop_emitter(voxels::fire_red, 3);
+                drop_emitter(matter{voxels::red[8], materials::fire}, 3);
             }
 
             if (!drop_status_.empty()) {

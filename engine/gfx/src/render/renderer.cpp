@@ -64,7 +64,7 @@ renderer::renderer(
         *context_, descriptor_pool_, *model_volumes_
     );
     light_cache_ = std::make_unique<light_cache>(
-        *context_, descriptor_pool_, occupancy_->get_descriptor_set_layout(), *voxel_registry_
+        *context_, descriptor_pool_, occupancy_->get_descriptor_set_layout()
     );
     create_graphics_pipeline();
     create_wireframe_pipeline();

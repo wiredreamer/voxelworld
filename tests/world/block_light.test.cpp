@@ -22,11 +22,11 @@ public:
         }
     }
 
-    auto set(int32 x, int32 y, int32 z, voxel id) -> void {
+    auto set(int32 x, int32 y, int32 z, matter id) -> void {
         models_[static_cast<std::size_t>(y / side)]->set_voxel(x, y % side, z, id);
     }
 
-    auto fill(vec3i from, vec3i to, voxel id) -> void {
+    auto fill(vec3i from, vec3i to, matter id) -> void {
         for (int32 y = from.y; y <= to.y; ++y) {
             for (int32 z = from.z; z <= to.z; ++z) {
                 for (int32 x = from.x; x <= to.x; ++x) {
@@ -51,7 +51,7 @@ public:
         around[4] = ecs::light_column::column_slice{.occupancy = occ_, .models = emitters_};
 
         return ecs::light_column{
-            around, material_table{voxel_registry{}}.emission(), {}
+            around, material_table{}.emission(), {}
         };
     }
 
@@ -68,7 +68,7 @@ private:
 
 TEST_CASE("a lamp lights its own voxel and falls one level a step", "[block_light]") {
     column_fixture fixture{1};
-    fixture.set(32, 32, 32, voxels::lamp_amber);
+    fixture.set(32, 32, 32, matter{voxels::amber[8], materials::lamp});
 
     const ecs::light_column light = fixture.light();
 
@@ -85,7 +85,7 @@ TEST_CASE("a lamp lights its own voxel and falls one level a step", "[block_ligh
 
 TEST_CASE("lava carries one voxel further than a lamp", "[block_light]") {
     column_fixture fixture{1};
-    fixture.set(10, 32, 32, voxels::fire_red);
+    fixture.set(10, 32, 32, matter{voxels::red[8], materials::fire});
 
     const ecs::light_column light = fixture.light();
 
@@ -97,7 +97,7 @@ TEST_CASE("lava carries one voxel further than a lamp", "[block_light]") {
 
 TEST_CASE("a wall stops block light", "[block_light]") {
     column_fixture fixture{1};
-    fixture.set(32, 32, 32, voxels::lamp_amber);
+    fixture.set(32, 32, 32, matter{voxels::amber[8], materials::lamp});
     fixture.fill(vec3i{34, 0, 0}, vec3i{34, side - 1, side - 1}, voxels::gray[8]);
 
     const ecs::light_column light = fixture.light();
@@ -128,7 +128,7 @@ TEST_CASE("a world with no emitters has no block light at all", "[block_light]")
 
 TEST_CASE("a solid page of lava lights all the way round itself", "[block_light]") {
     column_fixture fixture{1};
-    fixture.fill(vec3i{8, 8, 8}, vec3i{15, 15, 15}, voxels::fire_red);
+    fixture.fill(vec3i{8, 8, 8}, vec3i{15, 15, 15}, matter{voxels::red[8], materials::fire});
 
     const ecs::light_column light = fixture.light();
 
@@ -147,7 +147,7 @@ TEST_CASE("a solid page of lava lights all the way round itself", "[block_light]
 
 TEST_CASE("the two channels do not touch each other", "[block_light]") {
     column_fixture fixture{1};
-    fixture.set(32, 32, 32, voxels::lamp_amber);
+    fixture.set(32, 32, 32, matter{voxels::amber[8], materials::lamp});
 
     const ecs::light_column light = fixture.light();
 
@@ -160,8 +160,8 @@ TEST_CASE("the two channels do not touch each other", "[block_light]") {
 
 TEST_CASE("a baked block field reads back what was flooded", "[block_light]") {
     column_fixture fixture{1};
-    fixture.set(20, 30, 40, voxels::lamp_amber);
-    fixture.set(50, 10, 12, voxels::fire_red);
+    fixture.set(20, 30, 40, matter{voxels::amber[8], materials::lamp});
+    fixture.set(50, 10, 12, matter{voxels::red[8], materials::fire});
 
     const ecs::light_column light = fixture.light();
 

@@ -72,13 +72,13 @@ auto window_origin(vec3i centre_voxel, int32 cascade) -> vec3i {
 
 light_cache::light_cache(
     vulkan_context& context, vk::DescriptorPool descriptor_pool,
-    vk::DescriptorSetLayout occupancy_layout, const voxel_registry& registry
+    vk::DescriptorSetLayout occupancy_layout
 )
     : context_{&context}
     , descriptor_pool_{descriptor_pool}
     , compute_{context, "shaders/light_cache.comp.spv", shader_type::COMPUTE}
     , scatter_{context, "shaders/light_sources.comp.spv", shader_type::COMPUTE}
-    , emission_{material_table{registry}.emission()} {
+    , emission_{default_material_table().emission()} {
     for (std::size_t cascade = 0; cascade < cascades_.size(); ++cascade) {
         const auto slots = static_cast<std::size_t>(shapes[cascade].slot_count());
 

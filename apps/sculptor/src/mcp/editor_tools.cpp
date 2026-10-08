@@ -179,12 +179,6 @@ constexpr std::string_view no_arguments =
             {"name", type.name},
             {"color", std::format("#{:02x}{:02x}{:02x}", tint.r(), tint.g(), tint.b())},
         };
-        if (type.material.glow > 0) {
-            entry.set("glow", type.material.glow);
-        }
-        if (type.material.emission > 0) {
-            entry.set("emission", type.material.emission);
-        }
         voxels.emplace_back(std::move(entry));
     }
 
@@ -335,9 +329,8 @@ auto make_editor_tools(const editor_bindings& bindings) -> std::vector<tool> {
     tools.push_back(tool{
         .name = "palette_list",
         .description =
-            "List every voxel a volume may contain: its index, name and colour, and for glowing "
-            "voxels their glow and light emission. Index 0 is air. The palette is fixed and "
-            "shared by all volumes.",
+            "List every voxel a volume may contain: its index, name and colour. Index 0 is air. "
+            "The palette is fixed and shared by all volumes.",
         .input_schema = no_arguments,
         .run =
             [bindings](const json::value&) -> tool_outcome {

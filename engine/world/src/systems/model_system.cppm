@@ -35,9 +35,9 @@ public:
         auto set_visible(bool visible) -> void;
 
         auto set_chunk(std::shared_ptr<asset::chunk_volume> volume) -> void;
-        auto set_voxel(int32 x, int32 y, int32 z, voxel v) -> void;
-        auto set_voxel(vec3i pos, voxel v) -> void;
-        auto fill(voxel v) -> void;
+        auto set_voxel(int32 x, int32 y, int32 z, matter v) -> void;
+        auto set_voxel(vec3i pos, matter v) -> void;
+        auto fill(matter v) -> void;
 
     private:
         model_system* system_;

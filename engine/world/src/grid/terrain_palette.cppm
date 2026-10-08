@@ -25,9 +25,9 @@ inline constexpr auto ore_iron   = voxel_span{voxels::gray[10].value, 5};
 
 inline constexpr auto bedrock   = voxels::gray[0];
 inline constexpr auto water     = voxels::blue[4];
-inline constexpr auto crystal   = voxels::glow_blue;
-inline constexpr auto glowstone = voxels::lamp_amber;
-inline constexpr auto magma     = voxels::lamp_red;
-inline constexpr auto lava      = voxels::fire_red;
+inline constexpr auto crystal   = matter{voxels::blue[8], materials::glow};
+inline constexpr auto glowstone = matter{voxels::amber[8], materials::lamp};
+inline constexpr auto magma     = matter{voxels::red[8], materials::lamp};
+inline constexpr auto lava      = matter{voxels::red[8], materials::fire};
 
 }  // namespace vw::ecs::terrain

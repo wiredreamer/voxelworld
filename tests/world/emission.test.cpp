@@ -9,17 +9,16 @@ import vw.world;
 using namespace vw;
 
 TEST_CASE("the emission levels mirror the material table", "[emission]") {
-    const voxel_registry registry;
-    const material_table materials{registry};
-    const material_levels levels = materials.emission();
+    const material_table table;
+    const material_levels levels = table.emission();
 
-    REQUIRE(levels[0] == 0);
-    REQUIRE(levels[materials.of(voxels::green[10]).value] == 0);
-    REQUIRE(levels[materials.of(voxels::lamp_amber).value] == 14);
-    REQUIRE(levels[materials.of(voxels::fire_red).value] == 15);
+    REQUIRE(levels[materials::inert.value] == 0);
+    REQUIRE(levels[materials::leaves.value] == 0);
+    REQUIRE(levels[materials::lamp.value] == 14);
+    REQUIRE(levels[materials::fire.value] == 15);
 
-    for (std::size_t row = 0; row < materials.all().size(); ++row) {
-        REQUIRE(levels[row] == materials.all()[row].emission);
+    for (std::size_t row = 0; row < table.all().size(); ++row) {
+        REQUIRE(levels[row] == table.all()[row].emission);
     }
 }
 

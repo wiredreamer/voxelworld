@@ -83,12 +83,6 @@ auto voxel_palette_panel::render(
         selected.id.value
     );
 
-    if (selected.material.emission != 0 || selected.material.glow != 0) {
-        ImGui::Text(
-            "emits %u, glows %u", selected.material.emission, selected.material.glow
-        );
-    }
-
     ImGui::Spacing();
     ImGui::Separator();
     ImGui::Spacing();

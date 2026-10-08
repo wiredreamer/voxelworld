@@ -32,21 +32,37 @@ public:
     model(model&& other) noexcept;
     auto operator=(model&& other) noexcept -> model&;
 
-    auto set_voxel(int32 x, int32 y, int32 z, voxel v) -> void;
+    // см. docs/ENGINE.md#слой-материала
+    auto set_voxel(int32 x, int32 y, int32 z, matter value) -> void;
 
     auto set_voxel(
-        vec3i pos, voxel v
+        vec3i pos, matter value
     ) -> void {
-        set_voxel(pos.x, pos.y, pos.z, v);
+        set_voxel(pos.x, pos.y, pos.z, value);
     }
 
-    // см. docs/ENGINE.md#слой-материала
-    auto set_voxel(int32 x, int32 y, int32 z, voxel v, material made_of) -> void;
+    auto set_voxel(
+        int32 x, int32 y, int32 z, voxel v, material made_of
+    ) -> void {
+        set_voxel(x, y, z, matter{v, made_of});
+    }
 
     auto set_voxel(
         vec3i pos, voxel v, material made_of
     ) -> void {
-        set_voxel(pos.x, pos.y, pos.z, v, made_of);
+        set_voxel(pos.x, pos.y, pos.z, matter{v, made_of});
+    }
+
+    [[nodiscard]] auto get_matter(
+        int32 x, int32 y, int32 z
+    ) const -> matter {
+        return matter{get_voxel(x, y, z), get_material(x, y, z)};
+    }
+
+    [[nodiscard]] auto get_matter(
+        vec3i pos
+    ) const -> matter {
+        return get_matter(pos.x, pos.y, pos.z);
     }
 
     [[nodiscard]] auto get_material(
@@ -180,7 +196,7 @@ public:
 
     auto invalidate() -> void;
 
-    auto fill(voxel v) -> void;
+    auto fill(matter value) -> void;
 
     [[nodiscard]] auto get_identity() const -> model_identity {
         return identity_;
@@ -221,10 +237,8 @@ public:
 private:
     friend class model_writer;
 
-    auto set_voxel_raw_(int32 x, int32 y, int32 z, voxel v) -> void;
-    auto set_voxel_raw_(int32 x, int32 y, int32 z, voxel v, material made_of) -> void;
-    auto fill_page_raw_(int32 px, int32 py, int32 pz, voxel v) -> void;
-    auto fill_page_raw_(int32 px, int32 py, int32 pz, voxel v, material made_of) -> void;
+    auto set_voxel_raw_(int32 x, int32 y, int32 z, matter value) -> void;
+    auto fill_page_raw_(int32 px, int32 py, int32 pz, matter value) -> void;
 
     [[nodiscard]] auto page_index(
         int32 px, int32 py, int32 pz

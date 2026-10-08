@@ -32,7 +32,8 @@ public:
     auto operator=(world_grid&&) -> world_grid&      = delete;
 
     [[nodiscard]] auto get_voxel(vec3i world_pos) const -> voxel;
-    auto set_voxel(vec3i world_pos, voxel v) -> void;
+    [[nodiscard]] auto get_matter(vec3i world_pos) const -> matter;
+    auto set_voxel(vec3i world_pos, matter v) -> void;
 
     [[nodiscard]] auto cell_of(const vec3f& world_pos) const -> vec3i;
     [[nodiscard]] auto cell_at(vec3i at) const -> std::optional<cell>;

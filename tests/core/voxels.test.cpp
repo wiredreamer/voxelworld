@@ -35,61 +35,11 @@ TEST_CASE("value zero is empty and nothing else is", "[voxels]") {
     REQUIRE(voxels::blue[0].value >= 1);
 }
 
-TEST_CASE("air draws nothing and gives nothing", "[voxels]") {
+TEST_CASE("air draws nothing", "[voxels]") {
     const voxel_registry registry;
 
-    const voxel_type& air = registry.get(voxels::air);
-    REQUIRE(air.surface == voxel_surface::invisible);
-    REQUIRE(air.material.emission == 0);
-    REQUIRE(air.material.glow == 0);
-}
-
-TEST_CASE("an ordinary colour is unlit and unglowing", "[voxels]") {
-    const voxel_registry registry;
-
-    const voxel_type& green = registry.get(voxels::green[4]);
-    REQUIRE(green.surface == voxel_surface::opaque);
-    REQUIRE(green.material.emission == 0);
-    REQUIRE(green.material.glow == 0);
-}
-
-TEST_CASE("the three tiers differ only in emission and glow", "[voxels]") {
-    const voxel_registry registry;
-
-    const voxel_type& base = registry.get(voxels::red[8]);
-    const voxel_type& glow = registry.get(voxels::glow_red);
-    const voxel_type& lamp = registry.get(voxels::lamp_red);
-    const voxel_type& fire = registry.get(voxels::fire_red);
-
-    REQUIRE(base.material.clr == glow.material.clr);
-    REQUIRE(base.material.clr == lamp.material.clr);
-    REQUIRE(base.material.clr == fire.material.clr);
-
-    REQUIRE(glow.material.emission == 0);
-    REQUIRE(glow.material.glow > 0);
-
-    REQUIRE(lamp.material.emission == 14);
-    REQUIRE(fire.material.emission == 15);
-    REQUIRE(fire.material.glow > lamp.material.glow);
-}
-
-TEST_CASE("no voxel emits past the nibble", "[voxels]") {
-    const voxel_registry registry;
-
-    for (const voxel_type& type : registry.all()) {
-        REQUIRE(type.material.emission <= 15);
-    }
-}
-
-TEST_CASE("two voxels may wear one colour", "[voxels]") {
-    const voxel_registry registry;
-
-    const voxel_type& base = registry.get(voxels::blue[8]);
-    const voxel_type& glow = registry.get(voxels::glow_blue);
-
-    REQUIRE(base.material.clr == glow.material.clr);
-    REQUIRE(base.id != glow.id);
-    REQUIRE(base.material.glow != glow.material.glow);
+    REQUIRE(registry.get(voxels::air).surface == voxel_surface::invisible);
+    REQUIRE(registry.get(voxels::green[4]).surface == voxel_surface::opaque);
 }
 
 TEST_CASE("names are unique and resolve back to their voxel", "[voxels]") {
@@ -133,10 +83,13 @@ TEST_CASE("a voxel outside the catalog reads as missing", "[voxels]") {
     REQUIRE(registry.known(voxels::green[4]));
 }
 
-TEST_CASE("colours and tiers share one index space", "[voxels]") {
-    REQUIRE(voxels::green[4] != voxels::blue[0]);
-    REQUIRE(voxels::glow_red != voxels::red[8]);
-    REQUIRE(voxels::lamp_red != voxels::glow_red);
+TEST_CASE("the catalog ends where the colours end", "[voxels]") {
+    const voxel_registry registry;
+
+    REQUIRE(registry.known(voxels::black));
+    for (uint32 value = voxels::black.value + 1U; value < voxel_type_capacity; ++value) {
+        REQUIRE_FALSE(registry.known(voxel{static_cast<uint8>(value)}));
+    }
 }
 
 TEST_CASE("a colour's shades sit next to each other", "[voxels]") {
@@ -205,15 +158,14 @@ TEST_CASE("the groups cover the catalog once each", "[voxels]") {
     }
 }
 
-TEST_CASE("the catalog holds every colour exactly once as a matte voxel", "[voxels]") {
+TEST_CASE("the catalog holds every colour exactly once", "[voxels]") {
     const voxel_registry registry;
 
     for (const color& clr : colors::all) {
-        const auto matte = std::ranges::count_if(registry.all(), [&](const voxel_type& type) {
-            return registry.known(type.id) && type.material.clr == clr && type.material.glow == 0 &&
-                   type.material.emission == 0 && type.kind == voxel_kind::plain;
+        const auto held = std::ranges::count_if(registry.all(), [&](const voxel_type& type) {
+            return registry.known(type.id) && type.material.clr == clr;
         });
-        REQUIRE(matte == 1);
+        REQUIRE(held == 1);
     }
 }
 
@@ -225,50 +177,59 @@ TEST_CASE("a group hands out the voxels it spans", "[voxels]") {
     REQUIRE(group.at(11) == voxels::green[0]);
 }
 
-TEST_CASE("bark is wood and leaves are leaf, everything else is plain", "[voxels]") {
-    const voxel_registry registry;
+TEST_CASE("the material table names its rows and keeps the inert one first", "[voxels][material]") {
+    const material_table table;
 
-    for (uint8 i = 0; i < voxels::bark.count; ++i) {
-        REQUIRE(registry.get(voxels::bark[i]).kind == voxel_kind::wood);
-    }
-    for (uint8 i = 0; i < voxels::leaves.count; ++i) {
-        REQUIRE(registry.get(voxels::leaves[i]).kind == voxel_kind::leaf);
-    }
-    REQUIRE(registry.get(voxels::brown[3]).kind == voxel_kind::plain);
-    REQUIRE(registry.get(voxels::green[4]).kind == voxel_kind::plain);
-    REQUIRE(registry.get(voxels::air).kind == voxel_kind::plain);
+    REQUIRE(table.all().size() == static_cast<std::size_t>(material_capacity));
+    REQUIRE(table.named().size() == default_material_catalog.size());
+
+    REQUIRE(table.get(materials::inert) == material_type{.name = "inert"});
+    REQUIRE(table.find("inert") == materials::inert);
+    REQUIRE(table.find("wood") == materials::wood);
+    REQUIRE(table.find("leaves") == materials::leaves);
+    REQUIRE(table.find("glow") == materials::glow);
+    REQUIRE(table.find("lamp") == materials::lamp);
+    REQUIRE(table.find("fire") == materials::fire);
+    REQUIRE_FALSE(table.find("granite").has_value());
+    REQUIRE_FALSE(table.find("").has_value());
 }
 
-TEST_CASE("bark and leaves wear the plain shades they grew from", "[voxels]") {
-    const voxel_registry registry;
+TEST_CASE("the three glowing materials differ in emission and glow", "[voxels][material]") {
+    const material_table table;
 
-    REQUIRE(registry.get(voxels::bark[0]).material.clr == registry.get(voxels::amber[2]).material.clr);
-    REQUIRE(registry.get(voxels::leaves[0]).material.clr == registry.get(voxels::green[1]).material.clr);
+    const material_type& glow = table.get(materials::glow);
+    const material_type& lamp = table.get(materials::lamp);
+    const material_type& fire = table.get(materials::fire);
+
+    REQUIRE(glow.emission == 0);
+    REQUIRE(glow.glow > 0);
+    REQUIRE(lamp.emission == 14);
+    REQUIRE(fire.emission == 15);
+    REQUIRE(fire.glow > lamp.glow);
+
+    for (const material_type& row : table.all()) {
+        REQUIRE(row.emission <= 15);
+    }
 }
 
-TEST_CASE("a kind gathers exactly the voxels that carry it", "[voxels]") {
-    const voxel_registry registry;
+TEST_CASE("only leaves sway, and a row past the catalog is inert", "[voxels][material]") {
+    const material_table table;
 
-    const voxel_set leaves = registry.of_kind(voxel_kind::leaf);
-    REQUIRE(leaves.count() == voxels::leaves.count);
-    for (uint8 i = 0; i < voxels::leaves.count; ++i) {
-        REQUIRE(leaves.test(voxels::leaves[i].value));
-    }
-    REQUIRE_FALSE(leaves.test(voxels::green[4].value));
-    REQUIRE_FALSE(registry.of_kind(voxel_kind::wood).test(voxels::leaves[0].value));
+    const material_set swaying = table.swaying();
+    REQUIRE(swaying.count() == 1);
+    REQUIRE(swaying.test(materials::leaves.value));
+
+    REQUIRE(table.get(material{200}) == material_type{});
+    REQUIRE(table.emission()[200] == 0);
+    REQUIRE(table.emission()[materials::lamp.value] == 14);
 }
 
-TEST_CASE("the material table gives every catalog voxel a row and keeps the inert one first", "[voxels][material]") {
-    const voxel_registry registry;
-    const material_table materials{registry};
+TEST_CASE("matter is empty by its colour and inert unless told otherwise", "[voxels][material]") {
+    REQUIRE(matter{}.is_empty());
+    REQUIRE(matter{voxels::air, materials::lamp}.is_empty());
+    REQUIRE_FALSE(matter{voxels::green[4]}.is_empty());
 
-    REQUIRE(materials.get(material{}) == material_type{});
-    REQUIRE(materials.all().size() <= static_cast<std::size_t>(material_capacity));
-
-    for (const voxel_type& type : registry.all()) {
-        const material_type& row = materials.get(materials.of(type.id));
-        REQUIRE(row.glow == type.material.glow);
-        REQUIRE(row.emission == type.material.emission);
-        REQUIRE(row.sways == (type.kind == voxel_kind::leaf));
-    }
+    const matter plain = voxels::green[4];
+    REQUIRE(plain.made_of == materials::inert);
+    REQUIRE(plain != matter{voxels::green[4], materials::leaves});
 }

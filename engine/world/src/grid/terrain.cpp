@@ -562,8 +562,8 @@ auto perlin_terrain_generator::rock_voxel_at(
 
 auto perlin_terrain_generator::voxel_at(
     int32 wy, int32 surface, const column_paint& paint
-) const -> voxel {
-    return paint.at(surface - wy).value_or(rock_voxel_at(wy));
+) const -> matter {
+    return paint.at(surface - wy).value_or(matter{rock_voxel_at(wy)});
 }
 
 auto perlin_terrain_generator::surface_height_at(
@@ -587,7 +587,7 @@ auto perlin_terrain_generator::surface_voxel_at(
         shape_at(wx - 1, wz).height, shape.height, shape_at(wx + 1, wz).height,
         shape_at(wx, wz - 1).height, shape_at(wx, wz + 1).height
     );
-    return voxel_at(shape.surface, shape.surface, paint_at_(wx, wz, shape, slope));
+    return voxel_at(shape.surface, shape.surface, paint_at_(wx, wz, shape, slope)).color;
 }
 
 auto perlin_terrain_generator::generate(

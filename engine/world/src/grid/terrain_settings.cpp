@@ -161,6 +161,23 @@ auto read_value(const json::cursor& item, tone_ramp& out, const voxel_registry& 
             continue;
         }
 
+        if (key == "material") {
+            const auto name = value.string();
+            if (!name) {
+                return std::unexpected{json::describe(name.error())};
+            }
+            const auto found = default_material_table().find(*name);
+            if (!found) {
+                std::string known;
+                for (const material_type& row : default_material_table().named()) {
+                    known += std::format("{}{}", known.empty() ? "" : ", ", row.name);
+                }
+                return failure(value, std::format("no material named '{}', known: {}", *name, known));
+            }
+            out.made_of = *found;
+            continue;
+        }
+
         float32* number = key == "from"             ? &out.from
                         : key == "to"               ? &out.to
                         : key == "spot_frequency" ? &out.spot_frequency
@@ -168,7 +185,8 @@ auto read_value(const json::cursor& item, tone_ramp& out, const voxel_registry& 
                                                   : nullptr;
         if (number == nullptr) {
             return failure(
-                value, "unknown ramp setting, expected row, from, to, spot_frequency or spot_contrast"
+                value,
+                "unknown ramp setting, expected row, material, from, to, spot_frequency or spot_contrast"
             );
         }
         const auto read = read_value(value, *number, voxels);
@@ -250,6 +268,9 @@ auto write_value(voxel value, const voxel_registry& voxels) -> json::value {
 auto write_value(const tone_ramp& ramp, const voxel_registry&) -> json::value {
     json::object out;
     out.set("row", json::value{std::string{row_name(ramp.row)}});
+    if (ramp.made_of != materials::inert) {
+        out.set("material", json::value{std::string{default_material_table().get(ramp.made_of).name}});
+    }
     out.set("from", plain_number(ramp.from));
     out.set("to", plain_number(ramp.to));
     out.set("spot_frequency", plain_number(ramp.spot_frequency));

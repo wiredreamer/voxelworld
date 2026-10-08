@@ -973,6 +973,16 @@ auto has_face(const gfx::mesh& m, vec3i cell, int32 face) -> bool {
     return false;
 }
 
+constexpr uint32 leaf_tones = 8;
+
+constexpr auto bark_of(uint32 tone) -> matter {
+    return matter{voxels::amber[2 + tone], materials::wood};
+}
+
+constexpr auto leaf_of(uint32 tone) -> matter {
+    return matter{voxels::green[1 + tone], materials::leaves};
+}
+
 auto grow_test_tree(asset::model& m) -> void {
     for (int32 x = 0; x < m.width(); ++x) {
         for (int32 z = 0; z < m.depth(); ++z) {
@@ -980,7 +990,7 @@ auto grow_test_tree(asset::model& m) -> void {
         }
     }
     for (int32 y = 3; y < 12; ++y) {
-        m.set_voxel(20, y, 20, voxels::bark[2]);
+        m.set_voxel(20, y, 20, bark_of(2));
     }
     uint32 state = 77;
     for (int32 x = 14; x <= 26; ++x) {
@@ -992,7 +1002,7 @@ auto grow_test_tree(asset::model& m) -> void {
                 const int32 dz  = z - 20;
                 const bool keep = (dx * dx) + (dy * dy) + (dz * dz) <= 30 && ((state >> 28) % 5) != 0;
                 if (keep && m.is_empty(x, y, z)) {
-                    m.set_voxel(x, y, z, voxels::leaves[(state >> 20) % voxels::leaves.count]);
+                    m.set_voxel(x, y, z, leaf_of((state >> 20) % leaf_tones));
                 }
             }
         }
@@ -1002,29 +1012,27 @@ auto grow_test_tree(asset::model& m) -> void {
 }  // namespace
 
 TEST_CASE("a quad carries the material of its voxel and an empty state code", "[mesh][material]") {
-    const material_table& materials = default_material_table();
-
     model_fixture fixture{64};
     fixture.get()->set_voxel(3, 3, 3, voxels::gray[10]);
-    fixture.get()->set_voxel(9, 3, 3, voxels::glow_blue);
-    fixture.get()->set_voxel(15, 3, 3, voxels::leaves[2]);
+    fixture.get()->set_voxel(9, 3, 3, matter{voxels::blue[8], materials::glow});
+    fixture.get()->set_voxel(15, 3, 3, leaf_of(2));
 
-    REQUIRE(materials.of(voxels::gray[10]) == material{});
-    REQUIRE(materials.get(materials.of(voxels::glow_blue)).glow > 0);
-    REQUIRE(materials.get(materials.of(voxels::leaves[2])).sways);
-    REQUIRE(materials.of(voxels::glow_blue) != materials.of(voxels::leaves[2]));
-
-    const auto check = [&materials](const gfx::mesh& m) -> void {
+    const auto check = [&fixture](const gfx::mesh& m) -> void {
         REQUIRE(m.quads.size() == 18);
         for (const auto& q : m.quads) {
-            const voxel v = voxel{static_cast<uint8>(unpack_slot(q))};
-            REQUIRE(unpack_material(q) == materials.of(v));
+            const material want = fixture.get()->get_material(unpack_min(q));
+            REQUIRE(unpack_material(q) == want);
+            REQUIRE(unpack_sways(q) == (want == materials::leaves));
             REQUIRE((q.data1 >> 23) == 0);
         }
     };
 
     check(fixture.simple());
     check(fixture.greedy());
+
+    REQUIRE(fixture.get()->get_material(3, 3, 3) == materials::inert);
+    REQUIRE(fixture.get()->get_material(9, 3, 3) == materials::glow);
+    REQUIRE(fixture.get()->get_material(15, 3, 3) == materials::leaves);
 }
 
 TEST_CASE("a block of one leaf tone merges up to the wind lattice and no further", "[mesh][sway]") {
@@ -1032,7 +1040,7 @@ TEST_CASE("a block of one leaf tone merges up to the wind lattice and no further
     for (int32 x = 4; x < 20; ++x) {
         for (int32 y = 8; y < 24; ++y) {
             for (int32 z = 16; z < 32; ++z) {
-                fixture.get()->set_voxel(x, y, z, voxels::leaves[2]);
+                fixture.get()->set_voxel(x, y, z, leaf_of(2));
             }
         }
     }
@@ -1055,8 +1063,7 @@ TEST_CASE("every leaf quad sways, stays inside one lattice cell and carries noth
     const auto check = [](const gfx::mesh& m) -> int32 {
         int32 swaying = 0;
         for (const auto& q : m.quads) {
-            const voxel v = voxel{static_cast<uint8>(unpack_slot(q))};
-            REQUIRE(unpack_sways(q) == voxels::leaves.contains(v));
+            REQUIRE(unpack_sways(q) == (unpack_material(q) == materials::leaves));
             REQUIRE((q.data1 >> 23) == 0);
             if (unpack_sways(q)) {
                 const vec3i lo = unpack_min(q);
@@ -1076,10 +1083,10 @@ TEST_CASE("every leaf quad sways, stays inside one lattice cell and carries noth
 
 TEST_CASE("a leaf and the wood it touches both keep the face between them", "[mesh][sway]") {
     model_fixture fixture{64};
-    fixture.get()->set_voxel(5, 5, 5, voxels::leaves[3]);
-    fixture.get()->set_voxel(4, 5, 5, voxels::leaves[1]);
-    fixture.get()->set_voxel(6, 5, 5, voxels::bark[2]);
-    fixture.get()->set_voxel(7, 5, 5, voxels::bark[2]);
+    fixture.get()->set_voxel(5, 5, 5, leaf_of(3));
+    fixture.get()->set_voxel(4, 5, 5, leaf_of(1));
+    fixture.get()->set_voxel(6, 5, 5, bark_of(2));
+    fixture.get()->set_voxel(7, 5, 5, bark_of(2));
     fixture.get()->set_voxel(5, 4, 5, voxels::gray[10]);
 
     const auto check = [](const gfx::mesh& m) -> void {
@@ -1103,8 +1110,8 @@ TEST_CASE("a leaf on the chunk seam keeps its face against wood and drops it aga
         INFO((wood ? "wood" : "leaf") << " across the seam");
         model_fixture left{64};
         model_fixture right{64};
-        left.get()->set_voxel(63, 10, 10, voxels::leaves[3]);
-        right.get()->set_voxel(0, 10, 10, wood ? voxels::bark[2] : voxels::leaves[3]);
+        left.get()->set_voxel(63, 10, 10, leaf_of(3));
+        right.get()->set_voxel(0, 10, 10, wood ? bark_of(2) : leaf_of(3));
         left.chunk().set_boundary_slice(face_direction::pos_x, *right.get());
         right.chunk().set_boundary_slice(face_direction::neg_x, *left.get());
 
@@ -1125,8 +1132,7 @@ TEST_CASE("a coarse mesh neither sways nor opens faces between leaves and wood",
 }
 
 TEST_CASE("neighbours of one colour merge only when they are of one material", "[mesh][material]") {
-    const material glowing = default_material_table().of(voxels::glow_amber);
-    REQUIRE(glowing != material{});
+    const material glowing = materials::glow;
 
     const auto top_quads = [](material second) -> std::vector<material> {
         model_fixture fixture{64};

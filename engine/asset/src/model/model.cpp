@@ -233,22 +233,13 @@ auto model::operator=(model&& other) noexcept -> model& {
     return *this;
 }
 
-auto model::set_voxel(int32 x, int32 y, int32 z, voxel v) -> void {
-    set_voxel_raw_(x, y, z, v);
+auto model::set_voxel(int32 x, int32 y, int32 z, matter value) -> void {
+    set_voxel_raw_(x, y, z, value);
     increment_generation_();
 }
 
-auto model::set_voxel(int32 x, int32 y, int32 z, voxel v, material made_of) -> void {
-    set_voxel_raw_(x, y, z, v, made_of);
-    increment_generation_();
-}
-
-auto model::set_voxel_raw_(int32 x, int32 y, int32 z, voxel v) -> void {
-    set_voxel_raw_(x, y, z, v, default_material_table().of(v));
-}
-
-auto model::set_voxel_raw_(int32 x, int32 y, int32 z, voxel v, material made_of) -> void {
-    const voxel index = v;
+auto model::set_voxel_raw_(int32 x, int32 y, int32 z, matter value) -> void {
+    const voxel index = value.color;
 
     fill_known_    = false;
     const int32 px = x / page_size;
@@ -258,7 +249,8 @@ auto model::set_voxel_raw_(int32 x, int32 y, int32 z, voxel v, material made_of)
     auto& entry    = pages_[page_index(px, py, pz)];
 
     materials_.set(
-        static_cast<std::size_t>(page_index(px, py, pz)), li, v.is_empty() ? material{} : made_of
+        static_cast<std::size_t>(page_index(px, py, pz)), li,
+        index.is_empty() ? material{} : value.made_of
     );
 
     switch (entry.mode()) {
@@ -1030,9 +1022,11 @@ auto model::invalidate() -> void {
     increment_generation_();
 }
 
-auto model::fill(voxel v) -> void {
+auto model::fill(matter value) -> void {
+    const voxel v = value.color;
+
     release_all_pages_();
-    materials_.fill(v.is_empty() ? material{} : default_material_table().of(v));
+    materials_.fill(v.is_empty() ? material{} : value.made_of);
 
     if (v.is_empty()) {
         std::ranges::fill(pages_, page_entry::make_empty());
@@ -1045,16 +1039,14 @@ auto model::fill(voxel v) -> void {
     increment_generation_();
 }
 
-auto model::fill_page_raw_(int32 px, int32 py, int32 pz, voxel v) -> void {
-    fill_page_raw_(px, py, pz, v, default_material_table().of(v));
-}
+auto model::fill_page_raw_(int32 px, int32 py, int32 pz, matter value) -> void {
+    const voxel v = value.color;
 
-auto model::fill_page_raw_(int32 px, int32 py, int32 pz, voxel v, material made_of) -> void {
     fill_known_ = false;
     auto& entry = pages_[page_index(px, py, pz)];
 
     materials_.fill_page(
-        static_cast<std::size_t>(page_index(px, py, pz)), v.is_empty() ? material{} : made_of
+        static_cast<std::size_t>(page_index(px, py, pz)), v.is_empty() ? material{} : value.made_of
     );
 
     release_page_(entry);

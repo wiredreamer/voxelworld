@@ -25,12 +25,14 @@ enum class edit_tool : int32 {
 
 struct voxel_choice {
     const char* name;
-    voxel id;
+    matter id;
 };
 
-constexpr std::array<voxel_choice, 8> voxel_menu{{
-    {"glowstone (emits 14)", voxels::lamp_amber},
-    {"lava (emits 15)", voxels::fire_red},
+constexpr std::array<voxel_choice, 10> voxel_menu{{
+    {"glowstone (emits 14)", matter{voxels::amber[8], materials::lamp}},
+    {"lava (emits 15)", matter{voxels::red[8], materials::fire}},
+    {"crystal (glows)", matter{voxels::blue[8], materials::glow}},
+    {"leaves (sway)", matter{voxels::green[4], materials::leaves}},
     {"stone", voxels::gray[10]},
     {"dark stone", voxels::gray[4]},
     {"grass", voxels::green[10]},
@@ -106,7 +108,7 @@ public:
         return benching_;
     }
 
-    auto drop_emitter(voxel id, int32 radius) -> void;
+    auto drop_emitter(matter id, int32 radius) -> void;
 
 private:
     auto setup_world_grid() -> void;

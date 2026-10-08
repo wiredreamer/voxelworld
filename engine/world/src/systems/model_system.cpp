@@ -102,7 +102,7 @@ auto model_system::model_modifier::set_chunk(
 }
 
 auto model_system::model_modifier::set_voxel(
-    int x, int y, int z, voxel v
+    int x, int y, int z, matter v
 ) -> void {
     if (component_->model_) {
         component_->model_->set_voxel(x, y, z, v);
@@ -111,7 +111,7 @@ auto model_system::model_modifier::set_voxel(
 }
 
 auto model_system::model_modifier::set_voxel(
-    vec3i pos, voxel v
+    vec3i pos, matter v
 ) -> void {
     if (component_->model_) {
         component_->model_->set_voxel(pos.x, pos.y, pos.z, v);
@@ -120,7 +120,7 @@ auto model_system::model_modifier::set_voxel(
 }
 
 auto model_system::model_modifier::fill(
-    voxel v
+    matter v
 ) -> void {
     if (component_->model_) {
         component_->model_->fill(v);

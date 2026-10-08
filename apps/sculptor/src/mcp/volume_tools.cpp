@@ -440,7 +440,9 @@ public:
                         if (!reserve_(1)) {
                             return;
                         }
-                        edits_.push_back(asset::voxel_edit{.position = at, .value = *to});
+                        edits_.push_back(
+                            asset::voxel_edit{.position = at, .value = matter{*to, painted.get_material(at)}}
+                        );
                     }
                 }
             }

@@ -131,7 +131,7 @@ private:
         -> column_paint;
 
     [[nodiscard]] auto rock_voxel_at(int32 wy) const -> voxel;
-    [[nodiscard]] auto voxel_at(int32 wy, int32 surface, const column_paint& paint) const -> voxel;
+    [[nodiscard]] auto voxel_at(int32 wy, int32 surface, const column_paint& paint) const -> matter;
 
     struct column_profile {
         static constexpr int32 size   = 64;

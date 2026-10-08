@@ -11,12 +11,12 @@ class model_writer;
 
 class voxel_batch {
 public:
-    auto set(vec3i pos, voxel value) -> voxel_batch& {
+    auto set(vec3i pos, matter value) -> voxel_batch& {
         edits_.push_back({.at = pos, .value = value, .kind = edit_kind::voxel});
         return *this;
     }
 
-    auto fill_page(vec3i page, voxel value) -> voxel_batch& {
+    auto fill_page(vec3i page, matter value) -> voxel_batch& {
         edits_.push_back({.at = page, .value = value, .kind = edit_kind::page});
         return *this;
     }
@@ -42,7 +42,7 @@ private:
 
     struct edit {
         vec3i at;
-        voxel value;
+        matter value;
         edit_kind kind;
     };
 
@@ -64,23 +64,23 @@ public:
     model_writer(model_writer&&)                             = delete;
     auto operator=(model_writer&&) -> model_writer&          = delete;
 
-    auto set(int32 x, int32 y, int32 z, voxel value) -> model_writer& {
+    auto set(int32 x, int32 y, int32 z, matter value) -> model_writer& {
         target_->set_voxel_raw_(x, y, z, value);
         touched_ = true;
         return *this;
     }
 
-    auto set(vec3i pos, voxel value) -> model_writer& {
+    auto set(vec3i pos, matter value) -> model_writer& {
         return set(pos.x, pos.y, pos.z, value);
     }
 
-    auto fill_page(int32 px, int32 py, int32 pz, voxel value) -> model_writer& {
+    auto fill_page(int32 px, int32 py, int32 pz, matter value) -> model_writer& {
         target_->fill_page_raw_(px, py, pz, value);
         touched_ = true;
         return *this;
     }
 
-    auto fill_page(vec3i page, voxel value) -> model_writer& {
+    auto fill_page(vec3i page, matter value) -> model_writer& {
         return fill_page(page.x, page.y, page.z, value);
     }
 
@@ -137,14 +137,14 @@ struct voxel_orientation {
 
 struct voxel_clip {
     vec3i size;
-    std::vector<voxel> voxels;
+    std::vector<matter> voxels;
     vec3f corner_from_pivot;
 
     [[nodiscard]] auto empty() const -> bool {
         return voxels.empty();
     }
 
-    [[nodiscard]] auto at(vec3i pos) const -> voxel {
+    [[nodiscard]] auto at(vec3i pos) const -> matter {
         return voxels[index_of(pos)];
     }
 
@@ -166,7 +166,7 @@ enum class paste_mode : uint8 { keep_air, replace };
 enum class fill_scope : uint8 { every_cell, solid_only };
 
 [[nodiscard]] auto filled(
-    const model& source, const voxel_bounds& region, voxel value, fill_scope scope,
+    const model& source, const voxel_bounds& region, matter value, fill_scope scope,
     model_registry& registry
 ) -> std::shared_ptr<model>;
 
@@ -184,7 +184,7 @@ enum class fill_scope : uint8 { every_cell, solid_only };
 
 struct voxel_edit {
     vec3i position;
-    voxel value;
+    matter value;
 };
 
 [[nodiscard]] auto contains(vec3i size, vec3i position) -> bool;

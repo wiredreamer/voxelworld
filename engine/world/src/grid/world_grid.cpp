@@ -34,8 +34,18 @@ auto world_grid::get_voxel(
     return it->second->get_voxel(lc / world_units_per_voxel_);
 }
 
+auto world_grid::get_matter(
+    vec3i world_pos
+) const -> matter {
+    const auto it = chunks_.find(world_to_chunk_coord(world_pos));
+    if (it == chunks_.end()) {
+        return matter{};
+    }
+    return it->second->get_matter(world_to_local_coord(world_pos) / world_units_per_voxel_);
+}
+
 auto world_grid::set_voxel(
-    vec3i world_pos, voxel v
+    vec3i world_pos, matter v
 ) -> void {
     auto cc = world_to_chunk_coord(world_pos);
     auto it = chunks_.find(cc);

@@ -72,7 +72,7 @@ auto terrain_lab_scene::voxel_combo_(
     bool changed       = false;
     if (ImGui::BeginCombo(label, std::string{voxels.get(value).name}.c_str())) {
         for (const auto& type : voxels.all()) {
-            if (type.id == voxels::air || type.material.glow > 0) {
+            if (type.id == voxels::air) {
                 continue;
             }
             const std::string name{type.name};

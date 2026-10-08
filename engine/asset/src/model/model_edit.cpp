@@ -64,7 +64,7 @@ auto trimmed(
                 for (int32 z = 0; z < new_size.z; ++z) {
                     const auto from =
                         vec3i{x + bounds->min.x, y + bounds->min.y, z + bounds->min.z};
-                    writer.set(x, y, z, source.get_voxel(from));
+                    writer.set(x, y, z, source.get_matter(from));
                 }
             }
         }
@@ -191,7 +191,7 @@ auto reoriented(
         for (at.x = 0; at.x < new_size.x; ++at.x) {
             for (at.y = 0; at.y < new_size.y; ++at.y) {
                 for (at.z = 0; at.z < new_size.z; ++at.z) {
-                    const auto value = source.get_voxel(source_position(at, source_size, how));
+                    const auto value = source.get_matter(source_position(at, source_size, how));
                     if (!value.is_empty()) {
                         writer.set(at, value);
                     }
@@ -236,7 +236,7 @@ auto copied(
     for (at.x = 0; at.x < clip.size.x; ++at.x) {
         for (at.y = 0; at.y < clip.size.y; ++at.y) {
             for (at.z = 0; at.z < clip.size.z; ++at.z) {
-                clip.voxels[clip.index_of(at)] = source.get_voxel(
+                clip.voxels[clip.index_of(at)] = source.get_matter(
                     at.x + inside->min.x, at.y + inside->min.y, at.z + inside->min.z
                 );
             }
@@ -263,7 +263,7 @@ auto erased(
                         continue;
                     }
 
-                    const auto value = source.get_voxel(at);
+                    const auto value = source.get_matter(at);
                     if (!value.is_empty()) {
                         writer.set(at, value);
                     }
@@ -278,7 +278,7 @@ auto erased(
 }
 
 auto filled(
-    const model& source, const voxel_bounds& region, voxel value, fill_scope scope,
+    const model& source, const voxel_bounds& region, matter value, fill_scope scope,
     model_registry& registry
 ) -> std::shared_ptr<model> {
     const auto size = source.size();
@@ -291,12 +291,12 @@ auto filled(
         for (at.x = 0; at.x < size.x; ++at.x) {
             for (at.y = 0; at.y < size.y; ++at.y) {
                 for (at.z = 0; at.z < size.z; ++at.z) {
-                    auto cell = source.get_voxel(at);
+                    auto cell = source.get_matter(at);
 
                     const bool takes = contains(region, at) &&
                                        (scope == fill_scope::every_cell || !cell.is_empty());
                     if (takes) {
-                        cell = value;
+                        cell = scope == fill_scope::solid_only ? matter{value.color, cell.made_of} : value;
                     }
 
                     if (!cell.is_empty()) {
@@ -389,7 +389,7 @@ auto pasted(
                         at.x + grown.min.x, at.y + grown.min.y, at.z + grown.min.z
                     };
 
-                    voxel value;
+                    matter value;
                     bool taken = false;
 
                     if (!clip.empty() && contains(clip_box, in_target)) {
@@ -401,7 +401,7 @@ auto pasted(
                     }
 
                     if (!taken && contains(target_box, in_target)) {
-                        value = target.get_voxel(in_target);
+                        value = target.get_matter(in_target);
                     }
 
                     if (!value.is_empty()) {
@@ -462,7 +462,7 @@ auto edited(
         for (at.x = 0; at.x < size.x; ++at.x) {
             for (at.y = 0; at.y < size.y; ++at.y) {
                 for (at.z = 0; at.z < size.z; ++at.z) {
-                    const auto cell = source.get_voxel(at);
+                    const auto cell = source.get_matter(at);
                     if (!cell.is_empty()) {
                         writer.set(at, cell);
                     }
@@ -511,7 +511,7 @@ auto resized(
                         continue;
                     }
 
-                    const auto cell = source.get_voxel(from);
+                    const auto cell = source.get_matter(from);
                     if (!cell.is_empty()) {
                         writer.set(at, cell);
                     }

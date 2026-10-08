@@ -542,6 +542,8 @@ TEST_CASE("a voxm volume survives a round trip", "[serial]") {
     source->set_voxel(vec3i{1, 0, 0}, voxels::gray[14]);
     source->set_voxel(vec3i{2, 0, 0}, voxels::gray[16]);
     source->set_voxel(vec3i{5, 3, 2}, voxels::gray[18]);
+    source->set_voxel(vec3i{3, 1, 1}, matter{voxels::amber[8], materials::lamp});
+    source->set_voxel(vec3i{4, 1, 1}, matter{voxels::amber[8], materials::glow});
 
     const auto restored = parse_voxm(registry, write_voxm(*source));
 
@@ -554,7 +556,7 @@ TEST_CASE("a voxm volume survives a round trip", "[serial]") {
     for (int32 z = 0; z < model.depth(); ++z) {
         for (int32 y = 0; y < model.height(); ++y) {
             for (int32 x = 0; x < model.width(); ++x) {
-                REQUIRE(model.get_voxel(x, y, z) == source->get_voxel(x, y, z));
+                REQUIRE(model.get_matter(x, y, z) == source->get_matter(x, y, z));
             }
         }
     }
@@ -580,7 +582,52 @@ TEST_CASE("a voxm run collapses a row of equal voxels", "[serial]") {
     }
 
     REQUIRE(runs == 1);
-    REQUIRE(text.contains("r 0 0 0 8 "));
+    REQUIRE(text.contains(std::format("r 0 0 0 8 {} 0\n", voxels::green[4].value)));
+}
+
+TEST_CASE("a voxm run ends where the material changes", "[serial]") {
+    asset::model_registry registry;
+
+    const auto source = registry.create_unnamed(vec3i{8, 1, 1});
+    for (int32 x = 0; x < 8; ++x) {
+        source->set_voxel(vec3i{x, 0, 0}, matter{voxels::green[4], x < 5 ? materials::inert : materials::leaves});
+    }
+
+    const auto text = write_voxm(*source);
+
+    REQUIRE(text.contains(std::format("r 0 0 0 5 {} 0\n", voxels::green[4].value)));
+    REQUIRE(text.contains(
+        std::format("r 5 0 0 3 {} {}\n", voxels::green[4].value, materials::leaves.value)
+    ));
+    REQUIRE(text.starts_with("# Voxm File Version 5.0\n"));
+}
+
+TEST_CASE("a voxm run without a material is a parse error", "[serial]") {
+    asset::model_registry registry;
+
+    const auto restored = parse_voxm(
+        registry,
+        "# Voxm File Version 5.0\n"
+        "size 2 2 2\n"
+        "r 0 0 0 1 51\n"
+    );
+
+    REQUIRE_FALSE(restored.has_value());
+    REQUIRE(restored.error() == asset::voxm_deserializer::error_type::parse_error);
+}
+
+TEST_CASE("a voxm file from before materials is rejected", "[serial]") {
+    asset::model_registry registry;
+
+    const auto restored = parse_voxm(
+        registry,
+        "# Voxm File Version 4.0\n"
+        "size 2 2 2\n"
+        "r 0 0 0 1 51\n"
+    );
+
+    REQUIRE_FALSE(restored.has_value());
+    REQUIRE(restored.error() == asset::voxm_deserializer::error_type::unsupported_version);
 }
 
 TEST_CASE("an empty voxm volume is a valid file", "[serial]") {
@@ -626,10 +673,18 @@ TEST_CASE("a voxm run outside the volume is a parse error", "[serial]") {
     const auto restored = parse_voxm(
         registry,
         "size 2 2 2\n"
-        "r 0 0 0 5 51\n"
+        "r 0 0 0 5 51 0\n"
     );
 
     REQUIRE_FALSE(restored.has_value());
+
+    const auto inside = parse_voxm(
+        registry,
+        "size 2 2 2\n"
+        "r 0 0 0 2 51 0\n"
+    );
+
+    REQUIRE(inside.has_value());
 }
 
 TEST_CASE("a voxm file without a size is a parse error", "[serial]") {
@@ -646,9 +701,9 @@ TEST_CASE("a voxm voxel outside the catalog still parses", "[serial]") {
     const auto restored = parse_voxm(
         registry,
         "size 2 2 2\n"
-        "r 0 0 0 1 7\n"
+        "r 0 0 0 1 200 0\n"
     );
 
     REQUIRE(restored.has_value());
-    REQUIRE((*restored)->get_voxel(0, 0, 0) == voxel{7});
+    REQUIRE((*restored)->get_voxel(0, 0, 0) == voxel{200});
 }

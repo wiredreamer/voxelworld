@@ -44,7 +44,7 @@ auto expand_model_operation::execute() -> void {
         for (int x = 0; x < size.x; ++x) {
             for (int y = 0; y < size.y; ++y) {
                 for (int z = 0; z < size.z; ++z) {
-                    const auto v = model->get_voxel(x, y, z);
+                    const auto v = model->get_matter(x, y, z);
                     const auto new_p = vec3i{
                         x + zeroed_dir.x,
                         y + zeroed_dir.y,
@@ -105,7 +105,7 @@ auto expand_model_operation::undo() -> void {
         for (int x = beg.x; x < end.x; ++x) {
             for (int y = beg.y; y < end.y; ++y) {
                 for (int z = beg.z; z < end.z; ++z) {
-                    const auto v = model->get_voxel(x, y, z);
+                    const auto v = model->get_matter(x, y, z);
                     const auto new_p = vec3i{
                         x - zeroed_dir.x,
                         y - zeroed_dir.y,

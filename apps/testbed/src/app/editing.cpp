@@ -134,13 +134,13 @@ auto testbed_app::apply_tool_() -> void {
 
     world_grid_->set_voxel(
         {cell.x * scale, cell.y * scale, cell.z * scale},
-        placing ? voxel_menu[static_cast<std::size_t>(place_choice_)].id : voxels::air
+        placing ? voxel_menu[static_cast<std::size_t>(place_choice_)].id : matter{}
     );
 
     ++edit_clicks_;
 }
 
-auto testbed_app::drop_emitter(voxel id, int32 radius) -> void {
+auto testbed_app::drop_emitter(matter id, int32 radius) -> void {
     const int32 scale = generator_params_.world_units_per_voxel;
 
     const auto floor_div = [](int32 a, int32 b) -> int32 {

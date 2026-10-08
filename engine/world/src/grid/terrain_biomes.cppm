@@ -27,11 +27,12 @@ struct tone_ramp {
     float32 to             = 4.0F;
     float32 spot_frequency = 0.01F;
     float32 spot_contrast  = 2.5F;
+    material made_of       = materials::inert;
 
     [[nodiscard]] auto operator==(const tone_ramp& other) const -> bool {
         return row.first == other.row.first && row.count == other.row.count && from == other.from &&
                to == other.to && spot_frequency == other.spot_frequency &&
-               spot_contrast == other.spot_contrast;
+               spot_contrast == other.spot_contrast && made_of == other.made_of;
     }
 };
 
@@ -104,8 +105,16 @@ struct tree_species {
     float32 branch_reach = 0.4F;
     float32 crown_share  = 0.27F;
     float32 roughness    = 0.35F;
-    tone_ramp bark{.row = voxels::bark, .from = 1.0F, .to = 3.0F, .spot_frequency = 0.02F};
-    tone_ramp leaves{.row = voxels::leaves, .from = 1.0F, .to = 5.0F, .spot_frequency = 0.012F};
+    tone_ramp bark{
+        .row = voxels::amber, .from = 3.0F, .to = 5.0F, .spot_frequency = 0.02F, .made_of = materials::wood
+    };
+    tone_ramp leaves{
+        .row            = voxels::green,
+        .from           = 2.0F,
+        .to             = 6.0F,
+        .spot_frequency = 0.012F,
+        .made_of        = materials::leaves,
+    };
 
     auto operator==(const tree_species&) const -> bool = default;
 };
@@ -138,7 +147,7 @@ auto visit_forest_fields(Self& self, Visit&& visit) -> void {
 }
 
 struct paint_layer {
-    voxel fill;
+    matter fill;
     uint8 thickness = 0;
 };
 
@@ -150,7 +159,7 @@ struct column_paint {
     uint8 cover = 0;
     bool fertile = false;
 
-    auto add(voxel fill, int32 thickness) -> column_paint& {
+    auto add(matter fill, int32 thickness) -> column_paint& {
         if (count < capacity && thickness > 0) {
             layers[count] = {.fill = fill, .thickness = static_cast<uint8>(std::min(thickness, 255))};
             ++count;
@@ -166,7 +175,7 @@ struct column_paint {
         return total;
     }
 
-    [[nodiscard]] auto at(int32 below_surface) const -> std::optional<voxel> {
+    [[nodiscard]] auto at(int32 below_surface) const -> std::optional<matter> {
         int32 bottom = 0;
         for (uint8 index = 0; index < count; ++index) {
             bottom += layers[index].thickness;

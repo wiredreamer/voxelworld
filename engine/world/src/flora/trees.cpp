@@ -37,16 +37,23 @@ private:
     uint64 state_;
 };
 
-auto shade_of(voxel look, int32 step) -> voxel {
+auto shade_of(matter look, int32 step) -> matter {
     for (const auto& group : voxels::groups) {
         const int32 first = group.first.value;
         const int32 last  = first + group.count - 1;
-        if (look.value >= first && look.value <= last) {
-            return voxel{static_cast<uint8>(std::clamp(look.value + step, first, last))};
+        if (look.color.value >= first && look.color.value <= last) {
+            return matter{
+                voxel{static_cast<uint8>(std::clamp(look.color.value + step, first, last))}, look.made_of
+            };
         }
     }
     return look;
 }
+
+struct draft_cell {
+    uint8 color   = 0;
+    uint8 made_of = 0;
+};
 
 auto cell_noise(vec3i at, uint64 seed) -> uint64 {
     uint64 h = seed ^ (static_cast<uint64>(static_cast<uint32>(at.x)) * 0x9E3779B97F4A7C15ULL) ^
@@ -57,8 +64,10 @@ auto cell_noise(vec3i at, uint64 seed) -> uint64 {
     return h ^ (h >> 29U);
 }
 
-auto draft_storage() -> std::vector<uint8>& {
-    thread_local std::vector<uint8> looks(static_cast<std::size_t>(draft_side * draft_side * draft_side), 0);
+auto draft_storage() -> std::vector<draft_cell>& {
+    thread_local std::vector<draft_cell> looks(
+        static_cast<std::size_t>(draft_side * draft_side * draft_side), draft_cell{}
+    );
     return looks;
 }
 
@@ -82,7 +91,7 @@ public:
         for (int32 z = lo_.z; z <= hi_.z; ++z) {
             for (int32 y = lo_.y; y <= hi_.y; ++y) {
                 for (int32 x = lo_.x; x <= hi_.x; ++x) {
-                    looks_[index_({x, y, z})] = 0;
+                    looks_[index_({x, y, z})] = draft_cell{};
                 }
             }
         }
@@ -93,20 +102,20 @@ public:
     draft(draft&&)                         = delete;
     auto operator=(draft&&) -> draft&      = delete;
 
-    auto put(vec3i at, voxel look) -> void {
+    auto put(vec3i at, matter look) -> void {
         if (at.x < 0 || at.y < 0 || at.z < 0 || at.x >= draft_side || at.y >= draft_side || at.z >= draft_side) {
             return;
         }
         const auto i = index_(at);
-        if (voxels::bark.contains(voxel{looks_[i]}) && !voxels::bark.contains(look)) {
+        if (looks_[i].made_of == materials::wood.value && look.made_of != materials::wood) {
             return;
         }
-        looks_[i] = look.value;
+        looks_[i] = draft_cell{.color = look.color.value, .made_of = look.made_of.value};
         lo_       = {std::min(lo_.x, at.x), std::min(lo_.y, at.y), std::min(lo_.z, at.z)};
         hi_       = {std::max(hi_.x, at.x), std::max(hi_.y, at.y), std::max(hi_.z, at.z)};
     }
 
-    auto blob(vec3f centre, float32 radius, float32 roughness, uint64 seed, voxel look) -> void {
+    auto blob(vec3f centre, float32 radius, float32 roughness, uint64 seed, matter look) -> void {
         const int32 r = static_cast<int32>(std::ceil(radius)) + 1;
         const vec3i c{
             static_cast<int32>(std::floor(centre.x)), static_cast<int32>(std::floor(centre.y)),
@@ -133,7 +142,7 @@ public:
         }
     }
 
-    auto line(vec3f from, vec3f to, voxel look) -> void {
+    auto line(vec3f from, vec3f to, matter look) -> void {
         const vec3f d     = to - from;
         const float32 len = std::max({std::abs(d.x), std::abs(d.y), std::abs(d.z), 1.0F});
         const auto steps  = static_cast<int32>(std::ceil(len));
@@ -158,12 +167,14 @@ public:
         for (int32 z = lo_.z; z <= hi_.z; ++z) {
             for (int32 y = lo_.y; y <= hi_.y; ++y) {
                 for (int32 x = lo_.x; x <= hi_.x; ++x) {
-                    const uint8 look = looks_[index_({x, y, z})];
-                    if (look == 0) {
+                    const draft_cell look = looks_[index_({x, y, z})];
+                    if (look.color == 0) {
                         continue;
                     }
                     const vec3i offset = turned(vec3i{x, y, z} - root, quarter_turns);
-                    out.voxels.push_back({.offset = offset, .look = voxel{look}});
+                    out.voxels.push_back(
+                        {.offset = offset, .look = matter{voxel{look.color}, material{look.made_of}}}
+                    );
                     out.min = {std::min(out.min.x, offset.x), std::min(out.min.y, offset.y),
                                std::min(out.min.z, offset.z)};
                     out.max = {std::max(out.max.x, offset.x + 1), std::max(out.max.y, offset.y + 1),
@@ -179,7 +190,7 @@ private:
         return static_cast<std::size_t>(at.x + (draft_side * (at.y + (draft_side * at.z))));
     }
 
-    std::vector<uint8>& looks_;
+    std::vector<draft_cell>& looks_;
     vec3i lo_{draft_side, draft_side, draft_side};
     vec3i hi_{-1, -1, -1};
 };
@@ -188,7 +199,7 @@ private:
 
 // см. docs/world.md#деревья
 auto grow_tree(
-    const tree_species& species, uint64 seed, uint8 quarter_turns, voxel bark, voxel leaves
+    const tree_species& species, uint64 seed, uint8 quarter_turns, matter bark, matter leaves
 ) -> plant_shape {
     tree_dice dice{seed};
     draft shape;

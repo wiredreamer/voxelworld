@@ -74,7 +74,7 @@ namespace {
             if (right.id == voxels::air) {
                 continue;
             }
-            if (left.material == right.material && left.kind == right.kind) {
+            if (left.material == right.material) {
                 return false;
             }
         }

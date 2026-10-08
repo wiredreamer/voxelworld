@@ -454,3 +454,37 @@ TEST_CASE("the home region holds both biomes of the settings file", "[world][set
     REQUIRE(seen.contains("plains"));
     REQUIRE(seen.contains("hills"));
 }
+
+TEST_CASE("a tone ramp of the settings names its material, and a tree keeps wood and leaves by default", "[world][settings]") {
+    const auto& voxels = default_voxel_registry();
+
+    const tree_species stock{};
+    REQUIRE(stock.bark.made_of == materials::wood);
+    REQUIRE(stock.leaves.made_of == materials::leaves);
+    REQUIRE(stock.bark.row.first == voxels::amber[0]);
+    REQUIRE(stock.leaves.row.first == voxels::green[0]);
+
+    const auto tuned = parse_terrain_settings(
+        R"({"biomes": {"hills": {"leaves": {"row": "red", "from": 4, "to": 6},
+            "grass": {"material": "glow"}}}})",
+        voxels, terrain_params{}
+    );
+    REQUIRE(tuned.has_value());
+
+    const auto& hills = std::get<hills_biome>(tuned->biomes[1]);
+    REQUIRE(hills.woods.tree.leaves.row.first == voxels::red[0]);
+    REQUIRE(hills.woods.tree.leaves.made_of == materials::leaves);
+    REQUIRE(hills.grass.made_of == materials::glow);
+
+    const std::string text = dump_terrain_settings(*tuned, voxels);
+    const auto again       = parse_terrain_settings(text, voxels, terrain_params{});
+    REQUIRE(again.has_value());
+    REQUIRE(std::get<hills_biome>(again->biomes[1]).grass.made_of == materials::glow);
+    REQUIRE(std::get<hills_biome>(again->biomes[1]).woods.tree.leaves.made_of == materials::leaves);
+
+    const auto unknown = parse_terrain_settings(
+        R"({"biomes": {"hills": {"grass": {"material": "granite"}}}})", voxels, terrain_params{}
+    );
+    REQUIRE_FALSE(unknown.has_value());
+    REQUIRE(unknown.error().find("granite") != std::string::npos);
+}

@@ -56,18 +56,20 @@ auto voxm_serializer::serialize(
         for (int32 y = 0; y < size.y; ++y) {
             int32 x = 0;
             while (x < size.x) {
-                const auto index = model_->get_voxel(x, y, z);
-                if (index.is_empty()) {
+                const matter held = model_->get_matter(x, y, z);
+                if (held.is_empty()) {
                     ++x;
                     continue;
                 }
 
                 int32 run = 1;
-                while (x + run < size.x && model_->get_voxel(x + run, y, z) == index) {
+                while (x + run < size.x && model_->get_matter(x + run, y, z) == held) {
                     ++run;
                 }
 
-                output << std::format("r {} {} {} {} {}\n", x, y, z, run, index.value);
+                output << std::format(
+                    "r {} {} {} {} {} {}\n", x, y, z, run, held.color.value, held.made_of.value
+                );
                 x += run;
             }
         }
@@ -205,10 +207,12 @@ auto voxm_deserializer::process_run_(std::istringstream& iss) -> void {
     }
 
     vec3i at;
-    int32 count  = 0;
-    uint32 index = 0;
-    iss >> at.x >> at.y >> at.z >> count >> index;
-    if (iss.fail() || count <= 0 || index > std::numeric_limits<uint8>::max()) {
+    int32 count    = 0;
+    uint32 index   = 0;
+    uint32 made_of = 0;
+    iss >> at.x >> at.y >> at.z >> count >> index >> made_of;
+    if (iss.fail() || count <= 0 || index > std::numeric_limits<uint8>::max() ||
+        made_of > std::numeric_limits<uint8>::max()) {
         error_ = error_type::parse_error;
         return;
     }
@@ -231,7 +235,7 @@ auto voxm_deserializer::process_run_(std::istringstream& iss) -> void {
 
     model_writer writer{*model_};
     for (int32 i = 0; i < count; ++i) {
-        writer.set(vec3i{at.x + i, at.y, at.z}, id);
+        writer.set(vec3i{at.x + i, at.y, at.z}, matter{id, material{static_cast<uint8>(made_of)}});
     }
 }
 

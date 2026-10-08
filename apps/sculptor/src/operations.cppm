@@ -771,7 +771,7 @@ private:
     engine_type* engine_;
     app_state* state_;
     paint_voxel_params params_;
-    voxel previous_voxel_;
+    matter previous_voxel_;
 };
 
 }  // namespace vw::sculptor
@@ -1112,7 +1112,7 @@ private:
     engine_type* engine_;
     app_state* state_;
     remove_voxel_params params_;
-    voxel previous_voxel_;
+    matter previous_voxel_;
 };
 
 }  // namespace vw::sculptor

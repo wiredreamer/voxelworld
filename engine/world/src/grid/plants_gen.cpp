@@ -108,8 +108,11 @@ auto perlin_terrain_generator::grow_plant_(
         .surface = candidate.root.y - 1,
     };
 
-    return grow_tree(woods.tree, candidate.id, candidate.turns, tone_at(facts, woods.tree.bark, "bark", 991.0),
-                     tone_at(facts, woods.tree.leaves, "leaves", 997.0));
+    return grow_tree(
+        woods.tree, candidate.id, candidate.turns,
+        matter{tone_at(facts, woods.tree.bark, "bark", 991.0), woods.tree.bark.made_of},
+        matter{tone_at(facts, woods.tree.leaves, "leaves", 997.0), woods.tree.leaves.made_of}
+    );
 }
 
 auto perlin_terrain_generator::reach_of_(
@@ -252,16 +255,16 @@ auto perlin_terrain_generator::plant_chunk_(
                 continue;
             }
             for (const plant_voxel& v : plant.shape->voxels) {
-                if (voxels::bark.contains(v.look) != wood_pass) {
+                if ((v.look.made_of == materials::wood) != wood_pass) {
                     continue;
                 }
                 const vec3i at = plant.root + v.offset - base;
                 if (at.x < 0 || at.y < 0 || at.z < 0 || at.x >= s || at.y >= s || at.z >= s) {
                     continue;
                 }
-                const voxel here = voxels.get_voxel(at.x, at.y, at.z);
-                const bool open  = here.is_empty() || voxels::leaves.contains(here) ||
-                                  (wood_pass && voxels::bark.contains(here));
+                const matter here = voxels.get_matter(at.x, at.y, at.z);
+                const bool open   = here.is_empty() || here.made_of == materials::leaves ||
+                                    (wood_pass && here.made_of == materials::wood);
                 if (open) {
                     writer.set(at, v.look);
                 }

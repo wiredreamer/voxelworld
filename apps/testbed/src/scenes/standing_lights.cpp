@@ -92,7 +92,8 @@ auto standing_lights_scene::place_emitters_() -> void {
             const vec2i at = site(at_site);
             if (const auto surface = stand().grid().get_surface_voxel_y(at.x, at.y)) {
                 stand().grid().set_voxel(
-                    {at.x * scale, (*surface + 1) * scale, at.y * scale}, voxels::lamp_amber
+                    {at.x * scale, (*surface + 1) * scale, at.y * scale},
+                    matter{voxels::amber[8], materials::lamp}
                 );
 
                 ++placed_;

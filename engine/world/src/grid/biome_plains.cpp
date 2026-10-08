@@ -16,8 +16,8 @@ auto plains_biome::paint_at(
     const column_facts& column
 ) const -> column_paint {
     column_paint paint;
-    paint.add(tone_at(column, grass, "grass", 401.0), 1);
-    paint.add(tone_at(column, dirt, "dirt", 613.0), dirt_depth);
+    paint.add(matter{tone_at(column, grass, "grass", 401.0), grass.made_of}, 1);
+    paint.add(matter{tone_at(column, dirt, "dirt", 613.0), dirt.made_of}, dirt_depth);
     paint.cover   = cover_form_at(column, cover);
     paint.fertile = true;
     return paint;
