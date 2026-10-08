@@ -52,6 +52,10 @@ auto unpack_slot(const gfx::quad& q) -> uint16 {
     return static_cast<uint16>((q.data1 >> 14) & 0xFFU);
 }
 
+auto unpack_material(const gfx::quad& q) -> material {
+    return material{static_cast<uint8>(q.data0 >> 24)};
+}
+
 auto unpack_sways(const gfx::quad& q) -> bool {
     return ((q.data1 >> 22) & 0x1U) != 0;
 }
@@ -997,6 +1001,32 @@ auto grow_test_tree(asset::model& m) -> void {
 
 }  // namespace
 
+TEST_CASE("a quad carries the material of its voxel and an empty state code", "[mesh][material]") {
+    const material_table& materials = default_material_table();
+
+    model_fixture fixture{64};
+    fixture.get()->set_voxel(3, 3, 3, voxels::gray[10]);
+    fixture.get()->set_voxel(9, 3, 3, voxels::glow_blue);
+    fixture.get()->set_voxel(15, 3, 3, voxels::leaves[2]);
+
+    REQUIRE(materials.of(voxels::gray[10]) == material{});
+    REQUIRE(materials.get(materials.of(voxels::glow_blue)).glow > 0);
+    REQUIRE(materials.get(materials.of(voxels::leaves[2])).sways);
+    REQUIRE(materials.of(voxels::glow_blue) != materials.of(voxels::leaves[2]));
+
+    const auto check = [&materials](const gfx::mesh& m) -> void {
+        REQUIRE(m.quads.size() == 18);
+        for (const auto& q : m.quads) {
+            const voxel v = voxel{static_cast<uint8>(unpack_slot(q))};
+            REQUIRE(unpack_material(q) == materials.of(v));
+            REQUIRE((q.data1 >> 23) == 0);
+        }
+    };
+
+    check(fixture.simple());
+    check(fixture.greedy());
+}
+
 TEST_CASE("a block of one leaf tone merges up to the wind lattice and no further", "[mesh][sway]") {
     model_fixture fixture{64};
     for (int32 x = 4; x < 20; ++x) {
@@ -1027,7 +1057,6 @@ TEST_CASE("every leaf quad sways, stays inside one lattice cell and carries noth
         for (const auto& q : m.quads) {
             const voxel v = voxel{static_cast<uint8>(unpack_slot(q))};
             REQUIRE(unpack_sways(q) == voxels::leaves.contains(v));
-            REQUIRE((q.data0 >> 24) == 0);
             REQUIRE((q.data1 >> 23) == 0);
             if (unpack_sways(q)) {
                 const vec3i lo = unpack_min(q);

@@ -31,6 +31,7 @@ public:
 private:
     vulkan_context* context_;
     std::unique_ptr<storage_buffer> buffer_;
+    std::unique_ptr<storage_buffer> materials_;
     vk::DescriptorSet descriptor_set_              = nullptr;
     vk::DescriptorPool descriptor_pool_            = nullptr;
     vk::DescriptorSetLayout descriptor_set_layout_ = nullptr;

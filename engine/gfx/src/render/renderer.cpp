@@ -2518,16 +2518,24 @@ auto renderer::choose_swap_extent(
 namespace vw::gfx {
 
 auto renderer::create_palette_descriptor_set_layout() -> void {
-    vk::DescriptorSetLayoutBinding palette_layout_binding{};
-    palette_layout_binding.binding            = 0;
-    palette_layout_binding.descriptorType     = vk::DescriptorType::eStorageBuffer;
-    palette_layout_binding.descriptorCount    = 1;
-    palette_layout_binding.stageFlags         = vk::ShaderStageFlagBits::eVertex;
-    palette_layout_binding.pImmutableSamplers = nullptr;
+    const std::array palette_layout_bindings{
+        vk::DescriptorSetLayoutBinding{
+            .binding         = 0,
+            .descriptorType  = vk::DescriptorType::eStorageBuffer,
+            .descriptorCount = 1,
+            .stageFlags      = vk::ShaderStageFlagBits::eVertex,
+        },
+        vk::DescriptorSetLayoutBinding{
+            .binding         = 1,
+            .descriptorType  = vk::DescriptorType::eStorageBuffer,
+            .descriptorCount = 1,
+            .stageFlags      = vk::ShaderStageFlagBits::eVertex,
+        },
+    };
 
     vk::DescriptorSetLayoutCreateInfo palette_layout_info{};
-    palette_layout_info.bindingCount = 1;
-    palette_layout_info.pBindings    = &palette_layout_binding;
+    palette_layout_info.bindingCount = static_cast<uint32>(palette_layout_bindings.size());
+    palette_layout_info.pBindings    = palette_layout_bindings.data();
 
     palette_descriptor_set_layout_ = vk_must(context_->get_device().createDescriptorSetLayout(palette_layout_info), "failed to create palette descriptor set layout");
 }

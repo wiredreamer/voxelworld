@@ -18,7 +18,9 @@ struct quad {
     static constexpr per_face<int32> tangent_u_axis{2, 2, 0, 0, 0, 0};
     static constexpr per_face<int32> tangent_v_axis{1, 1, 2, 2, 1, 1};
 
-    static constexpr uint32 sway_flag = 1U << 22U;
+    static constexpr uint32 sway_flag      = 1U << 22U;
+    static constexpr uint32 material_shift = 24;
+    static constexpr uint32 state_shift    = 26;
 
     // см. docs/rendering.md#качание-листвы
     static constexpr int32 sway_lattice = 8;
@@ -30,7 +32,7 @@ struct quad {
 
     // см. docs/rendering.md#качание-листвы
     [[nodiscard]] static auto pack(
-        vec3i min_pos, vec3i max_pos, face_direction face, voxel v, bool sways
+        vec3i min_pos, vec3i max_pos, face_direction face, voxel v, material made_of, bool sways
     ) -> quad;
 
     [[nodiscard]] static auto get_binding_descriptions()

@@ -15,11 +15,17 @@ namespace {
 constexpr float32 palette_gamma = 1.5f;
 
 struct palette_entry {
-    alignas(16) vec3f color;
-    alignas(4) float32 glow;
+    alignas(16) vec4f color;
 };
 
 static_assert(sizeof(palette_entry) == 16);
+
+// см. docs/rendering.md#таблица-материалов
+struct material_entry {
+    alignas(16) vec4f look;
+};
+
+static_assert(sizeof(material_entry) == 16);
 
 [[nodiscard]] auto decode(uint8 channel) -> float32 {
     return std::pow(static_cast<float32>(channel) / 255.0f, palette_gamma);
@@ -44,10 +50,24 @@ palette_buffer::palette_buffer(
         const color clr = type.material.clr;
 
         palette_data.push_back(palette_entry{
-            .color = vec3f{decode(clr.r()), decode(clr.g()), decode(clr.b())},
-            .glow  = static_cast<float32>(type.material.glow) / 255.0f,
+            .color = vec4f{decode(clr.r()), decode(clr.g()), decode(clr.b()), 1.0f},
         });
     }
+
+    const material_table materials{registry};
+
+    std::vector<material_entry> material_data;
+    material_data.reserve(materials.all().size());
+    for (const material_type& row : materials.all()) {
+        material_data.push_back(material_entry{
+            .look = vec4f{static_cast<float32>(row.glow) / 255.0f, 0.0f, 0.0f, 0.0f},
+        });
+    }
+
+    const std::size_t material_bytes = material_data.size() * sizeof(material_entry);
+
+    materials_ = std::make_unique<storage_buffer>(*context_, material_bytes);
+    materials_->copy_from(material_data.data(), material_bytes);
 
     const std::size_t palette_bytes = palette_data.size() * sizeof(palette_entry);
 
@@ -69,14 +89,30 @@ palette_buffer::palette_buffer(
         .range  = vk::WholeSize,
     };
 
+    const vk::DescriptorBufferInfo materials_info{
+        .buffer = materials_->get_buffer(),
+        .offset = 0,
+        .range  = vk::WholeSize,
+    };
+
     context_->get_device().updateDescriptorSets(
-        vk::WriteDescriptorSet{
-            .dstSet          = descriptor_set_,
-            .dstBinding      = 0,
-            .dstArrayElement = 0,
-            .descriptorCount = 1,
-            .descriptorType  = vk::DescriptorType::eStorageBuffer,
-            .pBufferInfo     = &buffer_info,
+        {
+            vk::WriteDescriptorSet{
+                .dstSet          = descriptor_set_,
+                .dstBinding      = 0,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType  = vk::DescriptorType::eStorageBuffer,
+                .pBufferInfo     = &buffer_info,
+            },
+            vk::WriteDescriptorSet{
+                .dstSet          = descriptor_set_,
+                .dstBinding      = 1,
+                .dstArrayElement = 0,
+                .descriptorCount = 1,
+                .descriptorType  = vk::DescriptorType::eStorageBuffer,
+                .pBufferInfo     = &materials_info,
+            },
         },
         nullptr
     );

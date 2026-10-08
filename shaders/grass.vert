@@ -24,12 +24,19 @@ layout(set = 1, binding = 1, std430) readonly buffer Quads {
 };
 
 struct PaletteEntry {
-    vec3 color;
-    float glow;
+    vec4 color;
 };
 
 layout(set = 4, binding = 0, std430) readonly buffer PaletteBuffer {
     PaletteEntry palette[];
+};
+
+struct MaterialEntry {
+    vec4 look;
+};
+
+layout(set = 4, binding = 1, std430) readonly buffer MaterialBuffer {
+    MaterialEntry materials[];
 };
 
 layout(push_constant) uniform GrassPush {
@@ -114,8 +121,8 @@ void main() {
     fragInstanceLight = vec4(0.0, 0.0, inst.light.xy);
 
     uint palette_idx = (q.data1 >> 14) & 0xFFu;
-    fragColor = palette[palette_idx].color;
-    fragGlow  = palette[palette_idx].glow;
+    fragColor = palette[palette_idx].color.rgb;
+    fragGlow  = materials[q.data0 >> 24].look.x;
 
     fragConvexMask = normal_id << FACE_SHIFT;
 

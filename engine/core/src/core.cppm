@@ -16,5 +16,6 @@ export import :spatial;
 export import :spatial.occupancy;
 export import :voxels;
 export import :voxels.catalog;
+export import :voxels.materials;
 export import :voxels.face_direction;
 export import :input;

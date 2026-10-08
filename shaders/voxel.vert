@@ -25,12 +25,19 @@ layout(set = 1, binding = 2, std430) readonly buffer Quads {
 };
 
 struct PaletteEntry {
-    vec3 color;
-    float glow;
+    vec4 color;
 };
 
 layout(set = 4, binding = 0, std430) readonly buffer PaletteBuffer {
     PaletteEntry palette[];
+};
+
+struct MaterialEntry {
+    vec4 look;
+};
+
+layout(set = 4, binding = 1, std430) readonly buffer MaterialBuffer {
+    MaterialEntry materials[];
 };
 
 layout(push_constant) uniform WorldPush {
@@ -113,8 +120,8 @@ void main() {
     fragNormal = normalize(mat3(normalMatrix) * NORMALS[normal_id]);
     fragInstanceLight = normalMatrix[3];
 
-    fragColor = palette[palette_idx].color;
-    fragGlow  = palette[palette_idx].glow;
+    fragColor = palette[palette_idx].color.rgb;
+    fragGlow  = materials[q.data0 >> 24].look.x;
 
     fragConvexMask = (sways ? FLAT_ONLY : 0u) | (normal_id << FACE_SHIFT);
 

@@ -103,7 +103,8 @@ std430 нет диагностики на расхождение: ошибки �
   через плоскости решётки, шейдер смешивает ветер между её узлами. Разойдутся —
   в кронах щели, в которые видно небо; сторож только у стороны C++ (`a block of
   one leaf tone merges up to the wind lattice and no further`).
-- **Байты `31:24`.** Свободны и нулевые у обоих слов. Весов качания по углам
+- **Байты `31:24`.** У `data0` — номер материала (см. «Палитра»). У `data1`
+  биты `25:23` свободны, `31:26` заняты под код состояния; все нулевые. Весов качания по углам
   больше нет: листва движется вся одинаково, а мешер оставляет грани на её стыке
   с остальным (`docs/rendering.md#качание-листвы`). Затенения, выпуклости и света в кваде нет: их считает фрагмент (см. «Занятость»
   и «Кеш освещённости»).
@@ -287,15 +288,25 @@ std430 нет диагностики на расхождение: ошибки �
 
 - **C++:** `palette_buffer` (`resource/palette_buffer.cpp`) — запись
   `palette_entry` на тип в порядке `voxel_registry::all()`: `color` — цвет через
-  `palette_gamma`, `glow` — `material.glow / 255`.
-- **GLSL:** `PaletteBuffer` (`set = 4`) из `PaletteEntry` (`vec3 color`,
-  `float glow`) в `voxel.vert` по индексу `(data1 >> 14) & 0x3FF`, то есть по
-  слоту вокселя; `glow` уходит в `fragGlow` (location 2, component 3), и
-  `voxel.frag` умножает его на `glow_params.x`.
+  `palette_gamma`, `w` не читается. Рядом — запись `material_entry` на строку
+  `material_table::all()`: `look.x` — `glow / 255`, остальное свободно.
+- **GLSL:** `PaletteBuffer` (`set = 4`, привязка 0) из `PaletteEntry`
+  (`vec4 color`) в `voxel.vert` и `grass.vert` по индексу
+  `(data1 >> 14) & 0xFF`, то есть по вокселю; `MaterialBuffer` (привязка 1) из
+  `MaterialEntry` (`vec4 look`) по индексу `data0 >> 24`. `look.x` уходит в
+  `fragGlow` (location 2, component 3), и `voxel.frag` умножает его на
+  `glow_params.x`.
+- **Номер материала в кваде** пишет `quad::pack` сдвигом `quad::material_shift`
+  (24); биты `31:26` второго слова (`quad::state_shift`) заняты под код
+  состояния и пока нулевые. Таблицу на GPU и номер в кваде строят из одного
+  реестра — `material_table{registry}` и `default_material_table()`; с другим
+  реестром в рендерере строки разойдутся.
 - **Менять вместе:** номер в `all()` обязан совпадать со слотом (сторож —
-  `slots are dense and within the quad's ten bits`); раскладку `palette_entry`
-  и `PaletteEntry` — `glow` в последних четырёх байтах слота `color`, 16 байт
-  на запись (сторож — `static_assert` в `palette_buffer.cpp`).
+  `slots are dense and within the quad's ten bits`); раскладку обеих записей —
+  по 16 байт (сторож — `static_assert` в `palette_buffer.cpp`); привязки набора
+  в `renderer::create_palette_descriptor_set_layout`. Номер материала в кваде
+  стережёт `a quad carries the material of its voxel and an empty state code`,
+  чтение в шейдере — ничто.
 - **Если разошлись:** чужие цвета, светится не то.
 
 ## Адрес углов в нормальной матрице

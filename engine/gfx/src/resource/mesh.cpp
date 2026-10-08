@@ -20,6 +20,7 @@ auto quad::pack(
     vec3i max_pos,
     face_direction face,
     voxel v,
+    material made_of,
     bool sways
 ) -> quad {
     const int32 u_axis = tangent_u_axis[face];
@@ -33,7 +34,8 @@ auto quad::pack(
         (static_cast<uint32>(min_pos.x) & 0x7Fu) |          //
         ((static_cast<uint32>(min_pos.y) & 0x7Fu) << 7) |   //
         ((static_cast<uint32>(min_pos.z) & 0x7Fu) << 14) |  //
-        ((static_cast<uint32>(face) & 0x7u) << 21);
+        ((static_cast<uint32>(face) & 0x7u) << 21) |        //
+        (static_cast<uint32>(made_of.value) << material_shift);
 
     q.data1 =                                               //
         (span_u & 0x7Fu) |                                  //
@@ -134,7 +136,7 @@ auto add_quad(
     vec3i min_pos,
     vec3i max_pos,
     voxel v,
-    bool sways
+    bool at_full_detail
 ) -> void;
 
 struct layer_rows {
@@ -333,9 +335,14 @@ auto add_quad(
     vec3i min_pos,
     vec3i max_pos,
     voxel v,
-    bool sways
+    bool at_full_detail
 ) -> void {
-    quads.push_back(quad::pack(min_pos, max_pos, face, v, sways));
+    const material_table& materials = default_material_table();
+    const material made_of          = materials.of(v);
+
+    quads.push_back(quad::pack(
+        min_pos, max_pos, face, v, made_of, at_full_detail && materials.get(made_of).sways
+    ));
 }
 
 
@@ -410,7 +417,8 @@ auto build_layer_rows(
 
 // см. docs/rendering.md#качание-листвы
 [[nodiscard]] auto sways(const face_mask_cell& cell, const face_axis_mapping& axes) -> bool {
-    return axes.step == 1 && is_leaf_voxel(cell.index);
+    const material_table& materials = default_material_table();
+    return axes.step == 1 && materials.get(materials.of(cell.index)).sways;
 }
 
 [[nodiscard]] auto merge_reach(
@@ -435,7 +443,7 @@ auto emit_rect(
 ) -> void {
     auto [min_pos, max_pos] = axes.to_local_min_max(u_start, v_start, w, h, layer);
 
-    add_quad(storage.quads, face, min_pos, max_pos, cell.index, sways(cell, axes));
+    add_quad(storage.quads, face, min_pos, max_pos, cell.index, axes.step == 1);
 }
 
 [[nodiscard]] auto cell_span_mask(int32 step) -> uint64 {
@@ -607,7 +615,7 @@ auto simple_mesh_generator::add_cube_face(
     [[maybe_unused]] mesh_options opts
 ) -> void {
     detail::add_quad(
-        quads, face, {x, y, z}, {x + 1, y + 1, z + 1}, voxel_id, detail::is_leaf_voxel(voxel_id)
+        quads, face, {x, y, z}, {x + 1, y + 1, z + 1}, voxel_id, true
     );
 }
 

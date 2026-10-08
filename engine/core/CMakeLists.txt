@@ -22,6 +22,7 @@ target_sources(vw_core
             src/spatial/occupancy.cppm
             src/voxels/voxels.cppm
             src/voxels/catalog.cppm
+            src/voxels/materials.cppm
             src/voxels/face_direction.cppm
             src/log/log.cppm
             src/json/json.cppm
@@ -34,6 +35,7 @@ target_sources(vw_core
         src/spatial/spatial.cpp
         src/voxels/voxels.cpp
         src/voxels/catalog.cpp
+        src/voxels/materials.cpp
         src/log/log.cpp
         src/json/json.cpp
 )

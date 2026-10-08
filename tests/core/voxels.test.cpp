@@ -257,3 +257,18 @@ TEST_CASE("a kind gathers exactly the voxels that carry it", "[voxels]") {
     REQUIRE_FALSE(leaves.test(voxels::green[4].value));
     REQUIRE_FALSE(registry.of_kind(voxel_kind::wood).test(voxels::leaves[0].value));
 }
+
+TEST_CASE("the material table gives every catalog voxel a row and keeps the inert one first", "[voxels][material]") {
+    const voxel_registry registry;
+    const material_table materials{registry};
+
+    REQUIRE(materials.get(material{}) == material_type{});
+    REQUIRE(materials.all().size() <= static_cast<std::size_t>(material_capacity));
+
+    for (const voxel_type& type : registry.all()) {
+        const material_type& row = materials.get(materials.of(type.id));
+        REQUIRE(row.glow == type.material.glow);
+        REQUIRE(row.emission == type.material.emission);
+        REQUIRE(row.sways == (type.kind == voxel_kind::leaf));
+    }
+}
