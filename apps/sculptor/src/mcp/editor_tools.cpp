@@ -55,6 +55,8 @@ constexpr std::string_view no_arguments =
             return "remove_voxel";
         case tools::paint_voxel:
             return "paint_voxel";
+        case tools::material_brush:
+            return "material_brush";
         case tools::color_picker:
             return "color_picker";
         case tools::move_pivot:
@@ -164,6 +166,22 @@ constexpr std::string_view no_arguments =
         {"clips", list_refs(app_state::clip_dir(), ".voxa")},
         {"machines", list_refs(app_state::fsm_dir(), ".voxf")},
     };
+}
+
+[[nodiscard]] auto list_materials() -> json::value {
+    const std::span<const material_type> rows = default_material_table().named();
+
+    json::array listed;
+    for (std::size_t row = 0; row < rows.size(); ++row) {
+        listed.emplace_back(json::object{
+            {"index", row},
+            {"name", rows[row].name},
+            {"glow", rows[row].glow},
+            {"emission", rows[row].emission},
+            {"sways", rows[row].sways},
+        });
+    }
+    return json::object{{"materials", std::move(listed)}};
 }
 
 [[nodiscard]] auto list_palette(const voxel_registry& registry) -> json::value {
@@ -335,6 +353,20 @@ auto make_editor_tools(const editor_bindings& bindings) -> std::vector<tool> {
         .run =
             [bindings](const json::value&) -> tool_outcome {
                 return tool_success(list_palette(bindings.engine->get_voxel_registry()));
+            },
+    });
+
+    tools.push_back(tool{
+        .name = "material_list",
+        .description =
+            "List the materials a voxel may be made of: index, name and what the material does. "
+            "'glow' is how bright the voxel shines by itself (0-255), 'emission' the light it "
+            "casts on its surroundings (0-15), 'sways' whether it moves in the wind. A voxel "
+            "is a colour from palette_list plus one of these; 'inert' does nothing.",
+        .input_schema = no_arguments,
+        .run =
+            [](const json::value&) -> tool_outcome {
+                return tool_success(list_materials());
             },
     });
 

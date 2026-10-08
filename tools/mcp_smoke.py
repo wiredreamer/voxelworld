@@ -199,7 +199,17 @@ def run_prefab_scenario(probe):
     names = {voxel["name"]: voxel for voxel in palette.get("voxels", [])} if ok else {}
     probe.check("palette_list has more than sixty voxels", len(names) > 60, str(len(names)))
     probe.check("palette_list gives white as #rrggbb", names.get("white", {}).get("color", "").startswith("#"), str(names.get("white")))
-    probe.check("palette_list marks glowing voxels", "glow" in names.get("glow_blue", {}), str(names.get("glow_blue")))
+    probe.check("palette_list holds colours only", "glow" not in names.get("white", {}), str(names.get("white")))
+
+    ok, listed = tool(probe, "material_list")
+    rows = {row["name"]: row for row in listed.get("materials", [])} if ok else {}
+    probe.check("material_list starts with inert", ok and listed["materials"][0]["name"] == "inert", str(listed))
+    probe.check(
+        "material_list says what a material does",
+        rows.get("leaves", {}).get("sways") is True and rows.get("lamp", {}).get("emission", 0) > 0
+        and rows.get("glow", {}).get("glow", 0) > 0 and rows.get("glow", {}).get("emission") == 0,
+        str(rows),
+    )
 
     ok, text = tool(probe, "prefab_get")
     probe.check("prefab_get refuses when nothing is open", not ok and "no prefab is open" in text, str(text))
@@ -1917,6 +1927,120 @@ def run_delete_scenario(probe):
     remove_scratch_assets(asset_root)
 
 
+def run_material_scenario(probe):
+    scratch = SCRATCH_PREFABS[0]
+    ok, state = tool(probe, "editor_state")
+    asset_root = pathlib.Path(state["asset_root"])
+    remove_scratch_assets(asset_root)
+    tool(probe, "prefab_close", {"discard_unsaved": True})
+
+    tool(probe, "prefab_new", {"name": scratch})
+    tool(probe, "node_create", {"name": "root"})
+    tool(probe, "node_create", {"name": "box", "parent": "root", "volume": {"size": [4, 2, 2]}})
+
+    ok, written = tool(
+        probe,
+        "volume_write",
+        {
+            "node": "box",
+            "boxes": [{"min": [0, 0, 0], "max": [3, 0, 0], "voxel": "gray_10"}],
+            "points": [
+                {"voxel": "blue_8", "material": "glow", "at": [[0, 0, 0]]},
+                {"voxel": "green_3", "material": "leaves", "at": [[1, 0, 0], [2, 0, 0]]},
+            ],
+        },
+    )
+    probe.check("volume_write takes a material for points", ok and written.get("voxel_count") == 4, str(written))
+
+    ok, read = tool(probe, "volume_get", {"node": "box"})
+    layers = read.get("layers", {}) if ok else {}
+    probe.check(
+        "volume_get draws the materials of the same cells",
+        layers.get("material_slices") == [["baa."]] and layers.get("material_legend") == {"a": "leaves", "b": "glow"},
+        str(layers),
+    )
+    probe.check("the colours are drawn as before", layers.get("slices") == [["baac"]], str(layers.get("slices")))
+
+    ok, text = tool(probe, "volume_write", {"node": "box", "points": [{"voxel": "white", "material": "plasma", "at": [[3, 0, 0]]}]})
+    probe.check(
+        "an unknown material is refused with the known names",
+        not ok and "plasma" in text and "inert" in text and "leaves" in text,
+        str(text),
+    )
+
+    ok, brushed = tool(probe, "volume_set_material", {"node": "box", "material": "lamp", "at": [[3, 0, 0], [3, 1, 0]]})
+    probe.check(
+        "volume_set_material changes occupied cells and skips air",
+        ok and brushed.get("cells_written") == 1 and brushed.get("cells_of_air_skipped") == 1 and brushed.get("voxel_count") == 4,
+        str(brushed),
+    )
+
+    ok, read = tool(probe, "volume_get", {"node": "box"})
+    layers = read.get("layers", {}) if ok else {}
+    lamp = next((key for key, name in layers.get("material_legend", {}).items() if name == "lamp"), None)
+    probe.check(
+        "the brushed cell is a lamp of the colour it had",
+        lamp is not None and layers["material_slices"][0][0][3] == lamp
+        and layers["legend"].get(layers["slices"][0][0][3]) == "gray_10",
+        str(layers),
+    )
+
+    ok, recolored = tool(probe, "volume_write", {"node": "box", "recolor": [{"from": "green_3", "to": "green_6"}]})
+    ok, read = tool(probe, "volume_get", {"node": "box"})
+    layers = read.get("layers", {}) if ok else {}
+    leaves = next((key for key, name in layers.get("material_legend", {}).items() if name == "leaves"), None)
+    probe.check(
+        "recolor keeps the material",
+        leaves is not None and layers["material_slices"][0][0][1:3] == leaves * 2
+        and layers["legend"].get(layers["slices"][0][0][1]) == "green_6",
+        str(layers),
+    )
+
+    tool(probe, "undo")
+    ok, _ = tool(probe, "undo")
+    ok, read = tool(probe, "volume_get", {"node": "box"})
+    layers = read.get("layers", {}) if ok else {}
+    probe.check(
+        "undo takes the brushed material back",
+        "lamp" not in layers.get("material_legend", {}).values() and layers.get("material_slices", [[""]])[0][0][3] == ".",
+        str(layers),
+    )
+
+    ok, whole = tool(probe, "volume_set_material", {"node": "box", "material": "inert"})
+    ok, read = tool(probe, "volume_get", {"node": "box"})
+    layers = read.get("layers", {}) if ok else {}
+    probe.check(
+        "a volume of inert voxels shows no material layers",
+        ok and whole.get("cells_written") == 3 and "material_slices" not in layers,
+        str(layers),
+    )
+
+    ok, drawn = tool(
+        probe,
+        "volume_write",
+        {
+            "node": "box",
+            "layers": {
+                "origin": [0, 1, 0],
+                "legend": {"x": "amber_4"},
+                "slices": [["xx.."]],
+                "material_legend": {"w": "wood"},
+                "material_slices": [["w..."]],
+            },
+        },
+    )
+    ok, read = tool(probe, "volume_get", {"node": "box", "min": [0, 1, 0], "max": [3, 1, 0]})
+    layers = read.get("layers", {}) if ok else {}
+    probe.check(
+        "layers take a material drawing of the same shape",
+        layers.get("material_slices") == [["a..."]] and layers.get("material_legend") == {"a": "wood"},
+        str(layers),
+    )
+
+    tool(probe, "prefab_close", {"discard_unsaved": True})
+    remove_scratch_assets(asset_root)
+
+
 def main():
     port = DEFAULT_PORT
     with_scenario = False
@@ -1945,6 +2069,7 @@ def main():
             run_paint_scenario(probe)
             run_machine_scenario(probe)
             run_delete_scenario(probe)
+            run_material_scenario(probe)
     except OSError as error:
         print(f"FAIL cannot reach Sculptor on {DEFAULT_HOST}:{port} -- {error}")
         print("     start it with: sculptor --mcp")

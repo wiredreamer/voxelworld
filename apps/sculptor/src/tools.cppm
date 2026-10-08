@@ -86,6 +86,34 @@ private:
 
 export namespace vw::sculptor {
 
+class material_brush_tool final : public base_tool {
+public:
+    using engine_type = gfx::engine;
+
+    material_brush_tool(engine_type& eng, app_state& st, operation_manager& op_manager);
+
+    auto render(float delta_time) -> void override;
+    auto on_key_press(const plat::key_press_event& ev) -> void override;
+    auto on_mouse_move(const plat::mouse_move_event& ev) -> void override;
+    auto on_mouse_press(const plat::mouse_press_event& ev) -> void override;
+    auto on_mouse_release(const plat::mouse_release_event& ev) -> void override;
+    auto on_activate() -> void override;
+
+private:
+    auto update_hovered_voxel_() -> void;
+
+    engine_type* engine_;
+    app_state* state_;
+    operation_manager* op_manager_;
+
+    std::vector<ecs::entity> ray_cast_entities_;
+    vec3i hovered_voxel_ = vec3i{-1, -1, -1};
+};
+
+}  // namespace vw::sculptor
+
+export namespace vw::sculptor {
+
 class paint_tool final : public base_tool {
 public:
     using engine_type = gfx::engine;

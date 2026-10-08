@@ -103,6 +103,17 @@ auto voxel_palette_panel::render(
         ImGui::PopStyleVar();
     }
 
+    ImGui::SeparatorText("material");
+
+    const std::span<const material_type> rows = default_material_table().named();
+    for (std::size_t row = 0; row < rows.size(); ++row) {
+        const material made_of{static_cast<uint8>(row)};
+        const std::string label{rows[row].name};
+        if (ImGui::RadioButton(label.c_str(), state_->tool.selected_material == made_of)) {
+            state_->tool.selected_material = made_of;
+        }
+    }
+
     end_panel(*state_, panel_slot::bottom);
 }
 

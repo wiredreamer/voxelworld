@@ -152,17 +152,20 @@ enum class debug_view : uint32 {
     sun_light,
 
     state,
+
+    material,
 };
 
-inline constexpr std::array<std::string_view, 12> debug_view_names{
+inline constexpr std::array<std::string_view, 13> debug_view_names{
     "off",         "ambient occlusion", "normals",
     "sky light",   "convexity",         "block light",
     "blob shadow", "light complexity",  "blob complexity",
     "occupancy",       "sun-light",         "state",
+    "material",
 };
 
 static_assert(
-    debug_view_names.size() == static_cast<std::size_t>(debug_view::state) + 1
+    debug_view_names.size() == static_cast<std::size_t>(debug_view::material) + 1
 );
 
 struct block_light_settings {

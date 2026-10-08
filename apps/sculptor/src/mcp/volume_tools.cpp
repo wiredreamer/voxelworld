@@ -58,7 +58,8 @@ constexpr std::string_view write_schema = R"({
                 "properties": {
                     "min": {"type": "array", "items": {"type": "integer"}, "minItems": 3, "maxItems": 3},
                     "max": {"type": "array", "items": {"type": "integer"}, "minItems": 3, "maxItems": 3},
-                    "voxel": {"description": "Voxel name from palette_list, its index, or 'air' to erase.", "type": ["string", "integer", "null"]}
+                    "voxel": {"description": "Voxel name from palette_list, its index, or 'air' to erase.", "type": ["string", "integer", "null"]},
+                    "material": {"type": "string", "description": "Material name from material_list. Default 'inert'."}
                 },
                 "required": ["min", "max", "voxel"],
                 "additionalProperties": false
@@ -71,6 +72,7 @@ constexpr std::string_view write_schema = R"({
                 "type": "object",
                 "properties": {
                     "voxel": {"description": "Voxel name from palette_list, its index, or 'air' to erase.", "type": ["string", "integer", "null"]},
+                    "material": {"type": "string", "description": "Material name from material_list. Default 'inert'."},
                     "at": {"type": "array", "items": {"type": "array", "items": {"type": "integer"}, "minItems": 3, "maxItems": 3}, "description": "Positions [x, y, z] to set to this voxel."}
                 },
                 "required": ["voxel", "at"],
@@ -84,6 +86,8 @@ constexpr std::string_view write_schema = R"({
                 "origin": {"type": "array", "items": {"type": "integer"}, "minItems": 3, "maxItems": 3, "description": "Position of the first character of the first row of the first slice. Default [0, 0, 0]."},
                 "legend": {"type": "object", "description": "Maps a character to a voxel name or index.", "additionalProperties": {"type": ["string", "integer"]}},
                 "slices": {"type": "array", "items": {"type": "array", "items": {"type": "string"}}},
+                "material_legend": {"type": "object", "description": "Maps a character of material_slices to a material name from material_list.", "additionalProperties": {"type": "string"}},
+                "material_slices": {"type": "array", "items": {"type": "array", "items": {"type": "string"}}, "description": "Materials of the same cells, laid out exactly as slices; '.' and cells beyond a row are inert. Without it every voxel drawn is inert."},
                 "air": {"enum": ["erase", "keep"], "description": "What '.' does: 'erase' clears the cell (default), 'keep' leaves it as it is."}
             },
             "required": ["legend", "slices"],
@@ -91,6 +95,19 @@ constexpr std::string_view write_schema = R"({
         }
     },
     "required": ["node"],
+    "additionalProperties": false
+})";
+
+constexpr std::string_view set_material_schema = R"({
+    "type": "object",
+    "properties": {
+        "node": {"type": "string", "description": "Name of the node whose volume to change."},
+        "material": {"type": "string", "description": "Material name from material_list."},
+        "min": {"type": "array", "items": {"type": "integer"}, "minItems": 3, "maxItems": 3, "description": "Low corner [x, y, z] of the region. Default the whole volume."},
+        "max": {"type": "array", "items": {"type": "integer"}, "minItems": 3, "maxItems": 3, "description": "High corner of the region, inclusive. Default the whole volume."},
+        "at": {"type": "array", "items": {"type": "array", "items": {"type": "integer"}, "minItems": 3, "maxItems": 3}, "description": "Single positions [x, y, z] instead of a region."}
+    },
+    "required": ["node", "material"],
     "additionalProperties": false
 })";
 
@@ -153,6 +170,38 @@ constexpr std::string_view rename_schema = R"({
         return registry.get(value).name;
     }
     return value.value;
+}
+
+[[nodiscard]] auto known_materials() -> std::string {
+    std::string names;
+    for (const material_type& row : default_material_table().named()) {
+        names += names.empty() ? "" : ", ";
+        names += row.name;
+    }
+    return names;
+}
+
+[[nodiscard]] auto material_named(std::string_view path, std::string_view name)
+    -> std::expected<material, std::string> {
+    if (const auto found = default_material_table().find(name)) {
+        return *found;
+    }
+    return std::unexpected(std::format(
+        "{}: there is no material named '{}'; there are: {}", path, name, known_materials()
+    ));
+}
+
+[[nodiscard]] auto read_material(const json::cursor& at) -> std::expected<material, std::string> {
+    const json::value* given = at.get();
+    if (given == nullptr || given->is_null()) {
+        return materials::inert;
+    }
+    if (const std::string* name = given->as_string()) {
+        return material_named(at.path(), *name);
+    }
+    return std::unexpected(std::format(
+        "{}: expected a material name; there are: {}", at.path(), known_materials()
+    ));
 }
 
 [[nodiscard]] auto cells_of(const asset::voxel_bounds& region) -> std::size_t {
@@ -262,11 +311,64 @@ constexpr std::string_view rename_schema = R"({
         slices.emplace_back(std::move(rows));
     }
 
-    return json::object{
+    json::object layers{
         {"origin", json_of(region.min)},
         {"legend", std::move(legend)},
         {"slices", std::move(slices)},
     };
+
+    std::array<bool, material_capacity> made_of_used{};
+    bool any_material = false;
+    for (at.y = region.min.y; at.y <= region.max.y; ++at.y) {
+        for (at.z = region.min.z; at.z <= region.max.z; ++at.z) {
+            for (at.x = region.min.x; at.x <= region.max.x; ++at.x) {
+                const material held      = model.get_material(at);
+                made_of_used[held.value] = true;
+                any_material             = any_material || held != materials::inert;
+            }
+        }
+    }
+    if (!any_material) {
+        return layers;
+    }
+
+    const material_table& table = default_material_table();
+
+    std::array<char, material_capacity> material_symbol{};
+    material_symbol.fill('?');
+    material_symbol[0] = air_symbol;
+
+    json::object material_legend;
+    std::size_t rank = 0;
+    for (std::size_t row = 1; row < made_of_used.size() && rank < voxel_symbols.size(); ++row) {
+        if (!made_of_used[row]) {
+            continue;
+        }
+        const std::string_view name = table.get(material{static_cast<uint8>(row)}).name;
+        material_symbol[row]        = voxel_symbols[rank];
+        material_legend.set(
+            std::string(1, voxel_symbols[rank]),
+            name.empty() ? json::value{static_cast<int64>(row)} : json::value{name}
+        );
+        ++rank;
+    }
+
+    json::array material_slices;
+    for (at.y = region.min.y; at.y <= region.max.y; ++at.y) {
+        json::array rows;
+        for (at.z = region.min.z; at.z <= region.max.z; ++at.z) {
+            std::string row;
+            for (at.x = region.min.x; at.x <= region.max.x; ++at.x) {
+                row.push_back(material_symbol[model.get_material(at).value]);
+            }
+            rows.emplace_back(std::move(row));
+        }
+        material_slices.emplace_back(std::move(rows));
+    }
+
+    layers.set("material_legend", std::move(material_legend));
+    layers.set("material_slices", std::move(material_slices));
+    return layers;
 }
 
 [[nodiscard]] auto read_position(const json::cursor& at) -> std::expected<vec3i, std::string> {
@@ -354,17 +456,23 @@ public:
 
         for (const json::cursor& box : *elements) {
             argument_reader fields{box};
-            fields.allow({"min", "max", "voxel"});
+            fields.allow({"min", "max", "voxel", "material"});
             if (fields.failed()) {
                 fail_(fields.error());
                 return;
             }
 
-            const auto low   = read_position(box["min"]);
-            const auto high  = read_position(box["max"]);
-            const auto value = read_voxel(*registry_, box["voxel"]);
-            if (!low || !high || !value) {
-                fail_(!low ? low.error() : !high ? high.error() : value.error());
+            const auto low     = read_position(box["min"]);
+            const auto high    = read_position(box["max"]);
+            const auto value   = read_voxel(*registry_, box["voxel"]);
+            const auto made_of = read_material(box["material"]);
+            if (!low || !high || !value || !made_of) {
+                fail_(
+                    !low    ? low.error()
+                    : !high ? high.error()
+                    : !value ? value.error()
+                             : made_of.error()
+                );
                 return;
             }
             if (low->x > high->x || low->y > high->y || low->z > high->z) {
@@ -389,11 +497,64 @@ public:
             for (at.x = low->x; at.x <= high->x; ++at.x) {
                 for (at.y = low->y; at.y <= high->y; ++at.y) {
                     for (at.z = low->z; at.z <= high->z; ++at.z) {
-                        edits_.push_back(asset::voxel_edit{.position = at, .value = *value});
+                        edits_.push_back(
+                            asset::voxel_edit{.position = at, .value = matter{*value, *made_of}}
+                        );
                     }
                 }
             }
         }
+    }
+
+    auto add_materials(
+        const json::cursor& positions, const asset::voxel_bounds& region, material made_of,
+        const asset::model& held
+    ) -> void {
+        const auto mark = [&](vec3i at) -> void {
+            const matter there = held.get_matter(at);
+            if (there.is_empty()) {
+                ++skipped_air_;
+                return;
+            }
+            if (there.made_of == made_of || !reserve_(1)) {
+                return;
+            }
+            edits_.push_back(asset::voxel_edit{.position = at, .value = matter{there.color, made_of}});
+        };
+
+        if (positions.get() != nullptr) {
+            const auto entries = positions.elements();
+            if (!entries) {
+                fail_(json::describe(entries.error()));
+                return;
+            }
+            for (const json::cursor& entry : *entries) {
+                const auto position = read_position(entry);
+                if (!position) {
+                    fail_(position.error());
+                    return;
+                }
+                if (!asset::contains(size_, *position)) {
+                    fail_(outside(entry, *position, size_));
+                    return;
+                }
+                mark(*position);
+            }
+            return;
+        }
+
+        vec3i at;
+        for (at.x = region.min.x; at.x <= region.max.x && !failed(); ++at.x) {
+            for (at.y = region.min.y; at.y <= region.max.y; ++at.y) {
+                for (at.z = region.min.z; at.z <= region.max.z; ++at.z) {
+                    mark(at);
+                }
+            }
+        }
+    }
+
+    [[nodiscard]] auto skipped_air() const -> std::size_t {
+        return skipped_air_;
     }
 
     auto add_recolors(const json::cursor& recolors, const asset::model& painted) -> void {
@@ -458,16 +619,21 @@ public:
 
         for (const json::cursor& group : *groups) {
             argument_reader fields{group};
-            fields.allow({"voxel", "at"});
+            fields.allow({"voxel", "material", "at"});
             if (fields.failed()) {
                 fail_(fields.error());
                 return;
             }
 
             const auto value     = read_voxel(*registry_, group["voxel"]);
+            const auto made_of   = read_material(group["material"]);
             const auto positions = group["at"].elements();
-            if (!value || !positions) {
-                fail_(!value ? value.error() : json::describe(positions.error()));
+            if (!value || !made_of || !positions) {
+                fail_(
+                    !value     ? value.error()
+                    : !made_of ? made_of.error()
+                               : json::describe(positions.error())
+                );
                 return;
             }
             if (!reserve_(positions->size())) {
@@ -484,14 +650,16 @@ public:
                     fail_(outside(entry, *position, size_));
                     return;
                 }
-                edits_.push_back(asset::voxel_edit{.position = *position, .value = *value});
+                edits_.push_back(
+                    asset::voxel_edit{.position = *position, .value = matter{*value, *made_of}}
+                );
             }
         }
     }
 
     auto add_layers(const json::cursor& layers) -> void {
         argument_reader fields{layers};
-        fields.allow({"origin", "legend", "slices", "air"});
+        fields.allow({"origin", "legend", "slices", "material_legend", "material_slices", "air"});
 
         const vec3i origin   = fields.optional_vec3i("origin").value_or(vec3i{});
         const auto air_mode  = fields.optional_text("air").value_or(std::string{"erase"});
@@ -526,6 +694,75 @@ public:
             }
             voxel_of[static_cast<uint8>(symbol.front())] = *value;
         }
+
+        std::array<std::optional<material>, 256> material_of{};
+        std::vector<std::vector<std::string>> material_rows;
+        if (layers["material_slices"].get() != nullptr) {
+            if (layers["material_legend"].get() != nullptr) {
+                const auto named = layers["material_legend"].fields();
+                if (!named) {
+                    fail_(json::describe(named.error()));
+                    return;
+                }
+                for (const auto& [symbol, entry] : *named) {
+                    if (symbol.size() != 1 || symbol.front() == air_symbol) {
+                        fail_(std::format(
+                            "{}: a legend key is one character other than '.', found '{}'",
+                            layers["material_legend"].path(), symbol
+                        ));
+                        return;
+                    }
+                    const auto made_of = read_material(entry);
+                    if (!made_of) {
+                        fail_(made_of.error());
+                        return;
+                    }
+                    material_of[static_cast<uint8>(symbol.front())] = *made_of;
+                }
+            }
+
+            const auto drawn = layers["material_slices"].elements();
+            if (!drawn) {
+                fail_(json::describe(drawn.error()));
+                return;
+            }
+            for (const json::cursor& slice : *drawn) {
+                const auto rows = slice.elements();
+                if (!rows) {
+                    fail_(json::describe(rows.error()));
+                    return;
+                }
+                auto& kept = material_rows.emplace_back();
+                for (const json::cursor& row_at : *rows) {
+                    const auto row = row_at.string();
+                    if (!row) {
+                        fail_(json::describe(row.error()));
+                        return;
+                    }
+                    for (const char symbol : *row) {
+                        if (symbol != air_symbol && !material_of[static_cast<uint8>(symbol)]) {
+                            fail_(std::format(
+                                "{}: the character '{}' is not in material_legend", row_at.path(),
+                                symbol
+                            ));
+                            return;
+                        }
+                    }
+                    kept.emplace_back(*row);
+                }
+            }
+        }
+
+        const auto material_at = [&](std::size_t slice, std::size_t row, std::size_t column)
+            -> material {
+            if (slice >= material_rows.size() || row >= material_rows[slice].size() ||
+                column >= material_rows[slice][row].size()) {
+                return materials::inert;
+            }
+            const char symbol = material_rows[slice][row][column];
+            return symbol == air_symbol ? materials::inert
+                                        : *material_of[static_cast<uint8>(symbol)];
+        };
 
         for (std::size_t slice_index = 0; slice_index < slices->size(); ++slice_index) {
             const auto rows = (*slices)[slice_index].elements();
@@ -574,7 +811,10 @@ public:
                         fail_(outside(row_at, position, size_));
                         return;
                     }
-                    edits_.push_back(asset::voxel_edit{.position = position, .value = *value});
+                    edits_.push_back(asset::voxel_edit{
+                        .position = position,
+                        .value    = matter{*value, material_at(slice_index, row_index, column)},
+                    });
                 }
             }
         }
@@ -615,6 +855,7 @@ private:
     vec3i size_;
     std::vector<asset::voxel_edit> edits_;
     std::string error_;
+    std::size_t skipped_air_ = 0;
 };
 
 [[nodiscard]] auto axis_of(std::string_view text) -> std::optional<asset::voxel_axis> {
@@ -755,6 +996,72 @@ private:
     return tool_success(described);
 }
 
+[[nodiscard]] auto set_volume_material(
+    const editor_bindings& bindings, const json::value& arguments
+) -> tool_outcome {
+    argument_reader in{arguments};
+    in.allow({"node", "material", "min", "max", "at"});
+    const std::string node = in.text("node");
+    const std::string name = in.text("material");
+    const auto low         = in.optional_vec3i("min");
+    const auto high        = in.optional_vec3i("max");
+    if (in.failed()) {
+        return tool_failure(in.error());
+    }
+    if (in.has("at") && (low || high)) {
+        return tool_failure("give either 'at' or a region with min and max, not both");
+    }
+
+    const auto made_of = material_named("arguments.material", name);
+    if (!made_of) {
+        return tool_failure(made_of.error());
+    }
+
+    const auto held = bindings.volumes->find(node);
+    if (!held) {
+        return tool_failure(held.error());
+    }
+
+    const vec3i size = (*held)->size();
+    const asset::voxel_bounds region{
+        .min = low.value_or(vec3i{}), .max = high.value_or(vec3i{size.x - 1, size.y - 1, size.z - 1})
+    };
+    if (!asset::contains(size, region.min) || !asset::contains(size, region.max) ||
+        region.min.x > region.max.x || region.min.y > region.max.y || region.min.z > region.max.z) {
+        return tool_failure(std::format(
+            "the region [{}, {}, {}]..[{}, {}, {}] does not fit the volume, which spans [0, 0, 0] "
+            "to [{}, {}, {}]",
+            region.min.x, region.min.y, region.min.z, region.max.x, region.max.y, region.max.z,
+            size.x - 1, size.y - 1, size.z - 1
+        ));
+    }
+
+    edit_collector collected{bindings.engine->get_voxel_registry(), size};
+    collected.add_materials(in.at("at"), region, *made_of, **held);
+    if (collected.failed()) {
+        return tool_failure(collected.error());
+    }
+
+    auto edits              = collected.take();
+    const std::size_t cells = edits.size();
+    if (cells > 0) {
+        const auto written = bindings.volumes->write(node, std::move(edits));
+        if (!written) {
+            return tool_failure(written.error());
+        }
+    }
+
+    json::object described = describe_volume(bindings, node);
+    described.set("cells_written", cells);
+    if (collected.skipped_air() > 0) {
+        described.set("cells_of_air_skipped", collected.skipped_air());
+    }
+    if (cells == 0) {
+        described.set("note", "nothing changed: no occupied cell there holds another material");
+    }
+    return tool_success(described);
+}
+
 [[nodiscard]] auto reshape_volume(const editor_bindings& bindings, const json::value& arguments)
     -> tool_outcome {
     argument_reader in{arguments};
@@ -846,7 +1153,9 @@ auto append_volume_tools(std::vector<tool>& tools, const editor_bindings& bindin
             "the voxels themselves as text layers. x and z lie in the layer, y is up. In "
             "layers.slices[k] row j character i is the voxel at x = origin.x + i, y = origin.y "
             "+ k, z = origin.z + j; '.' is air and layers.legend names the other characters. "
-            "Without min and max the layers cover the occupied voxels.",
+            "Without min and max the layers cover the occupied voxels. When a voxel there is "
+            "of a material other than inert, layers.material_slices draws the materials of the "
+            "same cells and layers.material_legend names its characters.",
         .input_schema = get_schema,
         .run          = [bindings](const json::value& arguments) -> tool_outcome {
             return read_volume(bindings, arguments);
@@ -858,7 +1167,9 @@ auto append_volume_tools(std::vector<tool>& tools, const editor_bindings& bindin
         .description =
             "Set voxels of a node's volume as one undo step: recolor first, then boxes, then "
             "points, then layers, each overriding what came before. 'symmetry' draws the mirror "
-            "image along with what is given. Every position must lie inside the "
+            "image along with what is given. A voxel written here is inert unless a material "
+            "is named for it; recolor keeps the material of what it repaints. Every position "
+            "must lie inside the "
             "volume; grow it with volume_reshape first if it does not. A volume shared by "
             "several nodes changes for all of them. Opens the volume in the editor.",
         .input_schema = write_schema,
@@ -866,6 +1177,22 @@ auto append_volume_tools(std::vector<tool>& tools, const editor_bindings& bindin
             bindings,
             [bindings](const json::value& arguments) -> tool_outcome {
                 return write_volume(bindings, arguments);
+            }
+        ),
+    });
+
+    tools.push_back(tool{
+        .name = "volume_set_material",
+        .description =
+            "Set the material of occupied cells of a node's volume as one undo step, leaving "
+            "their colour as it is: the whole volume, a region given by min and max, or the "
+            "positions in 'at'. Air is skipped. material_list names the materials; volume_get "
+            "shows them as layers.material_slices.",
+        .input_schema = set_material_schema,
+        .run          = when_idle(
+            bindings,
+            [bindings](const json::value& arguments) -> tool_outcome {
+                return set_volume_material(bindings, arguments);
             }
         ),
     });

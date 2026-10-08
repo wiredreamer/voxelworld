@@ -29,6 +29,7 @@ enum class command : uint8 {
     tool_add_voxel,
     tool_remove_voxel,
     tool_paint,
+    tool_material_brush,
     tool_color_picker,
     tool_move_pivot,
     tool_select_box,
@@ -115,6 +116,10 @@ inline constexpr std::array shortcuts{
         plat::keyboard::keys::X, mod_none, command::tool_remove_voxel, "Tools", "X", "Remove voxel"
     },
     shortcut{plat::keyboard::keys::C, mod_none, command::tool_paint, "Tools", "C", "Paint voxel"},
+    shortcut{
+        plat::keyboard::keys::N, mod_none, command::tool_material_brush, "Tools", "N",
+        "Material brush"
+    },
     shortcut{
         plat::keyboard::keys::V, mod_none, command::tool_color_picker, "Tools", "V", "Color picker"
     },

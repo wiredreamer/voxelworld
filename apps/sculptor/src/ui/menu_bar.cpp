@@ -299,6 +299,11 @@ auto menu_bar::render(
         if (ImGui::MenuItem("Animation Timeline", "Alt+T", state_->ui.show_timeline)) {
             state_->ui.show_timeline ^= true;
         }
+        auto& renderer        = engine_->get_renderer();
+        const bool by_material = renderer.get_debug_view() == gfx::debug_view::material;
+        if (ImGui::MenuItem("Materials", nullptr, by_material)) {
+            renderer.set_debug_view(by_material ? gfx::debug_view::off : gfx::debug_view::material);
+        }
         ImGui::Separator();
         render_camera_menu_();
         ImGui::EndMenu();

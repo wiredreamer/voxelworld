@@ -251,7 +251,7 @@ export namespace vw::sculptor {
 struct add_voxel_params {
     std::string name;
     vec3i position;
-    voxel new_voxel;
+    matter new_voxel;
 };
 
 class add_voxel_operation final : public base_operation {
@@ -644,7 +644,7 @@ private:
 struct fill_voxels_params {
     std::string name;
     asset::voxel_bounds region;
-    voxel value;
+    matter value;
     asset::fill_scope scope = asset::fill_scope::every_cell;
 };
 
@@ -746,6 +746,32 @@ private:
 
     std::deque<std::unique_ptr<base_operation>> undo_;
     std::deque<std::unique_ptr<base_operation>> redo_;
+};
+
+}  // namespace vw::sculptor
+
+export namespace vw::sculptor {
+
+struct set_material_params {
+    std::string name;
+    vec3i position;
+    material made_of;
+};
+
+class set_material_operation final : public base_operation {
+public:
+    using engine_type = gfx::engine;
+
+    set_material_operation(engine_type& eng, app_state& st, const set_material_params& params);
+
+    auto execute() -> void override;
+    auto undo() -> void override;
+
+private:
+    engine_type* engine_;
+    app_state* state_;
+    set_material_params params_;
+    matter previous_;
 };
 
 }  // namespace vw::sculptor

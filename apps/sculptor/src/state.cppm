@@ -20,6 +20,7 @@ enum class tools : uint8 {
     add_voxel,
     remove_voxel,
     paint_voxel,
+    material_brush,
     color_picker,
     move_pivot,
     select_box,
@@ -159,6 +160,7 @@ struct context_state {
             case tools::add_voxel:
             case tools::remove_voxel:
             case tools::paint_voxel:
+            case tools::material_brush:
             case tools::color_picker:
             case tools::move_pivot:
             case tools::select_box: return kind() == edit_kind::model;
@@ -275,7 +277,8 @@ struct tool_state {
     tools selected_tool     = tools::add_voxel;
     tools tool_before_paste = tools::add_voxel;
     gizmo_mode gizmo        = gizmo_mode::translate;
-    voxel selected_voxel = voxels::gray[18];
+    voxel selected_voxel       = voxels::gray[18];
+    material selected_material = materials::inert;
 };
 
 struct clip_settings {

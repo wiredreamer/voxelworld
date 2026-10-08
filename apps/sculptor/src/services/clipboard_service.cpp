@@ -110,7 +110,7 @@ auto clipboard_service::fill(
             fill_voxels_params{
                 .name   = state_->edited_node(),
                 .region = state_->volume.selection->box,
-                .value  = state_->tool.selected_voxel,
+                .value  = matter{state_->tool.selected_voxel, state_->tool.selected_material},
                 .scope  = scope,
             }
         )

@@ -158,6 +158,7 @@ vec4 cachedLight(vec3 normal) {
 const uint FLAT_ONLY     = 1u << 8u;
 const uint FACE_SHIFT    = 9u;
 const uint STATE_SHIFT   = 12u;
+const uint MATERIAL_SHIFT = 18u;
 const vec3 CORNER_REACH = vec3(416.0, 224.0, 416.0);
 const vec3 CORNER_FADE  = vec3(32.0, 16.0, 32.0);
 
@@ -551,6 +552,13 @@ void main() {
         float facet = 0.7 + (0.3 * normal.y);
         vec3 marked = 0.5 + (0.5 * cos(6.2832 * ((float(code) * 0.381966) + vec3(0.0, 0.33, 0.67))));
         outColor    = shown((code == 0u ? vec3(0.5) : marked) * facet);
+        return;
+    }
+    if (ubo.debug_view == 12u) {
+        uint row    = (fragConvexMask >> MATERIAL_SHIFT) & 255u;
+        float facet = 0.7 + (0.3 * normal.y);
+        vec3 marked = 0.5 + (0.5 * cos(6.2832 * ((float(row) * 0.381966) + vec3(0.0, 0.33, 0.67))));
+        outColor    = shown((row == 0u ? vec3(0.5) : marked) * facet);
         return;
     }
 

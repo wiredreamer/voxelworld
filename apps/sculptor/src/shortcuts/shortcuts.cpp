@@ -131,6 +131,7 @@ auto tool_of(
         case command::tool_add_voxel: return tools::add_voxel;
         case command::tool_remove_voxel: return tools::remove_voxel;
         case command::tool_paint: return tools::paint_voxel;
+        case command::tool_material_brush: return tools::material_brush;
         case command::tool_color_picker: return tools::color_picker;
         case command::tool_move_pivot: return tools::move_pivot;
         case command::tool_select_box: return tools::select_box;
@@ -147,6 +148,7 @@ auto command_for_tool(
         case tools::add_voxel: return command::tool_add_voxel;
         case tools::remove_voxel: return command::tool_remove_voxel;
         case tools::paint_voxel: return command::tool_paint;
+        case tools::material_brush: return command::tool_material_brush;
         case tools::color_picker: return command::tool_color_picker;
         case tools::move_pivot: return command::tool_move_pivot;
         case tools::select_box: return command::tool_select_box;

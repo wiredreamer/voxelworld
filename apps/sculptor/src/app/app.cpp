@@ -71,6 +71,8 @@ app::app(
     tools_[tools::add_voxel]     = std::make_unique<add_voxel_tool>(eng, state_, op_manager_);
     tools_[tools::remove_voxel]  = std::make_unique<remove_voxel_tool>(eng, state_, op_manager_);
     tools_[tools::paint_voxel]   = std::make_unique<paint_tool>(eng, state_, op_manager_);
+    tools_[tools::material_brush] =
+        std::make_unique<material_brush_tool>(eng, state_, op_manager_);
     tools_[tools::color_picker]  = std::make_unique<color_picker_tool>(eng, state_, op_manager_);
     tools_[tools::move_pivot]    = std::make_unique<move_pivot_tool>(eng, state_, op_manager_);
     tools_[tools::select_box]    = std::make_unique<select_box_tool>(eng, state_, op_manager_);
@@ -412,6 +414,7 @@ auto app::run_command_(
         case command::tool_add_voxel:
         case command::tool_remove_voxel:
         case command::tool_paint:
+        case command::tool_material_brush:
         case command::tool_color_picker:
         case command::tool_move_pivot:
         case command::tool_select_box:

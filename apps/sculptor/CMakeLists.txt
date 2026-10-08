@@ -47,6 +47,7 @@ target_sources(${PROJECT_NAME}
         src/operations/move_entity_operation.cpp
         src/operations/operation_manager.cpp
         src/operations/paint_voxel_operation.cpp
+        src/operations/set_material_operation.cpp
         src/operations/remove_animation_target_operation.cpp
         src/operations/remove_keyframe_operation.cpp
         src/operations/remove_model_component_operation.cpp
@@ -88,6 +89,7 @@ target_sources(${PROJECT_NAME}
         src/tools/color_picker_tool.cpp
         src/tools/move_pivot_tool.cpp
         src/tools/paint_tool.cpp
+        src/tools/material_brush_tool.cpp
         src/tools/pose_tool.cpp
         src/tools/select_box_tool.cpp
         src/tools/place_paste_tool.cpp
