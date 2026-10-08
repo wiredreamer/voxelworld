@@ -1623,11 +1623,11 @@ auto renderer::create_descriptor_pool() -> void {
             vk::DescriptorType::eCombinedImageSampler,
             static_cast<uint32>(frames_in_flight) + post_process::sampled_image_count +
                 static_cast<uint32>(frames_in_flight * occupancy_clipmap::layout::level_count) +
-                static_cast<uint32>(light_cache::cascade_count)
+                static_cast<uint32>(light_cache::cascade_count * 2)
         },
         vk::DescriptorPoolSize{
             vk::DescriptorType::eStorageImage,
-            static_cast<uint32>(frames_in_flight * light_cache::cascade_count)
+            static_cast<uint32>(frames_in_flight * light_cache::cascade_count * 2)
         }
     };
 
@@ -2181,10 +2181,14 @@ auto renderer::update_uniform_buffer(
     ubo.sky_params =
         vec4f{ambient_settings_.sky_curve, ambient_settings_.sun_curve, 0.0f, 0.0f};
 
+    // см. docs/lighting.md#цвет-света-ламп
     ubo.lamp_params = vec4f{
-        block_light_settings_.color.x * block_light_settings_.intensity,
-        block_light_settings_.color.y * block_light_settings_.intensity,
-        block_light_settings_.color.z * block_light_settings_.intensity,
+        std::max({
+            block_light_settings_.color.x, block_light_settings_.color.y,
+            block_light_settings_.color.z
+        }) * block_light_settings_.intensity,
+        block_light_settings_.tint_saturation,
+        0.0f,
         block_light_settings_.curve,
     };
 

@@ -33,6 +33,12 @@ static_assert(sizeof(material_entry) == 16);
 
 }  // namespace
 
+auto palette_color_of(
+    color clr
+) -> vec3f {
+    return vec3f{decode(clr.r()), decode(clr.g()), decode(clr.b())};
+}
+
 palette_buffer::palette_buffer(
     vulkan_context& context,
     vk::DescriptorPool descriptor_pool,

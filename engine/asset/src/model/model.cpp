@@ -919,6 +919,7 @@ auto model::collect_emitters(
                                 .y     = static_cast<uint8>((py * ps) + ly),
                                 .z     = static_cast<uint8>((pz * ps) + lz),
                                 .level = level,
+                                .color = get_voxel((px * ps) + lx, (py * ps) + ly, (pz * ps) + lz),
                             });
                         }
                     }

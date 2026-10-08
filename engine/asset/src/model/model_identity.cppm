@@ -381,6 +381,7 @@ struct emitting_voxel {
     uint8 y     = 0;
     uint8 z     = 0;
     uint8 level = 0;
+    voxel color{};
 
     auto operator==(const emitting_voxel&) const -> bool = default;
 };

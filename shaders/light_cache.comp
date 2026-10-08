@@ -150,6 +150,71 @@ float sourcesAcrossCorners(ivec3 lowVoxel, ivec3 texel, int cascade, uint openFa
     return strongest;
 }
 
+vec4 tintAt(int cascade, ivec3 block) {
+    ivec3 lowVoxel = block << (CELL_SHIFT[cascade] + TINT_SHIFT);
+    while (!windowHolds(cascade, block << TINT_SHIFT)) {
+        if (cascade == LAST_CASCADE) {
+            return vec4(0.0);
+        }
+        cascade += 1;
+        block   = lowVoxel >> (CELL_SHIFT[cascade] + TINT_SHIFT);
+    }
+    return readTint(cascade, block & (SIDE_MASK[cascade] >> TINT_SHIFT));
+}
+
+const float TINT_REACH = 0.85;
+
+vec3 sourceColour(float packed) {
+    int bits = int(round(packed * 255.0));
+    return vec3(float(bits >> 5) / 7.0, float((bits >> 2) & 7) / 7.0, float(bits & 3) / 3.0);
+}
+
+vec3 tintFrom(int cascade, ivec3 block, float cost) {
+    vec3 beside = tintAt(cascade, block).rgb;
+    float top   = max(beside.r, max(beside.g, beside.b));
+    return top > cost ? beside * (1.0 - (cost / top)) : vec3(0.0);
+}
+
+// см. docs/lighting.md#цвет-света-ламп
+void settleTint(int cascade, ivec3 texel, bool lamps, bool wiped) {
+    ivec3 block = texel >> TINT_SHIFT;
+    ivec3 held  = block & (SIDE_MASK[cascade] >> TINT_SHIFT);
+
+    if (!lamps) {
+        writeTint(cascade, held, vec4(0.0));
+        return;
+    }
+
+    float packed = wiped ? 0.0 : readTint(cascade, held).a;
+
+    float source = 0.0;
+    if (packed > 0.0) {
+        for (int corner = 0; corner < 8; ++corner) {
+            ivec3 inside = texel + ivec3(corner & 1, (corner >> 1) & 1, corner >> 2);
+            source       = max(source, readCascade(cascade, inside & SIDE_MASK[cascade]).r);
+        }
+    }
+
+    float pace = (SOURCE_STRIDE * float(2 << CELL_SHIFT[cascade]) * TINT_REACH) / FULL_LEVEL;
+
+    vec3 level = sourceColour(packed) * source;
+    for (int z = -1; z <= 1; ++z) {
+        for (int y = -1; y <= 1; ++y) {
+            for (int x = -1; x <= 1; ++x) {
+                int steps = abs(x) + abs(y) + abs(z);
+                if (steps == 0) {
+                    continue;
+                }
+
+                float span = steps == 1 ? 1.0 : (steps == 2 ? EDGE_LENGTH : CORNER_LENGTH);
+                level      = max(level, tintFrom(cascade, block + ivec3(x, y, z), pace * span));
+            }
+        }
+    }
+
+    writeTint(cascade, held, vec4(level, packed));
+}
+
 void main() {
     ivec4 brick   = queue.bricks[gl_WorkGroupID.x];
     int cascade   = brick.w & CASCADE_BITS;
@@ -161,6 +226,10 @@ void main() {
     ivec3 stored   = texel & SIDE_MASK[cascade];
     ivec3 lowVoxel = texel << CELL_SHIFT[cascade];
     int cellVoxels = 1 << CELL_SHIFT[cascade];
+
+    if (all(equal(gl_LocalInvocationID & 1u, uvec3(0u)))) {
+        settleTint(cascade, texel, lamps, (brick.w & WIPES_SOURCES) != 0);
+    }
 
     vec4 own     = readCascade(cascade, stored);
     float source = (brick.w & WIPES_SOURCES) != 0 ? 0.0 : own.r;

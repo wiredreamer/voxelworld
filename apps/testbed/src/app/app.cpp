@@ -70,6 +70,12 @@ testbed_app::testbed_app(
         renderer.get_light_cache_settings().bricks_per_frame = bricks;
     }
 
+    if (args.text("--time")) {
+        day_night_.set_time_of_day(args.real("--time", 0.5f));
+        day_night_.set_running(false);
+        day_night_.apply(renderer);
+    }
+
     if (args.text("--sun-elevation")) {
         sun_pinned_ = true;
         const float32 elevation = math::radians(args.real("--sun-elevation", 90.0f));

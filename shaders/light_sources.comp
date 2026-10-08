@@ -9,6 +9,9 @@ layout(std430, set = 1, binding = 4) readonly buffer LightSources {
 } sources;
 
 const int LEVEL_SHIFT = 8;
+const int LEVEL_MASK  = 15;
+const int TINT_AT     = 12;
+const int TINT_MASK   = 255;
 
 void main() {
     if (gl_GlobalInvocationID.x >= uint(push.base_chunk.w)) {
@@ -20,6 +23,12 @@ void main() {
     ivec3 held  = cell.xyz & SIDE_MASK[cascade];
 
     vec4 light = readCascade(cascade, held);
-    light.r    = float(cell.w >> LEVEL_SHIFT) / FULL_LEVEL;
+    light.r    = float((cell.w >> LEVEL_SHIFT) & LEVEL_MASK) / FULL_LEVEL;
     writeCascade(cascade, held, light);
+
+    ivec3 block = (cell.xyz >> TINT_SHIFT) & (SIDE_MASK[cascade] >> TINT_SHIFT);
+
+    vec4 tint = readTint(cascade, block);
+    tint.a    = float((cell.w >> TINT_AT) & TINT_MASK) / 255.0;
+    writeTint(cascade, block, tint);
 }

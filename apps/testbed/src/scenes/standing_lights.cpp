@@ -20,7 +20,8 @@ standing_lights_scene::standing_lights_scene(
     , dynamic_lights_{args.integer("--moving-lights", 64)}
     , hamlets_{std::max(args.integer("--hamlets", 24), 1)}
     , per_frame_{args.integer("--emitters-per-frame", 1)}
-    , light_speed_{std::max(args.real("--light-speed", 1.0F), 0.0F)} {}
+    , light_speed_{std::max(args.real("--light-speed", 1.0F), 0.0F)}
+    , spread_{std::max(args.integer("--lamp-spread", radius), 1)} {}
 
 auto standing_lights_scene::spiral_point(int32 i, int32 count, float32 span) -> vec2f {
     constexpr float32 golden = 2.39996323f;
@@ -35,7 +36,7 @@ auto standing_lights_scene::spiral_point(int32 i, int32 count, float32 span) -> 
 
 auto standing_lights_scene::site(int32 i) const -> vec2i {
     const vec2f at =
-        spiral_point(i, std::max(static_lights_, 1), static_cast<float32>(radius));
+        spiral_point(i, std::max(static_lights_, 1), static_cast<float32>(spread_));
 
     return vec2i{
         static_cast<int32>(std::lround(at.x)),
@@ -91,9 +92,17 @@ auto standing_lights_scene::place_emitters_() -> void {
         if (done < per_frame_) {
             const vec2i at = site(at_site);
             if (const auto surface = stand().grid().get_surface_voxel_y(at.x, at.y)) {
+                static constexpr std::array lamp_colours{
+                    voxels::blue[8],   voxels::green[8], voxels::amber[8],
+                    voxels::red[8],    voxels::purple[8], voxels::white,
+                };
+
                 stand().grid().set_voxel(
                     {at.x * scale, (*surface + 1) * scale, at.y * scale},
-                    matter{voxels::amber[8], materials::lamp}
+                    matter{
+                        lamp_colours[static_cast<std::size_t>(at_site) % lamp_colours.size()],
+                        materials::lamp
+                    }
                 );
 
                 ++placed_;

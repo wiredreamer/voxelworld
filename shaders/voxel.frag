@@ -110,6 +110,7 @@ layout(set = 0, binding = 0) uniform UniformBufferObject {
 } ubo;
 
 layout(set = 6, binding = 0) uniform sampler3D lightCascades[3];
+layout(set = 6, binding = 1) uniform sampler3D lightTints[3];
 
 const int LIGHT_LAST_CASCADE  = 2;
 const float LIGHT_CELL[3]     = float[3](1.0, 4.0, 8.0);
@@ -130,9 +131,29 @@ vec4 cascadeLight(int cascade, vec3 fromBase, vec3 normal) {
     return texture(lightCascades[2], at);
 }
 
-const vec4 LIGHT_OPEN_SKY = vec4(0.0, 0.0, 0.0, 1.0);
+vec3 cascadeTint(int cascade, vec3 fromBase, vec3 normal) {
+    vec3 at = ((fromBase + (normal * (0.5 * LIGHT_CELL[cascade]))) / LIGHT_SPAN[cascade]) +
+              ubo.light_wrap[cascade].xyz;
 
-vec4 cachedLight(vec3 normal) {
+    if (cascade == 0) {
+        return texture(lightTints[0], at).rgb;
+    }
+    if (cascade == 1) {
+        return texture(lightTints[1], at).rgb;
+    }
+    return texture(lightTints[2], at).rgb;
+}
+
+const vec4 LIGHT_OPEN_SKY = vec4(0.0, 0.0, 0.0, 1.0);
+const float TINT_KNOWN    = 0.02;
+
+// см. docs/lighting.md#цвет-света-ламп
+struct CachedLight {
+    vec4 levels;
+    vec3 tint;
+};
+
+CachedLight cachedLight(vec3 normal) {
     vec3 fromBase = (fragPos - ubo.light_grid.xyz) * ubo.light_grid.w;
     vec3 fromEye  = abs(fromBase - ubo.occupancy_eye.xyz);
     float reach   = max(fromEye.x, max(fromEye.y, fromEye.z));
@@ -142,14 +163,18 @@ vec4 cachedLight(vec3 normal) {
     float edge  = LIGHT_EDGE[cascade];
     float outer = smoothstep(edge * LIGHT_EDGE_BLEND, edge, reach);
 
-    vec4 near = cascadeLight(cascade, fromBase, normal);
-    if (outer <= 0.0) {
-        return near;
+    vec4 levels = cascadeLight(cascade, fromBase, normal);
+    vec3 tint   = cascadeTint(cascade, fromBase, normal);
+    if (outer > 0.0) {
+        bool last = cascade == LIGHT_LAST_CASCADE;
+
+        levels = mix(levels, last ? LIGHT_OPEN_SKY : cascadeLight(cascade + 1, fromBase, normal), outer);
+        tint   = mix(tint, last ? vec3(0.0) : cascadeTint(cascade + 1, fromBase, normal), outer);
     }
 
-    vec4 far = cascade == LIGHT_LAST_CASCADE ? LIGHT_OPEN_SKY
-                                             : cascadeLight(cascade + 1, fromBase, normal);
-    return mix(near, far, outer);
+    float brightest = max(tint.r, max(tint.g, tint.b));
+    vec3 hue        = brightest < TINT_KNOWN ? vec3(1.0) : tint / brightest;
+    return CachedLight(levels, mix(vec3(1.0), hue, ubo.lamp_params.y));
 }
 
 #define OCCUPANCY_SET 5
@@ -562,7 +587,8 @@ void main() {
         return;
     }
 
-    vec4 cacheLight = cachedLight(normal);
+    CachedLight cached = cachedLight(normal);
+    vec4 cacheLight    = cached.levels;
 
     float skyReach = pow(cacheLight.a, ubo.sky_params.x);
     float sunReach = pow(cacheLight.a, ubo.sky_params.y);
@@ -580,7 +606,7 @@ void main() {
     float lampReach = pow(cacheLight.g, ubo.lamp_params.w);
 
     if (ubo.debug_view == 5u) {
-        outColor = shown(vec3(lampReach));
+        outColor = shown(cached.tint * lampReach);
         return;
     }
 
@@ -608,7 +634,7 @@ void main() {
 
     vec3 directional = calculateDirectionalLight(normal, shadow) * sunReach;
 
-    vec3 lamp = ubo.lamp_params.rgb * lampReach * aoFactor;
+    vec3 lamp = cached.tint * (ubo.lamp_params.x * lampReach * aoFactor);
 
     vec3 pointLighting = vec3(0.0);
 

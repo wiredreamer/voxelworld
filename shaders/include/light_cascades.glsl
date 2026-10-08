@@ -2,6 +2,10 @@ layout(set = 1, binding = 0, rgba8) uniform image3D cascadeNear;
 layout(set = 1, binding = 1, rgba8) uniform image3D cascadeMid;
 layout(set = 1, binding = 2, rgba8) uniform image3D cascadeFar;
 
+layout(set = 1, binding = 5, rgba8) uniform image3D tintNear;
+layout(set = 1, binding = 6, rgba8) uniform image3D tintMid;
+layout(set = 1, binding = 7, rgba8) uniform image3D tintFar;
+
 layout(push_constant) uniform LightPush {
     ivec4 base_chunk;
     ivec4 window[3];
@@ -32,5 +36,28 @@ void writeCascade(int cascade, ivec3 texel, vec4 light) {
         imageStore(cascadeMid, texel, light);
     } else {
         imageStore(cascadeFar, texel, light);
+    }
+}
+
+// см. docs/lighting.md#цвет-света-ламп
+const int TINT_SHIFT = 1;
+
+vec4 readTint(int cascade, ivec3 block) {
+    if (cascade == 0) {
+        return imageLoad(tintNear, block);
+    }
+    if (cascade == 1) {
+        return imageLoad(tintMid, block);
+    }
+    return imageLoad(tintFar, block);
+}
+
+void writeTint(int cascade, ivec3 block, vec4 tint) {
+    if (cascade == 0) {
+        imageStore(tintNear, block, tint);
+    } else if (cascade == 1) {
+        imageStore(tintMid, block, tint);
+    } else {
+        imageStore(tintFar, block, tint);
     }
 }

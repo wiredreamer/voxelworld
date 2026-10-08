@@ -29,8 +29,12 @@ struct voxel_choice {
     matter id;
 };
 
-constexpr std::array<voxel_choice, 10> voxel_menu{{
+constexpr std::array<voxel_choice, 14> voxel_menu{{
     {"glowstone (emits 14)", matter{voxels::amber[8], materials::lamp}},
+    {"blue lamp", matter{voxels::blue[8], materials::lamp}},
+    {"green lamp", matter{voxels::green[8], materials::lamp}},
+    {"purple lamp", matter{voxels::purple[8], materials::lamp}},
+    {"white lamp", matter{voxels::white, materials::lamp}},
     {"lava (emits 15)", matter{voxels::red[8], materials::fire}},
     {"crystal (glows)", matter{voxels::blue[8], materials::glow}},
     {"leaves (sway)", matter{voxels::green[4], materials::leaves}},

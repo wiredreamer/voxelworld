@@ -19,6 +19,21 @@ constexpr int32 last_pass          = 16;
 constexpr int32 wipes_sources      = 32;
 constexpr int32 near_sources       = 64;
 constexpr int32 source_level_shift = 8;
+constexpr int32 source_tint_shift  = 12;
+
+// см. docs/lighting.md#цвет-света-ламп
+auto packed_tint_of(color clr) -> int32 {
+    const vec3f shown       = palette_color_of(clr);
+    const float32 brightest = std::max({shown.x, shown.y, shown.z});
+    if (brightest <= 0.0f) {
+        return 0xFF;
+    }
+
+    const auto channel = [&](float32 value, int32 steps) -> int32 {
+        return static_cast<int32>(std::lround((value / brightest) * static_cast<float32>(steps)));
+    };
+    return (channel(shown.x, 7) << 5) | (channel(shown.y, 7) << 2) | channel(shown.z, 3);
+}
 
 auto chunk_of(vec3i voxel) -> vec3i {
     return {voxel.x >> 6, voxel.y >> 6, voxel.z >> 6};
@@ -96,6 +111,10 @@ light_cache::light_cache(
     chosen_.reserve(most_bricks_a_frame);
     source_entries_.reserve(most_sources_a_frame);
 
+    for (const voxel_type& type : default_voxel_registry().all()) {
+        tint_of_voxel_[type.id.value] = packed_tint_of(type.material.clr);
+    }
+
     create_images_();
     create_pipeline_(occupancy_layout);
     create_sets_();
@@ -117,6 +136,10 @@ light_cache::~light_cache() {
     device.destroySampler(sampler_);
 
     for (auto& cascade : cascades_) {
+        device.destroyImageView(cascade.tint_view);
+        device.destroyImage(cascade.tint_image);
+        device.freeMemory(cascade.tint_memory);
+
         device.destroyImageView(cascade.view);
         device.destroyImage(cascade.image);
         device.freeMemory(cascade.memory);
@@ -126,10 +149,7 @@ light_cache::~light_cache() {
 auto light_cache::create_images_() -> void {
     const vk::Device device = context_->get_device();
 
-    for (std::size_t index = 0; index < cascades_.size(); ++index) {
-        auto& cascade   = cascades_[index];
-        const auto side = static_cast<uint32>(shapes[index].texture_side);
-
+    const auto make = [&](uint32 side, vk::Image& image, vk::DeviceMemory& memory, vk::ImageView& view) {
         vk::ImageCreateInfo image_info{};
         image_info.imageType     = vk::ImageType::e3D;
         image_info.extent        = vk::Extent3D{side, side, side};
@@ -143,9 +163,9 @@ auto light_cache::create_images_() -> void {
         image_info.samples     = vk::SampleCountFlagBits::e1;
         image_info.sharingMode = vk::SharingMode::eExclusive;
 
-        cascade.image = vk_must(device.createImage(image_info), "create light cascade");
+        image = vk_must(device.createImage(image_info), "create light cascade");
 
-        const vk::MemoryRequirements needs = device.getImageMemoryRequirements(cascade.image);
+        const vk::MemoryRequirements needs = device.getImageMemoryRequirements(image);
 
         vk::MemoryAllocateInfo alloc_info{};
         alloc_info.allocationSize  = needs.size;
@@ -154,16 +174,24 @@ auto light_cache::create_images_() -> void {
             vk::MemoryPropertyFlagBits::eDeviceLocal
         );
 
-        cascade.memory = vk_must(device.allocateMemory(alloc_info), "allocate light cascade");
-        vk_must(device.bindImageMemory(cascade.image, cascade.memory, 0), "bind light cascade");
+        memory = vk_must(device.allocateMemory(alloc_info), "allocate light cascade");
+        vk_must(device.bindImageMemory(image, memory, 0), "bind light cascade");
 
         vk::ImageViewCreateInfo view_info{};
-        view_info.image            = cascade.image;
+        view_info.image            = image;
         view_info.viewType         = vk::ImageViewType::e3D;
         view_info.format           = format;
         view_info.subresourceRange = whole_image();
 
-        cascade.view = vk_must(device.createImageView(view_info), "create light cascade view");
+        view = vk_must(device.createImageView(view_info), "create light cascade view");
+    };
+
+    for (std::size_t index = 0; index < cascades_.size(); ++index) {
+        auto& cascade   = cascades_[index];
+        const auto side = static_cast<uint32>(shapes[index].texture_side);
+
+        make(side, cascade.image, cascade.memory, cascade.view);
+        make(side >> tint_shift, cascade.tint_image, cascade.tint_memory, cascade.tint_view);
     }
 
     vk::SamplerCreateInfo sampler_info{};
@@ -181,23 +209,30 @@ auto light_cache::create_images_() -> void {
 auto light_cache::create_pipeline_(vk::DescriptorSetLayout occupancy_layout) -> void {
     const vk::Device device = context_->get_device();
 
-    vk::DescriptorSetLayoutBinding sampled{};
-    sampled.binding         = 0;
-    sampled.descriptorType  = vk::DescriptorType::eCombinedImageSampler;
-    sampled.descriptorCount = static_cast<uint32>(cascade_count);
-    sampled.stageFlags      = vk::ShaderStageFlagBits::eFragment;
+    std::array<vk::DescriptorSetLayoutBinding, 2> sampled{};
+    for (uint32 kind = 0; kind < sampled.size(); ++kind) {
+        sampled[kind].binding         = kind;
+        sampled[kind].descriptorType  = vk::DescriptorType::eCombinedImageSampler;
+        sampled[kind].descriptorCount = static_cast<uint32>(cascade_count);
+        sampled[kind].stageFlags      = vk::ShaderStageFlagBits::eFragment;
+    }
 
     sampled_layout_ = vk_must(
-        device.createDescriptorSetLayout({.bindingCount = 1, .pBindings = &sampled}),
+        device.createDescriptorSetLayout({
+            .bindingCount = static_cast<uint32>(sampled.size()),
+            .pBindings    = sampled.data(),
+        }),
         "create light cache sampled layout"
     );
 
-    std::array<vk::DescriptorSetLayoutBinding, cascade_count + 2> written{};
+    std::array<vk::DescriptorSetLayoutBinding, (cascade_count * 2) + 2> written{};
     for (uint32 cascade = 0; cascade < cascade_count; ++cascade) {
-        written[cascade].binding         = cascade;
-        written[cascade].descriptorType  = vk::DescriptorType::eStorageImage;
-        written[cascade].descriptorCount = 1;
-        written[cascade].stageFlags      = vk::ShaderStageFlagBits::eCompute;
+        for (const uint32 binding : {cascade, tint_binding + cascade}) {
+            written[binding].binding         = binding;
+            written[binding].descriptorType  = vk::DescriptorType::eStorageImage;
+            written[binding].descriptorCount = 1;
+            written[binding].stageFlags      = vk::ShaderStageFlagBits::eCompute;
+        }
     }
     for (uint32 list = cascade_count; list < cascade_count + 2; ++list) {
         written[list].binding         = list;
@@ -260,23 +295,38 @@ auto light_cache::create_sets_() -> void {
     )[0];
 
     std::array<vk::DescriptorImageInfo, cascade_count> sampled{};
+    std::array<vk::DescriptorImageInfo, cascade_count> sampled_tints{};
     std::array<vk::DescriptorImageInfo, cascade_count> written{};
+    std::array<vk::DescriptorImageInfo, cascade_count> written_tints{};
     for (std::size_t cascade = 0; cascade < sampled.size(); ++cascade) {
         sampled[cascade].sampler     = sampler_;
         sampled[cascade].imageView   = cascades_[cascade].view;
         sampled[cascade].imageLayout = vk::ImageLayout::eGeneral;
 
+        sampled_tints[cascade].sampler     = sampler_;
+        sampled_tints[cascade].imageView   = cascades_[cascade].tint_view;
+        sampled_tints[cascade].imageLayout = vk::ImageLayout::eGeneral;
+
         written[cascade].imageView   = cascades_[cascade].view;
         written[cascade].imageLayout = vk::ImageLayout::eGeneral;
+
+        written_tints[cascade].imageView   = cascades_[cascade].tint_view;
+        written_tints[cascade].imageLayout = vk::ImageLayout::eGeneral;
     }
 
-    vk::WriteDescriptorSet sampled_write{};
-    sampled_write.dstSet          = sampled_set_;
-    sampled_write.dstBinding      = 0;
-    sampled_write.descriptorType  = vk::DescriptorType::eCombinedImageSampler;
-    sampled_write.descriptorCount = static_cast<uint32>(sampled.size());
-    sampled_write.pImageInfo      = sampled.data();
-    device.updateDescriptorSets(sampled_write, nullptr);
+    std::array<vk::WriteDescriptorSet, 2> sampled_writes{};
+    sampled_writes[0].dstSet          = sampled_set_;
+    sampled_writes[0].dstBinding      = 0;
+    sampled_writes[0].descriptorType  = vk::DescriptorType::eCombinedImageSampler;
+    sampled_writes[0].descriptorCount = static_cast<uint32>(sampled.size());
+    sampled_writes[0].pImageInfo      = sampled.data();
+
+    sampled_writes[1].dstSet          = sampled_set_;
+    sampled_writes[1].dstBinding      = 1;
+    sampled_writes[1].descriptorType  = vk::DescriptorType::eCombinedImageSampler;
+    sampled_writes[1].descriptorCount = static_cast<uint32>(sampled_tints.size());
+    sampled_writes[1].pImageInfo      = sampled_tints.data();
+    device.updateDescriptorSets(sampled_writes, nullptr);
 
     std::array<vk::DescriptorSetLayout, frames_in_flight> layouts{};
     layouts.fill(written_layout_);
@@ -303,13 +353,20 @@ auto light_cache::create_sets_() -> void {
         sources_info.offset = 0;
         sources_info.range  = vk::DeviceSize{most_sources_a_frame} * sizeof(vec4<int32>);
 
-        std::array<vk::WriteDescriptorSet, cascade_count + 2> writes{};
+        std::array<vk::WriteDescriptorSet, (cascade_count * 2) + 2> writes{};
         for (uint32 cascade = 0; cascade < cascade_count; ++cascade) {
             writes[cascade].dstSet          = sets[frame];
             writes[cascade].dstBinding      = cascade;
             writes[cascade].descriptorType  = vk::DescriptorType::eStorageImage;
             writes[cascade].descriptorCount = 1;
             writes[cascade].pImageInfo      = &written[cascade];
+
+            auto& tint           = writes[tint_binding + cascade];
+            tint.dstSet          = sets[frame];
+            tint.dstBinding      = tint_binding + cascade;
+            tint.descriptorType  = vk::DescriptorType::eStorageImage;
+            tint.descriptorCount = 1;
+            tint.pImageInfo      = &written_tints[cascade];
         }
         writes[cascade_count].dstSet          = sets[frame];
         writes[cascade_count].dstBinding      = cascade_count;
@@ -333,7 +390,7 @@ auto light_cache::make_ready(vk::CommandBuffer cmd) -> void {
     }
     ready_ = true;
 
-    for (const auto& cascade : cascades_) {
+    const auto start = [&](vk::Image image, const std::array<float32, 4>& filled) {
         vk::ImageMemoryBarrier to_general{};
         to_general.srcAccessMask       = {};
         to_general.dstAccessMask       = vk::AccessFlagBits::eTransferWrite;
@@ -341,7 +398,7 @@ auto light_cache::make_ready(vk::CommandBuffer cmd) -> void {
         to_general.newLayout           = vk::ImageLayout::eGeneral;
         to_general.srcQueueFamilyIndex = vk::QueueFamilyIgnored;
         to_general.dstQueueFamilyIndex = vk::QueueFamilyIgnored;
-        to_general.image               = cascade.image;
+        to_general.image               = image;
         to_general.subresourceRange    = whole_image();
 
         cmd.pipelineBarrier(
@@ -349,8 +406,14 @@ auto light_cache::make_ready(vk::CommandBuffer cmd) -> void {
             nullptr, nullptr, to_general
         );
 
-        const vk::ClearColorValue open_sky{std::array<float32, 4>{0.0f, 0.0f, 0.0f, 1.0f}};
-        cmd.clearColorImage(cascade.image, vk::ImageLayout::eGeneral, open_sky, whole_image());
+        cmd.clearColorImage(
+            image, vk::ImageLayout::eGeneral, vk::ClearColorValue{filled}, whole_image()
+        );
+    };
+
+    for (const auto& cascade : cascades_) {
+        start(cascade.image, {0.0f, 0.0f, 0.0f, 1.0f});
+        start(cascade.tint_image, {0.0f, 0.0f, 0.0f, 0.0f});
     }
 
     cmd.pipelineBarrier(
@@ -573,7 +636,7 @@ auto light_cache::seed_sources_(int32 cascade, vec3i brick) -> void {
     }
 }
 
-auto light_cache::strongest_source_in_(int32 cascade, vec3i cell) const -> uint8 {
+auto light_cache::strongest_source_in_(int32 cascade, vec3i cell) const -> held_source {
     const int32 shift = shapes[static_cast<std::size_t>(cascade)].cell_shift;
 
     const vec3i low{cell.x << shift, cell.y << shift, cell.z << shift};
@@ -581,7 +644,7 @@ auto light_cache::strongest_source_in_(int32 cascade, vec3i cell) const -> uint8
 
     const auto known = sources_.find(chunk);
     if (known == sources_.end()) {
-        return 0;
+        return {};
     }
 
     const asset::emitting_voxel first{
@@ -590,12 +653,12 @@ auto light_cache::strongest_source_in_(int32 cascade, vec3i cell) const -> uint8
         .z = static_cast<uint8>(low.z - (chunk.z * chunk_voxels)),
     };
 
-    uint8 strongest = 0;
+    held_source strongest{};
     for (const asset::emitting_voxel& at :
          std::ranges::equal_range(known->second, page_key_of(first), {}, page_key_of)) {
         if ((at.x >> shift) == (first.x >> shift) && (at.y >> shift) == (first.y >> shift) &&
-            (at.z >> shift) == (first.z >> shift)) {
-            strongest = std::max(strongest, at.level);
+            (at.z >> shift) == (first.z >> shift) && at.level > strongest.level) {
+            strongest = {.level = at.level, .color = at.color};
         }
     }
     return strongest;
@@ -628,10 +691,31 @@ auto light_cache::flush_sources_(frame_state& current) -> void {
             continue;
         }
 
-        const int32 level = strongest_source_in_(touched.cascade, touched.cell);
+        const held_source source = strongest_source_in_(touched.cascade, touched.cell);
+
+        // см. docs/lighting.md#цвет-света-ламп
+        const vec3i block_low{
+            (touched.cell.x >> tint_shift) << tint_shift,
+            (touched.cell.y >> tint_shift) << tint_shift,
+            (touched.cell.z >> tint_shift) << tint_shift
+        };
+        held_source in_block{};
+        for (int32 corner = 0; corner < 8; ++corner) {
+            const held_source beside = strongest_source_in_(
+                touched.cascade,
+                {block_low.x + (corner & 1), block_low.y + ((corner >> 1) & 1),
+                 block_low.z + (corner >> 2)}
+            );
+            if (beside.level > in_block.level) {
+                in_block = beside;
+            }
+        }
+        const int32 block_tint = in_block.level > 0 ? tint_of_voxel_[in_block.color.value] : 0;
+
         source_entries_.push_back({
             touched.cell.x, touched.cell.y, touched.cell.z,
-            touched.cascade | (level << source_level_shift)
+            touched.cascade | (int32{source.level} << source_level_shift) |
+                (block_tint << source_tint_shift)
         });
     }
     touched_cells_.swap(late_cells_);

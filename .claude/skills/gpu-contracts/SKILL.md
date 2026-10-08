@@ -395,8 +395,9 @@ std430 нет диагностики на расхождение: ошибки �
 - **GLSL:** `shaders/include/light_cascades.glsl` — `LightPush`, три хранимых
   образа, `CELL_SHIFT`, `SIDE_MASK`; `shaders/light_cache.comp` — `LightBricks`,
   `BRICK_TEXELS`; `shaders/light_sources.comp` — `LightSources`; `voxel.frag` —
-  `lightCascades[3]` (`set = 6`), `cascadeLight`, `cachedLight`, `LIGHT_CELL`,
-  `LIGHT_SPAN`, `LIGHT_EDGE`.
+  `lightCascades[3]` и `lightTints[3]` (`set = 6`, привязки 0 и 1),
+  `cascadeLight`, `cascadeTint`, `cachedLight`, `LIGHT_CELL`, `LIGHT_SPAN`,
+  `LIGHT_EDGE`.
 - **Менять вместе:**
   - число каскадов, сторона и клетка: `cascade_count`/`shapes` ↔
     `CELL_SHIFT`/`SIDE_MASK`/`LAST_CASCADE` в compute ↔
@@ -411,9 +412,27 @@ std430 нет диагностики на расхождение: ошибки �
     `wipes_sources`, `near_sources`, в compute — те же имена заглавными; одна
     рабочая группа на запись (`dispatch(блоков, 1, 1)`, `local_size` 8³);
   - запись списка излучателей `ivec4` для `light_sources.comp`: xyz — клетка в
-    текселях своего каскада, w — каскад в младших трёх битах, уровень 0–15 со
-    сдвигом 8 (`source_level_shift` ↔ `LEVEL_SHIFT`); рабочая группа — 64 записи,
-    число записей едет в `base_chunk.w`;
+    текселях своего каскада, w — каскад в младших трёх битах, уровень 0–15 в
+    битах 11:8 (`source_level_shift` ↔ `LEVEL_SHIFT`, `LEVEL_MASK`), цвет
+    БЛОКА 3:3:2 в битах 19:12 (`source_tint_shift` ↔ `TINT_AT`, `TINT_MASK`;
+    упаковка `packed_tint_of` ↔ `sourceColour` в `light_cache.comp`). Цвет
+    у всех записей одного блока 2³ обязан совпадать — они пишут одну клетку
+    без порядка; рабочая группа — 64 записи, число записей едет в
+    `base_chunk.w`;
+  - оттенок: текстура `rgba8` на каскад со стороной вдвое меньше
+    (`light_cache::tint_shift` ↔ `TINT_SHIFT`), клетка — блок 2³ клеток света.
+    `rgb` — три уровня света по компонентам, пишет только `settleTint` в
+    `light_cache.comp`, одно вызывающее на блок (чётные локальные координаты;
+    `local_size` обязан оставаться кратным блоку). `a` — цвет источника блока
+    3:3:2 как `байт / 255`, пишет только `light_sources.comp` (и обнуляет флаг
+    32). Очистка — нули. Фрагмент читает `.rgb` теми же координатами, что
+    уровень, и делит на большую компоненту;
+  - `lamp_params` кадрового uniform: `x` — яркость света ламп, `y` —
+    насыщенность оттенка, `z` свободна, `w` — степень кривой
+    (`update_uniform_buffer` ↔ `cachedLight` и `main` в `voxel.frag`);
+  - пул дескрипторов рендерера (`renderer.cpp`) считает хранимые и выбираемые
+    образы кеша поштучно: по два на каскад. Добавил текстуру — подними счёт,
+    иначе Release молча работает, а валидация в Debug ругается на пул;
   - `light_cache_push` (64 байта): `base_chunk` — чанк камеры, `window[k]` —
     угол окна каскада в его текселях. Блок объявлен один раз, в
     `include/light_cascades.glsl`, вместе с образами, `CELL_SHIFT`, `SIDE_MASK`
@@ -436,8 +455,9 @@ std430 нет диагностики на расхождение: ошибки �
   - образы живут в раскладке `eGeneral` всегда: и хранимый, и выбираемый
     дескриптор объявлены с ней.
 - **Наборы:** compute — `set = 0` занятость, `set = 1`: 0–2 каскады, 3 очередь
-  блоков, 4 список излучателей (на кадр в полёте); раскладка у обоих конвейеров
-  одна. Фрагмент — `set = 6`, один набор на все кадры.
+  блоков, 4 список излучателей, 5–7 оттенки (`light_cache::tint_binding`; на
+  кадр в полёте); раскладка у обоих конвейеров одна. Фрагмент — `set = 6`:
+  привязка 0 — уровни, 1 — оттенки, один набор на все кадры.
 - **Сторож:** `static_assert` на `light_cache_push` (16, размер 64) и на
   смещения 880, 896, размер 960 кадрового uniform. Шейдеры не сверяет ничто:
   правку заливки проверяет глаз по режимам просмотра `sky light` и `block light`.
@@ -536,7 +556,7 @@ std430 нет диагностики на расхождение: ошибки �
 | | 3 | набор источников и пятен | см. выше |
 | | 4 | `palette_buffer` | `PaletteBuffer` |
 | | 5 | `occupancy_clipmap::get_descriptor_set` | `OccupancyParams`, `occupancyBricks[3]`, `ModelOccupancy` |
-| | 6 | `light_cache::get_sampled_set` | `lightCascades[3]` |
+| | 6 | `light_cache::get_sampled_set` | `lightCascades[3]`, `lightTints[3]` |
 | | push | `world_push_constant_data` (32 байта, вершинный шаг): ветер, затем сетка | `WorldPush` |
 | теневой | 0 | `shadow_uniform_buffer_object` | `ShadowUniformBufferObject` |
 | | 1 | тот же набор квадов | те же три буфера |

@@ -66,6 +66,7 @@ private:
     int32 per_frame_      = 1;
 
     float32 light_speed_ = 1.0F;
+    int32 spread_        = radius;
 
     uint64 placed_  = 0;
     bool seeded_    = false;

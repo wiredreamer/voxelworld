@@ -69,6 +69,10 @@ public:
 
     static constexpr vk::Format format = vk::Format::eR8G8B8A8Unorm;
 
+    // см. docs/lighting.md#цвет-света-ламп
+    static constexpr int32 tint_shift    = 1;
+    static constexpr uint32 tint_binding = 5;
+
     light_cache(
         vulkan_context& context, vk::DescriptorPool descriptor_pool,
         vk::DescriptorSetLayout occupancy_layout
@@ -123,6 +127,10 @@ private:
         vk::DeviceMemory memory = nullptr;
         vk::ImageView view      = nullptr;
 
+        vk::Image tint_image         = nullptr;
+        vk::DeviceMemory tint_memory = nullptr;
+        vk::ImageView tint_view      = nullptr;
+
         vec3i origin{};
         bool placed = false;
         std::vector<slot> slots;
@@ -135,6 +143,11 @@ private:
         vk::DescriptorSet set = nullptr;
         uint32 bricks         = 0;
         uint32 source_cells   = 0;
+    };
+
+    struct held_source {
+        uint8 level = 0;
+        voxel color{};
     };
 
     struct source_cell {
@@ -159,7 +172,7 @@ private:
     auto seed_sources_(int32 cascade, vec3i brick) -> void;
     auto flush_sources_(frame_state& current) -> void;
     auto refresh_source_reach_() -> void;
-    [[nodiscard]] auto strongest_source_in_(int32 cascade, vec3i cell) const -> uint8;
+    [[nodiscard]] auto strongest_source_in_(int32 cascade, vec3i cell) const -> held_source;
     [[nodiscard]] static auto slot_index_(int32 cascade, vec3i brick) -> std::size_t;
 
     vulkan_context* context_;
@@ -168,6 +181,7 @@ private:
     shader compute_;
     shader scatter_;
     material_levels emission_;
+    std::array<int32, voxel_type_capacity> tint_of_voxel_{};
 
     vk::Sampler sampler_                     = nullptr;
     vk::DescriptorSetLayout sampled_layout_  = nullptr;

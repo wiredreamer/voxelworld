@@ -130,6 +130,7 @@ auto debug_window::render_lighting_panel() -> void {
         ImGui::SliderFloat("curve", &lamp.curve, 0.25f, 4.0f, "%.2f");
 
         ImGui::SliderFloat("glow", &lamp.glow, 0.0f, 3.0f, "%.2f");
+        ImGui::SliderFloat("lamp colour saturation", &lamp.tint_saturation, 0.0f, 1.0f, "%.2f");
 
         if (reset_button("reset##lamp")) {
             lamp = block_light_settings{};

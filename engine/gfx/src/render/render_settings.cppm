@@ -175,6 +175,8 @@ struct block_light_settings {
     float32 curve{2.0f};
 
     float32 glow{1.0f};
+
+    float32 tint_saturation{0.6f};
 };
 
 struct cluster_settings {

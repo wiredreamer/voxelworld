@@ -59,9 +59,9 @@ TEST_CASE("every lamp is named once with the level of its type", "[model][light]
     m.collect_emitters(emission_of_lamps(), found);
 
     const std::vector<asset::emitting_voxel> expected{
-        {.x = 9, .y = 2, .z = 3, .level = 14},
-        {.x = 40, .y = 17, .z = 8, .level = 14},
-        {.x = 63, .y = 63, .z = 63, .level = 9},
+        {.x = 9, .y = 2, .z = 3, .level = 14, .color = voxels::amber[8]},
+        {.x = 40, .y = 17, .z = 8, .level = 14, .color = voxels::amber[8]},
+        {.x = 63, .y = 63, .z = 63, .level = 9, .color = voxels::blue[8]},
     };
     REQUIRE(sorted(found) == sorted(expected));
 }
@@ -85,6 +85,6 @@ TEST_CASE("a page filled with one lamp type names all of its voxels", "[model][l
 
     REQUIRE(found.size() == 512);
     REQUIRE(std::ranges::all_of(found, [](const asset::emitting_voxel& at) {
-        return at.level == 9 && at.x >= 16 && at.x < 24 && at.y < 8 && at.z >= 8 && at.z < 16;
+        return at.level == 9 && at.color == voxels::blue[8] && at.x >= 16 && at.x < 24 && at.y < 8 && at.z >= 8 && at.z < 16;
     }));
 }

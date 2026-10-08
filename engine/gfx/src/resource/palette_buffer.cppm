@@ -16,6 +16,9 @@ export namespace vw::gfx {
 
 class vulkan_context;
 
+// см. docs/lighting.md#палитра
+[[nodiscard]] auto palette_color_of(color clr) -> vec3f;
+
 class palette_buffer {
 public:
     palette_buffer(
