@@ -41,6 +41,7 @@ target_sources(vw_gfx
             src/render/frame_probe.cppm
             src/render/shadow_map.cppm
             src/render/cull_pipeline.cppm
+            src/render/occluder_pass.cppm
             src/render/grass_renderer.cppm
             src/render/post_process.cppm
             src/render/occupancy_view.cppm
@@ -83,6 +84,7 @@ target_sources(vw_gfx
         src/render/frame_probe.cpp
         src/render/shadow_map.cpp
         src/render/cull_pipeline.cpp
+        src/render/occluder_pass.cpp
         src/render/grass_renderer.cpp
         src/render/post_process.cpp
         src/render/occupancy_view.cpp

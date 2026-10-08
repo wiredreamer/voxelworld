@@ -29,6 +29,8 @@ renderer::renderer(
         std::make_unique<shader>(*context_, "shaders/voxel.vert.spv", shader_type::VERTEX);
     fragment_shader_ =
         std::make_unique<shader>(*context_, "shaders/voxel.frag.spv", shader_type::FRAGMENT);
+    mark_fragment_shader_ =
+        std::make_unique<shader>(*context_, "shaders/mark.frag.spv", shader_type::FRAGMENT);
 
     debug_vertex_shader_ =
         std::make_unique<shader>(*context_, "shaders/debug.vert.spv", shader_type::VERTEX);
@@ -85,7 +87,13 @@ renderer::renderer(
     gpu_timer_   = std::make_unique<gpu_timer>(*context_, get_frames_in_flight());
     frame_probe_ = std::make_unique<frame_probe>(*context_, get_frames_in_flight());
 
-    cull_pipeline_ = std::make_unique<cull_pipeline>(*context_, descriptor_pool_);
+    occluders_ = std::make_unique<occluder_pass>(
+        *context_, descriptor_pool_, occupancy_->get_descriptor_set_layout()
+    );
+
+    cull_pipeline_ = std::make_unique<cull_pipeline>(
+        *context_, descriptor_pool_, occluders_->get_depths(), occluders_->get_depths_bytes()
+    );
 
     combined_buffer_pool_ = std::make_unique<combined_buffer_pool_type>(
         *context_,
@@ -149,6 +157,7 @@ renderer::~renderer() {
     grass_.reset();
     combined_buffer_pool_.reset();
     cull_pipeline_.reset();
+    occluders_.reset();
     frame_probe_.reset();
     gpu_timer_.reset();
     palette_buffer_.reset();
@@ -631,6 +640,42 @@ auto renderer::render(
             );
         }
 
+        // см. docs/rendering.md#отсев-по-заслонам
+        const bool world_known =
+            world.system<ecs::world_grid_system>().grid() != nullptr && !camera.is_orthographic();
+        const occlusion_mode occlusion =
+            world_known ? occlusion_settings_.mode : occlusion_mode::off;
+        frame_probe_->set_watching_hidden(occlusion == occlusion_mode::check);
+        checks_occlusion_ = occlusion == occlusion_mode::check;
+
+        const float32 span_high = std::tan(math::radians(camera.get_fov() * 0.5f));
+        const float32 span_wide = span_high * camera.get_aspect_ratio();
+        const vec3f ahead       = camera.get_forward();
+        const vec3f aside       = camera.get_right();
+        const vec3f above       = camera.get_up();
+
+        if (occlusion != occlusion_mode::off) {
+            const float32 units = occupancy_->world_units_per_voxel();
+            const vec4f grid    = grid_push_();
+            const vec3f eye     = camera.get_position();
+
+            occluders_->dispatch(
+                cmd, occupancy_->get_descriptor_set(current_frame_),
+                occluder_view{
+                    .eye_voxels = {(eye.x - grid.x) / units, (eye.y - grid.y) / units,
+                                   (eye.z - grid.z) / units},
+                    .world_units_per_voxel = units,
+                    .forward               = ahead,
+                    .right                 = aside * span_wide,
+                    .up                    = above * span_high,
+                    .base_chunk            = occupancy_->centre_chunk(),
+                    .thickness_voxels      = occlusion_settings_.thickness_voxels,
+                    .most_steps            = occlusion_settings_.most_steps,
+                },
+                current_frame_
+            );
+        }
+
         const vw::spatial::frustum& view_frustum = camera.get_frustum();
         const std::span<const vw::spatial::frustum> cull_cascades =
             shadows_on ? std::span<const vw::spatial::frustum>{cascade_frustums}
@@ -644,6 +689,14 @@ auto renderer::render(
             cull_rings{
                 .origin      = camera.get_position(),
                 .first_width = chunk_voxels * occupancy_->world_units_per_voxel(),
+            },
+            cull_occlusion{
+                .mode            = occlusion,
+                .eye             = camera.get_position(),
+                .forward         = ahead,
+                .right_over_span = aside * (1.0f / span_wide),
+                .up_over_span    = above * (1.0f / span_high),
+                .nearest_depth   = camera.get_near(),
             }
         );
 
@@ -1341,6 +1394,12 @@ auto renderer::create_graphics_pipeline() -> void {
     graphics_pipeline_ =
         vk_must(context_->get_device().createGraphicsPipeline(nullptr, pipeline_info), "create graphics pipeline");
 
+    // см. docs/rendering.md#отсев-по-заслонам
+    shader_stages[1]  = mark_fragment_shader_->get_stage_info();
+    marked_pipeline_ =
+        vk_must(context_->get_device().createGraphicsPipeline(nullptr, pipeline_info), "create marked pipeline");
+    shader_stages[1] = fragment_shader_->get_stage_info();
+
     // см. docs/rendering.md#приборы-кадра
     color_blend_attachment.blendEnable         = vk::True;
     color_blend_attachment.srcColorBlendFactor = vk::BlendFactor::eOne;
@@ -1641,7 +1700,7 @@ auto renderer::create_descriptor_pool() -> void {
     std::array pool_sizes = {
         vk::DescriptorPoolSize{
             vk::DescriptorType::eUniformBuffer,
-            static_cast<uint32>(frames_in_flight * 9)
+            static_cast<uint32>(frames_in_flight * 10)
         },
         vk::DescriptorPoolSize{vk::DescriptorType::eStorageBuffer, STORAGE_BUFFER_COUNT},
         vk::DescriptorPoolSize{
@@ -1800,6 +1859,10 @@ auto renderer::cleanup_descriptor_set_layouts() -> void {
 }
 
 auto renderer::cleanup_pipelines() -> void {
+    if (marked_pipeline_ != nullptr) {
+        context_->get_device().destroyPipeline(marked_pipeline_);
+        marked_pipeline_ = nullptr;
+    }
     if (graphics_pipeline_ != nullptr) {
         context_->get_device().destroyPipeline(graphics_pipeline_);
         graphics_pipeline_ = nullptr;
@@ -2153,6 +2216,41 @@ auto renderer::render_world(
                 sizeof(draw_command));
             draw_call_count_++;
         }
+    }
+
+    // см. docs/rendering.md#отсев-по-заслонам
+    if (checks_occlusion_ && index_bound) {
+        command_buffers_[current_frame_].bindPipeline(
+            vk::PipelineBindPoint::eGraphics, marked_pipeline_
+        );
+
+        frame_probe_->begin_hidden(command_buffers_[current_frame_]);
+        for (const auto& buffer : buffers) {
+            const uint32 max_draws = buffer->is_empty() ? 0 : buffer->get_draw_command_count();
+            if (max_draws == 0) {
+                continue;
+            }
+
+            const vk::DescriptorSet buffer_descriptor_set =
+                buffer->get_descriptor_set(current_frame_);
+            command_buffers_[current_frame_].bindDescriptorSets(
+                vk::PipelineBindPoint::eGraphics, pipeline_layout_, 1, buffer_descriptor_set,
+                nullptr
+            );
+            command_buffers_[current_frame_].bindVertexBuffers(
+                0, buffer->get_instance_index_buffer(), vk::DeviceSize{0}
+            );
+            command_buffers_[current_frame_].drawIndexedIndirectCount(
+                buffer->get_culled_indirect_buffer(),
+                vk::DeviceSize{combined_buffer::cull_hidden_region} * max_draws *
+                    sizeof(draw_command),
+                buffer->get_count_buffer(),
+                combined_buffer::cull_hidden_region * sizeof(uint32), max_draws,
+                sizeof(draw_command)
+            );
+            draw_call_count_++;
+        }
+        frame_probe_->end_hidden(command_buffers_[current_frame_]);
     }
 
     if (current_render_mode_ == render_mode::lit && !counts_overdraw) {

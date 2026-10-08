@@ -66,6 +66,16 @@ auto debug_window::render_view_panel() -> void {
 
     ImGui::Checkbox("colliders", &show_colliders_);
 
+    // см. docs/rendering.md#отсев-по-заслонам
+    static constexpr std::array<const char*, 3> occlusion_names{"off", "on", "check"};
+    auto occlusion = static_cast<int32>(renderer.get_occlusion_settings().mode);
+    if (ImGui::Combo(
+            "occlusion", &occlusion, occlusion_names.data(),
+            static_cast<int32>(occlusion_names.size())
+        )) {
+        renderer.get_occlusion_settings().mode = static_cast<occlusion_mode>(occlusion);
+    }
+
     bool chunk_cull = renderer.is_chunk_cull_enabled();
     if (ImGui::Checkbox("chunk cull", &chunk_cull)) {
         renderer.set_chunk_cull_enabled(chunk_cull);

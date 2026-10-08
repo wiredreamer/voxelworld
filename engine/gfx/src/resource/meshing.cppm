@@ -74,7 +74,14 @@ struct mesh {
     vw::asset::chunk_links links;
 
     int32 lod_step = 1;
+
+    // см. docs/rendering.md#тесные-коробки
+    vec3i reach_min{};
+    vec3i reach_max{};
+    bool sways = false;
 };
+
+[[nodiscard]] auto measured(mesh held) -> mesh;
 
 struct mesh_options {
     bool build_links = false;

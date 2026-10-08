@@ -1,0 +1,117 @@
+#version 450
+
+#define OCCUPANCY_SET 0
+#include "occupancy.glsl"
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(set = 1, binding = 0) uniform OccluderParams {
+    vec4 eye;
+    vec4 forward;
+    vec4 right;
+    vec4 up;
+    ivec4 base_chunk;
+    ivec4 rays;
+    ivec4 stretches;
+} params;
+
+layout(std430, set = 1, binding = 1) writeonly buffer OccluderDepths {
+    float depths[];
+} occluders;
+
+const float NO_OCCLUDER   = 3.0e38;
+const uint SOLID_BRICK    = 0xFFu;
+const float BRICK_VOXELS  = 2.0;
+const float CHUNK_VOXELS  = 64.0;
+const ivec3 FINE_WINDOW   = ivec3(16, 8, 16);
+
+// см. docs/rendering.md#отсев-по-заслонам
+float solidAlong(vec3 origin, vec3 direction, float thick, int most, float from, float until) {
+    ivec3 baseVoxel = params.base_chunk.xyz << OCCUPANCY_CHUNK_SHIFT;
+
+    float travelled  = from;
+    float solidSince = -1.0;
+    bool seenOpen    = from > 0.0;
+
+    for (int taken = 0; taken < most; ++taken) {
+        if (travelled >= until && solidSince < 0.0) {
+            return NO_OCCLUDER;
+        }
+
+        vec3 at     = origin + (direction * travelled);
+        ivec3 voxel = baseVoxel + ivec3(floor(at));
+        ivec3 chunk = voxel >> OCCUPANCY_CHUNK_SHIFT;
+
+        ivec3 inside = chunk - occupancy.origin[0].xyz;
+        if (any(lessThan(inside, ivec3(0))) || any(greaterThanEqual(inside, FINE_WINDOW))) {
+            return NO_OCCLUDER;
+        }
+
+        float box  = CHUNK_VOXELS;
+        bool solid = false;
+        if (occupancyKnows(chunk, 0)) {
+            uint brick = occupancyBrickAt(voxel, 0);
+
+            box   = BRICK_VOXELS;
+            solid = brick == SOLID_BRICK;
+            if (brick == 0u) {
+                if (occupancyKnows(chunk, 2) && occupancyBrickAt(voxel, 2) == 0u) {
+                    box = 8.0;
+                } else if (occupancyKnows(chunk, 1) && occupancyBrickAt(voxel, 1) == 0u) {
+                    box = 4.0;
+                }
+            }
+        }
+
+        if (!solid) {
+            seenOpen   = true;
+            solidSince = -1.0;
+        } else if (seenOpen && solidSince < 0.0) {
+            solidSince = travelled;
+        }
+
+        float leavesAt = NO_OCCLUDER;
+        for (int axis = 0; axis < 3; ++axis) {
+            float along = direction[axis];
+            if (along == 0.0) {
+                continue;
+            }
+
+            float low  = floor(at[axis] / box) * box;
+            float wall = along > 0.0 ? low + box : low;
+            leavesAt   = min(leavesAt, (wall - origin[axis]) / along);
+        }
+
+        travelled = max(leavesAt, travelled) + OCCUPANCY_NUDGE;
+
+        if (solidSince >= 0.0 && travelled - solidSince >= thick) {
+            return solidSince;
+        }
+    }
+
+    return NO_OCCLUDER;
+}
+
+void main() {
+    ivec2 corner = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 last   = params.rays.xy;
+    int stretch  = int(gl_GlobalInvocationID.z);
+    if (corner.x > last.x || corner.y > last.y || stretch >= params.stretches.x) {
+        return;
+    }
+
+    vec2 across = vec2(corner) / vec2(last);
+    vec3 aim    = params.forward.xyz + (params.right.xyz * ((2.0 * across.x) - 1.0)) +
+                  (params.up.xyz * (1.0 - (2.0 * across.y)));
+    float reach = length(aim);
+
+    float span  = float(params.stretches.y);
+    float along = solidAlong(
+        params.eye.xyz, aim / reach, float(params.rays.z), params.rays.w, float(stretch) * span,
+        float(stretch + 1) * span
+    );
+    float depth = along >= NO_OCCLUDER ? NO_OCCLUDER : (along / reach) * params.eye.w;
+
+    int plane = (last.x + 1) * (last.y + 1);
+    occluders.depths[(stretch * plane) + (corner.y * (last.x + 1)) + corner.x] = depth;
+}

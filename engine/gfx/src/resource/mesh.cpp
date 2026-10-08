@@ -48,6 +48,42 @@ auto quad::pack(
     return q;
 }
 
+auto measured(
+    mesh held
+) -> mesh {
+    if (held.quads.empty()) {
+        return held;
+    }
+
+    constexpr int32 far = std::numeric_limits<int32>::max();
+
+    vec3i lo{far, far, far};
+    vec3i hi{-far, -far, -far};
+    bool sways = false;
+
+    for (const quad& q : held.quads) {
+        const auto face = static_cast<face_direction>((q.data0 >> 21U) & 0x7U);
+
+        const vec3i from{
+            static_cast<int32>(q.data0 & 0x7FU), static_cast<int32>((q.data0 >> 7U) & 0x7FU),
+            static_cast<int32>((q.data0 >> 14U) & 0x7FU)
+        };
+        vec3i to = from;
+        to[axis_of(face)] += 1;
+        to[quad::tangent_u_axis[face]] += static_cast<int32>(q.data1 & 0x7FU) + 1;
+        to[quad::tangent_v_axis[face]] += static_cast<int32>((q.data1 >> 7U) & 0x7FU) + 1;
+
+        lo    = vec3i{std::min(lo.x, from.x), std::min(lo.y, from.y), std::min(lo.z, from.z)};
+        hi    = vec3i{std::max(hi.x, to.x), std::max(hi.y, to.y), std::max(hi.z, to.z)};
+        sways = sways || (q.data1 & quad::sway_flag) != 0;
+    }
+
+    held.reach_min = lo;
+    held.reach_max = hi;
+    held.sways     = sways;
+    return held;
+}
+
 auto effective_lod_step(
     const vw::asset::model& voxels, int32 requested
 ) -> int32 {
@@ -608,7 +644,7 @@ auto simple_mesh_generator::generate_mesh_data(
         face_counts[std::to_underlying(face)] = static_cast<uint32>(quads.size() - before);
     }
 
-    return mesh{.quads = std::move(quads), .face_counts = face_counts};
+    return measured(mesh{.quads = std::move(quads), .face_counts = face_counts});
 }
 
 auto simple_mesh_generator::add_cube_face(
@@ -671,7 +707,7 @@ auto strip_mesh_generator::generate_mesh_data(
         face_counts[std::to_underlying(face)] = static_cast<uint32>(storage.quads.size() - before);
     }
 
-    return mesh{std::vector<quad>{storage.quads}, face_counts, {}};
+    return measured(mesh{std::vector<quad>{storage.quads}, face_counts, {}});
 }
 
 auto strip_mesh_generator::merge_and_emit_strips(
@@ -837,7 +873,9 @@ auto greedy_mesh_generator::generate_mesh_data(
         }
     }
 
-    return mesh{std::vector<quad>{storage.quads}, face_counts, std::move(links), src.lod_step};
+    return measured(
+        mesh{std::vector<quad>{storage.quads}, face_counts, std::move(links), src.lod_step}
+    );
 }
 
 auto greedy_mesh_generator::merge_and_emit_rects_bits(

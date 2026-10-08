@@ -240,6 +240,43 @@ std430 нет диагностики на расхождение: ошибки �
   «кольцо, буфер», а не до цикла: пока мешей нет, буфера индексов не существует,
   и слой валидации ругается на `VK_NULL_HANDLE`.
 
+## Заслоны (`occluders.comp`, `occluder_levels.comp`, `cull.comp`)
+
+- **C++:** `occluder_params`, `occluder_pyramid`, `pyramid_over`,
+  `occluder_pass::dispatch` (`render/occluder_pass.*`); хвост `cull_frustum_ubo`
+  от `view_eye` и `cull_pipeline::update_frustums`; `cull_hidden_region` в
+  `combined_buffer`.
+- **GLSL:** `OccluderParams` в `occluders.comp`; `LevelPush` в
+  `occluder_levels.comp`; хвост `CullFrustumData`, `OccluderDepths` (набор 0,
+  привязка 1) и `behind_occluders` в `cull.comp`; смещения 848 и 864 в блоке
+  `UniformBufferObject` у `mark.frag`.
+- **Менять вместе:**
+  - раскладку буфера глубин: сначала `stretches` плоскостей по
+    `(rays_wide + 1) × (rays_high + 1)` лучей, за ними уровни пирамиды подряд.
+    Смещения уровней шейдеру отдаёт C++ (`occluder_levels[]` в uniform отсева и
+    push константы прохода уровней), в GLSL их никто не считает;
+  - смысл лучей: `right` и `up` в `occluder_params` умножены на тангенсы
+    полуугла, а в `cull_frustum_ubo` — поделены. Луч `(u, v)` идёт в
+    `forward + right·(2u − 1) + up·(1 − 2v)`, и `behind_occluders` обязан
+    раскладывать угол коробки обратно тем же соглашением;
+  - единицы глубины: проход пишет глубину вдоль `forward` в мировых единицах
+    (`eye.w` — единиц в вокселе), `cull.comp` сравнивает с ней глубину коробки в
+    тех же единицах;
+  - режим в `view_eye.w` — значение `occlusion_mode` (0, 1, 2);
+  - `mark.frag` читает `occupancy_eye` и `occupancy_base` кадрового uniform по
+    явным смещениям: сдвинул их в `render_uniforms.cppm` — поправь `offset`.
+- **Сторож:** `static_assert` на смещения обеих структур; `pyramid_over` — тесты
+  `[occlusion]`. Сами шейдеры сверяет только режим `--occlusion=check`: пурпурные
+  пиксели и ненулевой `hidden_samples_shown_peak` в отчёте.
+- **Если разошлись:** чанки пропадают при повороте камеры или у края экрана
+  (перепутаны `u`/`v` или тангенсы), либо отсев не прячет ничего (глубины в
+  разных единицах, уровень читается не с того смещения).
+- **Ловушки.** `mat4` в `CullFrustumData` ронял раскладку блока — только `vec4`
+  и массивы `vec4`/`ivec4`. Время прохода лучей задаёт длина цепочки зависимых
+  выборок, а не число лучей: удлинять отрезок или поднимать `most_steps` — значит
+  платить по микросекунде за шаг.
+- Почему так: `docs/rendering.md#отсев-по-заслонам`.
+
 ## Набор источников и пятен
 
 Одна раскладка на шесть привязок

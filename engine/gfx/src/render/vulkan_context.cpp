@@ -218,10 +218,13 @@ auto vulkan_context::create_logical_device_() -> void {
     counts_pipeline_statistics_ =
         physical_device_.getFeatures().pipelineStatisticsQuery == vk::True;
 
+    counts_samples_exactly_ = physical_device_.getFeatures().occlusionQueryPrecise == vk::True;
+
     const vk::PhysicalDeviceFeatures device_features{
         .multiDrawIndirect         = vk::True,
         .drawIndirectFirstInstance = vk::True,
         .fillModeNonSolid          = vk::True,
+        .occlusionQueryPrecise     = counts_samples_exactly_ ? vk::True : vk::False,
         .pipelineStatisticsQuery   = counts_pipeline_statistics_ ? vk::True : vk::False,
     };
 

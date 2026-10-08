@@ -12,7 +12,9 @@ namespace vw::gfx {
 
 cull_pipeline::cull_pipeline(
     vulkan_context& context,
-    vk::DescriptorPool descriptor_pool
+    vk::DescriptorPool descriptor_pool,
+    vk::Buffer occluder_depths,
+    vk::DeviceSize occluder_depths_bytes
 )
     : context_(&context)
     , descriptor_pool_(descriptor_pool) {
@@ -21,7 +23,7 @@ cull_pipeline::cull_pipeline(
     );
 
     create_descriptor_set_layouts_();
-    create_frustum_ubos_();
+    create_frustum_ubos_(occluder_depths, occluder_depths_bytes);
     create_pipeline_();
 }
 
@@ -35,17 +37,25 @@ cull_pipeline::~cull_pipeline() {
 }
 
 auto cull_pipeline::create_descriptor_set_layouts_() -> void {
-    const vk::DescriptorSetLayoutBinding frustum_binding{
-        .binding         = 0,
-        .descriptorType  = vk::DescriptorType::eUniformBuffer,
-        .descriptorCount = 1,
-        .stageFlags      = vk::ShaderStageFlagBits::eCompute,
+    const std::array frustum_bindings{
+        vk::DescriptorSetLayoutBinding{
+            .binding         = 0,
+            .descriptorType  = vk::DescriptorType::eUniformBuffer,
+            .descriptorCount = 1,
+            .stageFlags      = vk::ShaderStageFlagBits::eCompute,
+        },
+        vk::DescriptorSetLayoutBinding{
+            .binding         = 1,
+            .descriptorType  = vk::DescriptorType::eStorageBuffer,
+            .descriptorCount = 1,
+            .stageFlags      = vk::ShaderStageFlagBits::eCompute,
+        },
     };
 
     frustum_descriptor_set_layout_ = vk_must(
         context_->get_device().createDescriptorSetLayout({
-            .bindingCount = 1,
-            .pBindings    = &frustum_binding,
+            .bindingCount = static_cast<uint32>(frustum_bindings.size()),
+            .pBindings    = frustum_bindings.data(),
         }),
         "create frustum descriptor set layout"
     );
@@ -103,7 +113,9 @@ auto cull_pipeline::create_pipeline_() -> void {
     );
 }
 
-auto cull_pipeline::create_frustum_ubos_() -> void {
+auto cull_pipeline::create_frustum_ubos_(
+    vk::Buffer occluder_depths, vk::DeviceSize occluder_depths_bytes
+) -> void {
     for (uint32 i = 0; i < frames_in_flight; i++) {
         frustum_ubos_[i] = std::make_unique<uniform_buffer>(
             *context_, static_cast<vk::DeviceSize>(sizeof(cull_frustum_ubo))
@@ -130,14 +142,30 @@ auto cull_pipeline::create_frustum_ubos_() -> void {
             .range  = sizeof(cull_frustum_ubo),
         };
 
+        const vk::DescriptorBufferInfo depths_info{
+            .buffer = occluder_depths,
+            .offset = 0,
+            .range  = occluder_depths_bytes,
+        };
+
         context_->get_device().updateDescriptorSets(
-            vk::WriteDescriptorSet{
-                .dstSet          = frustum_descriptor_sets_[i],
-                .dstBinding      = 0,
-                .dstArrayElement = 0,
-                .descriptorCount = 1,
-                .descriptorType  = vk::DescriptorType::eUniformBuffer,
-                .pBufferInfo     = &buffer_info,
+            {
+                vk::WriteDescriptorSet{
+                    .dstSet          = frustum_descriptor_sets_[i],
+                    .dstBinding      = 0,
+                    .dstArrayElement = 0,
+                    .descriptorCount = 1,
+                    .descriptorType  = vk::DescriptorType::eUniformBuffer,
+                    .pBufferInfo     = &buffer_info,
+                },
+                vk::WriteDescriptorSet{
+                    .dstSet          = frustum_descriptor_sets_[i],
+                    .dstBinding      = 1,
+                    .dstArrayElement = 0,
+                    .descriptorCount = 1,
+                    .descriptorType  = vk::DescriptorType::eStorageBuffer,
+                    .pBufferInfo     = &depths_info,
+                },
             },
             nullptr
         );
@@ -154,7 +182,8 @@ auto cull_pipeline::update_frustums(
     const vw::spatial::frustum& view_frustum,
     std::span<const vw::spatial::frustum> shadow_frustums,
     const vec4f& eye,
-    const cull_rings& rings
+    const cull_rings& rings,
+    const cull_occlusion& occlusion
 ) -> void {
     cull_frustum_ubo ubo{};
     ubo.pass_count =
@@ -165,6 +194,28 @@ auto cull_pipeline::update_frustums(
     ubo.ring_count         = combined_buffer::cull_ring_count;
     ubo.rings_per_doubling = rings_per_doubling;
     ubo.rings = vec4f{rings.origin.x, rings.origin.y, rings.origin.z, rings.first_width};
+
+    ubo.hidden_region = combined_buffer::cull_hidden_region;
+    ubo.view_eye      = vec4f{
+        occlusion.eye.x, occlusion.eye.y, occlusion.eye.z,
+        static_cast<float32>(std::to_underlying(occlusion.mode))
+    };
+    ubo.view_forward = vec4f{
+        occlusion.forward.x, occlusion.forward.y, occlusion.forward.z, occlusion.nearest_depth
+    };
+    ubo.view_right = vec4f{
+        occlusion.right_over_span.x, occlusion.right_over_span.y, occlusion.right_over_span.z, 0.0f
+    };
+    ubo.view_up = vec4f{
+        occlusion.up_over_span.x, occlusion.up_over_span.y, occlusion.up_over_span.z, 0.0f
+    };
+
+    const occluder_pyramid& pyramid = occluder_pass::pyramid;
+    ubo.occluder_level_count        = pyramid.level_count;
+    for (uint32 level = 0; level < pyramid.level_count; ++level) {
+        const occluder_level& held = pyramid.levels[level];
+        ubo.occluder_levels[level] = {held.offset, held.width, held.height, 0};
+    }
 
     for (uint32 i = 0; i < 6; i++) {
         const auto& p = view_frustum.planes[i];

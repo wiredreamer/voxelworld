@@ -17,7 +17,7 @@ constexpr auto counted_statistics =
 constexpr std::size_t counted_statistic_count = 3;
 
 constexpr vk::DeviceSize counts_bytes =
-    vk::DeviceSize{combined_buffer::cull_ring_count} * sizeof(uint32);
+    vk::DeviceSize{combined_buffer::cull_region_count} * sizeof(uint32);
 
 }  // namespace
 
@@ -32,6 +32,14 @@ frame_probe::frame_probe(
             vk::BufferUsageFlagBits::eTransferDst
         );
     }
+
+    hidden_pool_ = vk_must(
+        context_->get_device().createQueryPool({
+            .queryType  = vk::QueryType::eOcclusion,
+            .queryCount = frames_in_flight,
+        }),
+        "create hidden samples query pool"
+    );
 
     if (!context_->counts_pipeline_statistics()) {
         log::warn(lc_, "the device does not count pipeline statistics");
@@ -52,6 +60,9 @@ frame_probe::~frame_probe() {
     if (pool_ != nullptr) {
         context_->get_device().destroyQueryPool(pool_);
     }
+    if (hidden_pool_ != nullptr) {
+        context_->get_device().destroyQueryPool(hidden_pool_);
+    }
 }
 
 auto frame_probe::reset(
@@ -60,12 +71,20 @@ auto frame_probe::reset(
     frame_state& frame = frames_[frame_index];
 
     recording_frame_       = frame_index;
-    recording_             = enabled_;
+    recording_             = enabled_ || watching_hidden_;
     frame.queried          = false;
+    frame.hidden_queried   = false;
+    frame.hidden_reset     = false;
+
+    if (watching_hidden_) {
+        cmd.resetQueryPool(hidden_pool_, frame_index, 1);
+        frame.hidden_reset = true;
+    }
+
     frame.buffers_copied   = 0;
     frame.commands_offered = 0;
 
-    if (!recording_ || pool_ == nullptr) {
+    if (!enabled_ || pool_ == nullptr) {
         return;
     }
 
@@ -117,7 +136,7 @@ auto frame_probe::copy_cull_counts(
 auto frame_probe::begin(
     vk::CommandBuffer cmd
 ) const -> void {
-    if (recording_ && pool_ != nullptr) {
+    if (frames_[recording_frame_].queried) {
         cmd.beginQuery(pool_, recording_frame_, {});
     }
 }
@@ -125,8 +144,32 @@ auto frame_probe::begin(
 auto frame_probe::end(
     vk::CommandBuffer cmd
 ) const -> void {
-    if (recording_ && pool_ != nullptr) {
+    if (frames_[recording_frame_].queried) {
         cmd.endQuery(pool_, recording_frame_);
+    }
+}
+
+auto frame_probe::begin_hidden(
+    vk::CommandBuffer cmd
+) -> void {
+    frame_state& frame = frames_[recording_frame_];
+    if (!frame.hidden_reset) {
+        return;
+    }
+
+    cmd.beginQuery(
+        hidden_pool_, recording_frame_,
+        context_->counts_samples_exactly() ? vk::QueryControlFlagBits::ePrecise
+                                           : vk::QueryControlFlags{}
+    );
+    frame.hidden_queried = true;
+}
+
+auto frame_probe::end_hidden(
+    vk::CommandBuffer cmd
+) const -> void {
+    if (frames_[recording_frame_].hidden_queried) {
+        cmd.endQuery(hidden_pool_, recording_frame_);
     }
 }
 
@@ -138,13 +181,34 @@ auto frame_probe::resolve(
     stats_ = frame_probe_stats{};
 
     if (frame.buffers_copied > 0) {
-        std::array<uint32, std::size_t{most_buffers} * combined_buffer::cull_ring_count> drawn{};
+        std::array<uint32, std::size_t{most_buffers} * combined_buffer::cull_region_count> drawn{};
         frame.counts->copy_to(drawn.data(), vk::DeviceSize{frame.buffers_copied} * counts_bytes);
 
         stats_.cull_counted     = true;
         stats_.commands_offered = frame.commands_offered;
-        for (uint32 held = 0; held < frame.buffers_copied * combined_buffer::cull_ring_count; ++held) {
-            stats_.commands_drawn += drawn[held];
+        for (uint32 buffer = 0; buffer < frame.buffers_copied; ++buffer) {
+            const uint32* regions = &drawn[std::size_t{buffer} * combined_buffer::cull_region_count];
+            for (uint32 ring = 0; ring < combined_buffer::cull_ring_count; ++ring) {
+                stats_.commands_drawn += regions[ring];
+            }
+            stats_.commands_hidden += regions[combined_buffer::cull_hidden_region];
+        }
+    }
+
+    if (frame.hidden_queried) {
+        std::array<uint64, 2> shown{};
+
+        const vk::Result hidden_result = context_->get_device().getQueryPoolResults(
+            hidden_pool_, frame_index, 1, shown.size() * sizeof(uint64), shown.data(),
+            shown.size() * sizeof(uint64),
+            vk::QueryResultFlagBits::e64 | vk::QueryResultFlagBits::eWithAvailability
+        );
+        if (hidden_result != vk::Result::eSuccess && hidden_result != vk::Result::eNotReady) {
+            vk_panic(hidden_result, "read hidden samples");
+        }
+        if (shown[1] != 0) {
+            stats_.hidden_counted       = true;
+            stats_.hidden_samples_shown = shown[0];
         }
     }
 

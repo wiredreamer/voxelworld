@@ -172,6 +172,19 @@ static_assert(
 
 inline constexpr float32 overdraw_view_full_scale = 8.0f;
 
+// см. docs/rendering.md#отсев-по-заслонам
+enum class occlusion_mode : uint32 {
+    off   = 0,
+    cull  = 1,
+    check = 2,
+};
+
+struct occlusion_settings {
+    occlusion_mode mode    = occlusion_mode::cull;
+    int32 thickness_voxels = 8;
+    int32 most_steps       = 16;
+};
+
 // см. docs/rendering.md#приборы-кадра
 struct shading_parts {
     bool corners      = true;

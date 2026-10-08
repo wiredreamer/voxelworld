@@ -23,7 +23,7 @@ testbed_app::testbed_app(
     , lod_level_{args.text("--lod-level") ? args.integer("--lod-level", 0) : -1}
     , benching_{args.flag("--bench")}
     , clusters_{args.flag("--cluster-stats"), args.count("--verify-lights", 0)}
-    , pipeline_{args.flag("--pipeline-stats")} {
+    , pipeline_{args.flag("--pipeline-stats") || args.text("--occlusion") == "check"} {
     if (const auto shot = args.text("--shot")) {
         shot_path_ = std::filesystem::path{*shot};
     }
@@ -43,7 +43,27 @@ testbed_app::testbed_app(
     renderer.get_bloom_settings().enabled =
         gfx::preset_of(quality_).bloom && !args.flag("--no-bloom");
     renderer.get_cluster_settings().enabled = !args.flag("--no-clusters");
-    renderer.set_frame_probe_enabled(pipeline_.wanted());
+    renderer.set_frame_probe_enabled(args.flag("--pipeline-stats"));
+
+    // см. docs/rendering.md#отсев-по-заслонам
+    if (const auto occlusion = args.text("--occlusion")) {
+        constexpr std::array<std::string_view, 3> known{"off", "on", "check"};
+        const auto named = std::ranges::find(known, *occlusion);
+        if (named == known.end()) {
+            throw std::runtime_error(std::format(
+                "unknown value '{}' of --occlusion; known ones are: off, on, check", *occlusion
+            ));
+        }
+        renderer.get_occlusion_settings().mode =
+            static_cast<gfx::occlusion_mode>(named - known.begin());
+    }
+    renderer.get_occlusion_settings().thickness_voxels = static_cast<int32>(args.count(
+        "--occluder-thickness",
+        static_cast<uint32>(renderer.get_occlusion_settings().thickness_voxels)
+    ));
+    renderer.get_occlusion_settings().most_steps = static_cast<int32>(args.count(
+        "--occluder-steps", static_cast<uint32>(renderer.get_occlusion_settings().most_steps)
+    ));
 
     // см. docs/rendering.md#приборы-кадра
     const std::string_view skipped = args.text("--skip").value_or(std::string_view{});

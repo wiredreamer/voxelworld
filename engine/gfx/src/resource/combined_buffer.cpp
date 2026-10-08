@@ -32,6 +32,28 @@ auto is_axis_aligned(
     return true;
 }
 
+// см. docs/rendering.md#тесные-коробки
+auto reach_of(
+    const mesh& mesh_data
+) -> std::pair<vec3f, vec3f> {
+    constexpr float32 sway_margin = 1.0f;
+
+    const float32 margin = mesh_data.sways ? sway_margin : 0.0f;
+    const vec3i lo       = mesh_data.reach_min;
+    const vec3i hi       = mesh_data.reach_max;
+
+    return {
+        vec3f{
+            static_cast<float32>(lo.x) - margin, static_cast<float32>(lo.y) - margin,
+            static_cast<float32>(lo.z) - margin
+        },
+        vec3f{
+            static_cast<float32>(hi.x) + margin, static_cast<float32>(hi.y) + margin,
+            static_cast<float32>(hi.z) + margin
+        },
+    };
+}
+
 auto instance_shading_column(
     const instance_shading& shading
 ) -> std::array<float32, 4> {
@@ -204,11 +226,13 @@ auto combined_buffer::allocate(
         sizeof(mat4f)
     );
 
-    write_bounds_(instance_index, transform_matrix, bounds);
+    write_bounds_(instance_index, transform_matrix, bounds, mesh_alloc);
 
     allocations_[instance] = instance_allocation{
         .instance_index = instance_index,
         .key            = key,
+        .transform      = transform_matrix,
+        .bounds         = bounds,
     };
 
     instance_keys_[instance_index] = instance;
@@ -217,14 +241,32 @@ auto combined_buffer::allocate(
 }
 
 auto combined_buffer::write_bounds_(
-    uint32 instance_index, const mat4f& transform_matrix, const vw::spatial::aabb& bounds
+    uint32 instance_index, const mat4f& transform_matrix, const vw::spatial::aabb& bounds,
+    const mesh_allocation& mesh_alloc
 ) -> void {
+    vec3f lo = bounds.min;
+    vec3f hi = bounds.max;
+
+    if (mesh_alloc.quad_count > 0) {
+        constexpr float32 huge = std::numeric_limits<float32>::max();
+
+        lo = vec3f{huge, huge, huge};
+        hi = vec3f{-huge, -huge, -huge};
+        for (uint32 corner = 0; corner < 8; ++corner) {
+            const vec4f at = transform_matrix * vec4f{
+                (corner & 1U) != 0 ? mesh_alloc.reach_max.x : mesh_alloc.reach_min.x,
+                (corner & 2U) != 0 ? mesh_alloc.reach_max.y : mesh_alloc.reach_min.y,
+                (corner & 4U) != 0 ? mesh_alloc.reach_max.z : mesh_alloc.reach_min.z,
+                1.0f
+            };
+            lo = vec3f{std::min(lo.x, at.x), std::min(lo.y, at.y), std::min(lo.z, at.z)};
+            hi = vec3f{std::max(hi.x, at.x), std::max(hi.y, at.y), std::max(hi.z, at.z)};
+        }
+    }
+
     const std::array<vec4f, 2> aabb_data{
-        vec4f{
-            bounds.min.x, bounds.min.y, bounds.min.z,
-            is_axis_aligned(transform_matrix) ? 1.0f : 0.0f
-        },
-        vec4f{bounds.max.x, bounds.max.y, bounds.max.z, 0.0f},
+        vec4f{lo.x, lo.y, lo.z, is_axis_aligned(transform_matrix) ? 1.0f : 0.0f},
+        vec4f{hi.x, hi.y, hi.z, 0.0f},
     };
     const auto aabb_staged = staging_->stage_struct(aabb_data);
     staging_->copy_to(
@@ -296,6 +338,7 @@ auto combined_buffer::allocate_mesh(
     new_mesh_alloc.generation  = model_id.generation;
     new_mesh_alloc.ref_count   = 0;
     new_mesh_alloc.face_counts = mesh_data.face_counts;
+    std::tie(new_mesh_alloc.reach_min, new_mesh_alloc.reach_max) = reach_of(mesh_data);
 
     mesh_allocations_[mesh_key_of(model_id, mesh_data.lod_step)] = new_mesh_alloc;
 }
@@ -322,10 +365,14 @@ auto combined_buffer::write_mesh(
     mesh_alloc.quad_count  = quad_count;
     mesh_alloc.generation  = model_id.generation;
     mesh_alloc.face_counts = mesh_data.face_counts;
+    std::tie(mesh_alloc.reach_min, mesh_alloc.reach_max) = reach_of(mesh_data);
 
     for (const auto& [instance, allocation] : allocations_) {
         if (allocation.key == key) {
             write_draw_command_(allocation.instance_index, mesh_alloc);
+            write_bounds_(
+                allocation.instance_index, allocation.transform, allocation.bounds, mesh_alloc
+            );
         }
     }
 }
@@ -334,7 +381,11 @@ auto combined_buffer::write_transform(
     instance_key instance, const mat4f& transform_matrix, const vw::spatial::aabb& bounds,
     const instance_shading& shading
 ) -> void {
-    auto& [instance_index, key] = allocations_[instance];
+    auto& held                 = allocations_[instance];
+    held.transform             = transform_matrix;
+    held.bounds                = bounds;
+    const uint32 instance_index = held.instance_index;
+
     const auto model_staged = staging_->stage_struct(transform_matrix);
     staging_->copy_to(
         model_matrix_buffer_->get_buffer(),
@@ -352,7 +403,7 @@ auto combined_buffer::write_transform(
         sizeof(mat4f)
     );
 
-    write_bounds_(instance_index, transform_matrix, bounds);
+    write_bounds_(instance_index, transform_matrix, bounds, mesh_allocations_[held.key]);
 }
 
 auto combined_buffer::write_visibility(

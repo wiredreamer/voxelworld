@@ -203,6 +203,7 @@ catch_discover_tests(game_tests)
 if(VW_BUILD_GFX)
     add_executable(gfx_tests
         gfx/mesher.test.cpp
+        gfx/occlusion.test.cpp
         gfx/mesh_pool.test.cpp
         gfx/camera.test.cpp
         gfx/image.test.cpp

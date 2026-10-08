@@ -22,6 +22,12 @@ struct frame_probe_stats {
 
     uint32 commands_offered = 0;
     uint32 commands_drawn   = 0;
+
+    // см. docs/rendering.md#отсев-по-заслонам
+    bool hidden_counted = false;
+
+    uint32 commands_hidden      = 0;
+    uint64 hidden_samples_shown = 0;
 };
 
 class frame_probe final {
@@ -52,6 +58,13 @@ public:
     auto begin(vk::CommandBuffer cmd) const -> void;
     auto end(vk::CommandBuffer cmd) const -> void;
 
+    auto set_watching_hidden(bool watching) -> void {
+        watching_hidden_ = watching;
+    }
+
+    auto begin_hidden(vk::CommandBuffer cmd) -> void;
+    auto end_hidden(vk::CommandBuffer cmd) const -> void;
+
     auto resolve(uint32 frame_index) -> void;
 
     [[nodiscard]] auto get_stats() const -> const frame_probe_stats& {
@@ -66,10 +79,14 @@ private:
         uint32 buffers_copied   = 0;
         uint32 commands_offered = 0;
         bool queried            = false;
+        bool hidden_queried     = false;
+        bool hidden_reset       = false;
     };
 
     vulkan_context* context_;
-    vk::QueryPool pool_ = nullptr;
+    vk::QueryPool pool_        = nullptr;
+    vk::QueryPool hidden_pool_ = nullptr;
+    bool watching_hidden_      = false;
     std::vector<frame_state> frames_;
     uint32 recording_frame_ = 0;
     bool recording_         = false;

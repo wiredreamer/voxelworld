@@ -29,6 +29,13 @@ auto pipeline_probe::collect(
         ++cull_frames;
         commands_offered += frame.commands_offered;
         commands_drawn   += frame.commands_drawn;
+        commands_hidden  += frame.commands_hidden;
+    }
+    if (frame.hidden_counted) {
+        ++hidden_frames;
+        hidden_samples      += frame.hidden_samples_shown;
+        hidden_samples_peak  = std::max(hidden_samples_peak, frame.hidden_samples_shown);
+        hidden_frames_wrong += frame.hidden_samples_shown > 0 ? 1 : 0;
     }
 }
 
@@ -66,6 +73,23 @@ auto pipeline_probe::collect_report(
         section.value("commands_offered_per_frame", offered, 0)
             .value("commands_drawn_per_frame", drawn, 0)
             .value("commands_drawn_percent", offered > 0.0 ? 100.0 * drawn / offered : 0.0, 1);
+    }
+
+    // см. docs/rendering.md#отсев-по-заслонам
+    if (hidden_frames > 0) {
+        const auto frames = static_cast<float64>(hidden_frames);
+
+        section.value("hidden_frames", hidden_frames)
+            .value(
+                "commands_hidden_per_frame",
+                cull_frames > 0 ? static_cast<float64>(commands_hidden) /
+                                      static_cast<float64>(cull_frames)
+                                : 0.0,
+                0
+            )
+            .value("hidden_samples_shown_per_frame", static_cast<float64>(hidden_samples) / frames, 2)
+            .value("hidden_samples_shown_peak", hidden_samples_peak)
+            .value("hidden_frames_with_samples", hidden_frames_wrong);
     }
 }
 

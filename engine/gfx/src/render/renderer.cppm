@@ -129,6 +129,11 @@ public:
         return shading_parts_;
     }
 
+    // см. docs/rendering.md#отсев-по-заслонам
+    [[nodiscard]] auto get_occlusion_settings() -> occlusion_settings& {
+        return occlusion_settings_;
+    }
+
     auto set_frame_probe_enabled(bool enabled) -> void {
         frame_probe_->set_enabled(enabled);
     }
@@ -321,6 +326,7 @@ private:
     vk::Pipeline graphics_pipeline_                             = nullptr;
     vk::Pipeline wireframe_pipeline_                            = nullptr;
     vk::Pipeline overdraw_pipeline_                             = nullptr;
+    vk::Pipeline marked_pipeline_                               = nullptr;
     vk::Pipeline shadow_pipeline_                               = nullptr;
     vk::PipelineLayout shadow_pipeline_layout_                  = nullptr;
 
@@ -341,6 +347,7 @@ private:
 
     std::unique_ptr<shader> vertex_shader_;
     std::unique_ptr<shader> fragment_shader_;
+    std::unique_ptr<shader> mark_fragment_shader_;
     std::unique_ptr<shader> shadow_vertex_shader_;
     std::unique_ptr<shader> shadow_fragment_shader_;
 
@@ -393,6 +400,7 @@ private:
     std::unique_ptr<light_cache> light_cache_;
     light_cache_settings light_cache_settings_;
 
+    std::unique_ptr<occluder_pass> occluders_;
     std::unique_ptr<cull_pipeline> cull_pipeline_;
 
     std::unique_ptr<shadow_map> shadow_map_;
@@ -416,6 +424,8 @@ private:
     float32 blob_strength_ = 1.0f;
     debug_view debug_view_ = debug_view::off;
     shading_parts shading_parts_{};
+    occlusion_settings occlusion_settings_{};
+    bool checks_occlusion_ = false;
     std::unique_ptr<frame_probe> frame_probe_;
 
     mutable renderer_stats stats_;

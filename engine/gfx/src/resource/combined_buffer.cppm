@@ -90,6 +90,8 @@ struct instance_shading {
 struct instance_allocation {
     uint32 instance_index;
     mesh_key key;
+    mat4f transform;
+    vw::spatial::aabb bounds;
 };
 
 struct mesh_allocation {
@@ -99,6 +101,10 @@ struct mesh_allocation {
     uint32 ref_count;
 
     std::array<uint32, 6> face_counts{};
+
+    // см. docs/rendering.md#тесные-коробки
+    vec3f reach_min{0.0F, 0.0F, 0.0F};
+    vec3f reach_max{0.0F, 0.0F, 0.0F};
 };
 
 struct combined_buffer_stats {
@@ -120,7 +126,8 @@ public:
 
     // см. docs/rendering.md#кольца-расстояния
     static constexpr uint32 cull_ring_count   = 12;
-    static constexpr uint32 cull_region_count = cull_ring_count + cull_pass_count - 1;
+    static constexpr uint32 cull_hidden_region = cull_ring_count + cull_pass_count - 1;
+    static constexpr uint32 cull_region_count  = cull_hidden_region + 1;
 
     static constexpr uint32 faces_per_mesh = 6;
 
@@ -175,7 +182,8 @@ public:
 private:
     auto write_draw_command_(uint32 instance_index, const mesh_allocation& mesh_alloc) -> void;
     auto write_bounds_(
-        uint32 instance_index, const mat4f& transform_matrix, const vw::spatial::aabb& bounds
+        uint32 instance_index, const mat4f& transform_matrix, const vw::spatial::aabb& bounds,
+        const mesh_allocation& mesh_alloc
     ) -> void;
     auto expand_mesh_buffers_() -> void;
     auto expand_instance_buffers_() -> void;

@@ -1,0 +1,43 @@
+#version 450
+
+layout(local_size_x = 8, local_size_y = 8) in;
+
+layout(std430, set = 0, binding = 1) buffer OccluderDepths {
+    float depths[];
+} occluders;
+
+layout(push_constant) uniform LevelPush {
+    ivec4 source;
+    ivec4 target;
+    ivec4 stretches;
+} push;
+
+// см. docs/rendering.md#отсев-по-заслонам
+void main() {
+    ivec2 texel = ivec2(gl_GlobalInvocationID.xy);
+    if (texel.x >= push.target.y || texel.y >= push.target.z) {
+        return;
+    }
+
+    int stride = push.source.w;
+    ivec2 low  = texel * stride;
+    ivec2 edge = ivec2(push.source.y, push.source.z) - 1;
+
+    int wider = push.target.w;
+
+    float farthest = 0.0;
+    for (int dy = -wider; dy < 2 + wider; ++dy) {
+        for (int dx = -wider; dx < 2 + wider; ++dx) {
+            ivec2 from = clamp(low + ivec2(dx, dy), ivec2(0), edge);
+            int at     = push.source.x + (from.y * push.source.y) + from.x;
+
+            float nearest = occluders.depths[at];
+            for (int stretch = 1; stretch < push.stretches.x; ++stretch) {
+                nearest = min(nearest, occluders.depths[at + (stretch * push.stretches.y)]);
+            }
+            farthest = max(farthest, nearest);
+        }
+    }
+
+    occluders.depths[push.target.x + (texel.y * push.target.y) + texel.x] = farthest;
+}

@@ -31,6 +31,12 @@ private:
     uint64 cull_frames      = 0;
     uint64 commands_offered = 0;
     uint64 commands_drawn   = 0;
+    uint64 commands_hidden  = 0;
+
+    uint64 hidden_frames       = 0;
+    uint64 hidden_samples      = 0;
+    uint64 hidden_samples_peak = 0;
+    uint64 hidden_frames_wrong = 0;
 
     uint64 screen_pixels = 0;
     uint32 msaa_samples  = 1;
