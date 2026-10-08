@@ -121,24 +121,38 @@ OccupancyBricks occupancyBricksAround(ivec3 centre, int u, int v) {
     );
 }
 
-uint occupancyPatch(OccupancyBricks held, int layer, int axis, int u, int v) {
-    uint shiftU = uint(u);
-    uint shiftV = uint(v);
-    uint inLayer = uint(layer & 1) << uint(axis);
+// см. docs/rendering.md#затенение-углов-во-фрагменте
+uint occupancyLayerBits(int layer, int axis) {
+    const uint LOW_HALF[3] = uint[3](0x55555555u, 0x33333333u, 0x0F0F0F0Fu);
+    return (layer & 1) == 0 ? LOW_HALF[axis] : ~LOW_HALF[axis];
+}
 
-    uint solid = 0u;
-    for (uint j = 0u; j < 3u; ++j) {
-        uint alongV = held.parityV + j;
-        uint rowBit = ((alongV >> 1u) << 4u) | ((alongV & 1u) << shiftV) | inLayer;
+uint occupancyLayerCells(uint packed, int layer, int axis) {
+    uint odd = uint(layer & 1);
 
-        for (uint i = 0u; i < 3u; ++i) {
-            uint alongU = held.parityU + i;
-            uint bit    = rowBit + ((alongU >> 1u) << 3u) + ((alongU & 1u) << shiftU);
-
-            solid |= ((held.packed >> bit) & 1u) << ((j * 3u) + i);
-        }
+    if (axis == 0) {
+        uint spread = (packed >> odd) & 0x55555555u;
+        uint paired = (spread | (spread >> 1u)) & 0x33333333u;
+        return (paired | (paired >> 2u)) & 0x0F0F0F0Fu;
     }
-    return solid;
+    if (axis == 1) {
+        uint held = (packed >> (odd << 1u)) & 0x33333333u;
+        return (held & 0x01010101u) | ((held >> 3u) & 0x02020202u) | ((held << 1u) & 0x04040404u) |
+               ((held >> 2u) & 0x08080808u);
+    }
+    return (packed >> (odd << 2u)) & 0x0F0F0F0Fu;
+}
+
+uint occupancyPatch(OccupancyBricks held, int layer, int axis) {
+    uint cells = occupancyLayerCells(held.packed, layer, axis);
+
+    uint grid = (cells & 0x3u) | ((cells >> 6u) & 0xCu) | ((cells << 2u) & 0x30u) |
+                ((cells >> 4u) & 0xC0u) | ((cells >> 8u) & 0x300u) | ((cells >> 14u) & 0xC00u) |
+                ((cells >> 6u) & 0x3000u) | ((cells >> 12u) & 0xC000u);
+
+    uint first = (held.parityV << 2u) + held.parityU;
+    return ((grid >> first) & 7u) | (((grid >> (first + 4u)) & 7u) << 3u) |
+           (((grid >> (first + 8u)) & 7u) << 6u);
 }
 
 OccupancyHit marchOccupancy(

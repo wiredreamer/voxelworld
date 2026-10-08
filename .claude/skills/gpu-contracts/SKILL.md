@@ -511,7 +511,12 @@ std430 нет диагностики на расхождение: ошибки �
   `voxel.vert` и `voxel.frag`; `ModelOccupancy` (привязка 2 набора занятости),
   `modelVolumeOf`, `modelSolid`, `modelPatch` в `occupancy.glsl`; хвост
   `UniformBufferObject`, `cornersFromOccupancy`, `cornersAcross`, `cornerLevel`
-  в `voxel.frag`; `occupancyBricksAround` и `occupancyPatch` в `occupancy.glsl`.
+  в `voxel.frag`; `occupancyBricksAround`, `occupancyLayerBits`,
+  `occupancyLayerCells` и `occupancyPatch` в `occupancy.glsl`. Три последние
+  знают раскладку байта блока — бит клетки `x | y << 1 | z << 2` — и порядок
+  склейки четырёх блоков в слово; поменял запись блока в `occupancy_clipmap` —
+  правь все три, сторожа у них нет, поломка — затенение не с той стороны
+  ступени.
   `voxel.vert` и `grass.vert` отдают location 7 (`fragConvexMask`), 8 и 9;
   location 4–6 свободны. Трава кладёт адрес объёма пучка
   (`model_occupancy_buffer::keep_copy`) и позицию в вокселях пучка.

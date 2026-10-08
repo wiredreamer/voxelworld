@@ -264,8 +264,8 @@ vec3 cornersFromOccupancy() {
     OccupancyBricks ahead = occupancyBricksAround(front, u, v);
 
     float occlusion = 0.0;
-    if (ahead.packed != 0u) {
-        occlusion = cornersAcross(occupancyPatch(ahead, front[axis], axis, u, v), at);
+    if ((ahead.packed & occupancyLayerBits(front[axis], axis)) != 0u) {
+        occlusion = cornersAcross(occupancyPatch(ahead, front[axis], axis), at);
     }
 
     float exposure = 0.0;
@@ -274,8 +274,9 @@ vec3 cornersFromOccupancy() {
         if ((host.y >> 1) != (front.y >> 1)) {
             under = occupancyBricksAround(host, u, v);
         }
-        if (under.packed != 0xFFFFFFFFu) {
-            uint open = ~occupancyPatch(under, host.y, axis, u, v) & 0x1FFu;
+        uint ground = occupancyLayerBits(host.y, axis);
+        if ((under.packed & ground) != ground) {
+            uint open = ~occupancyPatch(under, host.y, axis) & 0x1FFu;
             exposure  = cornersAcross(open, at);
         }
     }
