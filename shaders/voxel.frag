@@ -136,12 +136,12 @@ vec3 cascadeTint(int cascade, vec3 fromBase, vec3 normal) {
               ubo.light_wrap[cascade].xyz;
 
     if (cascade == 0) {
-        return texture(lightTints[0], at).rgb;
+        return textureLod(lightTints[0], at, 0.0).rgb;
     }
     if (cascade == 1) {
-        return texture(lightTints[1], at).rgb;
+        return textureLod(lightTints[1], at, 0.0).rgb;
     }
-    return texture(lightTints[2], at).rgb;
+    return textureLod(lightTints[2], at, 0.0).rgb;
 }
 
 const vec4 LIGHT_OPEN_SKY = vec4(0.0, 0.0, 0.0, 1.0);
@@ -163,13 +163,20 @@ CachedLight cachedLight(vec3 normal) {
     float edge  = LIGHT_EDGE[cascade];
     float outer = smoothstep(edge * LIGHT_EDGE_BLEND, edge, reach);
 
-    vec4 levels = cascadeLight(cascade, fromBase, normal);
-    vec3 tint   = cascadeTint(cascade, fromBase, normal);
-    if (outer > 0.0) {
-        bool last = cascade == LIGHT_LAST_CASCADE;
+    bool blends = outer > 0.0;
+    bool last   = cascade == LIGHT_LAST_CASCADE;
 
+    vec4 levels = cascadeLight(cascade, fromBase, normal);
+    if (blends) {
         levels = mix(levels, last ? LIGHT_OPEN_SKY : cascadeLight(cascade + 1, fromBase, normal), outer);
-        tint   = mix(tint, last ? vec3(0.0) : cascadeTint(cascade + 1, fromBase, normal), outer);
+    }
+    if (levels.g <= 0.0) {
+        return CachedLight(levels, vec3(1.0));
+    }
+
+    vec3 tint = cascadeTint(cascade, fromBase, normal);
+    if (blends) {
+        tint = mix(tint, last ? vec3(0.0) : cascadeTint(cascade + 1, fromBase, normal), outer);
     }
 
     float brightest = max(tint.r, max(tint.g, tint.b));
