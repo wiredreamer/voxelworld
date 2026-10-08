@@ -24,6 +24,9 @@ auto bench_from(const testbed::arg_reader& args) -> gfx::bench_config {
     if (const auto path = args.text("--bench-out")) {
         bench.report_path = std::string{*path};
     }
+    if (const auto path = args.text("--bench-series")) {
+        bench.series_path = std::string{*path};
+    }
     if (const auto path = args.text("--bench-json")) {
         bench.json_path = std::string{*path};
     }

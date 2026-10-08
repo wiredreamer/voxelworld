@@ -32,6 +32,8 @@ struct bench_config {
 
     std::string json_path;
 
+    std::string series_path;
+
     uint32 workers = 0;
 
     float32 fixed_delta_seconds = 0.0f;

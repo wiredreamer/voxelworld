@@ -22,7 +22,8 @@ testbed_app::testbed_app(
     , lod_distance_{args.real("--lod-distance", ecs::lod_base_chunks_behind_fog(view_distance_))}
     , lod_level_{args.text("--lod-level") ? args.integer("--lod-level", 0) : -1}
     , benching_{args.flag("--bench")}
-    , clusters_{args.flag("--cluster-stats"), args.count("--verify-lights", 0)} {
+    , clusters_{args.flag("--cluster-stats"), args.count("--verify-lights", 0)}
+    , pipeline_{args.flag("--pipeline-stats")} {
     if (const auto shot = args.text("--shot")) {
         shot_path_ = std::filesystem::path{*shot};
     }
@@ -42,6 +43,32 @@ testbed_app::testbed_app(
     renderer.get_bloom_settings().enabled =
         gfx::preset_of(quality_).bloom && !args.flag("--no-bloom");
     renderer.get_cluster_settings().enabled = !args.flag("--no-clusters");
+    renderer.set_frame_probe_enabled(pipeline_.wanted());
+
+    // см. docs/rendering.md#приборы-кадра
+    const std::string_view skipped = args.text("--skip").value_or(std::string_view{});
+    const bool flat                = args.flag("--flat");
+    const auto skips               = [&](std::string_view part) -> bool {
+        return flat || std::ranges::any_of(skipped | std::views::split(','), [&](auto&& named) {
+            return std::string_view{named} == part;
+        });
+    };
+    for (const auto named : skipped | std::views::split(',')) {
+        constexpr std::array<std::string_view, 5> known{"corners", "cache", "lights", "blobs", "fog"};
+        if (!std::string_view{named}.empty() && !std::ranges::contains(known, std::string_view{named})) {
+            throw std::runtime_error(std::format(
+                "unknown part '{}' in --skip; known ones are: corners, cache, lights, blobs, fog",
+                std::string_view{named}
+            ));
+        }
+    }
+    skips_fog_ = skips("fog");
+
+    auto& parts        = renderer.get_shading_parts();
+    parts.corners      = !skips("corners");
+    parts.light_cache  = !skips("cache");
+    parts.point_lights = !skips("lights");
+    parts.blob_shadows = !skips("blobs");
 
     if (const auto visible = args.count("--max-visible-lights", 0); visible > 0) {
         renderer.get_max_visible_lights() = visible;
@@ -128,6 +155,7 @@ testbed_app::testbed_app(
     fog.color         = {0.4f, 0.6f, 0.9f};
     fog.near_distance = ecs::fog_near_share * draw_reach;
     fog.far_distance  = ecs::fog_far_share * draw_reach;
+    fog.enabled       = !skips_fog_;
 
     camera.set_far(fog.far_distance);
 
@@ -202,6 +230,7 @@ auto testbed_app::render(
 
     scene_->tick(delta_time);
     clusters_.collect(get_engine().get_renderer(), !benching_ || bench_ready_);
+    pipeline_.collect(get_engine().get_renderer(), !benching_ || bench_ready_);
     tick_day_night_(delta_time);
 
     const auto cam_pos = get_engine().get_camera().get_position();
@@ -276,6 +305,15 @@ auto testbed_app::collect_report(gfx::report& out) const -> void {
 
     scene_->collect_report(out);
     clusters_.collect_report(out);
+    pipeline_.collect_report(out);
+
+    const auto& parts = get_engine().get_renderer().get_shading_parts();
+    out.section("shading parts")
+        .value("corners", parts.corners)
+        .value("light_cache", parts.light_cache)
+        .value("point_lights", parts.point_lights)
+        .value("blob_shadows", parts.blob_shadows)
+        .value("fog", !skips_fog_);
 }
 
 }  // namespace vw::testbed

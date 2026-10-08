@@ -167,6 +167,11 @@ auto engine::bench_tick_() -> void {
         .render  = renderer_->get_stats().timing,
         .grid    = world_->system<ecs::world_grid_system>().get_stats(),
         .systems = world_->get_update_stats(),
+
+        .light_bricks     = renderer_->get_stats().light_cache.bricks_frame,
+        .light_waiting    = renderer_->get_stats().light_cache.waiting,
+        .occupancy_packed = renderer_->get_stats().occupancy.packed_frame,
+        .meshes_pending   = renderer_->get_stats().combined_buffers.mesh_pending,
     });
 
     if (recorder_->sample_count() >= bench_.measure_frames) {
@@ -405,6 +410,15 @@ auto engine::write_bench_report_() const -> void {
             log::error(lc_bench_, "cannot write bench report to {}", bench_.report_path);
         } else {
             out << report_text;
+        }
+    }
+
+    if (!bench_.series_path.empty()) {
+        std::ofstream series{bench_.series_path};
+        if (!series) {
+            log::error(lc_bench_, "cannot write bench series to {}", bench_.series_path);
+        } else {
+            recorder_->write_series(series);
         }
     }
 

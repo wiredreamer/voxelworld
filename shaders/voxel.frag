@@ -107,6 +107,8 @@ layout(set = 0, binding = 0) uniform UniformBufferObject {
     vec4 light_grid;
 
     vec4 light_wrap[4];
+
+    uvec4 shading_skips;
 } ubo;
 
 layout(set = 6, binding = 0) uniform sampler3D lightCascades[3];
@@ -544,7 +546,19 @@ vec4 shown(vec3 display) {
     return vec4(sceneFromDisplay(display, ubo.tonemap_params.xy), 0.0);
 }
 
+const uint SKIPS_CORNERS      = 1u << 0u;
+const uint SKIPS_LIGHT_CACHE  = 1u << 1u;
+const uint SKIPS_POINT_LIGHTS = 1u << 2u;
+const uint SKIPS_BLOB_SHADOWS = 1u << 3u;
+
 void main() {
+    // см. docs/rendering.md#приборы-кадра
+    if (ubo.debug_view == 13u) {
+        outColor = vec4(1.0, 1.0, 1.0, 0.0);
+        return;
+    }
+
+    uint skips  = ubo.shading_skips.x;
     vec3 normal = normalize(fragNormal);
 
 #if SHADOW_ENABLED
@@ -555,7 +569,8 @@ void main() {
     float shadow = 1.0;
 #endif
 
-    vec3 corners = fragInstanceLight.z > -0.5 ? cornersFromOccupancy() : vec3(0.0);
+    bool shadesCorners = fragInstanceLight.z > -0.5 && (skips & SKIPS_CORNERS) == 0u;
+    vec3 corners       = shadesCorners ? cornersFromOccupancy() : vec3(0.0);
 
     float occlusion = corners.x * corners.z;
     float exposure  = corners.y * corners.z;
@@ -594,7 +609,9 @@ void main() {
         return;
     }
 
-    CachedLight cached = cachedLight(normal);
+    CachedLight cached = (skips & SKIPS_LIGHT_CACHE) == 0u
+                             ? cachedLight(normal)
+                             : CachedLight(LIGHT_OPEN_SKY, vec3(1.0));
     vec4 cacheLight    = cached.levels;
 
     float skyReach = pow(cacheLight.a, ubo.sky_params.x);
@@ -634,7 +651,7 @@ void main() {
         return;
     }
 
-    float blob = blobShadow(fragPos, normal);
+    float blob = (skips & SKIPS_BLOB_SHADOWS) == 0u ? blobShadow(fragPos, normal) : 1.0;
 
     vec3 sky = mix(ubo.cave_ambient.rgb, calculateHemisphereAmbient(normal), skyReach);
     vec3 ambient = sky * aoFactor;
@@ -645,7 +662,8 @@ void main() {
 
     vec3 pointLighting = vec3(0.0);
 
-    if (ubo.clusters.enabled == 0u) {
+    if ((skips & SKIPS_POINT_LIGHTS) != 0u) {
+    } else if (ubo.clusters.enabled == 0u) {
         for (uint i = 0; i < ubo.point_lights_count; i++) {
             pointLighting += calculatePointLight(i, fragPos);
         }

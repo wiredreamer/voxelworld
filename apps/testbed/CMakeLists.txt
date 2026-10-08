@@ -13,6 +13,7 @@ target_sources(${PROJECT_NAME}
             src/camera.cppm
             src/cameras.cppm
             src/probes/clusters.cppm
+            src/probes/pipeline.cppm
             src/app.cppm
             src/scenes.cppm
             src/scenes/terrain.cppm
@@ -28,6 +29,7 @@ target_sources(${PROJECT_NAME}
         src/cameras.cpp
         src/scenes.cpp
         src/probes/clusters.cpp
+        src/probes/pipeline.cpp
         src/app/app.cpp
         src/app/world_setup.cpp
         src/app/daynight.cpp

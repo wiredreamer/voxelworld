@@ -82,7 +82,8 @@ renderer::renderer(
     create_imgui_descriptor_pool();
     init_imgui();
 
-    gpu_timer_ = std::make_unique<gpu_timer>(*context_, get_frames_in_flight());
+    gpu_timer_   = std::make_unique<gpu_timer>(*context_, get_frames_in_flight());
+    frame_probe_ = std::make_unique<frame_probe>(*context_, get_frames_in_flight());
 
     cull_pipeline_ = std::make_unique<cull_pipeline>(*context_, descriptor_pool_);
 
@@ -148,6 +149,7 @@ renderer::~renderer() {
     grass_.reset();
     combined_buffer_pool_.reset();
     cull_pipeline_.reset();
+    frame_probe_.reset();
     gpu_timer_.reset();
     palette_buffer_.reset();
     light_grid_.reset();
@@ -193,6 +195,7 @@ auto renderer::begin_frame() -> bool {
 
     gpu_timer_->resolve(current_frame_);
     stats_.timing.gpu = gpu_timer_->get_stats();
+    frame_probe_->resolve(current_frame_);
 
     uint32 image_index = 0;
     const vk::Result result = device.acquireNextImageKHR(
@@ -525,6 +528,7 @@ auto renderer::render(
 
     auto cmd = command_buffers_[current_frame_];
     gpu_timer_->reset(cmd, current_frame_);
+    frame_probe_->reset(cmd, current_frame_);
     gpu_timer_->begin(cmd, gpu_stage::frame);
 
     stats_.timing.mesh_sync_ms = measure_ms([&] { sync_meshes_(world); });
@@ -640,6 +644,7 @@ auto renderer::render(
             combined_buffer_pool_->get_buffers(),
             current_frame_
         );
+        frame_probe_->copy_cull_counts(cmd, combined_buffer_pool_->get_buffers(), current_frame_);
 
         {
             vk::MemoryBarrier compute_barrier{};
@@ -1327,6 +1332,18 @@ auto renderer::create_graphics_pipeline() -> void {
 
     graphics_pipeline_ =
         vk_must(context_->get_device().createGraphicsPipeline(nullptr, pipeline_info), "create graphics pipeline");
+
+    // см. docs/rendering.md#приборы-кадра
+    color_blend_attachment.blendEnable         = vk::True;
+    color_blend_attachment.srcColorBlendFactor = vk::BlendFactor::eOne;
+    color_blend_attachment.dstColorBlendFactor = vk::BlendFactor::eOne;
+    color_blend_attachment.colorBlendOp        = vk::BlendOp::eAdd;
+    color_blend_attachment.srcAlphaBlendFactor = vk::BlendFactor::eZero;
+    color_blend_attachment.dstAlphaBlendFactor = vk::BlendFactor::eOne;
+    color_blend_attachment.alphaBlendOp        = vk::BlendOp::eAdd;
+
+    overdraw_pipeline_ =
+        vk_must(context_->get_device().createGraphicsPipeline(nullptr, pipeline_info), "create overdraw pipeline");
 }
 auto renderer::create_wireframe_pipeline() -> void {
     vk::PipelineShaderStageCreateInfo shader_stages[] = {
@@ -1783,6 +1800,10 @@ auto renderer::cleanup_pipelines() -> void {
         context_->get_device().destroyPipeline(wireframe_pipeline_);
         wireframe_pipeline_ = nullptr;
     }
+    if (overdraw_pipeline_ != nullptr) {
+        context_->get_device().destroyPipeline(overdraw_pipeline_);
+        overdraw_pipeline_ = nullptr;
+    }
     if (pipeline_layout_ != nullptr) {
         context_->get_device().destroyPipelineLayout(pipeline_layout_);
         pipeline_layout_ = nullptr;
@@ -1922,7 +1943,9 @@ auto renderer::render_world_pass(
     const vec3f sky = scene_from_display(
         vec3f{clear_color_.x, clear_color_.y, clear_color_.z}, tonemap_settings_
     );
-    const vec4f scene_clear{sky.x, sky.y, sky.z, 0.0f};
+    const vec4f scene_clear = debug_view_ == debug_view::overdraw
+                                  ? vec4f{0.0f, 0.0f, 0.0f, 0.0f}
+                                  : vec4f{sky.x, sky.y, sky.z, 0.0f};
 
     vk::ClearValue clear_values[2]{};
     memcpy(&clear_values[0].color, &scene_clear, sizeof(vec4f));
@@ -1939,7 +1962,9 @@ auto renderer::render_world_pass(
 
     stats_.timing.world_pass_geometry_ms = measure_ms([&] {
         gpu_timer_->begin(cmd, gpu_stage::world_geometry);
+        frame_probe_->begin(cmd);
         render_world(world, camera);
+        frame_probe_->end(cmd);
         gpu_timer_->end(cmd, gpu_stage::world_geometry);
     });
 
@@ -1994,7 +2019,10 @@ auto renderer::render_post_() -> void {
     cover_swapchain_();
 
     gpu_timer_->begin(cmd, gpu_stage::composite);
-    post_process_->draw_composite(cmd, tonemap_settings_, bloom_settings_);
+    post_process_->draw_composite(
+        cmd, tonemap_settings_, bloom_settings_,
+        debug_view_ == debug_view::overdraw ? overdraw_view_full_scale : 0.0f
+    );
     gpu_timer_->end(cmd, gpu_stage::composite);
 
     stats_.timing.world_pass_imgui_ms = measure_ms([&] {
@@ -2017,8 +2045,12 @@ auto renderer::render_world(
         return;
     }
 
+    const bool counts_overdraw = debug_view_ == debug_view::overdraw;
+
     vk::Pipeline current_pipeline =
-        (current_render_mode_ == render_mode::lit) ? graphics_pipeline_ : wireframe_pipeline_;
+        counts_overdraw ? overdraw_pipeline_
+                        : ((current_render_mode_ == render_mode::lit) ? graphics_pipeline_
+                                                                      : wireframe_pipeline_);
     command_buffers_[current_frame_].bindPipeline(vk::PipelineBindPoint::eGraphics, current_pipeline);
 
     const world_push_constant_data world_push{.wind = wind_push_(), .grid = grid_push_()};
@@ -2106,7 +2138,7 @@ auto renderer::render_world(
         }
     }
 
-    if (current_render_mode_ == render_mode::lit) {
+    if (current_render_mode_ == render_mode::lit && !counts_overdraw) {
         grass_->draw(
             command_buffers_[current_frame_], current_frame_,
             grass_bound_sets{
@@ -2238,6 +2270,7 @@ auto renderer::update_uniform_buffer(
     ubo.fog.near_distance = fog_settings_.near_distance;
     ubo.fog.far_distance  = fog_settings_.far_distance;
     ubo.fog.enabled       = fog_settings_.enabled ? 1u : 0u;
+    ubo.shading_skips     = vec4<uint32>{shading_parts_.skips(), 0, 0, 0};
 
     uniform_buffers_[current_frame_]->copy_from_struct(ubo);
 }

@@ -11,6 +11,7 @@ import vw.gfx;
 import :args;
 import :camera;
 import :probes.clusters;
+import :probes.pipeline;
 import :scene;
 
 export namespace vw::testbed {
@@ -168,8 +169,10 @@ private:
     mutable bool bench_ready_ = false;
     bool world_ready_         = false;
     bool benching_            = false;
+    bool skips_fog_           = false;
 
     cluster_probe clusters_;
+    pipeline_probe pipeline_;
 
     std::optional<std::filesystem::path> shot_path_;
     std::optional<float32> pitch_;

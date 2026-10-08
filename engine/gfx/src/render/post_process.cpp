@@ -464,7 +464,8 @@ auto post_process::record_bloom(vk::CommandBuffer cmd) const -> void {
 }
 
 auto post_process::draw_composite(
-    vk::CommandBuffer cmd, const tonemap_settings& tonemap, const bloom_settings& bloom
+    vk::CommandBuffer cmd, const tonemap_settings& tonemap, const bloom_settings& bloom,
+    float32 heat_full_scale
 ) const -> void {
     const std::array sets{
         scene_sampled_as_,
@@ -480,8 +481,8 @@ auto post_process::draw_composite(
         .params = vec4f{
             tonemap.exposure,
             std::max(tonemap.white_point, 0.01f),
-            bloom.enabled ? bloom.intensity : 0.0f,
-            0.0f,
+            bloom.enabled && heat_full_scale <= 0.0f ? bloom.intensity : 0.0f,
+            heat_full_scale,
         },
     };
     cmd.pushConstants<post_push_constants>(

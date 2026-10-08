@@ -215,10 +215,14 @@ auto vulkan_context::create_logical_device_() -> void {
         });
     }
 
-    constexpr vk::PhysicalDeviceFeatures device_features{
-        .multiDrawIndirect             = vk::True,
-        .drawIndirectFirstInstance     = vk::True,
-        .fillModeNonSolid              = vk::True,
+    counts_pipeline_statistics_ =
+        physical_device_.getFeatures().pipelineStatisticsQuery == vk::True;
+
+    const vk::PhysicalDeviceFeatures device_features{
+        .multiDrawIndirect         = vk::True,
+        .drawIndirectFirstInstance = vk::True,
+        .fillModeNonSolid          = vk::True,
+        .pipelineStatisticsQuery   = counts_pipeline_statistics_ ? vk::True : vk::False,
     };
 
     const vk::StructureChain<

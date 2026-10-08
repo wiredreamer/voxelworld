@@ -38,6 +38,7 @@ target_sources(vw_gfx
             src/render/render.cppm
             src/render/vulkan_context.cppm
             src/render/gpu_timer.cppm
+            src/render/frame_probe.cppm
             src/render/shadow_map.cppm
             src/render/cull_pipeline.cppm
             src/render/grass_renderer.cppm
@@ -79,6 +80,7 @@ target_sources(vw_gfx
         src/resource/light_cache.cpp
         src/render/vulkan_context.cpp
         src/render/gpu_timer.cpp
+        src/render/frame_probe.cpp
         src/render/shadow_map.cpp
         src/render/cull_pipeline.cpp
         src/render/grass_renderer.cpp

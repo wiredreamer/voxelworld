@@ -179,6 +179,46 @@ auto frame_recorder::report() const -> std::string {
 }
 
 
+auto frame_recorder::write_series(std::ostream& out) const -> void {
+    constexpr std::array counters{
+        stage_desc{"light_bricks", [](const frame_sample& s) -> float32 { return static_cast<float32>(s.light_bricks); }},
+        stage_desc{"light_waiting", [](const frame_sample& s) -> float32 { return static_cast<float32>(s.light_waiting); }},
+        stage_desc{"occupancy_packed", [](const frame_sample& s) -> float32 { return static_cast<float32>(s.occupancy_packed); }},
+        stage_desc{"meshes_pending", [](const frame_sample& s) -> float32 { return static_cast<float32>(s.meshes_pending); }},
+    };
+
+    const bool timed = !samples_.empty() && samples_.front().render.gpu.supported;
+
+    std::string line = "sample";
+    const auto name  = [&](const stage_desc& stage) -> void {
+        line += ',';
+        line += stage.name;
+    };
+    std::ranges::for_each(cpu_stages, name);
+    std::ranges::for_each(system_stages, name);
+    std::ranges::for_each(counters, name);
+    if (timed) {
+        std::ranges::for_each(gpu_stages, name);
+    }
+    out << line << '\n';
+
+    for (std::size_t at = 0; at < samples_.size(); ++at) {
+        const frame_sample& sample = samples_[at];
+
+        line = std::format("{}", at);
+        const auto cell = [&](const stage_desc& stage) -> void {
+            std::format_to(std::back_inserter(line), ",{:.4f}", stage.get(sample));
+        };
+        std::ranges::for_each(cpu_stages, cell);
+        std::ranges::for_each(system_stages, cell);
+        std::ranges::for_each(counters, cell);
+        if (timed) {
+            std::ranges::for_each(gpu_stages, cell);
+        }
+        out << line << '\n';
+    }
+}
+
 auto frame_recorder::collect(gfx::report& out) const -> void {
     if (samples_.empty()) {
         return;

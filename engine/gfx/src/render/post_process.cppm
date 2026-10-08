@@ -40,7 +40,8 @@ public:
     auto record_bloom(vk::CommandBuffer cmd) const -> void;
 
     auto draw_composite(
-        vk::CommandBuffer cmd, const tonemap_settings& tonemap, const bloom_settings& bloom
+        vk::CommandBuffer cmd, const tonemap_settings& tonemap, const bloom_settings& bloom,
+        float32 heat_full_scale
     ) const -> void;
 
 private:

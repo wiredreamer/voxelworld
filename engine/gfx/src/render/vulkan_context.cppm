@@ -50,6 +50,10 @@ public:
     [[nodiscard]] auto get_timestamp_period() const -> float32;
     [[nodiscard]] auto get_timestamp_valid_bits() const -> uint32;
 
+    [[nodiscard]] auto counts_pipeline_statistics() const -> bool {
+        return counts_pipeline_statistics_;
+    }
+
 private:
     auto create_instance_() -> void;
     auto create_surface_() -> void;
@@ -73,6 +77,7 @@ private:
     vk::Queue present_queue_;
     vk::CommandPool command_pool_;
     queue_family_indices queue_families_;
+    bool counts_pipeline_statistics_ = false;
 
     std::vector<const char*> device_extensions_;
 

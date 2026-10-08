@@ -97,6 +97,8 @@ struct uniform_buffer_object {
     alignas(16) vec4f light_grid;
 
     alignas(16) vec4f light_wrap[4];
+
+    alignas(16) vec4<uint32> shading_skips{};
 };
 
 static_assert(offsetof(uniform_buffer_object, corner_shading) == 640);
@@ -115,7 +117,8 @@ static_assert(offsetof(uniform_buffer_object, occupancy_eye) == 848);
 static_assert(offsetof(uniform_buffer_object, occupancy_base) == 864);
 static_assert(offsetof(uniform_buffer_object, light_grid) == 880);
 static_assert(offsetof(uniform_buffer_object, light_wrap) == 896);
-static_assert(sizeof(uniform_buffer_object) == 960);
+static_assert(offsetof(uniform_buffer_object, shading_skips) == 960);
+static_assert(sizeof(uniform_buffer_object) == 976);
 
 struct shadow_push_constant_data {
     alignas(16) vec4f wind;

@@ -154,19 +154,41 @@ enum class debug_view : uint32 {
     state,
 
     material,
+
+    overdraw,
 };
 
-inline constexpr std::array<std::string_view, 13> debug_view_names{
+inline constexpr std::array<std::string_view, 14> debug_view_names{
     "off",         "ambient occlusion", "normals",
     "sky light",   "convexity",         "block light",
     "blob shadow", "light complexity",  "blob complexity",
     "occupancy",       "sun-light",         "state",
-    "material",
+    "material",        "overdraw",
 };
 
 static_assert(
-    debug_view_names.size() == static_cast<std::size_t>(debug_view::material) + 1
+    debug_view_names.size() == static_cast<std::size_t>(debug_view::overdraw) + 1
 );
+
+inline constexpr float32 overdraw_view_full_scale = 8.0f;
+
+// см. docs/rendering.md#приборы-кадра
+struct shading_parts {
+    bool corners      = true;
+    bool light_cache  = true;
+    bool point_lights = true;
+    bool blob_shadows = true;
+
+    static constexpr uint32 skips_corners      = 1U << 0U;
+    static constexpr uint32 skips_light_cache  = 1U << 1U;
+    static constexpr uint32 skips_point_lights = 1U << 2U;
+    static constexpr uint32 skips_blob_shadows = 1U << 3U;
+
+    [[nodiscard]] constexpr auto skips() const -> uint32 {
+        return (corners ? 0U : skips_corners) | (light_cache ? 0U : skips_light_cache) |
+               (point_lights ? 0U : skips_point_lights) | (blob_shadows ? 0U : skips_blob_shadows);
+    }
+};
 
 struct block_light_settings {
     vec3f color{1.0f, 0.86f, 0.62f};

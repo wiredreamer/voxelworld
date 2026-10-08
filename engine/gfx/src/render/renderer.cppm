@@ -119,6 +119,23 @@ public:
     [[nodiscard]] auto get_light_cache_settings() -> light_cache_settings& {
         return light_cache_settings_;
     }
+
+    // см. docs/rendering.md#приборы-кадра
+    [[nodiscard]] auto get_render_extent() const -> vec2<uint32> {
+        return {swapchain_extent_.width, swapchain_extent_.height};
+    }
+
+    [[nodiscard]] auto get_shading_parts() -> shading_parts& {
+        return shading_parts_;
+    }
+
+    auto set_frame_probe_enabled(bool enabled) -> void {
+        frame_probe_->set_enabled(enabled);
+    }
+
+    [[nodiscard]] auto get_frame_probe_stats() const -> const frame_probe_stats& {
+        return frame_probe_->get_stats();
+    }
     [[nodiscard]] auto get_block_light_settings() -> block_light_settings&;
 
     [[nodiscard]] auto get_blob_strength() -> float32& {
@@ -303,6 +320,7 @@ private:
     vk::PipelineLayout pipeline_layout_                         = nullptr;
     vk::Pipeline graphics_pipeline_                             = nullptr;
     vk::Pipeline wireframe_pipeline_                            = nullptr;
+    vk::Pipeline overdraw_pipeline_                             = nullptr;
     vk::Pipeline shadow_pipeline_                               = nullptr;
     vk::PipelineLayout shadow_pipeline_layout_                  = nullptr;
 
@@ -397,6 +415,8 @@ private:
     cluster_settings cluster_settings_;
     float32 blob_strength_ = 1.0f;
     debug_view debug_view_ = debug_view::off;
+    shading_parts shading_parts_{};
+    std::unique_ptr<frame_probe> frame_probe_;
 
     mutable renderer_stats stats_;
     uint32 draw_call_count_ = 0;

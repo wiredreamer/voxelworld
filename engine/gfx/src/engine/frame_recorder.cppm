@@ -15,6 +15,11 @@ struct frame_sample {
     render_timing_stats render{};
     ecs::world_grid_system_stats grid{};
     ecs::world_update_stats systems{};
+
+    uint32 light_bricks     = 0;
+    uint32 light_waiting    = 0;
+    uint32 occupancy_packed = 0;
+    uint32 meshes_pending   = 0;
 };
 
 class frame_recorder final {
@@ -27,6 +32,9 @@ public:
     [[nodiscard]] auto report() const -> std::string;
 
     auto collect(gfx::report& out) const -> void;
+
+    // см. docs/optimization.md#покадровый-ряд
+    auto write_series(std::ostream& out) const -> void;
 
 private:
     using stage_getter = auto (*)(const frame_sample&) -> float32;
