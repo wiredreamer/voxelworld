@@ -584,3 +584,71 @@ TEST_CASE("a column is placed once its four side neighbours are in, whatever the
     REQUIRE(gs.grid()->has_column(corner));
     REQUIRE_FALSE(gs.grid()->has_column(corner + vec2i{1, 1}));
 }
+
+TEST_CASE("columns are placed from the viewer outwards", "[world][grid]") {
+    constexpr int32 wide_view = 5;
+
+    job_system jobs;
+    world w;
+
+    auto& models = w.resource<asset::model_registry>();
+    auto& gs     = w.system<world_grid_system>();
+    gs.set_grid(std::make_unique<world_grid>(w, 8));
+    gs.set_loader(
+        std::make_unique<chunk_loader>(
+            std::make_unique<perlin_terrain_generator>(
+                models.get_identity_pool(), models.get_page_pool(), shallow_params()
+            ),
+            jobs
+        )
+    );
+
+    const entity viewer =
+        w.create().with<transform_component>().with<world_view_component>().get_entity();
+    gs.modify_view(viewer).set_view_distance(wide_view);
+
+    std::unordered_map<vec2i, int32> placed_at;
+    uint32 backlog = 0;
+    int32 quiet    = 0;
+    for (int32 frame = 0; frame < 4000 && quiet < 120; ++frame) {
+        w.update(0.016F);
+
+        bool placed = false;
+        gs.grid()->for_each_chunk([&](vec3i coord, const chunk&) {
+            placed = placed_at.try_emplace(vec2i{coord.x, coord.z}, frame).second || placed;
+        });
+
+        const auto& stats  = gs.get_stats();
+        const bool waiting = stats.pending_count > 0 || stats.ready_count > 0;
+        quiet              = (waiting || placed) ? 0 : quiet + 1;
+        backlog            = std::max(backlog, stats.ready_count);
+        if (waiting) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        }
+    }
+
+    INFO("deepest backlog of ready columns " << backlog);
+    REQUIRE(backlog > 20);
+
+    std::vector<std::pair<int32, int32>> order;
+    for (const auto& [column, frame] : placed_at) {
+        order.emplace_back(frame, (column.x * column.x) + (column.y * column.y));
+    }
+    REQUIRE(order.size() > 60);
+    std::ranges::sort(order);
+
+    const auto half = static_cast<std::ptrdiff_t>(order.size() / 2);
+    const auto mean = [](auto first, auto last) -> float64 {
+        float64 sum = 0.0;
+        for (auto it = first; it != last; ++it) {
+            sum += it->second;
+        }
+        return sum / static_cast<float64>(last - first);
+    };
+
+    const float64 early = mean(order.begin(), order.begin() + half);
+    const float64 late  = mean(order.begin() + half, order.end());
+
+    INFO("mean squared distance, first half " << early << ", second half " << late);
+    REQUIRE(early * 1.5 < late);
+}

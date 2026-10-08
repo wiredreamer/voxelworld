@@ -300,7 +300,15 @@ auto world_grid_system::integrate_completed_columns_(
     int32 processed_columns     = 0;
 
     while (processed_columns < max_columns_per_frame && !layer.ready_columns.empty()) {
-        const auto coord = layer.ready_columns.back();
+        // см. docs/world.md#путь-колонки
+        const auto nearest = std::ranges::min_element(
+            layer.ready_columns, {}, [&layer](vec2i at) -> int64 {
+                const vec2i away = at - layer.camera_column;
+                return (int64{away.x} * away.x) + (int64{away.y} * away.y);
+            }
+        );
+        const auto coord = *nearest;
+        *nearest         = layer.ready_columns.back();
         layer.ready_columns.pop_back();
 
         const auto it = layer.staged_columns.find(coord);
