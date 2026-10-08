@@ -21,12 +21,18 @@ struct player_input_component final {
         return hold_seconds_[std::to_underlying(action)];
     }
 
+    // см. docs/ENGINE.md#луч-прицела
+    [[nodiscard]] auto get_aim_origin() const -> const std::optional<vec3f>& {
+        return aim_origin_;
+    }
+
 private:
     friend class input_system;
 
     input_frame frame_;
     input_frame incoming_;
     bool has_incoming_ = false;
+    std::optional<vec3f> aim_origin_;
 
     std::array<float32, input_action_count> hold_seconds_{};
 };
@@ -45,6 +51,7 @@ public:
     [[nodiscard]] auto locally_controlled() const -> ecs::entity;
 
     auto submit(ecs::entity ent, const input_frame& frame) -> void;
+    auto aim_from(ecs::entity ent, const vec3f& origin) -> void;
 
 private:
     ecs::world* world_;

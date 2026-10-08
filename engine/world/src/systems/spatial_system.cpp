@@ -207,12 +207,17 @@ auto spatial_system::voxel_ray_cast(
     const spatial::ray& r, std::vector<entity>& candidates, spatial_layer_mask layer_mask
 ) const -> std::optional<voxel_ray_hit> {
     query_all(r, candidates, layer_mask);
+    return closest_voxel_hit(r, candidates);
+}
 
+auto spatial_system::closest_voxel_hit(
+    const spatial::ray& r, std::span<const entity> among
+) const -> std::optional<voxel_ray_hit> {
     auto& reg = world_->registry();
     std::optional<voxel_ray_hit> closest_hit;
     float closest_distance_sq = std::numeric_limits<float>::max();
 
-    for (entity ent : candidates) {
+    for (entity ent : among) {
         const bool can_be_processed =  //
             reg.has<model_component>(ent) &&
             reg.has<transform_component>(ent);

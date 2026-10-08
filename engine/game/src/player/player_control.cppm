@@ -6,6 +6,7 @@ import vw.core;
 import vw.asset;
 import vw.ecs;
 import vw.world;
+import :input.mapper;
 
 export namespace vw::game {
 
@@ -20,6 +21,20 @@ enum class air_state : uint8 {
 enum class dodge_kind : uint8 {
     roll,
     dash,
+};
+
+enum class loadout : uint8 {
+    unarmed,
+    melee,
+    bow,
+};
+
+// см. docs/ENGINE.md#лук
+enum class bow_phase : uint8 {
+    rest,
+    drawing,
+    holding,
+    releasing,
 };
 
 struct movement_tuning final {
@@ -74,6 +89,13 @@ struct movement_tuning final {
     float32 stance_turn_follow_degrees     = 10.0f;
     float32 stance_turn_step_seconds       = 0.15f;
     float32 stance_turn_step_lift          = 1.5f;
+    float32 bow_draw_playback_rate         = 1.0f;
+    float32 bow_full_draw_seconds          = 0.8f;
+    float32 bow_quick_draw_seconds         = 0.25f;
+    float32 bow_quick_arrow_speed          = 550.0f;
+    float32 bow_full_arrow_speed           = 900.0f;
+    float32 bow_aim_reach                  = 4000.0f;
+    float32 bow_release_fallback_seconds   = 0.08f;
 };
 
 struct player_component final {
@@ -83,6 +105,42 @@ struct player_component final {
 
     [[nodiscard]] auto has_shield() const -> bool {
         return shield_.is_valid();
+    }
+
+    [[nodiscard]] auto has_bow() const -> bool {
+        return bow_.is_valid();
+    }
+
+    [[nodiscard]] auto has_nocked_arrow() const -> bool {
+        return nocked_arrow_.is_valid();
+    }
+
+    [[nodiscard]] auto get_loadout() const -> loadout {
+        return loadout_;
+    }
+
+    [[nodiscard]] auto get_bow_phase() const -> bow_phase {
+        return bow_phase_;
+    }
+
+    [[nodiscard]] auto get_draw_share() const -> float32 {
+        return draw_share_;
+    }
+
+    [[nodiscard]] auto get_shot_power() const -> float32 {
+        return shot_power_;
+    }
+
+    [[nodiscard]] auto get_arrows_loosed() const -> uint32 {
+        return arrows_loosed_;
+    }
+
+    [[nodiscard]] auto is_aiming() const -> bool {
+        return aiming_;
+    }
+
+    [[nodiscard]] auto is_braced() const -> bool {
+        return braced_;
     }
 
     [[nodiscard]] auto is_guarding() const -> bool {
@@ -235,6 +293,23 @@ private:
     ecs::entity foot_left_;
     ecs::entity weapon_;
     ecs::entity shield_;
+    ecs::entity bow_;
+    ecs::entity nocked_arrow_;
+    loadout loadout_         = loadout::unarmed;
+    bow_phase bow_phase_     = bow_phase::rest;
+    float32 draw_seconds_    = 0.0f;
+    float32 draw_share_      = 0.0f;
+    float32 shot_power_      = 0.0f;
+    float32 release_seconds_ = 0.0f;
+    uint32 arrows_loosed_    = 0;
+    bool draw_ready_         = false;
+    bool release_fired_      = false;
+    bool arrow_loosed_       = false;
+    bool bow_cancel_open_    = false;
+    bool aiming_             = false;
+    bool leapt_              = false;
+    bool draw_owed_          = false;
+    bool braced_             = false;
 
     vec3f attack_facing_{0.0f, 0.0f, 0.0f};
     vec3f previous_planar_velocity_{0.0f, 0.0f, 0.0f};
@@ -291,7 +366,7 @@ public:
 
     [[nodiscard]] auto spawn() -> ecs::entity;
 
-    auto toggle_weapon(ecs::entity player) -> void;
+    auto equip(ecs::entity player, loadout wanted) -> void;
 
     auto take_hit_on_shield(ecs::entity player) -> bool;
 
@@ -319,10 +394,37 @@ private:
         ecs::entity hand, std::string_view socket, std::string_view prefab
     ) const -> ecs::entity;
     static auto end_swing_(player_component& state) -> void;
+    auto put_away_(player_component& state) const -> void;
+    auto draw_bow_(
+        ecs::entity ent, player_component& state, const input_frame& frame, bool action_playing,
+        float32 delta_time
+    ) -> void;
+    static auto rest_bow_(player_component& state) -> void;
+    auto drop_draw_(ecs::entity ent, player_component& state) -> void;
+    auto nock_(ecs::entity player) const -> void;
+    auto unnock_(ecs::entity player) const -> void;
+    auto loose_(ecs::entity player) const -> void;
+
+    enum class bow_chore : uint8 {
+        nock,
+        unnock,
+        loose,
+    };
+
+    struct pending_chore {
+        ecs::entity player;
+        bow_chore chore;
+    };
+
+    struct pending_loadout {
+        ecs::entity player;
+        loadout wanted;
+    };
 
     ecs::world* world_;
     asset::asset_storage* assets_;
-    std::vector<ecs::entity> toggling_;
+    std::vector<pending_loadout> equipping_;
+    std::vector<pending_chore> chores_;
     movement_tuning tuning_;
 };
 

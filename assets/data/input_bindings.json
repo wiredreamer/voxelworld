@@ -11,7 +11,8 @@
     "interact": ["f"],
     "inventory": ["tab"],
     "compass": ["c"],
-    "toggle_weapon": ["1"]
+    "loadout_melee": ["1"],
+    "loadout_bow": ["2"]
   },
   "move": {
     "forward": ["w"],

@@ -19,15 +19,17 @@ enum class input_action : uint8 {
     interact,
     inventory,
     compass,
-    toggle_weapon,
+    loadout_melee,
+    loadout_bow,
 };
 
 inline constexpr std::size_t input_action_count =
-    std::to_underlying(input_action::toggle_weapon) + 1;
+    std::to_underlying(input_action::loadout_bow) + 1;
 
 inline constexpr std::array<std::string_view, input_action_count> input_action_names{
     "jump",      "sprint",    "attack",   "block",     "dodge",   "ability_1",
-    "ability_2", "ability_3", "interact", "inventory", "compass", "toggle_weapon",
+    "ability_2", "ability_3", "interact", "inventory", "compass", "loadout_melee",
+    "loadout_bow",
 };
 
 [[nodiscard]] constexpr auto input_action_name(input_action action) -> std::string_view {
@@ -76,6 +78,12 @@ struct input_frame {
     [[nodiscard]] auto look_forward_flat() const -> vec3f {
         const float32 yaw = math::radians(look_yaw_degrees);
         return {std::sin(yaw), 0.0f, std::cos(yaw)};
+    }
+
+    [[nodiscard]] auto look_direction() const -> vec3f {
+        const float32 yaw   = math::radians(look_yaw_degrees);
+        const float32 pitch = math::radians(look_pitch_degrees);
+        return {std::sin(yaw) * std::cos(pitch), std::sin(pitch), std::cos(yaw) * std::cos(pitch)};
     }
 
     [[nodiscard]] auto look_right_flat() const -> vec3f {

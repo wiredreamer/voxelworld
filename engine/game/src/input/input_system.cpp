@@ -38,6 +38,14 @@ auto input_system::submit(
     }
 }
 
+auto input_system::aim_from(
+    ecs::entity ent, const vec3f& origin
+) -> void {
+    if (auto* input = world_->try_get<player_input_component>(ent)) {
+        input->aim_origin_ = origin;
+    }
+}
+
 auto input_system::update(
     float32 delta_time
 ) -> void {

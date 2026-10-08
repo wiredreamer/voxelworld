@@ -180,6 +180,8 @@ add_executable(game_tests
     game/input_bindings.test.cpp
     game/player.test.cpp
     game/jump.test.cpp
+    game/bow.test.cpp
+    game/projectile.test.cpp
 )
 
 target_link_libraries(game_tests PRIVATE

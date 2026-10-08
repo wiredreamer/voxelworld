@@ -113,7 +113,7 @@ TEST_CASE("a repeated key down does not press the action again", "[game][input]"
     static_cast<void>(mapper.take_frame());
     mapper.key(keys::KEY_1, true);
 
-    REQUIRE_FALSE(mapper.take_frame().was_pressed(game::input_action::toggle_weapon));
+    REQUIRE_FALSE(mapper.take_frame().was_pressed(game::input_action::loadout_melee));
 }
 
 TEST_CASE("move keys make a unit direction", "[game][input]") {

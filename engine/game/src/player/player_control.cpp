@@ -15,6 +15,11 @@ constexpr std::string_view shield_prefab = "p_shield";
 constexpr std::string_view item_node     = "root";
 constexpr std::string_view weapon_socket = "hand_right";
 constexpr std::string_view shield_socket = "hand_left";
+constexpr std::string_view bow_prefab    = "p_bow";
+constexpr std::string_view arrow_prefab  = "p_arrow";
+constexpr std::string_view bow_socket    = "hand_left";
+constexpr std::string_view arrow_socket  = "hand_right";
+constexpr float32 aim_origin_height      = 30.0f;
 constexpr std::string_view stance_step_prefix = "walk_";
 constexpr float32 anchor_twist_radians        = 0.02f;
 constexpr float32 anchor_lift_voxels          = 0.05f;
@@ -135,6 +140,16 @@ auto dodge_trigger(dodge_kind kind) -> std::string_view {
     return kind == dodge_kind::roll ? "dodge_roll" : "dodge_dash";
 }
 
+auto arrow_speed(const movement_tuning& tuning, float32 power) -> float32 {
+    const float32 weakest = tuning.bow_full_draw_seconds > 0.0f
+        ? math::clamp(tuning.bow_quick_draw_seconds / tuning.bow_full_draw_seconds, 0.0f, 1.0f)
+        : 1.0f;
+    const float32 share =
+        weakest < 1.0f ? math::clamp((power - weakest) / (1.0f - weakest), 0.0f, 1.0f) : 1.0f;
+    return tuning.bow_quick_arrow_speed +
+        (tuning.bow_full_arrow_speed - tuning.bow_quick_arrow_speed) * share;
+}
+
 }  // namespace
 
 player_system::player_system(
@@ -223,39 +238,233 @@ auto player_system::attach_machines_(
     }
 }
 
-auto player_system::toggle_weapon(
-    ecs::entity player
-) -> void {
-    auto* state = world_->try_get<player_component>(player);
-    if (state == nullptr || !state->hand_right_.is_valid()) {
-        return;
-    }
-
+auto player_system::put_away_(
+    player_component& state
+) const -> void {
     auto& sockets = world_->system<ecs::socket_system>();
 
-    if (state->weapon_.is_valid()) {
-        sockets.modify(state->hand_right_).detach(std::string{weapon_socket});
-        world_->destroy(state->weapon_);
-        state->weapon_ = ecs::invalid_entity;
-        if (state->shield_.is_valid()) {
-            sockets.modify(state->hand_left_).detach(std::string{shield_socket});
-            world_->destroy(state->shield_);
-            state->shield_ = ecs::invalid_entity;
+    const auto drop = [&](ecs::entity hand, std::string_view socket, ecs::entity& held) {
+        if (!held.is_valid()) {
+            return;
         }
-        state->guarding_  = false;
-        state->in_stance_ = false;
+        if (hand.is_valid()) {
+            sockets.modify(hand).detach(std::string{socket});
+        }
+        world_->destroy(held);
+        held = ecs::invalid_entity;
+    };
+
+    drop(state.hand_right_, weapon_socket, state.weapon_);
+    drop(state.hand_left_, shield_socket, state.shield_);
+    drop(state.hand_left_, bow_socket, state.bow_);
+    drop(state.hand_right_, arrow_socket, state.nocked_arrow_);
+
+    end_swing_(state);
+    rest_bow_(state);
+    state.guarding_  = false;
+    state.in_stance_ = false;
+    state.braced_    = false;
+    state.aiming_    = false;
+    state.loadout_   = loadout::unarmed;
+}
+
+auto player_system::equip(
+    ecs::entity player, loadout wanted
+) -> void {
+    auto* state = world_->try_get<player_component>(player);
+    if (state == nullptr || !state->hand_right_.is_valid() || !state->hand_left_.is_valid()) {
         return;
     }
+
+    put_away_(*state);
+    world_->system<ecs::animation_fsm_system>().modify(player).set_parameter("bow_state", 0.0f);
 
     const auto hand_right = state->hand_right_;
     const auto hand_left  = state->hand_left_;
-    const auto weapon     = hold_in_socket_(hand_right, weapon_socket, weapon_prefab);
-    const auto shield =
-        hand_left.is_valid() ? hold_in_socket_(hand_left, shield_socket, shield_prefab) : ecs::invalid_entity;
 
-    auto& equipped   = world_->get<player_component>(player);
-    equipped.weapon_ = weapon;
-    equipped.shield_ = shield;
+    if (wanted == loadout::melee) {
+        const auto weapon = hold_in_socket_(hand_right, weapon_socket, weapon_prefab);
+        const auto shield = hold_in_socket_(hand_left, shield_socket, shield_prefab);
+
+        auto& equipped   = world_->get<player_component>(player);
+        equipped.weapon_ = weapon;
+        equipped.shield_ = shield;
+    } else if (wanted == loadout::bow) {
+        const auto bow = hold_in_socket_(hand_left, bow_socket, bow_prefab);
+
+        world_->get<player_component>(player).bow_ = bow;
+    }
+
+    world_->get<player_component>(player).loadout_ = wanted;
+}
+
+auto player_system::rest_bow_(
+    player_component& state
+) -> void {
+    state.bow_phase_       = bow_phase::rest;
+    state.draw_seconds_    = 0.0f;
+    state.draw_share_      = 0.0f;
+    state.release_seconds_ = 0.0f;
+    state.draw_ready_      = false;
+    state.release_fired_   = false;
+    state.arrow_loosed_    = false;
+    state.bow_cancel_open_ = false;
+}
+
+auto player_system::drop_draw_(
+    ecs::entity ent, player_component& state
+) -> void {
+    if (state.bow_phase_ == bow_phase::rest) {
+        return;
+    }
+    const bool spent = state.arrow_loosed_;
+    state.draw_owed_ = state.bow_phase_ == bow_phase::drawing ||
+        state.bow_phase_ == bow_phase::holding;
+    rest_bow_(state);
+    if (!spent) {
+        chores_.push_back({ent, bow_chore::unnock});
+    }
+}
+
+auto player_system::nock_(
+    ecs::entity player
+) const -> void {
+    const auto* state = world_->try_get<player_component>(player);
+    if (state == nullptr || state->nocked_arrow_.is_valid() || !state->hand_right_.is_valid() ||
+        state->bow_phase_ == bow_phase::rest) {
+        return;
+    }
+
+    const auto arrow = hold_in_socket_(state->hand_right_, arrow_socket, arrow_prefab);
+    world_->get<player_component>(player).nocked_arrow_ = arrow;
+}
+
+auto player_system::unnock_(
+    ecs::entity player
+) const -> void {
+    auto* state = world_->try_get<player_component>(player);
+    if (state == nullptr || !state->nocked_arrow_.is_valid()) {
+        return;
+    }
+
+    world_->system<ecs::socket_system>().modify(state->hand_right_).detach(std::string{arrow_socket});
+    world_->destroy(state->nocked_arrow_);
+    state->nocked_arrow_ = ecs::invalid_entity;
+}
+
+auto player_system::loose_(
+    ecs::entity player
+) const -> void {
+    const auto* state = world_->try_get<player_component>(player);
+    const auto* input = world_->try_get<player_input_component>(player);
+    if (state == nullptr || input == nullptr) {
+        return;
+    }
+
+    const vec3f feet = world_->get<ecs::transform_component>(player).get_position();
+    const vec3f zero{0.0f, 0.0f, 0.0f};
+
+    vec3f from = feet + vec3f{0.0f, aim_origin_height, 0.0f};
+    if (state->nocked_arrow_.is_valid()) {
+        from = world_->get<ecs::transform_component>(state->nocked_arrow_).get_world_matrix() * zero;
+    } else if (state->hand_right_.is_valid()) {
+        from = world_->get<ecs::transform_component>(state->hand_right_).get_world_matrix() * zero;
+    }
+
+    const vec3f look   = input->get_frame().look_direction();
+    const vec3f origin = input->get_aim_origin().value_or(feet + vec3f{0.0f, aim_origin_height, 0.0f});
+    const float32 past = std::max(math::dot(from - origin, look), 0.0f);
+
+    auto& projectiles  = world_->system<projectile_system>();
+    const vec3f far    = origin + look * (past + tuning_.bow_aim_reach);
+    const auto sighted = projectiles.first_hit(origin + look * past, far, player);
+    const vec3f target = sighted ? sighted->point : far;
+
+    const vec3f towards = target - from;
+    const vec3f heading = math::length(towards) > 1.0f ? math::normalize(towards) : look;
+    const float32 speed = arrow_speed(tuning_, state->shot_power_);
+
+    unnock_(player);
+    projectiles.launch({
+        .model    = assets_->get_model(arrow_prefab, item_node),
+        .position = from,
+        .velocity = heading * speed,
+        .owner    = player,
+    });
+}
+
+auto player_system::draw_bow_(
+    ecs::entity ent, player_component& state, const input_frame& frame, bool action_playing,
+    float32 delta_time
+) -> void {
+    const bool on_feet = !state.dodging_ && !state.body_locked_ && !state.leapt_;
+    const bool held    = frame.is_held(input_action::attack);
+
+    if (!on_feet) {
+        drop_draw_(ent, state);
+    }
+    state.draw_owed_ = state.draw_owed_ && held;
+
+    const bool rested = state.bow_phase_ == bow_phase::rest;
+    const bool chains = state.bow_phase_ == bow_phase::releasing && state.arrow_loosed_ &&
+        state.bow_cancel_open_;
+    const bool asked  = state.attack_buffered_ >= 0.0f || (state.draw_owed_ && rested);
+    if (asked && on_feet && (rested || chains)) {
+        state.draw_owed_ = false;
+        rest_bow_(state);
+        state.attack_buffered_ = -1.0f;
+        state.bow_phase_       = bow_phase::drawing;
+        chores_.push_back({ent, bow_chore::nock});
+    }
+
+    const float32 full    = std::max(tuning_.bow_full_draw_seconds, math::epsilon);
+    const auto let_fly    = [&] {
+        state.shot_power_      = math::clamp(state.draw_seconds_ / full, 0.0f, 1.0f);
+        state.bow_phase_       = bow_phase::releasing;
+        state.release_seconds_ = 0.0f;
+        state.release_fired_   = false;
+        state.arrow_loosed_    = false;
+        state.bow_cancel_open_ = false;
+    };
+
+    if (action_playing && state.bow_phase_ != bow_phase::rest) {
+        world_->system<ecs::animation_system>()
+            .modify_player(ent)
+            .layer(action_layer)
+            .set_playback_speed(
+                state.bow_phase_ == bow_phase::drawing ? tuning_.bow_draw_playback_rate : 1.0f
+            );
+    }
+
+    if (state.bow_phase_ == bow_phase::drawing) {
+        state.draw_seconds_ += delta_time * tuning_.bow_draw_playback_rate;
+        if (!held && state.draw_seconds_ >= tuning_.bow_quick_draw_seconds) {
+            let_fly();
+        } else if (state.draw_ready_ || state.draw_seconds_ >= full) {
+            state.draw_seconds_ = full;
+            state.bow_phase_    = bow_phase::holding;
+        }
+    } else if (state.bow_phase_ == bow_phase::holding) {
+        if (!held) {
+            let_fly();
+        }
+    } else if (state.bow_phase_ == bow_phase::releasing) {
+        state.release_seconds_ += delta_time;
+        const bool clip_silent =
+            state.release_seconds_ > tuning_.bow_release_fallback_seconds && !action_playing;
+        const bool overdue = state.release_seconds_ > longest_swing_seconds;
+        if (!state.arrow_loosed_ && (state.release_fired_ || clip_silent || overdue)) {
+            state.arrow_loosed_ = true;
+            ++state.arrows_loosed_;
+            chores_.push_back({ent, bow_chore::loose});
+        } else if (state.arrow_loosed_ && (clip_silent || overdue)) {
+            rest_bow_(state);
+        }
+    }
+
+    state.draw_share_ = state.bow_phase_ == bow_phase::drawing || state.bow_phase_ == bow_phase::holding
+        ? math::clamp(state.draw_seconds_ / full, 0.0f, 1.0f)
+        : 0.0f;
 }
 
 auto player_system::hold_in_socket_(
@@ -451,7 +660,7 @@ auto player_system::plant_feet_(
     const float32 body_yaw = std::atan2(facing.x, facing.z);
     const auto& wish       = world_->get<ecs::movement_intent_component>(ent).get_wish_velocity();
     const bool standing    = math::length(vec3f{wish.x, 0.0f, wish.z}) <= math::epsilon;
-    const bool planting    = state.guarding_ && standing && state.air_state_ == air_state::ground;
+    const bool planting    = state.braced_ && standing && state.air_state_ == air_state::ground;
     const float32 step_seconds = std::max(tuning_.stance_turn_step_seconds, math::epsilon);
 
     if (!planting) {
@@ -610,6 +819,12 @@ auto player_system::read_action_events_(
             state.hit_window_ = false;
         } else if (event.name == "cancel.ok" && state.swinging_) {
             state.cancel_open_ = true;
+        } else if (event.name == "cancel.ok" && state.bow_phase_ == bow_phase::releasing) {
+            state.bow_cancel_open_ = true;
+        } else if (event.name == "draw.ready" && state.bow_phase_ == bow_phase::drawing) {
+            state.draw_ready_ = true;
+        } else if (event.name == "arrow.release" && state.bow_phase_ == bow_phase::releasing) {
+            state.release_fired_ = true;
         }
     }
 }
@@ -647,7 +862,8 @@ auto player_system::update(
     auto& controllers = world_->system<ecs::character_controller_system>();
     auto& machines    = world_->system<ecs::animation_fsm_system>();
 
-    toggling_.clear();
+    equipping_.clear();
+    chores_.clear();
 
     world_->for_each<player_component, player_input_component>(
         [&](ecs::entity ent, player_component& state, const player_input_component& input) {
@@ -711,12 +927,21 @@ auto player_system::update(
                 if (state.swinging_) {
                     end_swing_(state);
                 }
+                drop_draw_(ent, state);
                 machines.modify(ent).fire_trigger(dodge_trigger(state.dodge_kind_));
                 machines.modify(ent).fire_trigger("dodge");
             }
 
-            state.in_stance_ = frame.is_held(input_action::block) && state.shield_.is_valid() &&
-                !state.dodging_ && state.air_state_ == air_state::ground;
+            const bool on_feet = !state.dodging_ && !state.leapt_;
+            const bool has_bow = state.bow_.is_valid();
+            if (has_bow) {
+                draw_bow_(ent, state, frame, action_playing, delta_time);
+            }
+            state.aiming_ = has_bow && frame.is_held(input_action::block) && on_feet;
+
+            const bool shield_up = frame.is_held(input_action::block) && state.shield_.is_valid();
+            const bool bow_up    = has_bow && (state.aiming_ || state.bow_phase_ != bow_phase::rest);
+            state.in_stance_     = (shield_up || bow_up) && on_feet;
             const bool striking_from_guard = state.guarding_;
 
             const bool strike_allowed = !state.dodging_ && !state.body_locked_ &&
@@ -746,10 +971,15 @@ auto player_system::update(
                 machines.modify(ent).fire_trigger("attack");
             }
             state.since_swing_seconds_ = state.swinging_ ? 0.0f : state.since_swing_seconds_ + delta_time;
-            state.guarding_ = state.in_stance_ && !state.swinging_ && !state.body_locked_;
+            state.braced_   = state.in_stance_ && !state.swinging_ && !state.body_locked_;
+            state.guarding_ = state.braced_ && state.shield_.is_valid();
             machines.modify(ent).set_parameter("block", state.guarding_ ? 1.0f : 0.0f);
+            machines.modify(ent).set_parameter(
+                "bow_state", static_cast<float32>(std::to_underlying(state.bow_phase_))
+            );
             machines.modify(ent).set_parameter("stance", state.in_stance_ ? 1.0f : 0.0f);
-            state.attacking_ = action_playing || state.swinging_;
+            state.attacking_ =
+                action_playing || state.swinging_ || state.bow_phase_ != bow_phase::rest;
 
             auto controller = controllers.modify(ent);
             if (state.dodging_) {
@@ -791,7 +1021,7 @@ auto player_system::update(
                         .layer(action_layer)
                         .set_playback_speed(tuning_.attack_playback_rate);
                 }
-            } else if (state.guarding_) {
+            } else if (state.braced_) {
                 const float32 ahead = math::dot(move_dir, forward);
                 const float32 aside = math::dot(move_dir, right);
                 const float32 pace  = ahead * ahead *
@@ -826,8 +1056,7 @@ auto player_system::update(
             controller.set_coyote_seconds(tuning_.coyote_seconds)
                 .set_jump_impulse(tuning_.jump_impulse)
                 .set_step_hop_voxels(
-                    state.dodging_ || state.swinging_ || state.in_stance_ ? 0.0f
-                                                                          : tuning_.step_hop_voxels
+                    state.dodging_ || state.swinging_ ? 0.0f : tuning_.step_hop_voxels
                 );
             if (state.jump_buffered_ >= 0.0f && !state.body_locked_ && !state.dodging_) {
                 controller.request_jump();
@@ -844,6 +1073,7 @@ auto player_system::update(
                        cc.get_seconds_off_ground() > tuning_.fall_after_seconds) {
                 state.air_state_ = air_state::falling;
             }
+            state.leapt_ = state.air_state_ != air_state::ground && cc.left_ground_by_jump();
             machines.modify(ent).set_parameter(
                 "air_state", static_cast<float32>(std::to_underlying(state.air_state_))
             );
@@ -866,8 +1096,15 @@ auto player_system::update(
             age_buffer(state.jump_buffered_, delta_time);
             age_buffer(state.dodge_buffered_, delta_time);
 
-            if (frame.was_pressed(input_action::toggle_weapon)) {
-                toggling_.push_back(ent);
+            if (frame.was_pressed(input_action::loadout_melee)) {
+                equipping_.push_back(
+                    {ent, state.loadout_ == loadout::melee ? loadout::unarmed : loadout::melee}
+                );
+            }
+            if (frame.was_pressed(input_action::loadout_bow)) {
+                equipping_.push_back(
+                    {ent, state.loadout_ == loadout::bow ? loadout::unarmed : loadout::bow}
+                );
             }
 
             lean_(ent, state, delta_time);
@@ -877,8 +1114,21 @@ auto player_system::update(
         }
     );
 
-    for (const ecs::entity ent : toggling_) {
-        toggle_weapon(ent);
+    for (const auto& pending : chores_) {
+        switch (pending.chore) {
+            case bow_chore::nock:
+                nock_(pending.player);
+                break;
+            case bow_chore::unnock:
+                unnock_(pending.player);
+                break;
+            case bow_chore::loose:
+                loose_(pending.player);
+                break;
+        }
+    }
+    for (const auto& pending : equipping_) {
+        equip(pending.player, pending.wanted);
     }
 }
 

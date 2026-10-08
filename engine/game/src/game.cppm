@@ -2,6 +2,7 @@ export module vw.game;
 
 export import :input;
 export import :player.control;
+export import :combat.projectile;
 export import :spawn.surface_placement;
 
 import vw.asset;

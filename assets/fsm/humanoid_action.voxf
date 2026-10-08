@@ -6,6 +6,7 @@ param dodge trigger
 param attack_chain int
 param block bool
 param block_impact trigger
+param bow_state int
 state none
 	playback loop
 	to attack_1
@@ -23,6 +24,9 @@ state none
 	to block
 		when block == 1
 		blend 0.12
+	to bow_draw
+		when bow_state == 1
+		blend 0.1
 state attack_1
 	clip animations/a_humanoid_attack_1.voxa
 	playback once
@@ -140,3 +144,65 @@ state block_impact
 	to block
 		wait end
 		blend 0.08
+state bow_draw
+	clip animations/a_humanoid_bow_draw.voxa
+	playback once
+	fade_in 0.08
+	fade_out 0.15
+	to none
+		on dodge
+		blend 0.05
+	to bow_release
+		when bow_state == 3
+		blend 0.04
+	to bow_hold
+		when bow_state == 2
+		blend 0.08
+	to none
+		when bow_state == 0
+		blend 0.12
+state bow_hold
+	clip animations/a_humanoid_bow_hold.voxa
+	playback loop
+	fade_in 0.08
+	fade_out 0.15
+	to none
+		on dodge
+		blend 0.05
+	to bow_release
+		when bow_state == 3
+		blend 0.03
+	to none
+		when bow_state == 0
+		blend 0.12
+state bow_release
+	clip animations/a_humanoid_bow_release.voxa
+	playback once
+	fade_in 0.03
+	fade_out 0.18
+	to none
+		on dodge
+		blend 0.05
+	to bow_redraw
+		when bow_state == 1
+		blend 0.06
+	to none
+		wait end
+		wait blend
+state bow_redraw
+	clip animations/a_humanoid_bow_redraw.voxa
+	playback once
+	fade_in 0.06
+	fade_out 0.15
+	to none
+		on dodge
+		blend 0.05
+	to bow_release
+		when bow_state == 3
+		blend 0.04
+	to bow_hold
+		when bow_state == 2
+		blend 0.08
+	to none
+		when bow_state == 0
+		blend 0.12

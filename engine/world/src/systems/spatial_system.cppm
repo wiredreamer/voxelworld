@@ -44,6 +44,9 @@ public:
                                       spatial_layer_mask layer_mask = spatial_layer::all) const
         -> std::optional<voxel_ray_hit>;
 
+    [[nodiscard]] auto closest_voxel_hit(const spatial::ray& r, std::span<const entity> among) const
+        -> std::optional<voxel_ray_hit>;
+
     auto cleanup(entity ent) -> void;
 
     template <typename C>

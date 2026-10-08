@@ -233,10 +233,77 @@ auto render_dodge_panel(game::movement_tuning& tuning) -> void {
     }
 }
 
+auto render_bow_panel(
+    ecs::world& world,
+    game::movement_tuning& tuning,
+    gfx::third_person_camera_controller& camera_controller
+) -> void {
+    auto& arrows = world.system<game::projectile_system>().tuning();
+    auto& camera = camera_controller.get_params();
+
+    ImGui::SliderFloat("draw speed", &tuning.bow_draw_playback_rate, 0.3f, 2.0f, "%.2f");
+    ImGui::SliderFloat("full draw, s", &tuning.bow_full_draw_seconds, 0.2f, 2.0f, "%.2f");
+    ImGui::SliderFloat("quick draw, s", &tuning.bow_quick_draw_seconds, 0.0f, 1.0f, "%.2f");
+    ImGui::SliderFloat("quick arrow, u/s", &tuning.bow_quick_arrow_speed, 100.0f, 2000.0f, "%.0f");
+    ImGui::SliderFloat("full arrow, u/s", &tuning.bow_full_arrow_speed, 100.0f, 3000.0f, "%.0f");
+    ImGui::SliderFloat("aim reach", &tuning.bow_aim_reach, 500.0f, 10000.0f, "%.0f");
+    ImGui::SliderFloat("arrow gravity, share", &arrows.gravity_scale, 0.0f, 2.0f, "%.2f");
+    ImGui::SliderFloat("arrow sinks in, units", &arrows.sink_units, 0.0f, 8.0f, "%.1f");
+    ImGui::SliderFloat("arrow flies at most, s", &arrows.flight_seconds, 1.0f, 20.0f, "%.1f");
+    ImGui::SliderFloat("arrow stays stuck, s", &arrows.stuck_seconds, 1.0f, 120.0f, "%.0f");
+
+    constexpr uint32 fewest_stuck = 1;
+    constexpr uint32 most_stuck   = 256;
+    ImGui::SliderScalar(
+        "stuck arrows at most", ImGuiDataType_U32, &arrows.stuck_limit, &fewest_stuck, &most_stuck
+    );
+
+    ImGui::Separator();
+    ImGui::SliderFloat("shoulder arm", &camera.shoulder_arm_length, 10.0f, 120.0f, "%.0f");
+    ImGui::SliderFloat("shoulder aside", &camera.shoulder_offset, -30.0f, 30.0f, "%.1f");
+    ImGui::SliderFloat("shoulder up", &camera.shoulder_rise, -10.0f, 20.0f, "%.1f");
+    ImGui::SliderFloat("shoulder follow, s", &camera.shoulder_follow_seconds, 0.0f, 0.5f, "%.2f");
+
+    if (ImGui::Button("defaults")) {
+        const game::movement_tuning defaults{};
+        for (const tuning_field field :
+             {&game::movement_tuning::bow_draw_playback_rate,
+              &game::movement_tuning::bow_full_draw_seconds,
+              &game::movement_tuning::bow_quick_draw_seconds,
+              &game::movement_tuning::bow_quick_arrow_speed,
+              &game::movement_tuning::bow_full_arrow_speed,
+              &game::movement_tuning::bow_aim_reach}) {
+            tuning.*field = defaults.*field;
+        }
+        arrows = game::projectile_tuning{};
+
+        const gfx::third_person_camera_params shoulder{};
+        camera.shoulder_arm_length     = shoulder.shoulder_arm_length;
+        camera.shoulder_offset         = shoulder.shoulder_offset;
+        camera.shoulder_rise           = shoulder.shoulder_rise;
+        camera.shoulder_follow_seconds = shoulder.shoulder_follow_seconds;
+    }
+}
+
+auto bow_phase_name(game::bow_phase phase) -> const char* {
+    switch (phase) {
+        case game::bow_phase::rest:
+            return "rest";
+        case game::bow_phase::drawing:
+            return "DRAW";
+        case game::bow_phase::holding:
+            return "HOLD";
+        case game::bow_phase::releasing:
+            return "RELEASE";
+    }
+    return "";
+}
+
 auto render_guard_tuning(ecs::world& world, ecs::entity player) -> void {
     auto& players = world.system<game::player_system>();
     auto& tuning  = players.tuning();
 
+    ImGui::TextDisabled("1 sword and shield  2 bow  LMB strike or draw  RMB guard or aim");
     ImGui::Text("Guard (hold RMB with the shield):");
     ImGui::SliderFloat("guard speed forward", &tuning.guard_speed_scale, 0.2f, 1.0f, "%.2f");
     ImGui::SliderFloat("guard speed back", &tuning.guard_back_speed_scale, 0.2f, 1.0f, "%.2f");
@@ -280,6 +347,17 @@ auto render_fighter_state(ecs::world& world, ecs::entity player) -> void {
         fighter.is_in_stance() ? ", STANCE" : "", fighter.is_guarding() ? ", GUARD" : "",
         fighter.get_blocked_hits()
     );
+    const auto& arrows = world.system<game::projectile_system>();
+    ImGui::Text(
+        "Bow: %s%s, %s, draw %.0f%%, power %.0f%%, loosed %u", fighter.has_bow() ? "equipped" : "none",
+        fighter.is_aiming() ? ", AIM" : "", bow_phase_name(fighter.get_bow_phase()),
+        fighter.get_draw_share() * 100.0f, fighter.get_shot_power() * 100.0f,
+        fighter.get_arrows_loosed()
+    );
+    ImGui::Text(
+        "Arrows: flying %u, stuck %zu, in bodies %u", arrows.get_flying_count(),
+        arrows.get_stuck_count(), arrows.get_entity_hit_count()
+    );
     ImGui::Text(
         "Feet: twist %+.0f / %+.0f deg%s%s, turn steps %u", fighter.get_foot_twist_degrees(0),
         fighter.get_foot_twist_degrees(1), fighter.is_foot_stepping(0) ? ", LEFT STEP" : "",
@@ -310,7 +388,7 @@ auto render_fighter_state(ecs::world& world, ecs::entity player) -> void {
 auto register_debug_panels(
     gfx::engine& engine,
     ecs::entity player,
-    const gfx::third_person_camera_controller& camera_controller,
+    gfx::third_person_camera_controller& camera_controller,
     gfx::day_night_cycle& day_night
 ) -> void {
     auto& tool   = engine.get_debug_tool();
@@ -323,6 +401,9 @@ auto register_debug_panels(
     tool.add_panel(menu, "Jump", [&world, &tuning] { render_jump_panel(world, tuning); });
     tool.add_panel(menu, "Strike", [&tuning] { render_strike_panel(tuning); });
     tool.add_panel(menu, "Dodge", [&tuning] { render_dodge_panel(tuning); });
+    tool.add_panel(menu, "Bow", [&world, &tuning, &camera_controller] {
+        render_bow_panel(world, tuning, camera_controller);
+    });
     tool.add_panel(menu, "Input", [&world, player] { render_input_panel(world, player); });
     tool.add_panel(menu, "Sky", [&day_night, &renderer = engine.get_renderer()] {
         day_night.draw_controls(renderer);

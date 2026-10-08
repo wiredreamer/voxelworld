@@ -1,7 +1,7 @@
 # Voxm File Version 5.0
 encoding rle
 size 4 5 16
-pivot 2.5 2.5 7
+pivot 2.5 2.5 1.5
 r 2 1 0 1 85 0
 r 1 2 0 1 85 0
 r 3 2 0 1 85 0

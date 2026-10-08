@@ -20,7 +20,8 @@ auto default_input_bindings() -> input_bindings {
                 {keys::F, input_action::interact},
                 {keys::TAB, input_action::inventory},
                 {keys::C, input_action::compass},
-                {keys::KEY_1, input_action::toggle_weapon},
+                {keys::KEY_1, input_action::loadout_melee},
+                {keys::KEY_2, input_action::loadout_bow},
             },
         .button_actions =
             {

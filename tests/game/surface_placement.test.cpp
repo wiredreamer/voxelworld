@@ -73,12 +73,14 @@ TEST_CASE("the game installs its systems into a world", "[game]") {
     REQUIRE(w.try_system<game::surface_placement_system>() != nullptr);
     REQUIRE(w.try_system<game::input_system>() != nullptr);
     REQUIRE(w.try_system<game::player_system>() != nullptr);
+    REQUIRE(w.try_system<game::projectile_system>() != nullptr);
 
     const auto timings = w.get_extension_timings();
-    REQUIRE(timings.size() == 3);
+    REQUIRE(timings.size() == 4);
     REQUIRE(timings[0].name == "surface_place");
     REQUIRE(timings[1].name == "input");
     REQUIRE(timings[2].name == "player");
+    REQUIRE(timings[3].name == "projectile");
 }
 
 TEST_CASE("an entity waits for the ground when there is no terrain yet", "[game][spawn]") {

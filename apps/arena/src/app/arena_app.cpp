@@ -173,7 +173,11 @@ auto arena_app::render(
         const auto& frame = world.get<game::player_input_component>(player_).get_frame();
         camera_controller_.update(
             player_, frame.look_yaw_degrees, frame.look_pitch_degrees, frame.zoom_delta,
-            world.get<ecs::rigid_body_component>(player_).get_step_sink()
+            world.get<ecs::rigid_body_component>(player_).get_step_sink(),
+            world.get<game::player_component>(player_).is_aiming(), delta_time
+        );
+        world.system<game::input_system>().aim_from(
+            player_, get_engine().get_camera().get_position()
         );
     }
 
@@ -188,6 +192,8 @@ auto arena_app::load_assets() -> void {
     assets_.load_prefab("p_humanoid", asset::asset_ref{"prefabs/p_humanoid.vox"});
     assets_.load_prefab("p_sword", asset::asset_ref{"prefabs/p_sword.vox"});
     assets_.load_prefab("p_shield", asset::asset_ref{"prefabs/p_shield.vox"});
+    assets_.load_prefab("p_bow", asset::asset_ref{"prefabs/p_bow.vox"});
+    assets_.load_prefab("p_arrow", asset::asset_ref{"prefabs/p_arrow.vox"});
 }
 
 auto arena_app::handle_key_press(

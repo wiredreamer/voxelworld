@@ -23,6 +23,12 @@ struct third_person_camera_params {
     vec3f target_offset    = {0.0f, 8.0f, 0.0f};
     float32 zoom_speed     = 2.0f;
     float32 collision_skin = 0.3f;
+
+    // см. docs/ENGINE.md#камера-у-плеча
+    float32 shoulder_arm_length     = 45.0f;
+    float32 shoulder_offset         = 14.0f;
+    float32 shoulder_rise           = 2.0f;
+    float32 shoulder_follow_seconds = 0.12f;
 };
 
 class third_person_camera_controller {
@@ -37,11 +43,12 @@ public:
     // см. docs/ENGINE.md#ввод
     auto update(
         entity target, float32 look_yaw_degrees, float32 look_pitch_degrees, float32 zoom_delta,
-        float32 focus_lift = 0.0F
+        float32 focus_lift = 0.0F, bool over_shoulder = false, float32 delta_time = 0.0F
     ) -> void;
 
     [[nodiscard]] auto get_params() -> third_person_camera_params&;
     [[nodiscard]] auto get_actual_arm_length() const -> float32;
+    [[nodiscard]] auto get_shoulder_share() const -> float32;
 
 private:
     camera* camera_;
@@ -49,6 +56,7 @@ private:
     third_person_camera_params params_;
 
     float32 actual_arm_length_ = 0.0f;
+    float32 shoulder_share_    = 0.0f;
 
     std::vector<entity> collision_candidates_;
 };

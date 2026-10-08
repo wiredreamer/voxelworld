@@ -83,7 +83,7 @@ export namespace vw::arena {
 auto register_debug_panels(
     gfx::engine& engine,
     ecs::entity player,
-    const gfx::third_person_camera_controller& camera_controller,
+    gfx::third_person_camera_controller& camera_controller,
     gfx::day_night_cycle& day_night
 ) -> void;
 

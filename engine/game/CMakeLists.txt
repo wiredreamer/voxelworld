@@ -9,6 +9,7 @@ target_sources(vw_game
             src/input/bindings_file.cppm
             src/input/input_system.cppm
             src/player/player_control.cppm
+            src/combat/projectile.cppm
             src/spawn/surface_placement.cppm
     PRIVATE
         src/game.cpp
@@ -16,6 +17,7 @@ target_sources(vw_game
         src/input/bindings_file.cpp
         src/input/input_system.cpp
         src/player/player_control.cpp
+        src/combat/projectile.cpp
         src/spawn/surface_placement.cpp
 )
 
