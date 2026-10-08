@@ -219,15 +219,13 @@ auto world_grid::refresh_chunk(
     auto& vol  = *c.get_volume();
     uint8 mask = 0;
 
-    for (const vec3i step : all_shell_steps()) {
-        const auto neighbor = chunks_.find(chunk_coord + step);
+    for (const face_direction face : all_face_directions) {
+        const auto neighbor = chunks_.find(chunk_coord + offset_of(face));
         if (neighbor == chunks_.end()) {
             continue;
         }
-        vol.set_boundary_shell(step, neighbor->second->get_volume()->voxels());
-        if (shell_span(step) == 1) {
-            mask |= face_bit(shell_face(step));
-        }
+        vol.set_boundary_slice(face, neighbor->second->get_volume()->voxels());
+        mask |= face_bit(face);
     }
 
     c.set_known_neighbors(mask);

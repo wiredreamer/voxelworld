@@ -116,31 +116,23 @@ auto world_grid_system::run_layer_(
 
 namespace {
 
-constexpr vec2i column_neighbor_offsets[8] = {
-    {1, 0},    //
-    {-1, 0},   //
-    {0, 1},    //
-    {0, -1},   //
-    {1, 1},    //
-    {1, -1},   //
-    {-1, 1},   //
-    {-1, -1}
-};
+// см. docs/world.md#путь-колонки
+constexpr vec2i column_neighbor_offsets[4] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
 }  // namespace
 
-auto world_grid_system::fill_shell_(
-    column_layer& layer, asset::chunk_volume& vol, vec3i chunk_coord, vec3i step
+auto world_grid_system::fill_face_(
+    column_layer& layer, asset::chunk_volume& vol, vec3i chunk_coord, face_direction face
 ) -> bool {
-    const auto at = chunk_coord + step;
+    const auto at = chunk_coord + offset_of(face);
 
     if (auto* neighbor = model_at_(layer, at)) {
-        vol.set_boundary_shell(step, *neighbor);
+        vol.set_boundary_slice(face, *neighbor);
         return true;
     }
 
     const auto top = column_top_(layer, vec2i{at.x, at.z});
     if (top.has_value() && at.y > *top) {
-        vol.set_boundary_shell_air(step);
+        vol.set_boundary_air(face);
         return true;
     }
 
@@ -158,11 +150,11 @@ auto world_grid_system::refresh_boundary_(
     auto& vol = *placed->get_volume();
 
     bool filled = false;
-    for (const vec3i step : all_shell_steps()) {
-        if (vol.has_boundary_shell(step)) {
+    for (const face_direction face : all_face_directions) {
+        if (vol.has_boundary_slice(face)) {
             continue;
         }
-        if (fill_shell_(layer, vol, chunk_coord, step)) {
+        if (fill_face_(layer, vol, chunk_coord, face)) {
             filled = true;
         }
     }
@@ -327,8 +319,8 @@ auto world_grid_system::integrate_completed_columns_(
 
         boundary_from_total += measure_ms([&] -> auto {
             for (auto& [y, cd] : it->second->get_all_chunk_data()) {
-                for (const vec3i step : all_shell_steps()) {
-                    static_cast<void>(fill_shell_(layer, *cd.volume, cd.coord, step));
+                for (const face_direction face : all_face_directions) {
+                    static_cast<void>(fill_face_(layer, *cd.volume, cd.coord, face));
                 }
             }
         });

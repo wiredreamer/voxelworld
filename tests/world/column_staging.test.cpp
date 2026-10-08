@@ -470,3 +470,117 @@ TEST_CASE("a settled world leaves no sideways hole in any chunk", "[world][grid]
     REQUIRE(checked > 0);
     REQUIRE(holes == 0);
 }
+
+TEST_CASE("digging an edge of a chunk wakes the two chunks across its faces, not the diagonal one", "[world][grid]") {
+    job_system jobs;
+    world w;
+    const settled_grid settled{w, jobs};
+
+    auto& grid = *w.system<world_grid_system>().grid();
+    auto& reg  = w.registry();
+
+    const auto drawn = [&](vec3i coord) -> bool {
+        const auto* c = grid.get_chunk(coord);
+        return c != nullptr && c->is_drawn();
+    };
+
+    constexpr vec3i east{1, 0, 0};
+    constexpr vec3i south{0, 0, 1};
+
+    std::optional<vec3i> target;
+    grid.for_each_chunk([&](vec3i coord, const chunk&) {
+        if (!target && drawn(coord) && drawn(coord + east) && drawn(coord + south) &&
+            drawn(coord + east + south)) {
+            target = coord;
+        }
+    });
+    REQUIRE(target.has_value());
+
+    const auto woken = [&](vec3i coord) -> bool {
+        const entity owner = grid.get_chunk(coord)->get_entity();
+        return std::ranges::contains(reg.requested<model_component>(), owner);
+    };
+
+    REQUIRE_FALSE(woken(*target));
+
+    constexpr int32 last = chunk::size - 1;
+    const vec3i local{last, 20, last};
+    grid.set_voxel(
+        grid.chunk_to_world_coord(*target) + (local * grid.world_units_per_voxel()), voxels::air
+    );
+
+    REQUIRE(woken(*target));
+    REQUIRE(woken(*target + east));
+    REQUIRE(woken(*target + south));
+    REQUIRE_FALSE(woken(*target + east + south));
+}
+
+namespace {
+
+class stalling_generator final : public terrain_generator {
+public:
+    stalling_generator(
+        std::unique_ptr<terrain_generator> inner, vec2i stalled, const std::atomic<bool>& released
+    )
+        : inner_{std::move(inner)}, stalled_{stalled}, released_{&released} {}
+
+    auto generate(terrain_context& ctx) -> void override {
+        while (vec2i{ctx.cx, ctx.cz} == stalled_ && !released_->load()) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+        inner_->generate(ctx);
+    }
+
+private:
+    std::unique_ptr<terrain_generator> inner_;
+    vec2i stalled_;
+    const std::atomic<bool>* released_;
+};
+
+struct release_on_exit {
+    std::atomic<bool>* released;
+
+    ~release_on_exit() {
+        released->store(true);
+    }
+};
+
+}  // namespace
+
+TEST_CASE("a column is placed once its four side neighbours are in, whatever the diagonal one does", "[world][grid]") {
+    std::atomic<bool> released{false};
+
+    job_system jobs{4};
+    world w;
+
+    auto& models = w.resource<asset::model_registry>();
+    auto& gs     = w.system<world_grid_system>();
+
+    gs.set_grid(std::make_unique<world_grid>(w, 8));
+    gs.set_loader(
+        std::make_unique<chunk_loader>(
+            std::make_unique<stalling_generator>(
+                std::make_unique<perlin_terrain_generator>(
+                    models.get_identity_pool(), models.get_page_pool(), shallow_params()
+                ),
+                vec2i{view_distance + 1, view_distance + 1}, released
+            ),
+            jobs
+        )
+    );
+
+    const release_on_exit guard{&released};
+
+    const entity viewer =
+        w.create().with<transform_component>().with<world_view_component>().get_entity();
+    gs.modify_view(viewer).set_view_distance(view_distance);
+
+    const vec2i corner{view_distance, view_distance};
+    for (int32 frame = 0; frame < 4000 && !gs.grid()->has_column(corner); ++frame) {
+        w.update(0.016F);
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+
+    REQUIRE(gs.grid()->has_column(corner));
+    REQUIRE_FALSE(gs.grid()->has_column(corner + vec2i{1, 1}));
+}

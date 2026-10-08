@@ -25,34 +25,12 @@ struct face_occupancy {
     }
 };
 
-// см. docs/lod-plan.md#у-мешера-двадцать-шесть-соседей
+// см. docs/rendering.md#выборки-на-ребре-чанка
 struct model_boundary {
     per_face<face_occupancy> faces{};
-    std::array<uint64, shell_edge_count> edges{};
-    uint8 corners = 0;
-
     per_face<face_occupancy> leaf_faces{};
 
-    uint8 valid         = 0;
-    uint16 edges_valid  = 0;
-    uint8 corners_valid = 0;
-
-    [[nodiscard]] auto has_edge(vec3i step) const -> bool {
-        return (edges_valid & (1U << shell_edge_index(step))) != 0;
-    }
-
-    [[nodiscard]] auto edge_holds(vec3i step, int32 along) const -> bool {
-        return ((edges[static_cast<std::size_t>(shell_edge_index(step))] >> along) & 1U) != 0;
-    }
-
-    [[nodiscard]] auto has_corner(vec3i step) const -> bool {
-        return (corners_valid & (1U << shell_corner_index(step))) != 0;
-    }
-
-    [[nodiscard]] auto corner_holds(vec3i step) const -> bool {
-        return ((corners >> shell_corner_index(step)) & 1U) != 0;
-    }
-
+    uint8 valid = 0;
 };
 
 struct chunk_occupancy {
