@@ -17,7 +17,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        compiler: [msvc, clang]
         config: [Debug, Release]
 
     steps:
@@ -54,7 +53,6 @@ jobs:
           cmake -B build -S . -G Ninja
           -DCMAKE_BUILD_TYPE=${{ matrix.config }}
           -DVW_WARNINGS_AS_ERRORS=ON
-          ${{ matrix.compiler == 'clang' && '-DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang++' || '' }}
           -DCMAKE_TOOLCHAIN_FILE=${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake
 
       - name: Build

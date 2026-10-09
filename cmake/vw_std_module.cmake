@@ -29,8 +29,6 @@ if(VW_STD_NEEDS_MSVC_SOURCES)
 
     target_compile_features(vw_std_msvc PUBLIC cxx_std_23)
 
-    target_compile_definitions(vw_std_msvc PUBLIC _USE_STD_VECTOR_ALGORITHMS=0)
-
     target_compile_options(vw_std_msvc PRIVATE
         -Wno-reserved-module-identifier
         -Wno-include-angled-in-module-purview

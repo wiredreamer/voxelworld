@@ -214,7 +214,7 @@ push, `release.yml` — на тег `v*`. Версии инструментов 
 
 | Файл | Джоб | Что проверяет |
 |---|---|---|
-| `ci.yml` | `build` | Windows, `msvc`/`clang` × `Debug`/`Release`, полная конфигурация и тесты |
+| `ci.yml` | `build` | Windows, MSVC × `Debug`/`Release`, полная конфигурация и тесты |
 | `ci.yml` | `headless` | Windows без Vulkan SDK, `VW_BUILD_GFX=OFF` |
 | `ci.yml` | `linux` | ubuntu-24.04, Clang + libc++, триплет `x64-linux-libcxx`, полная конфигурация |
 | `ci.yml` | `lint` | `python scripts/lint_modules.py` |
@@ -228,14 +228,33 @@ push, `release.yml` — на тег `v*`. Версии инструментов 
 шаге Report, из него собирается `objects` для `llvm-cov`. Новый тестовый таргет
 впиши и туда, иначе его строки в покрытие не попадут.
 
+### Clang на Windows в CI не собирается
+
+Windows в CI собирает только MSVC, второй компилятор — Clang на Linux. Связка
+Clang + MS STL из матрицы убрана 09.10.2026: ею ничего не поставляется, всё
+полезное из её предупреждений ловит джоб `linux` тем же фронтендом, а ломалась
+она чаще остальных и не из-за нашего кода.
+
+- STL 14.51 на `windows-latest`: векторизованный `std::find` под Clang 20
+  упирается в `static_assert(false, "unexpected size")` для структуры в 12 байт
+  с `operator==() = default` — условие «тип сравним побайтно» под Clang
+  пропускает её, а функция за ним умеет только 1, 2, 4 и 8 байт. Исправления в
+  microsoft/STL на тот день не нашлось. Обход `_USE_STD_VECTOR_ALGORITHMS=0`
+  сборку чинил, но следом упали тесты.
+- Локальный Clang 21 падал сам на типах с указателями на поля, пришедших из
+  модуля (`terrain-lab`).
+
+Локально такая сборка осталась возможной (`vw_std` из `std.ixx`, см. выше), но
+её никто не сторожит. Возвращать в CI стоит, только если понадобится сама
+связка, и начинать с проверки, жива ли ошибка STL.
+
 ### Проверить CI до пуша
 
 Логи Actions без токена не читаются, так что гадать по красному значку
 бесполезно — джобы воспроизводятся локально.
 
 - **Windows.** Те же строки Configure, что в `ci.yml`, в свои каталоги:
-  `build/ci-msvc`, `build/ci-clang` (`-DCMAKE_C_COMPILER=clang-cl
-  -DCMAKE_CXX_COMPILER=clang++`), `build/ci-headless`. Обязательно с
+  `build/ci-msvc`, `build/ci-headless`. Обязательно с
   `-DVW_WARNINGS_AS_ERRORS=ON`: обычная сборка предупреждения только печатает.
   Собирать с `-- -k 0`, чтобы увидеть все ошибки разом.
 - **Linux** — в контейнере Docker, не в WSL: Ubuntu 24.04, Clang 20 и libc++ с
@@ -261,16 +280,6 @@ push, `release.yml` — на тег `v*`. Версии инструментов 
   нет: «declaration of X must be imported from module Y before it is required».
   Лечится `import`-ом в `.cpp`; интерфейсная партиция обязана быть в
   `export import` первичного интерфейса (так забыли `:frames_in_flight`).
-- **STL раннера новее локальной.** На `windows-latest` стоит другой Visual
-  Studio, и Clang встречается с версией MS STL, которой локально нет. Так
-  упала сборка Clang после первого пуша: в STL 14.51 векторизованный `std::find`
-  под Clang 20 натыкается на `static_assert(false, "unexpected size")` для
-  структуры в 12 байт с `operator==() = default`. Для связки Clang + MS STL
-  векторизованные алгоритмы поэтому выключены целиком:
-  `_USE_STD_VECTOR_ALGORITHMS=0` стоит PUBLIC на `vw_std_msvc`
-  (`cmake/vw_std_module.cmake`) — на самом std-модуле и на всех, кто его
-  линкует, потому что макрос обязан быть одним и тем же во всех TU. Локально это
-  не воспроизвести, проверяется только пушем.
 - **Неопределённое поведение**, которое MSVC прощает: переполнение знакового,
   выход за массив в тесте.
 
