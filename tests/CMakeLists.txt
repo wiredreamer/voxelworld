@@ -136,6 +136,7 @@ add_executable(world_tests
     world/column_staging.test.cpp
     world/occupancy_log.test.cpp
     world/surface.test.cpp
+    world/footing.test.cpp
     world/cover.test.cpp
     world/grass_tuft.test.cpp
     world/trees.test.cpp

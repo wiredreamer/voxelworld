@@ -35,6 +35,7 @@ target_sources(vw_world
             src/grid/grid.cppm
             src/grid/chunk_visibility.cppm
             src/grid/cell.cppm
+            src/grid/footing.cppm
             src/flora/grass_tuft.cppm
             src/flora/trees.cppm
             src/grid/chunk.cppm
