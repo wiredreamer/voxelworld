@@ -41,7 +41,8 @@ arena_app::arena_app(
               .zoom_speed     = 5.0f,
               .collision_skin = 3.0f,
               .pivot_rise     = 0.0f,
-              .probe_radius   = 4.0f
+              .probe_radius   = 4.0f,
+              .height_follow_seconds = 0.1f
           }
       ) {
     get_engine().get_debug_tool().set_visible(true);
@@ -184,7 +185,19 @@ auto arena_app::render(
     }
 
     if (show_colliders_) {
-        get_engine().get_renderer().draw_colliders(world);
+        auto& renderer = get_engine().get_renderer();
+        renderer.draw_colliders(world);
+        if (is_player_placed_()) {
+            const auto& body  = world.get<ecs::rigid_body_component>(player_);
+            const auto& probe = body.get_ride_probe();
+            const vec3f shown = world.get<ecs::transform_component>(player_).get_shown_offset();
+            if (probe.looks_ahead) {
+                renderer.draw_box(probe.ahead_corner + shown, probe.size, colors::red_8);
+            }
+            if (probe.looks_behind) {
+                renderer.draw_box(probe.behind_corner + shown, probe.size, colors::blue_8);
+            }
+        }
     }
 
     render_debug_hud(get_engine(), player_, show_colliders_);
@@ -246,6 +259,11 @@ auto arena_app::handle_key_press(
         case plat::keyboard::keys::F2:
             show_colliders_ = !show_colliders_;
             break;
+        case plat::keyboard::keys::F8: {
+            auto& tuning = get_engine().get_world().system<game::player_system>().tuning();
+            tuning.ride_footing = !tuning.ride_footing;
+            break;
+        }
         default:
             break;
     }

@@ -230,4 +230,30 @@ auto character_controller_system::controller_modifier::set_step_hop_voxels(
     return *this;
 }
 
+auto character_controller_system::controller_modifier::set_rides_footing(
+    bool rides
+) -> controller_modifier& {
+    auto& reg = system_->world_->registry();
+    if (!reg.has<character_controller_component>(entity_)) {
+        return *this;
+    }
+    auto& comp = reg.get<character_controller_component>(entity_);
+    comp.rides_footing_ = rides;
+    return *this;
+}
+
+auto character_controller_system::controller_modifier::set_ride_lead(
+    float32 lead_voxels, float32 rise_speed, float32 sink_speed
+) -> controller_modifier& {
+    auto& reg = system_->world_->registry();
+    if (!reg.has<character_controller_component>(entity_)) {
+        return *this;
+    }
+    auto& comp = reg.get<character_controller_component>(entity_);
+    comp.ride_lead_voxels_ = std::max(lead_voxels, 0.0f);
+    comp.ride_rise_speed_  = std::max(rise_speed, 1.0f);
+    comp.ride_sink_speed_  = std::max(sink_speed, 1.0f);
+    return *this;
+}
+
 }  // namespace vw::ecs

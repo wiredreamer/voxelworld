@@ -45,8 +45,19 @@ auto third_person_camera_controller::update(
 
     target_ = target;
 
-    const auto& tc        = registry.get<transform_component>(target);
-    const auto player_pos = tc.get_shown_position();
+    const auto& tc  = registry.get<transform_component>(target);
+    auto player_pos = tc.get_shown_position();
+
+    // см. docs/ENGINE.md#камера-от-третьего-лица
+    const bool jumped = std::abs(player_pos.y - followed_height_) > params_.height_snap_distance;
+    if (!height_known_ || jumped || params_.height_follow_seconds <= 0.0f || delta_time <= 0.0f) {
+        followed_height_ = player_pos.y;
+        height_known_    = true;
+    } else {
+        followed_height_ += (player_pos.y - followed_height_) *
+                            (1.0f - std::exp(-delta_time / params_.height_follow_seconds));
+    }
+    player_pos.y = followed_height_;
     const vec3f lift{0.0f, focus_lift, 0.0f};
     const vec3f chest       = player_pos + params_.target_offset * 0.5f + lift;
     const vec3f wanted_head = player_pos + params_.target_offset + lift;

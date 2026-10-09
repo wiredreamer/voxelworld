@@ -20,6 +20,29 @@ auto measure_into(bool enabled, float32& sink, F&& body) -> void {
     sink += std::chrono::duration<float32>(clock::now() - started).count() * 1000.0F;
 }
 
+class solid_in_grid final {
+public:
+    explicit solid_in_grid(world_grid& grid) : grid_{&grid}, units_{grid.world_units_per_voxel()} {}
+
+    [[nodiscard]] auto operator()(int32 vx, int32 vy, int32 vz) const -> bool {
+        const vec3i at{vx * units_, vy * units_, vz * units_};
+
+        const auto coord = grid_->world_to_chunk_coord(at);
+        if (coord != cached_coord_) {
+            cached_coord_ = coord;
+            cached_chunk_ = grid_->get_chunk(coord);
+        }
+        return cached_chunk_ != nullptr &&
+               !cached_chunk_->get_voxel(grid_->world_to_local_coord(at) / units_).is_empty();
+    }
+
+private:
+    world_grid* grid_;
+    int32 units_;
+    mutable vec3i cached_coord_{std::numeric_limits<int32>::min(), 0, 0};
+    mutable chunk* cached_chunk_ = nullptr;
+};
+
 }  // namespace
 
 physics_system::physics_system(world& w)
@@ -58,7 +81,7 @@ auto physics_system::update(
         ++stats_.step_count;
     }
 
-    show_between_steps_();
+    show_between_steps_(delta_time);
 
     stats_.step_ms = std::chrono::duration<float32>(clock::now() - step_start).count() * 1000.0f;
 }
@@ -123,10 +146,21 @@ auto physics_system::step(
                 continue;
             }
 
-            rb.frozen_ = false;
+            rb.frozen_     = false;
+            rb.ride_probe_ = {};
 
             const auto voxel_size =
                 static_cast<float32>(world_->system<world_grid_system>().grid()->world_units_per_voxel());
+            if (const auto* rider = reg.try_get<character_controller_component>(ent);
+                rider != nullptr && rider->rides_footing() && rider->get_leg_voxels() > 0.0f) {
+                new_position      = ride_footing_(ent, rb, col, *rider, position, dt);
+                rb.step_sink_     = 0.0f;
+                rb.step_lead_     = 0.0f;
+                rb.step_catch_up_ = 0.0f;
+                rb.stepped_to_    = new_position;
+                world_->system<transform_system>().modify(ent).set_position(new_position);
+                continue;
+            }
             const auto substeps = std::max(
                 1, static_cast<int32>(std::ceil(math::length(rb.velocity_ * dt) / (voxel_size * max_substep_voxels)))
             );
@@ -218,8 +252,218 @@ auto physics_system::step(
     }
 }
 
+// см. docs/ENGINE.md#езда-по-опоре
+auto physics_system::ride_footing_(
+    entity ent, rigid_body_component& rb, const box_collider_component& col,
+    const character_controller_component& walker, const vec3f& from, float32 dt
+) -> vec3f {
+    auto& grid               = *world_->system<world_grid_system>().grid();
+    const float32 voxel_size = static_cast<float32>(grid.world_units_per_voxel());
+    const solid_in_grid solid{grid};
+
+    const vec3f half         = col.extents_ * 0.5f;
+    const float32 height     = col.extents_.y;
+    const float32 leg        = std::min(walker.get_leg_voxels() * voxel_size, height * longest_leg_share);
+    const float32 feet_below = half.y - col.offset_.y;
+    const bool may_climb     = walker.get_step_hop_voxels() > 0.0f;
+    const float32 rise       = walker.get_ride_rise_speed();
+    const float32 sink       = walker.get_ride_sink_speed();
+
+    const vec3f wish{rb.velocity_.x, 0.0f, rb.velocity_.z};
+    const float32 wish_speed = math::length(wish);
+    const float32 pace       = walker.get_move_speed() > 0.0f
+        ? std::clamp(wish_speed / walker.get_move_speed(), 0.0f, 1.0f)
+        : 0.0f;
+    const float32 lead       = walker.get_ride_lead_voxels() * voxel_size * pace;
+    const vec3f heading      = wish_speed > 1.0f ? wish * (1.0f / wish_speed) : vec3f{0.0f, 0.0f, 0.0f};
+
+    const auto under = [&](float32 x, float32 z) {
+        return footprint{
+            .x = x + col.offset_.x, .z = z + col.offset_.z, .half_x = half.x, .half_z = half.z
+        };
+    };
+
+    struct ground {
+        float32 stand = 0.0f;
+        float32 ride  = 0.0f;
+        bool found    = false;
+    };
+    const auto ground_at = [&](float32 x, float32 z, float32 feet) -> ground {
+        const auto here = footing_under(solid, voxel_size, under(x, z), feet, leg);
+        if (!here.found) {
+            return {};
+        }
+
+        float32 ride = here.stand;
+        if (lead <= ride_look_past) {
+            return {.stand = here.stand, .ride = ride, .found = true};
+        }
+        for (const float32 way : {1.0f, -1.0f}) {
+            if (way > 0.0f && !may_climb) {
+                continue;
+            }
+            const float32 along_x = heading.x * way;
+            const float32 along_z = heading.z * way;
+
+            std::array<float32, ride_crossings> crossings{};
+            std::size_t count = 0;
+            const auto collect = [&](float32 centre, float32 half_width, float32 along) {
+                if (std::abs(along) < 1.0e-4f) {
+                    return;
+                }
+                const float32 edge = centre + (along > 0.0f ? half_width : -half_width);
+                float32 wall       = along > 0.0f
+                    ? std::ceil((edge - ride_look_past) / voxel_size) * voxel_size
+                    : std::floor((edge + ride_look_past) / voxel_size) * voxel_size;
+                for (; count < crossings.size(); wall += along > 0.0f ? voxel_size : -voxel_size) {
+                    const float32 reached = std::max((wall - edge) / along, 0.0f);
+                    if (reached > lead) {
+                        break;
+                    }
+                    crossings[count++] = reached;
+                }
+            };
+            collect(x + col.offset_.x, half.x, along_x);
+            collect(z + col.offset_.z, half.z, along_z);
+
+            for (std::size_t at = 0; at < count; ++at) {
+                const float32 gone = crossings[at] + ride_look_past;
+                const auto there   = footing_under(
+                    solid, voxel_size, under(x + (along_x * gone), z + (along_z * gone)), feet, leg
+                );
+                if (there.found && there.stand <= here.stand + leg + footing_reach_slack) {
+                    ride = std::max(ride, there.stand - (leg * crossings[at] / lead));
+                }
+            }
+        }
+        return {.stand = here.stand, .ride = ride, .found = true};
+    };
+
+    float32 x    = from.x;
+    float32 z    = from.z;
+    float32 feet = from.y - feet_below;
+    bool riding  = rb.grounded_ && rb.velocity_.y <= 0.0f;
+
+    const auto substeps = std::max(
+        1, static_cast<int32>(std::ceil(math::length(rb.velocity_ * dt) / (voxel_size * max_substep_voxels)))
+    );
+    const float32 sub_dt = dt / static_cast<float32>(substeps);
+    const auto towards   = [&](float32 now, float32 goal) {
+        return now + std::clamp(goal - now, -sink * sub_dt, rise * sub_dt);
+    };
+
+    for (int32 sub = 0; sub < substeps; ++sub) {
+        if (riding) {
+            const float32 wanted_x = rb.velocity_.x * sub_dt;
+            const float32 wanted_z = rb.velocity_.z * sub_dt;
+            const std::array<std::pair<float32, float32>, 3> tries{
+                std::pair{wanted_x, wanted_z}, std::pair{wanted_x, 0.0f}, std::pair{0.0f, wanted_z}
+            };
+
+            bool moved = false;
+            for (const auto& [move_x, move_z] : tries) {
+                if (moved || (move_x == 0.0f && move_z == 0.0f)) {
+                    continue;
+                }
+                const auto there = ground_at(x + move_x, z + move_z, feet);
+                const bool off   = !there.found || there.ride < feet - leg - ride_drop_slack;
+                const float32 stood = off ? feet : towards(feet, there.ride);
+
+                if (!off && there.stand > stood + ride_climb_slack) {
+                    continue;
+                }
+                if (!off && !may_climb && there.stand > feet + ride_climb_slack) {
+                    continue;
+                }
+                if (!body_fits(
+                        solid, voxel_size, under(x + move_x, z + move_z), stood + leg, stood + height
+                    )) {
+                    continue;
+                }
+
+                x += move_x;
+                z += move_z;
+                feet = stood;
+                if (move_x == 0.0f) {
+                    rb.velocity_.x = 0.0f;
+                }
+                if (move_z == 0.0f) {
+                    rb.velocity_.z = 0.0f;
+                }
+                riding = !off;
+                moved  = true;
+            }
+
+            if (!moved) {
+                rb.velocity_.x = 0.0f;
+                rb.velocity_.z = 0.0f;
+
+                const auto here = ground_at(x, z, feet);
+                if (!here.found || here.ride < feet - leg - ride_drop_slack) {
+                    riding = false;
+                } else {
+                    const float32 stood = towards(feet, here.ride);
+                    if (stood <= feet ||
+                        body_fits(solid, voxel_size, under(x, z), stood + leg, stood + height)) {
+                        feet = stood;
+                    }
+                }
+            }
+            rb.velocity_.y = 0.0f;
+        } else {
+            const float32 box_half = (height - leg) * 0.5f;
+            const vec3f box{half.x, box_half, half.z};
+            const vec3f centre{
+                x + col.offset_.x + (rb.velocity_.x * sub_dt),
+                feet + leg + box_half + (rb.velocity_.y * sub_dt),
+                z + col.offset_.z + (rb.velocity_.z * sub_dt)
+            };
+
+            collision_result result{};
+            measure_into(detailed_active_, stats_.voxel_collision_ms, [&] {
+                result = resolve_box_voxel(centre, box, rb.velocity_);
+            });
+            x    = result.resolved_position.x - col.offset_.x;
+            z    = result.resolved_position.z - col.offset_.z;
+            feet = result.resolved_position.y - box_half - leg;
+
+            const auto here = ground_at(x, z, feet);
+            if (here.found && feet <= here.ride &&
+                body_fits(solid, voxel_size, under(x, z), here.ride + leg, here.ride + height)) {
+                feet           = here.ride;
+                riding         = true;
+                rb.velocity_.y = 0.0f;
+            }
+        }
+
+        vec3f pushed{x, feet + feet_below, z};
+        measure_into(detailed_active_, stats_.entity_collision_ms, [&] {
+            resolve_entity_collisions(ent, pushed, rb.velocity_, half, col.offset_);
+        });
+        x = pushed.x;
+        z = pushed.z;
+        if (!riding) {
+            feet = pushed.y - feet_below;
+        }
+    }
+
+    const bool looking = riding && lead > ride_look_past;
+    const vec3f reach{heading.x * lead, 0.0f, heading.z * lead};
+    const vec3f corner{x + col.offset_.x - half.x, feet - leg, z + col.offset_.z - half.z};
+    rb.ride_probe_ = {
+        .ahead_corner  = corner + reach,
+        .behind_corner = corner - reach,
+        .size          = {col.extents_.x, 2.0f * leg, col.extents_.z},
+        .looks_ahead   = looking && may_climb,
+        .looks_behind  = looking,
+    };
+
+    rb.grounded_ = riding;
+    return {x, feet + feet_below, z};
+}
+
 // см. docs/ENGINE.md#положение-для-показа
-auto physics_system::show_between_steps_() -> void {
+auto physics_system::show_between_steps_(float32 frame_seconds) -> void {
     const float32 into_step = std::clamp(accumulated_time_ / fixed_dt, 0.0f, 1.0f);
     const float32 behind    = 1.0f - into_step;
 
@@ -252,6 +496,36 @@ auto physics_system::show_between_steps_() -> void {
                     .set_position({at.x, at.y + (sink - rb.shown_sink_), at.z});
             }
             rb.shown_sink_ = sink;
+        }
+
+        // см. docs/ENGINE.md#модель-опускается-мягче-тела
+        float32 lift = 0.0f;
+        if (rb.model_sink_seconds_ > 0.0f &&
+            reg.try_get<transform_component>(rb.step_follower_) != nullptr) {
+            const float32 shown = tc.get_position().y + offset.y;
+            if (!rb.model_height_known_ || held) {
+                rb.model_height_       = shown;
+                rb.model_height_known_ = true;
+            } else {
+                const float32 seconds =
+                    rb.grounded_ ? rb.model_sink_seconds_ : rb.model_air_sink_seconds_;
+                const float32 closer =
+                    seconds > 0.0f ? 1.0f - std::exp(-frame_seconds / seconds) : 1.0f;
+                rb.model_height_ += (shown - rb.model_height_) * closer;
+                rb.model_height_ =
+                    std::clamp(rb.model_height_, shown, shown + rb.model_lift_limit_);
+            }
+            lift = rb.model_height_ - shown;
+        } else {
+            rb.model_height_known_ = false;
+        }
+        if (lift != rb.model_lift_) {
+            if (auto* follower = reg.try_get<transform_component>(rb.step_follower_)) {
+                const vec3f at = follower->get_position();
+                transforms.modify(rb.step_follower_)
+                    .set_position({at.x, at.y + (lift - rb.model_lift_), at.z});
+            }
+            rb.model_lift_ = lift;
         }
     }
 }
@@ -648,6 +922,20 @@ auto physics_system::rigid_body_modifier::smooth_steps(
     auto& comp = reg.get<rigid_body_component>(entity_);
     comp.step_follower_       = follower;
     comp.step_smooth_seconds_ = seconds;
+    return *this;
+}
+
+auto physics_system::rigid_body_modifier::soften_descent(
+    float32 seconds, float32 seconds_in_the_air, float32 lift_limit
+) -> rigid_body_modifier& {
+    auto& reg = system_->world_->registry();
+    if (!reg.has<rigid_body_component>(entity_)) {
+        return *this;
+    }
+    auto& comp = reg.get<rigid_body_component>(entity_);
+    comp.model_sink_seconds_     = std::max(seconds, 0.0f);
+    comp.model_air_sink_seconds_ = std::max(seconds_in_the_air, 0.0f);
+    comp.model_lift_limit_       = std::max(lift_limit, 0.0f);
     return *this;
 }
 

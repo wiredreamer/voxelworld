@@ -144,6 +144,12 @@ auto render_jump_panel(ecs::world& world, game::movement_tuning& tuning) -> void
     ImGui::SliderFloat("input buffer, s", &tuning.input_buffer_seconds, 0.0f, 0.5f, "%.2f");
     ImGui::SliderFloat("coyote time, s", &tuning.coyote_seconds, 0.0f, 0.5f, "%.2f");
     ImGui::SliderFloat("step height, voxels (0 off)", &tuning.step_hop_voxels, 0.0f, 2.0f, "%.1f");
+    ImGui::Checkbox("ride the footing (F8)", &tuning.ride_footing);
+    ImGui::SliderFloat("ramp starts ahead, voxels", &tuning.ride_lead_voxels, 0.0f, 3.0f, "%.2f");
+    ImGui::SliderFloat("body rises at most, u/s", &tuning.ride_rise_speed, 50.0f, 1000.0f, "%.0f");
+    ImGui::SliderFloat("body sinks at most, u/s", &tuning.ride_sink_speed, 50.0f, 1000.0f, "%.0f");
+    ImGui::SliderFloat("model sinks in, s (0 off)", &tuning.model_sink_seconds, 0.0f, 0.6f, "%.2f");
+    ImGui::SliderFloat("model stays above by at most", &tuning.model_lift_limit, 0.0f, 32.0f, "%.0f");
     ImGui::SliderFloat("step smoothing, s", &tuning.step_smooth_seconds, 0.0f, 0.3f, "%.2f");
     ImGui::SliderFloat("fall after, s", &tuning.fall_after_seconds, 0.0f, 0.5f, "%.2f");
     ImGui::SliderFloat("hard landing, u/s", &tuning.hard_landing_speed, 50.0f, 400.0f, "%.0f");
@@ -315,6 +321,7 @@ auto render_camera_panel(gfx::third_person_camera_controller& camera_controller)
     ImGui::SliderFloat("probe radius", &camera.probe_radius, 0.0f, 12.0f, "%.1f");
     ImGui::SliderFloat("wall skin", &camera.collision_skin, 0.0f, 12.0f, "%.1f");
     ImGui::SliderFloat("arm returns in, s", &camera.arm_return_seconds, 0.0f, 1.0f, "%.2f");
+    ImGui::SliderFloat("height follows in, s (0 off)", &camera.height_follow_seconds, 0.0f, 0.5f, "%.2f");
     ImGui::Text("arm now: %.1f", camera_controller.get_actual_arm_length());
 }
 
@@ -484,9 +491,13 @@ auto render_debug_hud(const gfx::engine& engine, ecs::entity player, bool show_c
 
     ImGui::Begin("Arena", nullptr, window_flags);
     ImGui::TextDisabled(
-        "F1 cursor  F2 colliders (%s)  F3 impulse  ESC exit", show_colliders ? "on" : "off"
+        "F1 cursor  F2 colliders and step probe (%s)  F3 impulse  ESC exit", show_colliders ? "on" : "off"
     );
     ImGui::TextDisabled("F4 hit  F5 break the guard  F6 death  F7 revive");
+    ImGui::TextDisabled(
+        "F8 footing: %s",
+        engine.get_world().system<game::player_system>().tuning().ride_footing ? "RIDE (new)" : "step (old)"
+    );
     ImGui::TextDisabled("1 sword and shield  2 bow");
     ImGui::TextDisabled("LMB strike, hold to charge; with the bow draw");
     ImGui::TextDisabled("RMB guard or aim  Q whirl  E pommel");

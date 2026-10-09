@@ -32,6 +32,8 @@ struct third_person_camera_params {
     float32 look_down_full_degrees = 80.0f;
     float32 probe_radius          = 0.5f;
     float32 arm_return_seconds    = 0.2f;
+    float32 height_follow_seconds = 0.0f;
+    float32 height_snap_distance  = 64.0f;
 
     // см. docs/ENGINE.md#камера-у-плеча
     float32 shoulder_arm_length     = 45.0f;
@@ -70,6 +72,8 @@ private:
     float32 actual_arm_length_ = 0.0f;
     float32 shoulder_share_    = 0.0f;
     float32 held_arm_share_    = 1.0f;
+    float32 followed_height_   = 0.0f;
+    bool height_known_         = false;
     entity target_;
 
     std::vector<entity> collision_candidates_;

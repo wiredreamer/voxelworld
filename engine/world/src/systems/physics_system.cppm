@@ -36,6 +36,11 @@ public:
     static constexpr int32 step_lead_halvings       = 6;
     static constexpr float32 step_lead_slack        = 1.5F;
     static constexpr float32 longest_shown_step     = 4.0F;
+    static constexpr float32 ride_drop_slack        = 0.05F;
+    static constexpr float32 ride_climb_slack       = 0.01F;
+    static constexpr float32 ride_look_past         = 0.02F;
+    static constexpr std::size_t ride_crossings     = 12;
+    static constexpr float32 longest_leg_share      = 0.75F;
 
     explicit physics_system(world& w);
 
@@ -47,6 +52,7 @@ public:
 
     auto request_detailed_stats() -> void;
 
+
     class rigid_body_modifier {
     public:
         auto set_velocity(const vec3f& vel) -> rigid_body_modifier&;
@@ -55,6 +61,8 @@ public:
         auto add_external_impulse(const vec3f& impulse) -> rigid_body_modifier&;
         auto set_drag(float32 drag) -> rigid_body_modifier&;
         auto smooth_steps(entity follower, float32 seconds) -> rigid_body_modifier&;
+        auto soften_descent(float32 seconds, float32 seconds_in_the_air, float32 lift_limit)
+            -> rigid_body_modifier&;
 
     private:
         friend class physics_system;
@@ -99,7 +107,11 @@ private:
         float32 within
     ) const -> float32;
     [[nodiscard]] auto box_blocked_(const vec3f& lo, const vec3f& hi) const -> bool;
-    auto show_between_steps_() -> void;
+    [[nodiscard]] auto ride_footing_(
+        entity ent, rigid_body_component& rb, const box_collider_component& col,
+        const character_controller_component& walker, const vec3f& from, float32 dt
+    ) -> vec3f;
+    auto show_between_steps_(float32 frame_seconds) -> void;
 
     auto resolve_entity_collisions(entity ent, vec3f& position, vec3f& velocity,
                                    const vec3f& half_extents, const vec3f& offset) -> void;

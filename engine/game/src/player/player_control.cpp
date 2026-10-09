@@ -633,7 +633,14 @@ auto player_system::lean_(
     world_->system<ecs::physics_system>().modify(ent).smooth_steps(
         state.pose_, tuning_.step_smooth_seconds
     );
-    const float32 step_sink = world_->get<ecs::rigid_body_component>(ent).get_step_sink();
+    // см. docs/ENGINE.md#модель-опускается-мягче-тела
+    const bool softened = tuning_.ride_footing && !state.dead_;
+    world_->system<ecs::physics_system>().modify(ent).soften_descent(
+        softened ? tuning_.model_sink_seconds : 0.0f, tuning_.model_air_sink_seconds,
+        tuning_.model_lift_limit
+    );
+    const auto& carried     = world_->get<ecs::rigid_body_component>(ent);
+    const float32 step_sink = carried.get_step_sink() + carried.get_model_lift();
 
     if (state.is_rolling()) {
         state.lean_forward_degrees_ = 0.0f;
@@ -1357,6 +1364,10 @@ auto player_system::update(
                 .set_jump_impulse(tuning_.jump_impulse)
                 .set_step_hop_voxels(
                     state.dodging_ || state.swinging_ ? 0.0f : tuning_.step_hop_voxels
+                )
+                .set_rides_footing(tuning_.ride_footing)
+                .set_ride_lead(
+                    tuning_.ride_lead_voxels, tuning_.ride_rise_speed, tuning_.ride_sink_speed
                 );
             if (state.jump_buffered_ >= 0.0f && !state.body_locked_ && !state.dodging_) {
                 controller.request_jump();

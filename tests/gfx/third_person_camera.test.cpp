@@ -199,3 +199,27 @@ TEST_CASE("the body the camera follows never stops its rays", "[camera][third_pe
     CHECK(eye.y == Approx(head_height + pivot_rise).margin(1e-3F));
     CHECK(eye.z == Approx(-arm).margin(1e-3F));
 }
+
+TEST_CASE("the camera's height trails a body that pops up and catches it", "[camera][third_person]") {
+    stage s;
+    s.rig.get_params().height_follow_seconds = 0.1F;
+    s.settle();
+    const float32 level = s.look(0.0F).y;
+
+    s.world.system<ecs::transform_system>().modify(s.hero).set_position({0.0F, 8.0F, 0.0F});
+    s.settle();
+
+    const float32 just_after = s.look(0.0F).y;
+    CHECK(just_after > level);
+    CHECK(just_after < level + 4.0F);
+
+    float32 settled = just_after;
+    for (uint32 frame = 0; frame < 120; ++frame) {
+        settled = s.look(0.0F).y;
+    }
+    CHECK(settled == Approx(level + 8.0F).margin(1e-2F));
+
+    s.world.system<ecs::transform_system>().modify(s.hero).set_position({0.0F, 500.0F, 0.0F});
+    s.settle();
+    CHECK(s.look(0.0F).y == Approx(level + 500.0F).margin(1e-2F));
+}
