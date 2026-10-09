@@ -24,10 +24,19 @@ struct third_person_camera_params {
     float32 zoom_speed     = 2.0f;
     float32 collision_skin = 0.3f;
 
+    // см. docs/ENGINE.md#камера-от-третьего-лица
+    float32 pivot_rise            = 0.0f;
+    float32 look_up_arm_share     = 0.25f;
+    float32 look_up_full_degrees  = 30.0f;
+    float32 look_down_arm_share   = 1.5f;
+    float32 look_down_full_degrees = 80.0f;
+    float32 probe_radius          = 0.5f;
+    float32 arm_return_seconds    = 0.2f;
+
     // см. docs/ENGINE.md#камера-у-плеча
     float32 shoulder_arm_length     = 45.0f;
     float32 shoulder_offset         = 14.0f;
-    float32 shoulder_rise           = 2.0f;
+    float32 shoulder_rise           = -6.0f;
     float32 shoulder_follow_seconds = 0.12f;
 };
 
@@ -51,12 +60,17 @@ public:
     [[nodiscard]] auto get_shoulder_share() const -> float32;
 
 private:
+    [[nodiscard]] auto free_length_(const vec3f& from, const vec3f& to) -> float32;
+    [[nodiscard]] auto belongs_to_target_(entity ent) const -> bool;
+
     camera* camera_;
     world_type* world_;
     third_person_camera_params params_;
 
     float32 actual_arm_length_ = 0.0f;
     float32 shoulder_share_    = 0.0f;
+    float32 held_arm_share_    = 1.0f;
+    entity target_;
 
     std::vector<entity> collision_candidates_;
 };

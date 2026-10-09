@@ -39,7 +39,9 @@ arena_app::arena_app(
               .arm_length_max = 200.0f,
               .target_offset  = {0.0f, 36.5f, 0.0f},
               .zoom_speed     = 5.0f,
-              .collision_skin = 2.0f
+              .collision_skin = 3.0f,
+              .pivot_rise     = 0.0f,
+              .probe_radius   = 4.0f
           }
       ) {
     get_engine().get_debug_tool().set_visible(true);

@@ -208,6 +208,7 @@ if(VW_BUILD_GFX)
         gfx/occlusion.test.cpp
         gfx/mesh_pool.test.cpp
         gfx/camera.test.cpp
+        gfx/third_person_camera.test.cpp
         gfx/image.test.cpp
         gfx/tonemap.test.cpp
     )
