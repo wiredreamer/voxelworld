@@ -7,8 +7,18 @@ param attack_chain int
 param block bool
 param block_impact trigger
 param bow_state int
+param charging int
+param whirl trigger
+param whirl_phase int
+param pommel trigger
 state none
 	playback loop
+	to whirl
+		on whirl
+		blend 0.08
+	to pommel
+		on pommel
+		blend 0.06
 	to attack_1
 		on attack
 		when attack_chain == 1
@@ -32,6 +42,15 @@ state attack_1
 	playback once
 	fade_in 0.06
 	fade_out 0.2
+	to charge
+		when charging == 1
+		blend 0.1
+	to whirl
+		on whirl
+		blend 0.08
+	to pommel
+		on pommel
+		blend 0.06
 	to none
 		on dodge
 		blend 0.05
@@ -54,6 +73,12 @@ state attack_2
 	playback once
 	fade_in 0.06
 	fade_out 0.2
+	to whirl
+		on whirl
+		blend 0.08
+	to pommel
+		on pommel
+		blend 0.06
 	to none
 		on dodge
 		blend 0.05
@@ -76,6 +101,12 @@ state attack_3
 	playback once
 	fade_in 0.06
 	fade_out 0.2
+	to whirl
+		on whirl
+		blend 0.08
+	to pommel
+		on pommel
+		blend 0.06
 	to none
 		on dodge
 		blend 0.05
@@ -94,6 +125,12 @@ state block
 	playback loop
 	fade_in 0.12
 	fade_out 0.15
+	to whirl
+		on whirl
+		blend 0.08
+	to pommel
+		on pommel
+		blend 0.06
 	to attack_1
 		on attack
 		when attack_chain == 1
@@ -120,6 +157,12 @@ state block_impact
 	playback once
 	fade_in 0.05
 	fade_out 0.15
+	to whirl
+		on whirl
+		blend 0.08
+	to pommel
+		on pommel
+		blend 0.06
 	to attack_1
 		on attack
 		when attack_chain == 1
@@ -206,3 +249,120 @@ state bow_redraw
 	to none
 		when bow_state == 0
 		blend 0.12
+state charge
+	clip animations/a_humanoid_attack_charge.voxa
+	playback once
+	fade_in 0.06
+	fade_out 0.15
+	to none
+		on dodge
+		blend 0.05
+	to charged
+		when charging == 2
+		blend 0.05
+	to none
+		when charging == 0
+		blend 0.12
+state charged
+	clip animations/a_humanoid_attack_charged.voxa
+	playback once
+	fade_in 0.04
+	fade_out 0.2
+	to none
+		on dodge
+		blend 0.05
+	to whirl
+		on whirl
+		blend 0.08
+	to pommel
+		on pommel
+		blend 0.06
+	to attack_1
+		on attack
+		when attack_chain == 1
+		blend 0.08
+	to block
+		when block == 1
+		blend 0.12
+	to none
+		wait end
+		wait blend
+state whirl
+	clip animations/a_humanoid_sword_whirl_start.voxa
+	playback once
+	fade_in 0.06
+	fade_out 0.2
+	to none
+		on dodge
+		blend 0.05
+	to whirl_spin
+		when whirl_phase == 2
+		blend 0.05
+	to whirl_end
+		when whirl_phase == 3
+		blend 0.05
+	to none
+		when whirl_phase == 0
+		blend 0.12
+state whirl_spin
+	clip animations/a_humanoid_sword_whirl_spin.voxa
+	playback loop
+	fade_in 0.05
+	fade_out 0.15
+	to none
+		on dodge
+		blend 0.05
+	to whirl_end
+		when whirl_phase == 3
+		blend 0.05
+	to none
+		when whirl_phase == 0
+		blend 0.12
+state whirl_end
+	clip animations/a_humanoid_sword_whirl_end.voxa
+	playback once
+	fade_in 0.05
+	fade_out 0.2
+	to none
+		on dodge
+		blend 0.05
+	to whirl
+		on whirl
+		blend 0.08
+	to pommel
+		on pommel
+		blend 0.06
+	to attack_1
+		on attack
+		when attack_chain == 1
+		blend 0.08
+	to block
+		when block == 1
+		blend 0.12
+	to none
+		wait end
+		wait blend
+state pommel
+	clip animations/a_humanoid_sword_pommel.voxa
+	playback once
+	fade_in 0.05
+	fade_out 0.2
+	to none
+		on dodge
+		blend 0.05
+	to whirl
+		on whirl
+		blend 0.08
+	to pommel
+		on pommel
+		blend 0.06
+	to attack_1
+		on attack
+		when attack_chain == 1
+		blend 0.08
+	to block
+		when block == 1
+		blend 0.12
+	to none
+		wait end
+		wait blend

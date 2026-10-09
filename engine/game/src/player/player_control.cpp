@@ -65,7 +65,23 @@ auto lunge_travel_seconds(const movement_tuning& tuning) -> float32 {
                                               : 0.0f;
 }
 
-auto lunge_speed(const movement_tuning& tuning, uint32 chain_step, float32 seconds_into_lunge)
+auto lunge_reach(const movement_tuning& tuning, strike_kind strike, uint32 chain_step) -> float32 {
+    switch (strike) {
+        case strike_kind::overhead:
+        case strike_kind::heavy:
+            return tuning.charged_lunge_distance;
+        case strike_kind::pommel:
+            return tuning.pommel_lunge_distance;
+        case strike_kind::whirl:
+            return 0.0f;
+        case strike_kind::none:
+        case strike_kind::light:
+            break;
+    }
+    return chain_step == chain_length ? tuning.finisher_lunge_distance : tuning.lunge_distance;
+}
+
+auto lunge_speed(const movement_tuning& tuning, float32 distance, float32 seconds_into_lunge)
     -> float32 {
     const float32 seconds = lunge_travel_seconds(tuning);
     if (seconds <= 0.0f) {
@@ -75,8 +91,6 @@ auto lunge_speed(const movement_tuning& tuning, uint32 chain_step, float32 secon
     if (progress < 0.0f || progress >= 1.0f) {
         return 0.0f;
     }
-    const float32 distance =
-        chain_step == chain_length ? tuning.finisher_lunge_distance : tuning.lunge_distance;
     return 2.0f * distance / seconds * (1.0f - progress);
 }
 
@@ -138,6 +152,16 @@ auto dodge_speed(const movement_tuning& tuning, dodge_kind kind, float32 seconds
 
 auto dodge_trigger(dodge_kind kind) -> std::string_view {
     return kind == dodge_kind::roll ? "dodge_roll" : "dodge_dash";
+}
+
+auto stance_pace(
+    const movement_tuning& tuning, const vec3f& move_dir, const vec3f& forward, const vec3f& right
+) -> float32 {
+    const float32 ahead = math::dot(move_dir, forward);
+    const float32 aside = math::dot(move_dir, right);
+    return ahead * ahead *
+            (ahead >= 0.0f ? tuning.guard_speed_scale : tuning.guard_back_speed_scale) +
+        aside * aside * tuning.guard_side_speed_scale;
 }
 
 auto arrow_speed(const movement_tuning& tuning, float32 power) -> float32 {
@@ -260,6 +284,9 @@ auto player_system::put_away_(
     drop(state.hand_right_, arrow_socket, state.nocked_arrow_);
 
     end_swing_(state);
+    drop_charge_(state);
+    state.whirl_buffered_  = -1.0f;
+    state.pommel_buffered_ = -1.0f;
     rest_bow_(state);
     state.guarding_  = false;
     state.in_stance_ = false;
@@ -578,9 +605,13 @@ auto player_system::lean_(
     state.lean_forward_degrees_ += (target_forward - state.lean_forward_degrees_) * follow;
     state.lean_right_degrees_ += (target_right - state.lean_right_degrees_) * follow;
 
-    pose.set_rotation(math::euler_to_quat(
-        {math::radians(state.lean_forward_degrees_), 0.0f, -math::radians(state.lean_right_degrees_)}
-    ));
+    const float32 half_whirl = state.whirl_turn_ * 0.5f;
+    pose.set_rotation(
+        quat{0.0f, std::sin(half_whirl), 0.0f, std::cos(half_whirl)} *
+        math::euler_to_quat(
+            {math::radians(state.lean_forward_degrees_), 0.0f, -math::radians(state.lean_right_degrees_)}
+        )
+    );
     pose.set_position({0.0f, state.roll_height_ + step_sink, 0.0f});
 }
 
@@ -815,6 +846,11 @@ auto player_system::read_action_events_(
             state.lunging_ = false;
         } else if (event.name == "hit.start" && state.swinging_) {
             state.hit_window_ = true;
+            if (state.strike_ == strike_kind::whirl && state.whirl_spin_elapsed_ < 0.0f) {
+                state.whirl_spin_elapsed_ = 0.0f;
+            }
+        } else if (event.name == "charge.ready" && state.charging_) {
+            state.charge_heard_ = true;
         } else if (event.name == "hit.end") {
             state.hit_window_ = false;
         } else if (event.name == "cancel.ok" && state.swinging_) {
@@ -854,6 +890,71 @@ auto player_system::end_swing_(
     state.lunging_     = false;
     state.hit_window_  = false;
     state.cancel_open_ = false;
+    state.charge_watch_ = false;
+    state.strike_       = strike_kind::none;
+}
+
+auto player_system::drop_charge_(
+    player_component& state
+) -> void {
+    state.charge_watch_ = false;
+    state.charging_     = false;
+    state.charge_ready_ = false;
+    state.charge_heard_ = false;
+}
+
+// см. docs/ENGINE.md#заряженный-удар-и-способности-меча
+auto player_system::spin_whirl_(
+    player_component& state, float32 delta_time
+) const -> void {
+    if (state.strike_ != strike_kind::whirl) {
+        state.whirl_phase_ = whirl_phase::none;
+        if (state.whirl_spin_elapsed_ >= 0.0f) {
+            state.whirl_spin_elapsed_ = -1.0f;
+            state.whirl_turn_         = wrapped_radians(state.whirl_turn_);
+        }
+    }
+
+    if (state.whirl_spin_elapsed_ < 0.0f) {
+        const float32 follow = tuning_.whirl_settle_seconds > 0.0f
+            ? 1.0f - std::exp(-delta_time / tuning_.whirl_settle_seconds)
+            : 1.0f;
+        state.whirl_turn_ -= state.whirl_turn_ * follow;
+        return;
+    }
+
+    const float32 rate    = std::max(tuning_.attack_playback_rate, math::epsilon);
+    const float32 turns   = std::max(std::round(tuning_.whirl_turns), 1.0f);
+    const float32 gather  = std::max(tuning_.whirl_gather_seconds, 0.0f) / rate;
+    const float32 brake   = std::max(tuning_.whirl_brake_seconds, 0.0f) / rate;
+    const float32 ramps   = (gather + brake) * 0.5f;
+    const float32 cruise  = std::max((turns * tuning_.whirl_turn_seconds / rate) - ramps, 0.0f);
+    const float32 at_full = std::max(cruise + ramps, math::epsilon);
+    const float32 pace    = turns / at_full;
+
+    state.whirl_spin_elapsed_ += delta_time;
+    const float32 elapsed = state.whirl_spin_elapsed_;
+    const float32 total   = gather + cruise + brake;
+    if (elapsed >= total) {
+        state.whirl_spin_elapsed_ = -1.0f;
+        state.whirl_turn_         = 0.0f;
+        state.whirl_phase_        = whirl_phase::braking;
+        return;
+    }
+
+    float32 turned = 0.0f;
+    if (elapsed < gather) {
+        turned             = pace * elapsed * elapsed / (2.0f * gather);
+        state.whirl_phase_ = whirl_phase::gathering;
+    } else if (elapsed < gather + cruise) {
+        turned             = pace * ((gather * 0.5f) + (elapsed - gather));
+        state.whirl_phase_ = whirl_phase::spinning;
+    } else {
+        const float32 left = total - elapsed;
+        turned             = turns - (pace * left * left / (2.0f * brake));
+        state.whirl_phase_ = whirl_phase::braking;
+    }
+    state.whirl_turn_ = -2.0f * std::numbers::pi_v<float32> * turned;
 }
 
 auto player_system::update(
@@ -907,6 +1008,12 @@ auto player_system::update(
             if (frame.was_pressed(input_action::dodge)) {
                 state.dodge_buffered_ = tuning_.input_buffer_seconds;
             }
+            if (frame.was_pressed(input_action::ability_1)) {
+                state.whirl_buffered_ = tuning_.input_buffer_seconds;
+            }
+            if (frame.was_pressed(input_action::ability_2)) {
+                state.pommel_buffered_ = tuning_.input_buffer_seconds;
+            }
 
             const bool dodge_allowed = !state.dodging_ && !state.body_locked_ &&
                 !state.hit_window_ && state.air_state_ == air_state::ground &&
@@ -924,9 +1031,12 @@ auto player_system::update(
                 state.dodge_elapsed_ = 0.0f;
                 state.roll_height_   = 0.0f;
                 state.attack_buffered_ = -1.0f;
+                state.whirl_buffered_  = -1.0f;
+                state.pommel_buffered_ = -1.0f;
                 if (state.swinging_) {
                     end_swing_(state);
                 }
+                drop_charge_(state);
                 drop_draw_(ent, state);
                 machines.modify(ent).fire_trigger(dodge_trigger(state.dodge_kind_));
                 machines.modify(ent).fire_trigger("dodge");
@@ -941,22 +1051,20 @@ auto player_system::update(
 
             const bool shield_up = frame.is_held(input_action::block) && state.shield_.is_valid();
             const bool bow_up    = has_bow && (state.aiming_ || state.bow_phase_ != bow_phase::rest);
-            state.in_stance_     = (shield_up || bow_up) && on_feet;
+            state.in_stance_     = (shield_up || bow_up || state.charging_) && on_feet;
             const bool striking_from_guard = state.guarding_;
 
-            const bool strike_allowed = !state.dodging_ && !state.body_locked_ &&
-                (!state.swinging_ || state.cancel_open_);
-            if (state.attack_buffered_ >= 0.0f && state.weapon_.is_valid() && strike_allowed) {
-                const bool chaining = state.swinging_ ||
-                    state.since_swing_seconds_ <= tuning_.chain_reset_seconds;
-                state.chain_step_ =
-                    chaining && state.chain_step_ < chain_length ? state.chain_step_ + 1 : 1;
+            const bool armed       = state.weapon_.is_valid();
+            const bool attack_held = frame.is_held(input_action::attack);
+            const auto begin_strike = [&](strike_kind kind) {
                 state.attack_buffered_ = -1.0f;
                 state.cancel_open_     = false;
                 ++state.swing_count_;
                 const auto facing = world_->get<ecs::transform_component>(ent).get_rotation();
                 const vec3f look  = rotated(facing, {0.0f, 0.0f, 1.0f});
-                state.attack_facing_ = striking_from_guard ? forward
+                const bool aimed  = striking_from_guard || kind == strike_kind::heavy ||
+                    kind == strike_kind::overhead;
+                state.attack_facing_ = aimed ? forward
                     : moving                               ? move_dir
                                                            : math::normalize(vec3f{look.x, 0.0f, look.z});
                 state.swinging_      = true;
@@ -965,21 +1073,107 @@ auto player_system::update(
                 state.lunging_       = false;
                 state.lunged_        = false;
                 state.hit_window_    = false;
+                state.charge_watch_  = false;
+                state.strike_        = kind;
+            };
+
+            // см. docs/ENGINE.md#заряженный-удар-и-способности-меча
+            if (state.charging_ && (!armed || state.dodging_ || state.body_locked_)) {
+                drop_charge_(state);
+            }
+            if (state.charge_watch_) {
+                state.charge_seconds_ += delta_time;
+                if (!attack_held || !state.swinging_) {
+                    state.charge_watch_ = false;
+                } else if (state.charge_seconds_ >= tuning_.charge_decide_seconds) {
+                    end_swing_(state);
+                    state.attack_buffered_ = -1.0f;
+                    state.charging_        = true;
+                    state.charge_ready_    = false;
+                    state.charge_heard_    = false;
+                    ++state.charge_count_;
+                }
+            } else if (state.charging_) {
+                state.charge_seconds_ += delta_time;
+                state.charge_ready_ = state.charge_ready_ || state.charge_heard_ ||
+                    state.charge_seconds_ >= tuning_.charge_full_seconds;
+                if (action_playing) {
+                    world_->system<ecs::animation_system>()
+                        .modify_player(ent)
+                        .layer(action_layer)
+                        .set_playback_speed(state.charge_heard_ ? 0.0f : 1.0f);
+                    state.charge_frozen_ = state.charge_heard_;
+                }
+                if (!attack_held) {
+                    const bool heavy = state.charge_ready_;
+                    drop_charge_(state);
+                    state.chain_step_ = 0;
+                    begin_strike(heavy ? strike_kind::heavy : strike_kind::overhead);
+                    state.heavy_strike_count_ += heavy ? 1 : 0;
+                }
+            }
+
+            if (!state.charging_ && state.charge_frozen_) {
+                state.charge_frozen_ = false;
+                if (action_playing) {
+                    world_->system<ecs::animation_system>()
+                        .modify_player(ent)
+                        .layer(action_layer)
+                        .set_playback_speed(1.0f);
+                }
+            }
+
+            const bool strike_allowed = !state.dodging_ && !state.body_locked_ && !state.charging_ &&
+                (!state.swinging_ || state.cancel_open_);
+            const bool ability_allowed =
+                armed && strike_allowed && state.air_state_ == air_state::ground;
+            if (state.whirl_buffered_ >= 0.0f && ability_allowed) {
+                state.whirl_buffered_  = -1.0f;
+                state.pommel_buffered_ = -1.0f;
+                state.chain_step_      = 0;
+                begin_strike(strike_kind::whirl);
+                state.whirl_phase_        = whirl_phase::gathering;
+                state.whirl_spin_elapsed_ = -1.0f;
+                state.whirl_turn_         = wrapped_radians(state.whirl_turn_);
+                ++state.whirl_count_;
+                machines.modify(ent).fire_trigger("whirl");
+            } else if (state.pommel_buffered_ >= 0.0f && ability_allowed) {
+                state.pommel_buffered_ = -1.0f;
+                state.chain_step_      = 0;
+                begin_strike(strike_kind::pommel);
+                ++state.pommel_count_;
+                machines.modify(ent).fire_trigger("pommel");
+            } else if (state.attack_buffered_ >= 0.0f && armed && strike_allowed) {
+                const bool chaining = state.swinging_ ||
+                    state.since_swing_seconds_ <= tuning_.chain_reset_seconds;
+                state.chain_step_ =
+                    chaining && state.chain_step_ < chain_length ? state.chain_step_ + 1 : 1;
+                begin_strike(strike_kind::light);
+                state.charge_watch_   = state.chain_step_ == 1 && attack_held;
+                state.charge_seconds_ = 0.0f;
                 machines.modify(ent).set_parameter(
                     "attack_chain", static_cast<float32>(state.chain_step_)
                 );
                 machines.modify(ent).fire_trigger("attack");
             }
+            const bool striking_overhead = state.swinging_ &&
+                (state.strike_ == strike_kind::overhead || state.strike_ == strike_kind::heavy);
+            machines.modify(ent).set_parameter(
+                "charging", state.charging_ ? 1.0f : striking_overhead ? 2.0f : 0.0f
+            );
+            machines.modify(ent).set_parameter(
+                "whirl_phase", static_cast<float32>(std::to_underlying(state.whirl_phase_))
+            );
             state.since_swing_seconds_ = state.swinging_ ? 0.0f : state.since_swing_seconds_ + delta_time;
             state.braced_   = state.in_stance_ && !state.swinging_ && !state.body_locked_;
-            state.guarding_ = state.braced_ && state.shield_.is_valid();
+            state.guarding_ = state.braced_ && state.shield_.is_valid() && !state.charging_;
             machines.modify(ent).set_parameter("block", state.guarding_ ? 1.0f : 0.0f);
             machines.modify(ent).set_parameter(
                 "bow_state", static_cast<float32>(std::to_underlying(state.bow_phase_))
             );
             machines.modify(ent).set_parameter("stance", state.in_stance_ ? 1.0f : 0.0f);
-            state.attacking_ =
-                action_playing || state.swinging_ || state.bow_phase_ != bow_phase::rest;
+            state.attacking_ = action_playing || state.swinging_ || state.charging_ ||
+                state.bow_phase_ != bow_phase::rest;
 
             auto controller = controllers.modify(ent);
             if (state.dodging_) {
@@ -998,9 +1192,41 @@ auto player_system::update(
                 state.dodging_ =
                     state.dodge_elapsed_ < dodge_total_seconds(tuning_, state.dodge_kind_);
                 state.invulnerable_ = state.invulnerable_ && state.dodging_;
+            } else if (state.charging_) {
+                state.attack_facing_ = forward;
+                const float32 pace   = state.air_state_ == air_state::ground
+                    ? stance_pace(tuning_, move_dir, forward, right) * tuning_.charge_move_scale
+                    : 1.0f;
+                controller.set_move_input(moving ? move_dir * pace : vec3f{0.0f, 0.0f, 0.0f})
+                    .set_acceleration_seconds(tuning_.acceleration_seconds)
+                    .set_deceleration_seconds(tuning_.deceleration_seconds)
+                    .set_facing_direction(forward)
+                    .set_turn_degrees_per_second(tuning_.guard_turn_degrees_per_second);
+            } else if (state.swinging_ && state.strike_ == strike_kind::whirl) {
+                controller
+                    .set_move_input(
+                        moving ? move_dir * tuning_.whirl_move_scale : vec3f{0.0f, 0.0f, 0.0f}
+                    )
+                    .set_acceleration_seconds(tuning_.acceleration_seconds)
+                    .set_deceleration_seconds(tuning_.deceleration_seconds)
+                    .set_facing_direction(state.attack_facing_)
+                    .set_turn_degrees_per_second(tuning_.attack_turn_degrees_per_second);
+
+                if (state.whirl_spin_elapsed_ < 0.0f) {
+                    state.swing_seconds_ += delta_time;
+                }
+                if (action_playing) {
+                    world_->system<ecs::animation_system>()
+                        .modify_player(ent)
+                        .layer(action_layer)
+                        .set_playback_speed(tuning_.attack_playback_rate);
+                }
             } else if (state.swinging_) {
                 const float32 lunge = state.lunging_
-                    ? lunge_speed(tuning_, state.chain_step_, state.lunge_seconds_ + delta_time * 0.5f)
+                    ? lunge_speed(
+                          tuning_, lunge_reach(tuning_, state.strike_, state.chain_step_),
+                          state.lunge_seconds_ + delta_time * 0.5f
+                      )
                     : 0.0f;
                 const float32 move_speed =
                     world_->get<ecs::character_controller_component>(ent).get_move_speed();
@@ -1022,11 +1248,7 @@ auto player_system::update(
                         .set_playback_speed(tuning_.attack_playback_rate);
                 }
             } else if (state.braced_) {
-                const float32 ahead = math::dot(move_dir, forward);
-                const float32 aside = math::dot(move_dir, right);
-                const float32 pace  = ahead * ahead *
-                        (ahead >= 0.0f ? tuning_.guard_speed_scale : tuning_.guard_back_speed_scale) +
-                    aside * aside * tuning_.guard_side_speed_scale;
+                const float32 pace = stance_pace(tuning_, move_dir, forward, right);
                 controller.set_move_input(moving ? move_dir * pace : vec3f{0.0f, 0.0f, 0.0f})
                     .set_acceleration_seconds(tuning_.acceleration_seconds)
                     .set_deceleration_seconds(tuning_.deceleration_seconds)
@@ -1095,6 +1317,8 @@ auto player_system::update(
             age_buffer(state.attack_buffered_, delta_time);
             age_buffer(state.jump_buffered_, delta_time);
             age_buffer(state.dodge_buffered_, delta_time);
+            age_buffer(state.whirl_buffered_, delta_time);
+            age_buffer(state.pommel_buffered_, delta_time);
 
             if (frame.was_pressed(input_action::loadout_melee)) {
                 equipping_.push_back(
@@ -1107,6 +1331,7 @@ auto player_system::update(
                 );
             }
 
+            spin_whirl_(state, delta_time);
             lean_(ent, state, delta_time);
             turn_head_(ent, state, forward, delta_time);
             plant_feet_(ent, state, delta_time);

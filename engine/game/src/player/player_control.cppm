@@ -37,6 +37,23 @@ enum class bow_phase : uint8 {
     releasing,
 };
 
+// см. docs/ENGINE.md#заряженный-удар-и-способности-меча
+enum class strike_kind : uint8 {
+    none,
+    light,
+    overhead,
+    heavy,
+    whirl,
+    pommel,
+};
+
+enum class whirl_phase : uint8 {
+    none,
+    gathering,
+    spinning,
+    braking,
+};
+
 struct movement_tuning final {
     float32 run_turn_degrees_per_second    = 360.0f;
     float32 attack_turn_degrees_per_second = 800.0f;
@@ -92,10 +109,21 @@ struct movement_tuning final {
     float32 bow_draw_playback_rate         = 1.0f;
     float32 bow_full_draw_seconds          = 0.8f;
     float32 bow_quick_draw_seconds         = 0.25f;
-    float32 bow_quick_arrow_speed          = 550.0f;
+    float32 bow_quick_arrow_speed          = 220.0f;
     float32 bow_full_arrow_speed           = 900.0f;
     float32 bow_aim_reach                  = 4000.0f;
     float32 bow_release_fallback_seconds   = 0.08f;
+    float32 charge_decide_seconds          = 0.15f;
+    float32 charge_full_seconds            = 0.5f;
+    float32 charge_move_scale              = 1.0f;
+    float32 charged_lunge_distance         = 25.0f;
+    float32 whirl_turns                    = 3.0f;
+    float32 whirl_turn_seconds             = 0.3f;
+    float32 whirl_gather_seconds           = 0.2f;
+    float32 whirl_brake_seconds            = 0.25f;
+    float32 whirl_move_scale               = 0.5f;
+    float32 whirl_settle_seconds           = 0.06f;
+    float32 pommel_lunge_distance          = 25.0f;
 };
 
 struct player_component final {
@@ -189,6 +217,50 @@ struct player_component final {
 
     [[nodiscard]] auto get_chain_step() const -> uint32 {
         return chain_step_;
+    }
+
+    [[nodiscard]] auto get_strike() const -> strike_kind {
+        return strike_;
+    }
+
+    [[nodiscard]] auto is_heavy_strike() const -> bool {
+        return strike_ == strike_kind::heavy;
+    }
+
+    [[nodiscard]] auto is_charging() const -> bool {
+        return charging_;
+    }
+
+    [[nodiscard]] auto is_charge_ready() const -> bool {
+        return charging_ && charge_ready_;
+    }
+
+    [[nodiscard]] auto get_charge_seconds() const -> float32 {
+        return charge_seconds_;
+    }
+
+    [[nodiscard]] auto get_charge_count() const -> uint32 {
+        return charge_count_;
+    }
+
+    [[nodiscard]] auto get_heavy_strike_count() const -> uint32 {
+        return heavy_strike_count_;
+    }
+
+    [[nodiscard]] auto get_whirl_count() const -> uint32 {
+        return whirl_count_;
+    }
+
+    [[nodiscard]] auto get_pommel_count() const -> uint32 {
+        return pommel_count_;
+    }
+
+    [[nodiscard]] auto get_whirl_phase() const -> whirl_phase {
+        return whirl_phase_;
+    }
+
+    [[nodiscard]] auto get_whirl_turn_degrees() const -> float32 {
+        return math::degrees(whirl_turn_);
     }
 
     [[nodiscard]] auto get_attack_direction() const -> const vec3f& {
@@ -347,6 +419,22 @@ private:
     std::array<planted_foot, 2> feet_{};
     uint32 turn_steps_            = 0;
     uint32 blocked_hits_          = 0;
+    strike_kind strike_        = strike_kind::none;
+    float32 charge_seconds_    = 0.0f;
+    float32 whirl_buffered_    = -1.0f;
+    float32 pommel_buffered_   = -1.0f;
+    float32 whirl_spin_elapsed_ = -1.0f;
+    float32 whirl_turn_        = 0.0f;
+    whirl_phase whirl_phase_   = whirl_phase::none;
+    uint32 charge_count_       = 0;
+    uint32 heavy_strike_count_ = 0;
+    uint32 whirl_count_        = 0;
+    uint32 pommel_count_       = 0;
+    bool charge_watch_         = false;
+    bool charging_             = false;
+    bool charge_ready_         = false;
+    bool charge_heard_         = false;
+    bool charge_frozen_        = false;
     bool attacking_     = false;
     bool swinging_      = false;
     bool swing_started_ = false;
@@ -394,6 +482,8 @@ private:
         ecs::entity hand, std::string_view socket, std::string_view prefab
     ) const -> ecs::entity;
     static auto end_swing_(player_component& state) -> void;
+    static auto drop_charge_(player_component& state) -> void;
+    auto spin_whirl_(player_component& state, float32 delta_time) const -> void;
     auto put_away_(player_component& state) const -> void;
     auto draw_bow_(
         ecs::entity ent, player_component& state, const input_frame& frame, bool action_playing,

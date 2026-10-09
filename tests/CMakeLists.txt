@@ -182,6 +182,7 @@ add_executable(game_tests
     game/jump.test.cpp
     game/bow.test.cpp
     game/projectile.test.cpp
+    game/sword.test.cpp
 )
 
 target_link_libraries(game_tests PRIVATE
