@@ -1150,3 +1150,111 @@ TEST_CASE("between physics steps a running body is shown moving, though it stand
     REQUIRE(longest_shown_stride < physics_stride * 0.6F);
     REQUIRE(farthest_behind <= physics_stride * 1.01F);
 }
+
+namespace {
+
+// см. docs/walker-plan.md#этапы
+auto twitches_on_a_zigzag(uint32 seed) -> int32 {
+    constexpr int32 reach         = 60;
+    constexpr int32 window_ticks  = 4;
+    constexpr float32 run_seconds = 40.0F;
+
+    grounded_world g;
+    REQUIRE(g.settle());
+
+    auto& mapper = g.world.system<game::input_system>().mapper();
+    mapper.cursor_at(0.0, 0.0);
+    g.tick();
+
+    const vec3f start   = g.world.get<ecs::transform_component>(g.player).get_position();
+    const auto vs       = static_cast<float32>(units_per_voxel);
+    const int32 floor_y = static_cast<int32>(std::lround((start.y - 0.5F) / vs)) - 1;
+    const vec3i origin{
+        static_cast<int32>(std::floor(start.x / vs)), floor_y,
+        static_cast<int32>(std::floor(start.z / vs))
+    };
+
+    auto& grid = *g.world.system<ecs::world_grid_system>().grid();
+    for (int32 x = -reach; x <= reach; ++x) {
+        for (int32 z = -reach; z <= reach; ++z) {
+            const float32 wave = std::sin(static_cast<float32>(x) * 0.55F) +
+                                 std::cos(static_cast<float32>(z) * 0.45F) +
+                                 std::sin(static_cast<float32>(x + z) * 0.3F);
+            const bool under_the_feet = std::abs(x) <= 1 && std::abs(z) <= 1;
+            const int32 height =
+                under_the_feet ? 0 : std::clamp(static_cast<int32>(std::lround(wave)), -1, 2) + 1;
+            for (int32 up = -2; up <= 12; ++up) {
+                grid.set_voxel(
+                    (origin + vec3i{x, up, z}) * units_per_voxel,
+                    up <= height ? voxels::red[6] : voxels::air
+                );
+            }
+        }
+    }
+    g.run_for(0.5F);
+
+    std::mt19937 dice{seed};
+    std::uniform_real_distribution<float32> hold{0.08F, 0.5F};
+    std::uniform_int_distribution<int32> pick{0, 3};
+
+    std::vector<float32> shown;
+    std::vector<bool> on_the_ground;
+    float32 until = 0.0F;
+    float64 yaw   = 0.0;
+    for (float32 elapsed = 0.0F; elapsed < run_seconds; elapsed += g.tick_seconds) {
+        if (elapsed >= until) {
+            until = elapsed + hold(dice);
+
+            const int32 way = pick(dice);
+            mapper.key(keys::W, true);
+            mapper.key(keys::A, way == 1);
+            mapper.key(keys::D, way == 2);
+            if (way == 3) {
+                yaw += 140.0;
+                mapper.cursor_at(yaw, 0.0);
+            }
+        }
+        g.tick();
+
+        const auto& body = g.world.get<ecs::rigid_body_component>(g.player);
+        shown.push_back(
+            g.world.get<ecs::transform_component>(g.player).get_shown_position().y + body.get_step_sink()
+        );
+        on_the_ground.push_back(body.is_grounded());
+    }
+
+    const float32 enough = 0.15F * vs;
+    int32 twitches       = 0;
+    for (std::size_t at = window_ticks; at + window_ticks < shown.size(); ++at) {
+        bool stood = true;
+        float32 lowest_before = shown[at];
+        float32 lowest_after  = shown[at];
+        float32 highest_before = shown[at];
+        float32 highest_after  = shown[at];
+        for (std::size_t off = 1; off <= window_ticks; ++off) {
+            stood          = stood && on_the_ground[at - off] && on_the_ground[at + off];
+            lowest_before  = std::min(lowest_before, shown[at - off]);
+            lowest_after   = std::min(lowest_after, shown[at + off]);
+            highest_before = std::max(highest_before, shown[at - off]);
+            highest_after  = std::max(highest_after, shown[at + off]);
+        }
+        const bool peak = shown[at] - lowest_before > enough && shown[at] - lowest_after > enough;
+        const bool dip  = highest_before - shown[at] > enough && highest_after - shown[at] > enough;
+        if (stood && on_the_ground[at] && (peak || dip)) {
+            ++twitches;
+            at += window_ticks;
+        }
+    }
+    return twitches;
+}
+
+}  // namespace
+
+TEST_CASE("a zigzag over bumps never twitches the shown height", "[game][walker][!shouldfail]") {
+    int32 twitches = 0;
+    for (const uint32 seed : {1U, 2U, 3U}) {
+        twitches += twitches_on_a_zigzag(seed);
+    }
+    INFO("twitches " << twitches);
+    REQUIRE(twitches == 0);
+}
