@@ -10,6 +10,10 @@ param dodge_dash trigger
 param dir_x float
 param dir_z float
 param stance bool
+param hit trigger
+param death trigger
+param revive trigger
+param death_fall int
 state idle
 	clip animations/a_humanoid_idle.voxa
 	playback loop
@@ -106,6 +110,47 @@ state land_hard
 	to idle
 		wait end
 		blend 0.1
+any
+	to death_front
+		on death
+		when death_fall == 1
+		blend 0.05
+	to death
+		on death
+		blend 0.05
+	to hit_react
+		on hit
+		blend 0.04
+state hit_react
+	clip animations/a_humanoid_hit_react.voxa
+	playback once
+	to idle
+		wait end
+		blend 0.1
+state death
+	clip animations/a_humanoid_death.voxa
+	playback once
+	to dead
+		wait end
+		blend 0.02
+state dead
+	clip animations/a_humanoid_dead.voxa
+	playback loop
+	to idle
+		on revive
+		blend 0.3
+state death_front
+	clip animations/a_humanoid_death_front.voxa
+	playback once
+	to dead_front
+		wait end
+		blend 0.02
+state dead_front
+	clip animations/a_humanoid_dead_front.voxa
+	playback loop
+	to idle
+		on revive
+		blend 0.3
 state dodge_roll
 	clip animations/a_humanoid_dodge_roll.voxa
 	playback once

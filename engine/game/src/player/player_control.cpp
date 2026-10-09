@@ -522,6 +522,59 @@ auto player_system::take_hit_on_shield(
     return true;
 }
 
+// см. docs/ENGINE.md#удар-по-персонажу-и-смерть
+auto player_system::take_hit(
+    ecs::entity player
+) -> bool {
+    auto* state = world_->try_get<player_component>(player);
+    if (state == nullptr || state->dead_ || state->invulnerable_) {
+        return false;
+    }
+    ++state->staggers_;
+    state->blow_ = blow_kind::stagger;
+    return true;
+}
+
+auto player_system::break_guard(
+    ecs::entity player
+) -> bool {
+    auto* state = world_->try_get<player_component>(player);
+    if (state == nullptr || state->dead_ || !state->guarding_) {
+        return false;
+    }
+    ++state->guard_breaks_;
+    ++state->staggers_;
+    state->blow_ = blow_kind::stagger;
+    return true;
+}
+
+auto player_system::die(
+    ecs::entity player, death_fall fall
+) -> bool {
+    auto* state = world_->try_get<player_component>(player);
+    if (state == nullptr || state->dead_) {
+        return false;
+    }
+    state->dead_       = true;
+    state->death_fall_ = fall;
+    state->blow_ = blow_kind::death;
+    return true;
+}
+
+auto player_system::revive(
+    ecs::entity player
+) -> bool {
+    auto* state = world_->try_get<player_component>(player);
+    if (state == nullptr || !state->dead_) {
+        return false;
+    }
+    state->dead_        = false;
+    state->blow_        = blow_kind::none;
+    state->body_locked_ = false;
+    world_->system<ecs::animation_fsm_system>().modify(player).fire_trigger("revive");
+    return true;
+}
+
 auto player_system::pace_stance_steps_(
     ecs::entity ent
 ) const -> void {
@@ -662,7 +715,7 @@ auto player_system::turn_head_(
     const vec3f body{forward.x, 0.0f, forward.z};
 
     float32 target = 0.0f;
-    if (math::length(body) > math::epsilon && math::length(look) > math::epsilon) {
+    if (!state.dead_ && math::length(body) > math::epsilon && math::length(look) > math::epsilon) {
         const vec3f along   = math::normalize(body);
         const vec3f towards = math::normalize(vec3f{look.x, 0.0f, look.z});
         const float32 apart = math::degrees(
@@ -994,7 +1047,32 @@ auto player_system::update(
                     end_swing_(state);
                 }
             }
-            if (state.body_locked_) {
+            if (state.blow_ != blow_kind::none) {
+                if (state.swinging_) {
+                    end_swing_(state);
+                }
+                drop_charge_(state);
+                drop_draw_(ent, state);
+                state.draw_owed_           = false;
+                state.attack_buffered_     = -1.0f;
+                state.whirl_buffered_      = -1.0f;
+                state.pommel_buffered_     = -1.0f;
+                state.dodge_buffered_      = -1.0f;
+                state.jump_buffered_       = -1.0f;
+                state.dodging_             = false;
+                state.invulnerable_        = false;
+                state.body_locked_         = true;
+                state.body_locked_seconds_ = 0.0f;
+                machines.modify(ent).fire_trigger("dodge");
+                machines.modify(ent).set_parameter(
+                    "death_fall", static_cast<float32>(std::to_underlying(state.death_fall_))
+                );
+                machines.modify(ent).fire_trigger(state.blow_ == blow_kind::death ? "death" : "hit");
+                state.blow_ = blow_kind::none;
+            }
+            if (state.dead_) {
+                state.body_locked_ = true;
+            } else if (state.body_locked_) {
                 state.body_locked_seconds_ += delta_time;
                 state.body_locked_ = state.body_locked_seconds_ <= longest_swing_seconds;
             }
@@ -1042,7 +1120,7 @@ auto player_system::update(
                 machines.modify(ent).fire_trigger("dodge");
             }
 
-            const bool on_feet = !state.dodging_ && !state.leapt_;
+            const bool on_feet = !state.dodging_ && !state.leapt_ && !state.dead_;
             const bool has_bow = state.bow_.is_valid();
             if (has_bow) {
                 draw_bow_(ent, state, frame, action_playing, delta_time);

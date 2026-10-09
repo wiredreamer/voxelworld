@@ -217,6 +217,32 @@ auto arena_app::handle_key_press(
         case plat::keyboard::keys::F1:
             set_mouse_captured_(!mouse_captured_);
             break;
+        case plat::keyboard::keys::F4:
+        case plat::keyboard::keys::F5:
+        case plat::keyboard::keys::F6:
+        case plat::keyboard::keys::F7:
+            if (is_player_placed_()) {
+                auto& players = get_engine().get_world().system<game::player_system>();
+                if (key == plat::keyboard::keys::F4) {
+                    if (!players.take_hit_on_shield(player_)) {
+                        static_cast<void>(players.take_hit(player_));
+                    }
+                } else if (key == plat::keyboard::keys::F5) {
+                    static_cast<void>(players.break_guard(player_));
+                } else if (key == plat::keyboard::keys::F6) {
+                    const auto& world   = get_engine().get_world();
+                    const auto velocity = world.get<ecs::rigid_body_component>(player_).get_velocity();
+                    const auto& placed  = world.get<ecs::transform_component>(player_).get_world_matrix();
+                    const vec3f ahead   = (placed * vec3f{0.0f, 0.0f, 1.0f}) - (placed * vec3f{0.0f, 0.0f, 0.0f});
+                    const bool onward   = (velocity.x * ahead.x) + (velocity.z * ahead.z) > 20.0f;
+                    static_cast<void>(players.die(
+                        player_, onward ? game::death_fall::forward : game::death_fall::backward
+                    ));
+                } else {
+                    static_cast<void>(players.revive(player_));
+                }
+            }
+            break;
         case plat::keyboard::keys::F2:
             show_colliders_ = !show_colliders_;
             break;

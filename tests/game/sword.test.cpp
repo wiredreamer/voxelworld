@@ -101,6 +101,14 @@ struct fencer {
         return world.get<ecs::animation_fsm_component>(player).get_machine(1).get_current_state();
     }
 
+    [[nodiscard]] auto body_state() const -> const std::string& {
+        return world.get<ecs::animation_fsm_component>(player).get_machine(0).get_current_state();
+    }
+
+    [[nodiscard]] auto players() -> game::player_system& {
+        return world.system<game::player_system>();
+    }
+
     [[nodiscard]] auto step() -> float32 {
         tick();
         const auto wish = world.get<ecs::movement_intent_component>(player).get_wish_velocity();
@@ -511,4 +519,116 @@ TEST_CASE("the whirl lets the fencer walk at half pace", "[game][sword]") {
     const auto wish    = f.world.get<ecs::movement_intent_component>(f.player).get_wish_velocity();
     const float32 pace = std::sqrt((wish.x * wish.x) + (wish.z * wish.z));
     REQUIRE(pace == Catch::Approx(speed * f.tuning().whirl_move_scale).margin(speed * 0.1F));
+}
+
+TEST_CASE("a hit staggers: it drops what the hands did and locks the body", "[game][blow]") {
+    fencer f;
+    f.hold(true);
+    f.ticks_until([&] { return f.state().is_charging(); });
+    REQUIRE(f.state().is_charging());
+
+    REQUIRE(f.players().take_hit(f.player));
+    f.tick();
+    f.tick();
+    REQUIRE(f.state().get_staggers() == 1);
+    REQUIRE_FALSE(f.state().is_charging());
+    REQUIRE(f.state().is_body_locked());
+    REQUIRE(f.body_state() == "hit_react");
+    f.hold(false);
+
+    const uint32 swings = f.state().get_swing_count();
+    const uint32 dodges = f.state().get_dodge_count();
+    f.click();
+    f.tap(keys::LEFT_SHIFT);
+    f.tap(keys::Q);
+    REQUIRE(f.state().get_swing_count() == swings);
+    REQUIRE(f.state().get_dodge_count() == dodges);
+    REQUIRE(f.state().get_whirl_count() == 0);
+
+    f.ticks_until([&] { return !f.state().is_body_locked(); });
+    REQUIRE_FALSE(f.state().is_body_locked());
+    f.run_for(0.4F);
+    REQUIRE(f.body_state() == "idle");
+
+    f.click();
+    f.tick();
+    REQUIRE(f.state().get_swing_count() == swings + 1);
+}
+
+TEST_CASE("a dodge's invulnerable frames shrug a hit off", "[game][blow]") {
+    fencer f;
+    f.mapper().key(keys::LEFT_SHIFT, true);
+    f.tick();
+    f.mapper().key(keys::LEFT_SHIFT, false);
+    f.ticks_until([&] { return f.state().is_invulnerable(); });
+    REQUIRE(f.state().is_invulnerable());
+
+    REQUIRE_FALSE(f.players().take_hit(f.player));
+    f.tick();
+    REQUIRE(f.state().get_staggers() == 0);
+}
+
+TEST_CASE("the guard breaks only while it is up", "[game][blow]") {
+    fencer f;
+    REQUIRE_FALSE(f.players().break_guard(f.player));
+
+    f.mapper().button(mouse::buttons::RIGHT, true);
+    f.run_for(0.2F);
+    REQUIRE(f.state().is_guarding());
+    REQUIRE(f.players().break_guard(f.player));
+    f.tick();
+    f.tick();
+
+    REQUIRE(f.state().get_guard_breaks() == 1);
+    REQUIRE_FALSE(f.state().is_guarding());
+    REQUIRE(f.body_state() == "hit_react");
+}
+
+TEST_CASE("the dead lie still until revived", "[game][blow]") {
+    fencer f;
+    REQUIRE_FALSE(f.players().revive(f.player));
+    REQUIRE(f.players().die(f.player));
+    REQUIRE_FALSE(f.players().die(f.player));
+    f.tick();
+    f.tick();
+    REQUIRE(f.state().is_dead());
+    REQUIRE(f.body_state() == "death");
+    REQUIRE_FALSE(f.players().take_hit(f.player));
+
+    f.mapper().key(keys::W, true);
+    f.mapper().button(mouse::buttons::RIGHT, true);
+    f.click();
+    f.tap(keys::SPACE);
+    f.run_for(3.0F);
+    REQUIRE(f.body_state() == "dead");
+    REQUIRE(f.state().is_body_locked());
+    REQUIRE_FALSE(f.state().is_in_stance());
+    REQUIRE_FALSE(f.state().is_swinging());
+    const auto wish = f.world.get<ecs::movement_intent_component>(f.player).get_wish_velocity();
+    REQUIRE(std::abs(wish.x) + std::abs(wish.z) < 1.0e-3F);
+    f.mapper().key(keys::W, false);
+    f.mapper().button(mouse::buttons::RIGHT, false);
+
+    REQUIRE(f.players().revive(f.player));
+    f.run_for(0.5F);
+    REQUIRE_FALSE(f.state().is_dead());
+    REQUIRE_FALSE(f.state().is_body_locked());
+    REQUIRE(f.body_state() == "idle");
+}
+
+TEST_CASE("the dead fall the way they were told to", "[game][blow]") {
+    fencer f;
+    REQUIRE(f.players().die(f.player, game::death_fall::forward));
+    f.tick();
+    f.tick();
+    REQUIRE(f.body_state() == "death_front");
+    f.run_for(1.5F);
+    REQUIRE(f.body_state() == "dead_front");
+
+    REQUIRE(f.players().revive(f.player));
+    f.run_for(0.5F);
+    REQUIRE(f.players().die(f.player));
+    f.tick();
+    f.tick();
+    REQUIRE(f.body_state() == "death");
 }

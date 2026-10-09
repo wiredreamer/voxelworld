@@ -637,13 +637,13 @@ auto animation_system::layer_modifier::play() const -> void {
 }
 
 auto animation_system::layer_modifier::play(
-    const asset::transition& fade_in
+    const asset::transition& fade_in, float32 from_influence
 ) const -> void {
     const bool fading_out = layer_->state == asset::animation_state::playing && layer_->fade_is_out;
 
     layer_->fade_in        = fade_in;
-    layer_->fade_influence = fading_out ? layer_->fade_influence : 0.0f;
-    layer_->fade_elapsed   = fading_out ? fade_in.duration * layer_->fade_influence : 0.0f;
+    layer_->fade_influence = fading_out ? layer_->fade_influence : from_influence;
+    layer_->fade_elapsed   = fade_in.duration * layer_->fade_influence;
     layer_->fade_is_out    = false;
 
     if (layer_->state != asset::animation_state::playing) {

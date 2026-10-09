@@ -47,6 +47,17 @@ enum class strike_kind : uint8 {
     pommel,
 };
 
+enum class blow_kind : uint8 {
+    none,
+    stagger,
+    death,
+};
+
+enum class death_fall : uint8 {
+    backward,
+    forward,
+};
+
 enum class whirl_phase : uint8 {
     none,
     gathering,
@@ -181,6 +192,22 @@ struct player_component final {
 
     [[nodiscard]] auto get_blocked_hits() const -> uint32 {
         return blocked_hits_;
+    }
+
+    [[nodiscard]] auto get_staggers() const -> uint32 {
+        return staggers_;
+    }
+
+    [[nodiscard]] auto get_guard_breaks() const -> uint32 {
+        return guard_breaks_;
+    }
+
+    [[nodiscard]] auto is_dead() const -> bool {
+        return dead_;
+    }
+
+    [[nodiscard]] auto get_death_fall() const -> death_fall {
+        return death_fall_;
     }
 
     [[nodiscard]] auto get_foot_twist_degrees(std::size_t foot) const -> float32 {
@@ -419,6 +446,11 @@ private:
     std::array<planted_foot, 2> feet_{};
     uint32 turn_steps_            = 0;
     uint32 blocked_hits_          = 0;
+    uint32 staggers_              = 0;
+    uint32 guard_breaks_          = 0;
+    bool dead_                    = false;
+    death_fall death_fall_        = death_fall::backward;
+    blow_kind blow_               = blow_kind::none;
     strike_kind strike_        = strike_kind::none;
     float32 charge_seconds_    = 0.0f;
     float32 whirl_buffered_    = -1.0f;
@@ -457,6 +489,10 @@ public:
     auto equip(ecs::entity player, loadout wanted) -> void;
 
     auto take_hit_on_shield(ecs::entity player) -> bool;
+    auto take_hit(ecs::entity player) -> bool;
+    auto break_guard(ecs::entity player) -> bool;
+    auto die(ecs::entity player, death_fall fall = death_fall::backward) -> bool;
+    auto revive(ecs::entity player) -> bool;
 
     [[nodiscard]] auto tuning() -> movement_tuning& {
         return tuning_;

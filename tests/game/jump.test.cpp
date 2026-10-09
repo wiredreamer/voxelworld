@@ -754,8 +754,14 @@ TEST_CASE("a hit on the shield plays the recoil only while guarding", "[game][gu
     REQUIRE(s.action_state() == "block_impact");
     REQUIRE(s.state.get_blocked_hits() == 1);
 
-    s.g.run_for(0.6F);
+    const auto& hands = s.g.world.get<ecs::animation_player_component>(s.g.player).get_layer(1);
+    float32 faintest  = 1.0F;
+    for (int32 frame = 0; frame < 60; ++frame) {
+        s.g.tick();
+        faintest = std::min(faintest, hands.fade_influence);
+    }
     REQUIRE(s.action_state() == "block");
+    REQUIRE(faintest > 0.9F);
 }
 
 TEST_CASE("standing in the stance the feet hold the ground and step after a wide turn", "[game][guard]") {

@@ -44,7 +44,7 @@ public:
     class layer_modifier {
     public:
         auto play() const -> void;
-        auto play(const asset::transition& fade_in) const -> void;
+        auto play(const asset::transition& fade_in, float32 from_influence = 0.0F) const -> void;
         auto pause() const -> void;
         auto stop() const -> void;
         auto stop(const asset::transition& fade_out) const -> void;

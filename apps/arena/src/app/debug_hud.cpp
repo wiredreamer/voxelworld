@@ -332,9 +332,7 @@ auto bow_phase_name(game::bow_phase phase) -> const char* {
     return "";
 }
 
-auto render_guard_tuning(ecs::world& world, ecs::entity player) -> void {
-    auto& players = world.system<game::player_system>();
-    auto& tuning  = players.tuning();
+auto render_guard_tuning(game::movement_tuning& tuning) -> void {
 
     ImGui::SliderFloat("guard speed forward", &tuning.guard_speed_scale, 0.2f, 1.0f, "%.2f");
     ImGui::SliderFloat("guard speed back", &tuning.guard_back_speed_scale, 0.2f, 1.0f, "%.2f");
@@ -346,12 +344,6 @@ auto render_guard_tuning(ecs::world& world, ecs::entity player) -> void {
     ImGui::SliderFloat("turn step time, s", &tuning.stance_turn_step_seconds, 0.05f, 0.5f, "%.2f");
     ImGui::SliderFloat("turn step lift", &tuning.stance_turn_step_lift, 0.0f, 4.0f, "%.1f");
 
-    ImGui::BeginDisabled(!world.get<game::player_component>(player).is_guarding());
-    if (ImGui::Button("hit the shield")) {
-        static_cast<void>(players.take_hit_on_shield(player));
-    }
-    ImGui::EndDisabled();
-    ImGui::SameLine();
     if (ImGui::Button("defaults")) {
         const game::movement_tuning defaults{};
         tuning.guard_speed_scale             = defaults.guard_speed_scale;
@@ -401,10 +393,11 @@ auto render_fighter_state(ecs::world& world, ecs::entity player) -> void {
         fighter.get_heavy_strike_count(), fighter.get_whirl_count(), fighter.get_pommel_count()
     );
     ImGui::Text(
-        "Shield: %s%s%s, blocked %u", fighter.has_shield() ? "equipped" : "none",
+        "Shield: %s%s%s, blocked %u, broken %u", fighter.has_shield() ? "equipped" : "none",
         fighter.is_in_stance() ? ", STANCE" : "", fighter.is_guarding() ? ", GUARD" : "",
-        fighter.get_blocked_hits()
+        fighter.get_blocked_hits(), fighter.get_guard_breaks()
     );
+    ImGui::Text("Hits taken: %u%s", fighter.get_staggers(), fighter.is_dead() ? ", DEAD" : "");
     const auto& arrows = world.system<game::projectile_system>();
     ImGui::Text(
         "Bow: %s%s, %s, draw %.0f%%, power %.0f%%, loosed %u", fighter.has_bow() ? "equipped" : "none",
@@ -458,7 +451,7 @@ auto register_debug_panels(
     tool.add_panel(menu, "Lean and head", [&tuning] { render_lean_panel(tuning); });
     tool.add_panel(menu, "Jump", [&world, &tuning] { render_jump_panel(world, tuning); });
     tool.add_panel(menu, "Strike", [&tuning] { render_strike_panel(tuning); });
-    tool.add_panel(menu, "Guard", [&world, player] { render_guard_tuning(world, player); });
+    tool.add_panel(menu, "Guard", [&tuning] { render_guard_tuning(tuning); });
     tool.add_panel(menu, "Dodge", [&tuning] { render_dodge_panel(tuning); });
     tool.add_panel(menu, "Camera", [&camera_controller] {
         render_camera_panel(camera_controller);
@@ -493,6 +486,7 @@ auto render_debug_hud(const gfx::engine& engine, ecs::entity player, bool show_c
     ImGui::TextDisabled(
         "F1 cursor  F2 colliders (%s)  F3 impulse  ESC exit", show_colliders ? "on" : "off"
     );
+    ImGui::TextDisabled("F4 hit  F5 break the guard  F6 death  F7 revive");
     ImGui::TextDisabled("1 sword and shield  2 bow");
     ImGui::TextDisabled("LMB strike, hold to charge; with the bow draw");
     ImGui::TextDisabled("RMB guard or aim  Q whirl  E pommel");

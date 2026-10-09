@@ -1,0 +1,106 @@
+# Voxa File Version 2.1
+rig humanoid
+event 0 control.lock
+event 0.76 death.done
+
+track body 60
+  channel position
+    k 0 0 12.5 0 ease_out 0 1
+    k 0.1 0 12.2 -2.2 ease_in 0 1
+    k 0.3 0 9.5 -5 ease_in 0 1
+    k 0.5 0 5.2 -9 ease_out 0 1
+    k 0.6 0 6.2 -9 ease_in_out 0 1
+    k 0.72 0 5.5 -9 ease_in_out 0 1
+    k 0.85 0 5.5 -9 linear 0 1
+  channel rotation
+    k 0 -0 0 -0 1 ease_out 0 1
+    k 0.1 -0.139173 0 -0 0.990268 ease_in 0 1
+    k 0.3 -0.406737 0 -0 0.913545 ease_in 0 1
+    k 0.5 -0.71934 0 -0 0.694658 ease_out 0 1
+    k 0.6 -0.681998 0 -0 0.731354 ease_in_out 0 1
+    k 0.72 -0.707107 0 -0 0.707107 ease_in_out 0 1
+    k 0.85 -0.707107 0 -0 0.707107 linear 0 1
+
+track head 60
+  channel position
+    k 0 0 22 0 ease_out 0 1
+    k 0.1 0 21.3 -4.6 ease_in 0 1
+    k 0.3 0 16 -11.5 ease_in 0 1
+    k 0.5 0 4.6 -18.5 ease_out 0 1
+    k 0.61 0 6.6 -18.5 ease_in_out 0 1
+    k 0.74 0 5 -18.5 ease_in_out 0 1
+    k 0.85 0 5 -18.5 linear 0 1
+  channel rotation
+    k 0 -0 0 -0 1 ease_out 0 1
+    k 0.1 -0.224951 0 -0 0.97437 ease_in 0 1
+    k 0.3 -0.515038 0 -0 0.857167 ease_in 0 1
+    k 0.5 -0.753675 0.0394984 -0.0343355 0.65516 ease_out 0 1
+    k 0.61 -0.641907 0.0336409 -0.0400917 0.764995 ease_in_out 0 1
+    k 0.74 -0.706138 0.0370071 -0.0370071 0.706138 ease_in_out 0 1
+    k 0.85 -0.706138 0.0370071 -0.0370071 0.706138 linear 0 1
+
+track hand_right 60
+  channel position
+    k 0 10 14.5 0 ease_out 0 1
+    k 0.12 12.5 17 3 ease_in 0 1
+    k 0.32 12.5 15 -3 ease_in 0 1
+    k 0.52 11 2.6 -11 ease_out 0 1
+    k 0.64 11 4 -11 ease_in_out 0 1
+    k 0.76 11 3 -11 ease_in_out 0 1
+    k 0.85 11 3 -11 linear 0 1
+  channel rotation
+    k 0 -0.707107 0 -0 0.707107 ease_out 0 1
+    k 0.12 -0.573576 0 -0 0.819152 ease_in 0 1
+    k 0.32 -0.861281 0.0905243 -0.0522642 0.497261 ease_in 0 1
+    k 0.52 -0.975701 0.216308 0.00755363 -0.0340722 ease_out 0 1
+    k 0.64 -0.974958 0.216143 -0.0113276 0.0510954 ease_in_out 0 1
+    k 0.76 -0.976296 0.21644 9.46088e-09 -4.26753e-08 ease_in_out 0 1
+    k 0.85 -0.976296 0.21644 9.46088e-09 -4.26753e-08 linear 0 1
+
+track hand_left 60
+  channel position
+    k 0 -10 14.5 0 ease_out 0 1
+    k 0.12 -12.5 17 3 ease_in 0 1
+    k 0.32 -12.5 15 -2 ease_in 0 1
+    k 0.52 -11 2.6 -8 ease_out 0 1
+    k 0.64 -11 4 -8 ease_in_out 0 1
+    k 0.76 -11 3 -8 ease_in_out 0 1
+    k 0.85 -11 3 -8 linear 0 1
+  channel rotation
+    k 0 -0.707107 0 -0 0.707107 ease_out 0 1
+    k 0.12 -0.573576 0 -0 0.819152 ease_in 0 1
+    k 0.32 -0.861281 -0.0905243 0.0522642 0.497261 ease_in 0 1
+    k 0.52 -0.975701 -0.216308 -0.00755363 -0.0340722 ease_out 0 1
+    k 0.64 -0.974958 -0.216143 0.0113276 0.0510954 ease_in_out 0 1
+    k 0.76 -0.976296 -0.21644 -9.46088e-09 -4.26753e-08 ease_in_out 0 1
+    k 0.85 -0.976296 -0.21644 -9.46088e-09 -4.26753e-08 linear 0 1
+
+track foot_right 60
+  channel position
+    k 0 5 3.5 0 ease_out 0 1
+    k 0.1 5 4.8 -2.5 ease_in_out 0 1
+    k 0.2 5 3.5 -4 ease_in 0 1
+    k 0.5 5.5 5 -0.5 ease_out 0 1
+    k 0.66 5.5 4.5 -0.5 ease_in_out 0 1
+    k 0.85 5.5 4.5 -0.5 linear 0 1
+  channel rotation
+    k 0 -0 0 -0 1 ease_out 0 1
+    k 0.1 0.104528 -0 0 0.994522 ease_in_out 0 1
+    k 0.2 -0 0 -0 1 ease_in 0 1
+    k 0.5 -0.572179 0.0400107 -0.0571412 0.817157 ease_out 0 1
+    k 0.66 -0.513783 0.0359272 -0.059793 0.855079 ease_in_out 0 1
+    k 0.85 -0.513783 0.0359272 -0.059793 0.855079 linear 0 1
+
+track foot_left 60
+  channel position
+    k 0 -5 3.5 0 ease_in_out 0 1
+    k 0.25 -5 3.5 0 ease_in 0 1
+    k 0.52 -5.5 5.2 0.5 ease_out 0 1
+    k 0.68 -5.5 4.5 0.5 ease_in_out 0 1
+    k 0.85 -5.5 4.5 0.5 linear 0 1
+  channel rotation
+    k 0 -0 0 -0 1 ease_in_out 0 1
+    k 0.25 -0 0 -0 1 ease_in 0 1
+    k 0.52 -0.626926 -0.0548489 0.0677327 0.774189 ease_out 0 1
+    k 0.68 -0.571394 -0.0499905 0.0713938 0.816035 ease_in_out 0 1
+    k 0.85 -0.571394 -0.0499905 0.0713938 0.816035 linear 0 1
