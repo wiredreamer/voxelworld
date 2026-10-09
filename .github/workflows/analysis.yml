@@ -194,9 +194,14 @@ jobs:
 
           test_targets="core_tests asset_tests net_tests ecs_tests world_tests game_tests"
 
+          first=""
           objects=""
           for target in $test_targets; do
-            objects="$objects -object build-cov/tests/$target"
+            if [ -z "$first" ]; then
+              first="build-cov/tests/$target"
+            else
+              objects="$objects -object build-cov/tests/$target"
+            fi
           done
 
           skip='.*(vcpkg_installed|_deps|/tests/).*'
@@ -205,12 +210,12 @@ jobs:
             echo '## Покрытие headless-ядра'
             echo
             echo '```'
-            $cov report $objects -instr-profile=merged.profdata \
+            $cov report $first $objects -instr-profile=merged.profdata \
               -ignore-filename-regex="$skip" engine
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-          $cov show $objects -instr-profile=merged.profdata \
+          $cov show $first $objects -instr-profile=merged.profdata \
             -ignore-filename-regex="$skip" -format=html -o coverage-html engine
 
       - name: Upload the line-by-line report

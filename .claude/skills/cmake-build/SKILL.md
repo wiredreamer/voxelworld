@@ -261,6 +261,16 @@ push, `release.yml` — на тег `v*`. Версии инструментов 
   нет: «declaration of X must be imported from module Y before it is required».
   Лечится `import`-ом в `.cpp`; интерфейсная партиция обязана быть в
   `export import` первичного интерфейса (так забыли `:frames_in_flight`).
+- **STL раннера новее локальной.** На `windows-latest` стоит другой Visual
+  Studio, и Clang встречается с версией MS STL, которой локально нет. Так
+  упала сборка Clang после первого пуша: в STL 14.51 векторизованный `std::find`
+  под Clang 20 натыкается на `static_assert(false, "unexpected size")` для
+  структуры в 12 байт с `operator==() = default`. Для связки Clang + MS STL
+  векторизованные алгоритмы поэтому выключены целиком:
+  `_USE_STD_VECTOR_ALGORITHMS=0` стоит PUBLIC на `vw_std_msvc`
+  (`cmake/vw_std_module.cmake`) — на самом std-модуле и на всех, кто его
+  линкует, потому что макрос обязан быть одним и тем же во всех TU. Локально это
+  не воспроизвести, проверяется только пушем.
 - **Неопределённое поведение**, которое MSVC прощает: переполнение знакового,
   выход за массив в тесте.
 
