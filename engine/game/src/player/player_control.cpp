@@ -1362,9 +1362,7 @@ auto player_system::update(
 
             controller.set_coyote_seconds(tuning_.coyote_seconds)
                 .set_jump_impulse(tuning_.jump_impulse)
-                .set_step_hop_voxels(
-                    state.dodging_ || state.swinging_ ? 0.0f : tuning_.step_hop_voxels
-                )
+                .set_step_hop_voxels(tuning_.step_hop_voxels)
                 .set_rides_footing(tuning_.ride_footing)
                 .set_ride_lead(
                     tuning_.ride_lead_voxels, tuning_.ride_rise_speed, tuning_.ride_sink_speed

@@ -38,7 +38,6 @@ struct grounded_world {
         assets.load_prefab("p_sword", asset::asset_ref{"prefabs/p_sword.vox"});
         assets.load_prefab("p_shield", asset::asset_ref{"prefabs/p_shield.vox"});
         game::install_systems(world, assets);
-        world.system<game::player_system>().tuning().ride_footing = false;
         start_streaming_();
 
         player = world.system<game::player_system>().spawn();
@@ -872,6 +871,7 @@ TEST_CASE("a run steps onto a one voxel ledge without leaving the ground, a tall
     INFO("wall " << wall_voxels << " voxels");
 
     grounded_world g;
+    g.world.system<game::player_system>().tuning().ride_footing = false;
     REQUIRE(g.settle());
 
     auto& mapper = g.world.system<game::input_system>().mapper();
@@ -1581,4 +1581,60 @@ TEST_CASE("falling from a jump the model comes down smoothly at any frame rate",
     REQUIRE(falling);
     REQUIRE(g.grounded());
     REQUIRE(backward < 0.05F);
+}
+
+TEST_CASE("a roll goes over a step instead of stopping at it", "[game][walker]") {
+    constexpr int32 step_at = 3;
+    riding_track track{[](int32 along) { return along >= step_at ? 1 : 0; }};
+    const auto& fighter = track.g.world.get<game::player_component>(track.g.player);
+
+    track.mapper().key(keys::W, true);
+    track.g.run_for(0.1F);
+    track.mapper().key(keys::LEFT_SHIFT, true);
+    track.g.tick();
+    track.mapper().key(keys::LEFT_SHIFT, false);
+    track.mapper().key(keys::W, false);
+    REQUIRE(fighter.is_rolling());
+
+    bool grounded_all_along = true;
+    for (int32 tick = 0; tick < 120; ++tick) {
+        track.g.tick();
+        grounded_all_along = grounded_all_along && track.g.grounded();
+    }
+
+    REQUIRE(grounded_all_along);
+    REQUIRE(track.gone() > static_cast<float32>(step_at));
+    REQUIRE(track.risen() == Catch::Approx(1.0F).margin(0.02F));
+}
+
+TEST_CASE("the lunges of a sword chain carry the body onto a step", "[game][walker]") {
+    constexpr int32 step_at = 2;
+    riding_track track{[](int32 along) { return along >= step_at ? 1 : 0; }};
+    const auto& fighter = track.g.world.get<game::player_component>(track.g.player);
+
+    track.mapper().key(keys::KEY_1, true);
+    track.g.tick();
+    track.mapper().key(keys::KEY_1, false);
+    track.g.run_for(0.2F);
+    REQUIRE(fighter.has_weapon());
+
+    track.mapper().key(keys::W, true);
+    track.g.run_for(0.12F);
+    track.mapper().key(keys::W, false);
+    track.g.run_for(0.3F);
+
+    for (int32 strike = 0; strike < 3; ++strike) {
+        track.mapper().button(mouse::buttons::LEFT, true);
+        track.g.tick();
+        track.mapper().button(mouse::buttons::LEFT, false);
+        for (int32 tick = 0; tick < 200 && !fighter.can_cancel(); ++tick) {
+            track.g.tick();
+        }
+    }
+    track.g.run_for(1.0F);
+
+    REQUIRE(fighter.get_swing_count() == 3);
+    REQUIRE(track.g.grounded());
+    REQUIRE(track.gone() > static_cast<float32>(step_at) - 0.4F);
+    REQUIRE(track.risen() == Catch::Approx(1.0F).margin(0.02F));
 }
