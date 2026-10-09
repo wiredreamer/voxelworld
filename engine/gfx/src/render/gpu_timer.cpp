@@ -24,9 +24,9 @@ auto mask_for_bits(uint32 bits) -> uint64 {
 }  // namespace
 
 gpu_timer::gpu_timer(
-    vulkan_context& context, uint32 frames_in_flight
+    vulkan_context& context, uint32 frame_count
 )
-    : context_(&context), frames_in_flight_(frames_in_flight) {
+    : context_(&context), frames_in_flight_(frame_count) {
     const uint32 valid_bits = context_->get_timestamp_valid_bits();
     const float32 period    = context_->get_timestamp_period();
 

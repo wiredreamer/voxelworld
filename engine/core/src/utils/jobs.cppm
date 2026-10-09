@@ -20,7 +20,54 @@ struct job_lane_stats {
     uint32 peak    = 0;
 };
 
-using job = std::move_only_function<void(uint32)>;
+// см. docs/ENGINE.md#фоновые-задачи
+class job final {
+public:
+    job() = default;
+
+    template <typename Work>
+        requires(!std::same_as<std::remove_cvref_t<Work>, job>) &&
+                std::invocable<std::remove_cvref_t<Work>&, uint32>
+    job(Work&& work)
+        : held_{std::make_unique<holder<std::remove_cvref_t<Work>>>(std::forward<Work>(work))} {}
+
+    job(job&&) noexcept                    = default;
+    auto operator=(job&&) noexcept -> job& = default;
+    job(const job&)                        = delete;
+    auto operator=(const job&) -> job&     = delete;
+    ~job()                                 = default;
+
+    auto operator()(uint32 worker) -> void {
+        held_->run(worker);
+    }
+
+    [[nodiscard]] explicit operator bool() const {
+        return held_ != nullptr;
+    }
+
+private:
+    struct base {
+        base()                               = default;
+        base(const base&)                    = delete;
+        auto operator=(const base&) -> base& = delete;
+        virtual ~base()                      = default;
+        virtual auto run(uint32 worker) -> void = 0;
+    };
+
+    template <typename Work>
+    struct holder final : base {
+        template <typename Given>
+        explicit holder(Given&& given) : work{std::forward<Given>(given)} {}
+
+        auto run(uint32 worker) -> void override {
+            work(worker);
+        }
+
+        Work work;
+    };
+
+    std::unique_ptr<base> held_;
+};
 
 class job_system final {
 public:

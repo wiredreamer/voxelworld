@@ -71,6 +71,11 @@ struct grounded_world {
             tick();
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
+        const auto& streaming = world.system<ecs::world_grid_system>();
+        for (int32 frame = 0; frame < 20000 && streaming.get_stats().pending_count > 0; ++frame) {
+            tick();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
         for (float32 waited = 0.0F; waited < 3.0F && !grounded(); waited += tick_seconds) {
             tick();
         }

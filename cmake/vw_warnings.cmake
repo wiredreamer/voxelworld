@@ -1,4 +1,11 @@
+include(CheckCXXCompilerFlag)
+
 option(VW_WARNINGS_AS_ERRORS "Turn warnings into errors" OFF)
+
+check_cxx_compiler_flag(
+    -Wimport-implementation-partition-unit-in-interface-unit
+    VW_HAS_PARTITION_IMPORT_WARNING
+)
 
 function(vw_set_warnings target)
     if(CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
@@ -21,6 +28,9 @@ function(vw_set_warnings target)
 
             -Wno-missing-designated-field-initializers
         )
+        if(VW_HAS_PARTITION_IMPORT_WARNING)
+            list(APPEND flags -Wno-import-implementation-partition-unit-in-interface-unit)
+        endif()
         if(VW_WARNINGS_AS_ERRORS)
             list(APPEND flags -Werror)
         endif()

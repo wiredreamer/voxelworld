@@ -112,6 +112,11 @@ private:
             tick();
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
         }
+        const auto& streaming = world.system<ecs::world_grid_system>();
+        for (int32 frame = 0; frame < 20000 && streaming.get_stats().pending_count > 0; ++frame) {
+            tick();
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
         const auto grounded = [&] {
             return world.get<ecs::rigid_body_component>(player).is_grounded();
         };

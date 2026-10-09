@@ -134,7 +134,9 @@ struct animation_fsm_component final {
     }
 
     [[nodiscard]] auto is_pinned(std::string_view name) const -> bool {
-        return std::ranges::contains(pinned_, name, &pinned_parameter::first);
+        return std::ranges::any_of(pinned_, [name](const pinned_parameter& pinned) {
+            return pinned.first == name;
+        });
     }
 
 private:

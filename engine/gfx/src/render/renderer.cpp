@@ -22,9 +22,9 @@ renderer::renderer(
 )
     : context_(&context)
     , window_(&window)
+    , wanted_msaa_samples_(wanted_msaa_samples)
     , mesh_pool_(registry, jobs)
-    , voxel_registry_(&registry)
-    , wanted_msaa_samples_(wanted_msaa_samples) {
+    , voxel_registry_(&registry) {
     vertex_shader_ =
         std::make_unique<shader>(*context_, "shaders/voxel.vert.spv", shader_type::VERTEX);
     fragment_shader_ =

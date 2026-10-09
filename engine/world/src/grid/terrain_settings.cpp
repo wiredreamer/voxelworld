@@ -9,6 +9,13 @@ namespace {
 
 using P = terrain_params;
 
+struct terrain_number_field {
+    std::string_view key;
+    std::variant<float32 terrain_params::*, int32 terrain_params::*> member;
+    float32 min = 0.0F;
+    float32 max = 1.0F;
+};
+
 constexpr std::array number_fields = {
     terrain_number_field{"region_spacing_voxels", &P::region_spacing_voxels, 256.0F, 4096.0F},
     terrain_number_field{"region_jitter", &P::region_jitter, 0.0F, 0.45F},
@@ -26,6 +33,11 @@ constexpr std::array number_fields = {
     terrain_number_field{"tone_blend", &P::tone_blend, 0.01F, 1.0F},
 };
 
+struct terrain_flag_field {
+    std::string_view key;
+    bool terrain_params::* member;
+};
+
 constexpr std::array flag_fields = {
     terrain_flag_field{"island", &P::island},
     terrain_flag_field{"caves", &P::caves},
@@ -34,19 +46,6 @@ constexpr std::array flag_fields = {
 
 auto failure(const json::cursor& at, std::string_view message) -> std::unexpected<std::string> {
     return std::unexpected{std::format("{}: {}", at.path(), message)};
-}
-
-auto voxel_named(const json::cursor& at, const voxel_registry& voxels)
-    -> std::expected<voxel, std::string> {
-    const auto name = at.string();
-    if (!name) {
-        return std::unexpected{json::describe(name.error())};
-    }
-    const auto found = voxels.find(*name);
-    if (!found) {
-        return failure(at, std::format("no voxel named '{}'", *name));
-    }
-    return *found;
 }
 
 auto plain_number(float32 value) -> json::value {
@@ -113,16 +112,6 @@ auto read_value(const json::cursor& item, int32& out, const voxel_registry&)
         return std::unexpected{json::describe(value.error())};
     }
     out = static_cast<int32>(std::lround(*value));
-    return {};
-}
-
-auto read_value(const json::cursor& item, voxel& out, const voxel_registry& voxels)
-    -> std::expected<void, std::string> {
-    const auto found = voxel_named(item, voxels);
-    if (!found) {
-        return std::unexpected{found.error()};
-    }
-    out = *found;
     return {};
 }
 
@@ -249,20 +238,12 @@ auto parse_biomes(
     return {};
 }
 
-auto voxel_text(voxel value, const voxel_registry& voxels) -> json::value {
-    return json::value{std::string{voxels.get(value).name}};
-}
-
 auto write_value(float32 value, const voxel_registry&) -> json::value {
     return plain_number(value);
 }
 
 auto write_value(int32 value, const voxel_registry&) -> json::value {
     return json::value{value};
-}
-
-auto write_value(voxel value, const voxel_registry& voxels) -> json::value {
-    return voxel_text(value, voxels);
 }
 
 auto write_value(const tone_ramp& ramp, const voxel_registry&) -> json::value {
@@ -308,12 +289,33 @@ auto dump_biome(const terrain_biome& biome, const voxel_registry& voxels) -> std
 
 }  // namespace
 
-auto terrain_number_fields() -> std::span<const terrain_number_field> {
-    return number_fields;
+auto terrain_number_count() -> std::size_t {
+    return number_fields.size();
 }
 
-auto terrain_flag_fields() -> std::span<const terrain_flag_field> {
-    return flag_fields;
+auto terrain_number(terrain_params& params, std::size_t index) -> terrain_number_slot {
+    const auto& field = number_fields[index];
+    return {
+        .key   = field.key,
+        .value = std::visit(
+            [&params](auto member) -> std::variant<float32*, int32*> { return &(params.*member); },
+            field.member
+        ),
+        .min = field.min,
+        .max = field.max,
+    };
+}
+
+auto terrain_flag_count() -> std::size_t {
+    return flag_fields.size();
+}
+
+auto terrain_flag_key(std::size_t index) -> std::string_view {
+    return flag_fields[index].key;
+}
+
+auto terrain_flag(terrain_params& params, std::size_t index) -> bool& {
+    return params.*(flag_fields[index].member);
 }
 
 auto parse_terrain_settings(

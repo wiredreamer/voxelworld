@@ -328,7 +328,7 @@
 
 Значения по умолчанию живут в коде. `assets/data/world_gen.json` хранит только
 поправки поверх них: раздел `world` — поля `perlin_terrain_generator::params`
-(таблица `terrain_number_fields`), раздел `biomes` — объект по кодовым именам
+(таблица `number_fields` в `terrain_settings.cpp`), раздел `biomes` — объект по кодовым именам
 биомов, внутри — поля из `visit_fields` этого биома. Лестница оттенков пишется
 объектом `{"row", "material", "from", "to", "spot_frequency", "spot_contrast"}`,
 ряд — имя группы палитры (`green`, `brown`, `gray`…), материал — имя строки

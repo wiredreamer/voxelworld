@@ -506,19 +506,19 @@ auto gather_boundary(
     }
 
     for (const vec3i step : all_shell_steps()) {
-        const int32 span = shell_span(step);
-        if (span == 1) {
+        const int32 shell = shell_span(step);
+        if (shell == 1) {
             continue;
         }
 
-        const auto beyond = [](int32 s, int32 along) -> int32 {
-            if (s == 0) {
+        const auto beyond = [](int32 way, int32 along) -> int32 {
+            if (way == 0) {
                 return along;
             }
-            return s > 0 ? side : -1;
+            return way > 0 ? side : -1;
         };
 
-        if (span == 3) {
+        if (shell == 3) {
             out.set_corner_level(
                 step,
                 at(beyond(step.x, 0), y_base + beyond(step.y, 0), beyond(step.z, 0))

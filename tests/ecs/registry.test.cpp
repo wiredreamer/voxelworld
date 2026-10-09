@@ -191,8 +191,16 @@ TEST_CASE("registry change sets and dependencies", "[registry]") {
 
     reg.notify_changed<position_component>(e);
 
-    REQUIRE(std::ranges::contains(reg.changed<position_component>(), e));
-    REQUIRE(std::ranges::contains(reg.requested<velocity_component>(), e));
+    const auto holds = [](const auto& listed, entity wanted) {
+        for (const entity one : listed) {
+            if (one == wanted) {
+                return true;
+            }
+        }
+        return false;
+    };
+    REQUIRE(holds(reg.changed<position_component>(), e));
+    REQUIRE(holds(reg.requested<velocity_component>(), e));
 
     reg.clear_changed();
     REQUIRE(reg.changed<position_component>().empty());

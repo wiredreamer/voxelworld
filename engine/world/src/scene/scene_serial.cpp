@@ -16,7 +16,7 @@ vox_serializer::vox_serializer(
     world& world, asset::vox_writer& writer, entity root, options opts,
     const component_registry& codecs
 )
-    : world_(&world), writer_(&writer), root_(root), codecs_(&codecs) {
+    : world_(&world), writer_(&writer), codecs_(&codecs), root_(root) {
     if (opts.entity_names.has_value()) {
         entity_names_ = std::move(opts.entity_names.value());
     } else {

@@ -95,27 +95,23 @@ auto terrain_lab_scene::world_ui_() -> bool {
         changed      = true;
     }
 
-    for (const auto& flag : ecs::terrain_flag_fields()) {
-        const std::string label{flag.key};
-        changed |= ImGui::Checkbox(label.c_str(), &(params_.*(flag.member)));
+    for (std::size_t at = 0; at < ecs::terrain_flag_count(); ++at) {
+        const std::string label{ecs::terrain_flag_key(at)};
+        changed |= ImGui::Checkbox(label.c_str(), &ecs::terrain_flag(params_, at));
     }
 
-    for (const auto& field : ecs::terrain_number_fields()) {
-        const std::string label{field.key};
-        std::visit(
-            [&](auto member) {
-                auto& value = params_.*member;
-                if constexpr (std::is_same_v<std::remove_cvref_t<decltype(value)>, int32>) {
-                    changed |= ImGui::SliderInt(
-                        label.c_str(), &value, static_cast<int32>(field.min),
-                        static_cast<int32>(field.max)
-                    );
-                } else {
-                    changed |= ImGui::SliderFloat(label.c_str(), &value, field.min, field.max, "%.4g");
-                }
-            },
-            field.member
-        );
+    for (std::size_t at = 0; at < ecs::terrain_number_count(); ++at) {
+        const auto slot = ecs::terrain_number(params_, at);
+        const std::string label{slot.key};
+        if (auto* const* whole = std::get_if<int32*>(&slot.value)) {
+            changed |= ImGui::SliderInt(
+                label.c_str(), *whole, static_cast<int32>(slot.min), static_cast<int32>(slot.max)
+            );
+        } else {
+            changed |= ImGui::SliderFloat(
+                label.c_str(), std::get<float32*>(slot.value), slot.min, slot.max, "%.4g"
+            );
+        }
     }
     return changed;
 }

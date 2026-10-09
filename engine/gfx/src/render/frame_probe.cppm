@@ -32,7 +32,7 @@ struct frame_probe_stats {
 
 class frame_probe final {
 public:
-    frame_probe(vulkan_context& context, uint32 frames_in_flight);
+    frame_probe(vulkan_context& context, uint32 frame_count);
     ~frame_probe();
 
     frame_probe(const frame_probe&)                    = delete;

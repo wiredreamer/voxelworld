@@ -702,7 +702,7 @@ auto perlin_terrain_generator::sample_column_(
 
 // см. docs/world.md#покров
 auto perlin_terrain_generator::cover_of_(
-    const terrain_context& ctx, int32 chunk_y, const column_profile& profile, const asset::model& voxels,
+    const terrain_context&, int32 chunk_y, const column_profile& profile, const asset::model& voxels,
     const plant_footing& footing
 ) const -> asset::cover_layer {
     constexpr int32 s = 64;

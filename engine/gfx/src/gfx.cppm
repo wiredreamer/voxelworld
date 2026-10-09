@@ -1,5 +1,6 @@
 export module vw.gfx;
 
+export import :frames_in_flight;
 export import :camera;
 export import :camera.controllers;
 export import :resource;

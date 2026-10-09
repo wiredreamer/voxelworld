@@ -160,8 +160,9 @@ private:
         }
 
         [[nodiscard]] auto cell_of(int32 world_y) const -> int32 {
-            return world_y >= 0 ? world_y / voxels_per_cell
-                                : (world_y - voxels_per_cell + 1) / voxels_per_cell;
+            const int32 towards_zero = world_y / voxels_per_cell;
+            const bool below         = world_y < 0 && (world_y % voxels_per_cell) != 0;
+            return below ? towards_zero - 1 : towards_zero;
         }
     };
 

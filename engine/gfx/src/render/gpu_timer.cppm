@@ -58,7 +58,7 @@ struct gpu_timing_stats {
 
 class gpu_timer final {
 public:
-    gpu_timer(vulkan_context& context, uint32 frames_in_flight);
+    gpu_timer(vulkan_context& context, uint32 frame_count);
     ~gpu_timer();
 
     gpu_timer(const gpu_timer&)                    = delete;

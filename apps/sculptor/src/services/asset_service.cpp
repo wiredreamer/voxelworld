@@ -57,10 +57,6 @@ constexpr std::string_view machine_extension = ".voxf";
     return name;
 }
 
-[[nodiscard]] auto asset_root() -> fs::path {
-    return fs::path{app_state::asset_root_name};
-}
-
 [[nodiscard]] auto files_naming(
     const fs::path& folder,
     std::string_view extension,

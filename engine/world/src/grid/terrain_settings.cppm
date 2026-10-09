@@ -10,20 +10,18 @@ export namespace vw::ecs {
 
 using terrain_params = perlin_terrain_generator::params;
 
-struct terrain_number_field {
+struct terrain_number_slot {
     std::string_view key;
-    std::variant<float32 terrain_params::*, int32 terrain_params::*> member;
+    std::variant<float32*, int32*> value;
     float32 min = 0.0F;
     float32 max = 1.0F;
 };
 
-struct terrain_flag_field {
-    std::string_view key;
-    bool terrain_params::* member;
-};
-
-[[nodiscard]] auto terrain_number_fields() -> std::span<const terrain_number_field>;
-[[nodiscard]] auto terrain_flag_fields() -> std::span<const terrain_flag_field>;
+[[nodiscard]] auto terrain_number_count() -> std::size_t;
+[[nodiscard]] auto terrain_number(terrain_params& params, std::size_t index) -> terrain_number_slot;
+[[nodiscard]] auto terrain_flag_count() -> std::size_t;
+[[nodiscard]] auto terrain_flag_key(std::size_t index) -> std::string_view;
+[[nodiscard]] auto terrain_flag(terrain_params& params, std::size_t index) -> bool&;
 
 [[nodiscard]] auto parse_terrain_settings(
     std::string_view text, const voxel_registry& voxels, terrain_params base

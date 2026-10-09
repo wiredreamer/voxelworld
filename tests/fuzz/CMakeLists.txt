@@ -7,6 +7,9 @@ function(vw_add_fuzzer name source)
 
     target_compile_options(${name} PRIVATE -fsanitize=fuzzer-no-link)
     target_link_options(${name} PRIVATE -fsanitize=fuzzer)
+    if(UNIX)
+        target_link_options(${name} PRIVATE LINKER:--no-as-needed LINKER:-l:libstdc++.so.6)
+    endif()
 
     vw_set_warnings(${name})
 endfunction()

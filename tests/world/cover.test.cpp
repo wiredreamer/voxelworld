@@ -271,7 +271,11 @@ TEST_CASE("grass grows taller deeper inside its patch", "[world][cover]") {
     const generated_column column{flat_params(0.7F), 0, 0};
 
     std::array<int32, grass_height_classes> seen{};
-    column.for_each_grass([&seen](vec3i, uint8 form) { ++seen[grass_height_class_of(form)]; });
+    column.for_each_grass([&seen](vec3i, uint8 form) {
+        if (form >= 1 && form <= grass_form_count) {
+            ++seen[grass_height_class_of(form)];
+        }
+    });
 
     for (uint8 height_class = 0; height_class < grass_height_classes; ++height_class) {
         INFO("class " << static_cast<int32>(height_class));

@@ -22,10 +22,10 @@ constexpr vk::DeviceSize counts_bytes =
 }  // namespace
 
 frame_probe::frame_probe(
-    vulkan_context& context, uint32 frames_in_flight
+    vulkan_context& context, uint32 frame_count
 )
     : context_(&context) {
-    frames_.resize(frames_in_flight);
+    frames_.resize(frame_count);
     for (frame_state& frame : frames_) {
         frame.counts = std::make_unique<storage_buffer>(
             *context_, vk::DeviceSize{most_buffers} * counts_bytes,
@@ -36,7 +36,7 @@ frame_probe::frame_probe(
     hidden_pool_ = vk_must(
         context_->get_device().createQueryPool({
             .queryType  = vk::QueryType::eOcclusion,
-            .queryCount = frames_in_flight,
+            .queryCount = frame_count,
         }),
         "create hidden samples query pool"
     );
@@ -49,7 +49,7 @@ frame_probe::frame_probe(
     pool_ = vk_must(
         context_->get_device().createQueryPool({
             .queryType          = vk::QueryType::ePipelineStatistics,
-            .queryCount         = frames_in_flight,
+            .queryCount         = frame_count,
             .pipelineStatistics = counted_statistics,
         }),
         "create pipeline statistics query pool"

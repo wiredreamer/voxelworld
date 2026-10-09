@@ -42,33 +42,29 @@ TEST_CASE("the worker index stays inside the pool") {
 }
 
 TEST_CASE("a flooded lane does not starve the others") {
+    constexpr uint32 flood = 64;
     job_system jobs{2};
 
-    std::atomic<bool> release{false};
-    std::atomic<uint32> meshed{0};
+    std::atomic<uint32> dug{0};
+    std::atomic<uint32> dug_before_the_mesh{flood};
 
-    for (uint32 i = 0; i < 64; ++i) {
-        jobs.submit(job_lane::terrain, [&release](uint32) {
-            while (!release.load()) {
-                std::this_thread::yield();
-            }
+    for (uint32 i = 0; i < flood; ++i) {
+        jobs.submit(job_lane::terrain, [&dug](uint32) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+            dug.fetch_add(1);
         });
     }
 
-    jobs.submit(job_lane::mesh, [&meshed](uint32) { meshed.fetch_add(1); });
+    jobs.submit(job_lane::mesh, [&dug, &dug_before_the_mesh](uint32) {
+        dug_before_the_mesh.store(dug.load());
+    });
 
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-    while (meshed.load() == 0 && std::chrono::steady_clock::now() < deadline) {
-        std::this_thread::yield();
-    }
-
-    const uint32 ran_while_blocked = meshed.load();
-
-    release.store(true);
-    jobs.drain(job_lane::terrain);
     jobs.drain(job_lane::mesh);
+    const uint32 waited_for = dug_before_the_mesh.load();
+    jobs.drain(job_lane::terrain);
 
-    REQUIRE(ran_while_blocked == 1);
+    REQUIRE(dug.load() == flood);
+    REQUIRE(waited_for < flood / 2);
 }
 
 TEST_CASE("draining one lane ignores work queued on another") {

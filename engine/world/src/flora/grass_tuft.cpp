@@ -67,7 +67,7 @@ auto grow_flowers(
     };
 
     std::array<int32, slots * slots> order{};
-    std::ranges::iota(order, 0);
+    std::iota(order.begin(), order.end(), 0);
     for (int32 i = static_cast<int32>(order.size()) - 1; i > 0; --i) {
         std::swap(order[static_cast<std::size_t>(i)], order[static_cast<std::size_t>(dice.roll(0, i))]);
     }
