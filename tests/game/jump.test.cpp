@@ -866,101 +866,6 @@ TEST_CASE("a strike leaves the guard at once, goes where the body looks and the 
     REQUIRE(s.action_state() == "block");
 }
 
-TEST_CASE("a run steps onto a one voxel ledge without leaving the ground, a taller wall stops it", "[game][jump]") {
-    const int32 wall_voxels = GENERATE(1, 2);
-    INFO("wall " << wall_voxels << " voxels");
-
-    grounded_world g;
-    g.world.system<game::player_system>().tuning().ride_footing = false;
-    REQUIRE(g.settle());
-
-    auto& mapper = g.world.system<game::input_system>().mapper();
-    mapper.cursor_at(0.0, 0.0);
-    g.tick();
-
-    const vec3f look = g.world.get<game::player_input_component>(g.player).get_frame().look_forward_flat();
-    const bool along_x = std::abs(look.x) > std::abs(look.z);
-    const int32 ahead  = (along_x ? look.x : look.z) > 0.0F ? 1 : -1;
-
-    const vec3f start = g.world.get<ecs::transform_component>(g.player).get_position();
-    const auto vs     = static_cast<float32>(units_per_voxel);
-    const int32 floor_y = static_cast<int32>(std::lround((start.y - 0.5F) / vs)) - 1;
-    const vec3i origin{
-        static_cast<int32>(std::floor(start.x / vs)), floor_y,
-        static_cast<int32>(std::floor(start.z / vs))
-    };
-
-    auto& grid = *g.world.system<ecs::world_grid_system>().grid();
-    const auto put = [&](int32 along, int32 aside, int32 up, voxel v) {
-        const vec3i offset = along_x ? vec3i{along * ahead, up, aside} : vec3i{aside, up, along * ahead};
-        grid.set_voxel((origin + offset) * units_per_voxel, v);
-    };
-
-    constexpr int32 wall_at = 8;
-    for (int32 along = -3; along <= 20; ++along) {
-        for (int32 aside = -3; aside <= 3; ++aside) {
-            put(along, aside, 0, voxels::red[6]);
-            for (int32 up = 1; up <= 8; ++up) {
-                const bool wall = along >= wall_at && up <= wall_voxels;
-                put(along, aside, up, wall ? voxels::red[6] : voxels::air);
-            }
-        }
-    }
-    g.run_for(0.3F);
-    REQUIRE(g.grounded());
-
-    const auto& body          = g.world.get<ecs::rigid_body_component>(g.player);
-    const uint32 steps_before = body.get_steps_taken();
-    const auto risen = [&] {
-        return g.world.get<ecs::transform_component>(g.player).get_position().y - start.y;
-    };
-    const auto shown_height = [&] {
-        return g.world.get<ecs::transform_component>(g.player).get_shown_position().y - start.y +
-               g.world.get<ecs::rigid_body_component>(g.player).get_step_sink();
-    };
-
-    float32 longest_in_the_air = 0.0F;
-    float32 in_the_air         = 0.0F;
-    float32 biggest_jolt       = 0.0F;
-    float32 deepest_sink       = 0.0F;
-    float32 shown_before       = shown_height();
-
-    mapper.key(keys::W, true);
-    for (float32 elapsed = 0.0F; elapsed < 1.0F; elapsed += g.tick_seconds) {
-        g.tick();
-
-        in_the_air         = g.grounded() ? 0.0F : in_the_air + g.tick_seconds;
-        longest_in_the_air = std::max(longest_in_the_air, in_the_air);
-
-        const float32 shown = shown_height();
-        biggest_jolt        = std::max(biggest_jolt, std::abs(shown - shown_before));
-        deepest_sink        = std::min(deepest_sink, body.get_step_sink());
-        shown_before        = shown;
-    }
-    mapper.key(keys::W, false);
-    g.run_for(0.4F);
-
-    const vec3f end   = g.world.get<ecs::transform_component>(g.player).get_position();
-    const uint32 took = body.get_steps_taken() - steps_before;
-    const float32 wall_face = (static_cast<float32>(along_x ? origin.x : origin.z) + 0.5F +
-                               static_cast<float32>(ahead) * (static_cast<float32>(wall_at) - 0.5F)) * vs;
-    const float32 travelled = static_cast<float32>(ahead) * ((along_x ? end.x : end.z) - wall_face);
-
-    REQUIRE(g.grounded());
-    REQUIRE(longest_in_the_air == 0.0F);
-    if (wall_voxels == 1) {
-        REQUIRE(took == 1);
-        REQUIRE(end.y == Catch::Approx(start.y + vs).margin(0.5F));
-        REQUIRE(travelled > 2.0F * vs);
-        REQUIRE(biggest_jolt < 0.45F * vs);
-        REQUIRE(deepest_sink > -0.25F * vs);
-    } else {
-        REQUIRE(took == 0);
-        REQUIRE(end.y == Catch::Approx(start.y).margin(0.5F));
-        REQUIRE(travelled < 0.0F);
-    }
-}
-
 namespace {
 
 struct stair_run {
@@ -968,20 +873,16 @@ struct stair_run {
     float32 slowest_on_stairs  = std::numeric_limits<float32>::max();
     float32 longest_in_the_air = 0.0F;
     float32 biggest_jolt       = 0.0F;
-    float32 deepest_sink       = 0.0F;
     float32 risen              = 0.0F;
-    float32 sink_at_the_end    = 0.0F;
-    uint32 steps_taken         = 0;
     bool grounded_at_the_end   = false;
 };
 
-auto run_up_stairs(bool across_the_corner, bool riding = false) -> stair_run {
+auto run_up_stairs(bool across_the_corner) -> stair_run {
     constexpr int32 stairs_at = 8;
     constexpr int32 steps     = 6;
 
-    grounded_world g{display_tick_seconds, riding ? game_units_per_voxel : units_per_voxel};
+    grounded_world g{display_tick_seconds, game_units_per_voxel};
     const int32 units_per_voxel = g.units;
-    g.world.system<game::player_system>().tuning().ride_footing = riding;
     REQUIRE(g.settle());
 
     auto& mapper = g.world.system<game::input_system>().mapper();
@@ -1034,12 +935,10 @@ auto run_up_stairs(bool across_the_corner, bool riding = false) -> stair_run {
         return g.world.get<ecs::transform_component>(g.player).get_position().y - start.y;
     };
     const auto shown_height = [&] {
-        return g.world.get<ecs::transform_component>(g.player).get_shown_position().y - start.y +
-               g.world.get<ecs::rigid_body_component>(g.player).get_step_sink();
+        return g.world.get<ecs::transform_component>(g.player).get_shown_position().y - start.y;
     };
 
     stair_run seen;
-    const uint32 steps_before = body.get_steps_taken();
 
     int32 ticks_in_the_window = 0;
 
@@ -1059,7 +958,6 @@ auto run_up_stairs(bool across_the_corner, bool riding = false) -> stair_run {
 
         const float32 shown = shown_height();
         seen.biggest_jolt   = std::max(seen.biggest_jolt, std::abs(shown - shown_before));
-        seen.deepest_sink   = std::min(seen.deepest_sink, body.get_step_sink());
         shown_before        = shown;
 
         if (++ticks_in_the_window < pace_window_ticks) {
@@ -1079,39 +977,11 @@ auto run_up_stairs(bool across_the_corner, bool riding = false) -> stair_run {
     g.run_for(0.5F);
 
     seen.risen               = risen() / vs;
-    seen.sink_at_the_end     = body.get_step_sink();
-    seen.steps_taken         = body.get_steps_taken() - steps_before;
     seen.grounded_at_the_end = g.grounded();
     return seen;
 }
 
 }  // namespace
-
-TEST_CASE("a run walks up a staircase of one voxel steps without leaving the ground", "[game][jump]") {
-    const stair_run seen = run_up_stairs(false);
-
-    REQUIRE(seen.grounded_at_the_end);
-    REQUIRE(seen.risen == Catch::Approx(6.0F).margin(0.1F));
-    REQUIRE(seen.steps_taken == 6);
-    REQUIRE(seen.pace_on_the_flat > 0.0F);
-    REQUIRE(seen.slowest_on_stairs >= seen.pace_on_the_flat * 0.8F);
-    REQUIRE(seen.longest_in_the_air == 0.0F);
-    REQUIRE(seen.biggest_jolt < 0.45F * static_cast<float32>(units_per_voxel));
-    REQUIRE(seen.deepest_sink > -0.25F * static_cast<float32>(units_per_voxel));
-    REQUIRE(std::abs(seen.sink_at_the_end) < 0.1F);
-}
-
-TEST_CASE("a diagonal run climbs the inside corner of two staircases", "[game][jump]") {
-    const stair_run seen = run_up_stairs(true);
-
-    REQUIRE(seen.grounded_at_the_end);
-    REQUIRE(seen.risen >= 5.9F);
-    REQUIRE(seen.pace_on_the_flat > 0.0F);
-    REQUIRE(seen.slowest_on_stairs >= seen.pace_on_the_flat * 0.8F);
-    REQUIRE(seen.longest_in_the_air == 0.0F);
-    REQUIRE(seen.biggest_jolt < 0.45F * static_cast<float32>(units_per_voxel));
-    REQUIRE(seen.deepest_sink > -0.25F * static_cast<float32>(units_per_voxel));
-}
 
 TEST_CASE("between physics steps a running body is shown moving, though it stands still", "[game][physics]") {
     constexpr float32 fast_tick = 1.0F / 240.0F;
@@ -1161,21 +1031,18 @@ TEST_CASE("between physics steps a running body is shown moving, though it stand
 namespace {
 
 struct zigzag_report {
-    int32 twitches       = 0;
     float32 fastest_rise = 0.0F;
     float32 fastest_sink = 0.0F;
     int32 false_rises    = 0;
 };
 
-// см. docs/walker-plan.md#этапы
-auto zigzag_over_bumps(uint32 seed, bool riding) -> zigzag_report {
+// см. docs/ENGINE.md#езда-по-опоре
+auto zigzag_over_bumps(uint32 seed) -> zigzag_report {
     constexpr int32 reach         = 60;
-    constexpr int32 window_ticks  = 4;
     constexpr float32 run_seconds = 40.0F;
 
-    grounded_world g{display_tick_seconds, riding ? game_units_per_voxel : units_per_voxel};
+    grounded_world g{display_tick_seconds, game_units_per_voxel};
     const int32 units_per_voxel = g.units;
-    g.world.system<game::player_system>().tuning().ride_footing = riding;
     REQUIRE(g.settle());
 
     auto& mapper = g.world.system<game::input_system>().mapper();
@@ -1233,8 +1100,6 @@ auto zigzag_over_bumps(uint32 seed, bool riding) -> zigzag_report {
     float32 ground_before = 0.0F;
     bool rising           = false;
 
-    std::vector<float32> shown;
-    std::vector<bool> on_the_ground;
     float32 until = 0.0F;
     float64 yaw   = 0.0;
     for (float32 elapsed = 0.0F; elapsed < run_seconds; elapsed += g.tick_seconds) {
@@ -1253,10 +1118,6 @@ auto zigzag_over_bumps(uint32 seed, bool riding) -> zigzag_report {
         g.tick();
 
         const auto& body = g.world.get<ecs::rigid_body_component>(g.player);
-        shown.push_back(
-            g.world.get<ecs::transform_component>(g.player).get_shown_position().y + body.get_step_sink()
-        );
-        on_the_ground.push_back(body.is_grounded());
 
         const float32 height = g.world.get<ecs::transform_component>(g.player).get_position().y;
         if (grounded_before && body.is_grounded()) {
@@ -1282,47 +1143,16 @@ auto zigzag_over_bumps(uint32 seed, bool riding) -> zigzag_report {
         grounded_before = body.is_grounded();
     }
 
-    const float32 enough = 0.15F * vs;
-    int32& twitches      = report.twitches;
-    for (std::size_t at = window_ticks; at + window_ticks < shown.size(); ++at) {
-        bool stood = true;
-        float32 lowest_before = shown[at];
-        float32 lowest_after  = shown[at];
-        float32 highest_before = shown[at];
-        float32 highest_after  = shown[at];
-        for (std::size_t off = 1; off <= window_ticks; ++off) {
-            stood          = stood && on_the_ground[at - off] && on_the_ground[at + off];
-            lowest_before  = std::min(lowest_before, shown[at - off]);
-            lowest_after   = std::min(lowest_after, shown[at + off]);
-            highest_before = std::max(highest_before, shown[at - off]);
-            highest_after  = std::max(highest_after, shown[at + off]);
-        }
-        const bool peak = shown[at] - lowest_before > enough && shown[at] - lowest_after > enough;
-        const bool dip  = highest_before - shown[at] > enough && highest_after - shown[at] > enough;
-        if (stood && on_the_ground[at] && (peak || dip)) {
-            ++twitches;
-            at += window_ticks;
-        }
-    }
     return report;
 }
 
 }  // namespace
 
-TEST_CASE("a zigzag over bumps never twitches the shown height", "[game][walker][!shouldfail]") {
-    int32 twitches = 0;
-    for (const uint32 seed : {1U, 2U, 3U}) {
-        twitches += zigzag_over_bumps(seed, false).twitches;
-    }
-    INFO("twitches " << twitches);
-    REQUIRE(twitches == 0);
-}
-
-TEST_CASE("riding its footing the body never moves up or down faster than it may", "[game][walker]") {
+TEST_CASE("the body never moves up or down faster than it may", "[game][walker]") {
     constexpr float32 steps_in_a_tick = 2.0F;
     for (const uint32 seed : {1U, 2U, 3U}) {
         INFO("seed " << seed);
-        const zigzag_report seen = zigzag_over_bumps(seed, true);
+        const zigzag_report seen = zigzag_over_bumps(seed);
         const game::movement_tuning tuning{};
         const float32 a_step = ecs::physics_system::fixed_dt * steps_in_a_tick;
 
@@ -1332,19 +1162,17 @@ TEST_CASE("riding its footing the body never moves up or down faster than it may
     }
 }
 
-TEST_CASE("riding its footing the body walks up stairs as up a ramp", "[game][walker]") {
+TEST_CASE("the body walks up stairs as up a ramp", "[game][walker]") {
     const bool across_the_corner = GENERATE(false, true);
-    const stair_run seen         = run_up_stairs(across_the_corner, true);
+    const stair_run seen         = run_up_stairs(across_the_corner);
     const auto voxel             = static_cast<float32>(game_units_per_voxel);
 
     REQUIRE(seen.grounded_at_the_end);
     REQUIRE(seen.risen >= 5.9F);
-    REQUIRE(seen.steps_taken == 0);
     REQUIRE(seen.pace_on_the_flat > 0.0F);
     REQUIRE(seen.slowest_on_stairs >= seen.pace_on_the_flat * 0.8F);
     REQUIRE(seen.longest_in_the_air == 0.0F);
     REQUIRE(seen.biggest_jolt < 0.6F * voxel);
-    REQUIRE(seen.deepest_sink == 0.0F);
 }
 
 namespace {
@@ -1358,7 +1186,6 @@ struct riding_track {
     int32 ahead  = 1;
 
     explicit riding_track(const std::function<int32(int32)>& height_at) {
-        g.world.system<game::player_system>().tuning().ride_footing = true;
         REQUIRE(g.settle());
 
         mapper().cursor_at(0.0, 0.0);
@@ -1413,7 +1240,7 @@ struct riding_track {
 
 }  // namespace
 
-TEST_CASE("riding its footing the body goes down a step without leaving the ground", "[game][walker]") {
+TEST_CASE("the body goes down a step without leaving the ground", "[game][walker]") {
     riding_track track{[](int32 along) { return along >= 4 ? -1 : 0; }};
 
     float32 lowest_step = 0.0F;
@@ -1436,7 +1263,7 @@ TEST_CASE("riding its footing the body goes down a step without leaving the grou
     REQUIRE(lowest_step > -0.45F * track.voxel);
 }
 
-TEST_CASE("riding its footing the body walks off a cliff, falls and lands", "[game][walker]") {
+TEST_CASE("the body walks off a cliff, falls and lands", "[game][walker]") {
     riding_track track{[](int32 along) { return along >= 4 ? -6 : 0; }};
 
     bool fell = false;
@@ -1454,7 +1281,7 @@ TEST_CASE("riding its footing the body walks off a cliff, falls and lands", "[ga
     REQUIRE(track.risen() == Catch::Approx(-6.0F).margin(0.02F));
 }
 
-TEST_CASE("riding its footing the body is stopped by a wall of two voxels", "[game][walker]") {
+TEST_CASE("the body is stopped by a wall of two voxels", "[game][walker]") {
     constexpr int32 wall_at = 4;
     riding_track track{[](int32 along) { return along >= wall_at ? 2 : 0; }};
 
@@ -1466,7 +1293,7 @@ TEST_CASE("riding its footing the body is stopped by a wall of two voxels", "[ga
     REQUIRE(track.gone() < static_cast<float32>(wall_at));
 }
 
-TEST_CASE("riding its footing the body jumps onto a ledge of two voxels", "[game][walker]") {
+TEST_CASE("the body jumps onto a ledge of two voxels", "[game][walker]") {
     constexpr int32 wall_at = 3;
     riding_track track{[](int32 along) { return along >= wall_at ? 2 : 0; }};
 
@@ -1480,7 +1307,7 @@ TEST_CASE("riding its footing the body jumps onto a ledge of two voxels", "[game
     REQUIRE(track.gone() > static_cast<float32>(wall_at));
 }
 
-TEST_CASE("riding its footing the body rises in front of a step, never inside it", "[game][walker]") {
+TEST_CASE("the body rises in front of a step, never inside it", "[game][walker]") {
     constexpr int32 step_at = 5;
     riding_track track{[](int32 along) { return along >= step_at ? 1 : 0; }};
     const float32 face = static_cast<float32>(step_at) - (6.0F / track.voxel) - 0.5F;
@@ -1505,7 +1332,7 @@ TEST_CASE("riding its footing the body rises in front of a step, never inside it
     REQUIRE(track.risen() == Catch::Approx(1.0F).margin(0.02F));
 }
 
-TEST_CASE("riding its footing the body that stops before a step comes back down", "[game][walker]") {
+TEST_CASE("the body that stops before a step comes back down", "[game][walker]") {
     constexpr int32 step_at = 5;
     riding_track track{[](int32 along) { return along >= step_at ? 1 : 0; }};
 
@@ -1553,7 +1380,6 @@ TEST_CASE("over teeth the model dips less than the body and never below it", "[g
 TEST_CASE("falling from a jump the model comes down smoothly at any frame rate", "[game][walker]") {
     const float32 tick = GENERATE(display_tick_seconds, 1.0F / 240.0F, 1.0F / 97.0F);
     grounded_world g{tick, game_units_per_voxel};
-    g.world.system<game::player_system>().tuning().ride_footing = true;
     REQUIRE(g.settle());
 
     const auto& fighter = g.world.get<ecs::rigid_body_component>(g.player);
@@ -1637,4 +1463,61 @@ TEST_CASE("the lunges of a sword chain carry the body onto a step", "[game][walk
     REQUIRE(track.g.grounded());
     REQUIRE(track.gone() > static_cast<float32>(step_at) - 0.4F);
     REQUIRE(track.risen() == Catch::Approx(1.0F).margin(0.02F));
+}
+
+TEST_CASE("in the air a ledge is a wall: a jump that falls short does not climb it", "[game][walker]") {
+    constexpr int32 ledge_at = 4;
+    const float32 run_up     = GENERATE(0.05F, 0.12F, 0.2F, 0.28F, 0.36F);
+    INFO("jumps after " << run_up << " s");
+    riding_track track{[](int32 along) { return along >= ledge_at ? 3 : 0; }};
+
+    float32 highest = 0.0F;
+    track.mapper().key(keys::W, true);
+    track.g.run_for(run_up);
+    track.g.press_jump();
+    for (int32 tick = 0; tick < 150; ++tick) {
+        track.g.tick();
+        highest = std::max(highest, track.risen());
+    }
+
+    REQUIRE(highest > 1.5F);
+    REQUIRE(highest < 2.6F);
+    REQUIRE(track.g.grounded());
+    REQUIRE(track.risen() == Catch::Approx(0.0F).margin(0.02F));
+    REQUIRE(track.gone() < static_cast<float32>(ledge_at));
+}
+
+TEST_CASE("a jump does not carry the body into a gap lower than itself", "[game][walker]") {
+    constexpr int32 gap_at = 4;
+    const float32 run_up   = GENERATE(0.05F, 0.12F, 0.2F, 0.28F, 0.36F);
+    INFO("jumps after " << run_up << " s");
+    riding_track track{[](int32) { return 0; }};
+
+    auto& grid = *track.g.world.system<ecs::world_grid_system>().grid();
+    for (int32 along = gap_at; along <= 12; ++along) {
+        for (int32 aside = -3; aside <= 3; ++aside) {
+            for (int32 up = 1; up <= 8; ++up) {
+                const vec3i offset = track.along_x ? vec3i{along * track.ahead, up, aside}
+                                                   : vec3i{aside, up, along * track.ahead};
+                grid.set_voxel(
+                    (track.origin + offset) * game_units_per_voxel,
+                    up == 2 ? voxels::air : voxels::red[6]
+                );
+            }
+        }
+    }
+    track.g.run_for(0.1F);
+
+    float32 furthest = 0.0F;
+    track.mapper().key(keys::W, true);
+    track.g.run_for(run_up);
+    track.g.press_jump();
+    for (int32 tick = 0; tick < 150; ++tick) {
+        track.g.tick();
+        furthest = std::max(furthest, track.gone());
+    }
+
+    REQUIRE(furthest < static_cast<float32>(gap_at) - 0.3F);
+    REQUIRE(track.g.grounded());
+    REQUIRE(track.risen() == Catch::Approx(0.0F).margin(0.02F));
 }

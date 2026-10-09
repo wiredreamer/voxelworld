@@ -176,7 +176,6 @@ auto arena_app::render(
         const auto& frame = world.get<game::player_input_component>(player_).get_frame();
         camera_controller_.update(
             player_, frame.look_yaw_degrees, frame.look_pitch_degrees, frame.zoom_delta,
-            world.get<ecs::rigid_body_component>(player_).get_step_sink(),
             world.get<game::player_component>(player_).is_aiming(), delta_time
         );
         world.system<game::input_system>().aim_from(
@@ -259,11 +258,6 @@ auto arena_app::handle_key_press(
         case plat::keyboard::keys::F2:
             show_colliders_ = !show_colliders_;
             break;
-        case plat::keyboard::keys::F8: {
-            auto& tuning = get_engine().get_world().system<game::player_system>().tuning();
-            tuning.ride_footing = !tuning.ride_footing;
-            break;
-        }
         default:
             break;
     }

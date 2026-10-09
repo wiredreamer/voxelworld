@@ -45,20 +45,12 @@ struct ride_probe final {
 };
 
 struct rigid_body_component final {
-    [[nodiscard]] auto get_step_sink() const -> float32 {
-        return shown_sink_;
-    }
-
     [[nodiscard]] auto get_model_lift() const -> float32 {
         return model_lift_;
     }
 
     [[nodiscard]] auto get_ride_probe() const -> const ride_probe& {
         return ride_probe_;
-    }
-
-    [[nodiscard]] auto get_steps_taken() const -> uint32 {
-        return steps_taken_;
     }
 
     [[nodiscard]] auto get_velocity() const -> const vec3f& {
@@ -96,12 +88,6 @@ private:
     bool frozen_           = false;
     vec3f stepped_from_{0.0F, 0.0F, 0.0F};
     vec3f stepped_to_{0.0F, 0.0F, 0.0F};
-    float32 sink_before_step_    = 0.0F;
-    float32 shown_sink_          = 0.0F;
-    float32 step_sink_           = 0.0F;
-    float32 step_lead_           = 0.0F;
-    float32 step_catch_up_       = 0.0F;
-    float32 step_smooth_seconds_ = 0.0F;
     ride_probe ride_probe_{};
     float32 model_sink_seconds_     = 0.0F;
     float32 model_air_sink_seconds_ = 0.0F;
@@ -109,8 +95,7 @@ private:
     float32 model_height_           = 0.0F;
     float32 model_lift_             = 0.0F;
     bool model_height_known_        = false;
-    entity step_follower_{};
-    uint32 steps_taken_          = 0;
+    entity model_node_{};
 };
 
 using axis_flags = uint8;
@@ -186,10 +171,6 @@ struct character_controller_component final {
         return step_hop_voxels_;
     }
 
-    [[nodiscard]] auto rides_footing() const -> bool {
-        return rides_footing_;
-    }
-
     [[nodiscard]] auto get_leg_voxels() const -> float32 {
         return leg_voxels_;
     }
@@ -224,7 +205,6 @@ private:
     float32 ride_lead_voxels_        = 1.0F;
     float32 ride_rise_speed_         = 250.0F;
     float32 ride_sink_speed_         = 200.0F;
-    bool rides_footing_              = false;
     uint32 jump_count_               = 0;
     bool left_ground_by_jump_        = false;
     bool jump_requested_             = false;

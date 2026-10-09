@@ -32,9 +32,6 @@ public:
     static constexpr float32 fixed_dt               = 1.0F / 60.0F;
     static constexpr int32 max_steps_per_frame      = 5;
     static constexpr float32 max_substep_voxels     = 0.5F;
-    static constexpr float32 step_blocked_share     = 0.02F;
-    static constexpr int32 step_lead_halvings       = 6;
-    static constexpr float32 step_lead_slack        = 1.5F;
     static constexpr float32 longest_shown_step     = 4.0F;
     static constexpr float32 ride_drop_slack        = 0.05F;
     static constexpr float32 ride_climb_slack       = 0.01F;
@@ -60,9 +57,9 @@ public:
         auto add_impulse(const vec3f& impulse) -> rigid_body_modifier&;
         auto add_external_impulse(const vec3f& impulse) -> rigid_body_modifier&;
         auto set_drag(float32 drag) -> rigid_body_modifier&;
-        auto smooth_steps(entity follower, float32 seconds) -> rigid_body_modifier&;
-        auto soften_descent(float32 seconds, float32 seconds_in_the_air, float32 lift_limit)
-            -> rigid_body_modifier&;
+        auto soften_descent(
+            entity model, float32 seconds, float32 seconds_in_the_air, float32 lift_limit
+        ) -> rigid_body_modifier&;
 
     private:
         friend class physics_system;
@@ -99,14 +96,6 @@ private:
 
     [[nodiscard]] auto resolve_box_voxel(vec3f center, const vec3f& half_extents,
                                          vec3f& velocity) const -> collision_result;
-    [[nodiscard]] auto step_up_(
-        const vec3f& center, const vec3f& half_extents, const vec3f& wanted, float32 step_height
-    ) const -> std::optional<vec3f>;
-    [[nodiscard]] auto rise_coming_(
-        const vec3f& center, const vec3f& half_extents, const vec3f& heading, float32 step_height,
-        float32 within
-    ) const -> float32;
-    [[nodiscard]] auto box_blocked_(const vec3f& lo, const vec3f& hi) const -> bool;
     [[nodiscard]] auto ride_footing_(
         entity ent, rigid_body_component& rb, const box_collider_component& col,
         const character_controller_component& walker, const vec3f& from, float32 dt

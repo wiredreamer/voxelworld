@@ -33,7 +33,6 @@ public:
         auto set_turn_degrees_per_second(float32 degrees_per_second) -> controller_modifier&;
         auto set_coyote_seconds(float32 seconds) -> controller_modifier&;
         auto set_step_hop_voxels(float32 voxels) -> controller_modifier&;
-        auto set_rides_footing(bool rides) -> controller_modifier&;
         auto set_ride_lead(float32 lead_voxels, float32 rise_speed, float32 sink_speed)
             -> controller_modifier&;
         auto request_jump() -> controller_modifier&;

@@ -32,7 +32,7 @@ third_person_camera_controller::third_person_camera_controller(
 
 auto third_person_camera_controller::update(
     entity target, float32 look_yaw_degrees, float32 look_pitch_degrees, float32 zoom_delta,
-    float32 focus_lift, bool over_shoulder, float32 delta_time
+    bool over_shoulder, float32 delta_time
 ) -> void {
     params_.arm_length -= zoom_delta * params_.zoom_speed;
     params_.arm_length =
@@ -58,9 +58,8 @@ auto third_person_camera_controller::update(
                             (1.0f - std::exp(-delta_time / params_.height_follow_seconds));
     }
     player_pos.y = followed_height_;
-    const vec3f lift{0.0f, focus_lift, 0.0f};
-    const vec3f chest       = player_pos + params_.target_offset * 0.5f + lift;
-    const vec3f wanted_head = player_pos + params_.target_offset + lift;
+    const vec3f chest       = player_pos + params_.target_offset * 0.5f;
+    const vec3f wanted_head = player_pos + params_.target_offset;
     const float32 neck      = math::length(wanted_head - chest);
     const vec3f head        = neck > math::epsilon
         ? chest + (wanted_head - chest) * (free_length_(chest, wanted_head) / neck)

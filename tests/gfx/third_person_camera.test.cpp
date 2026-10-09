@@ -70,7 +70,7 @@ struct stage {
     }
 
     auto look(float32 pitch_degrees, float32 delta_time = tick_seconds) -> vec3f {
-        rig.update(hero, 0.0F, pitch_degrees, 0.0F, 0.0F, false, delta_time);
+        rig.update(hero, 0.0F, pitch_degrees, 0.0F, false, delta_time);
         return eye.get_position();
     }
 };
@@ -168,7 +168,7 @@ TEST_CASE("the shoulder shift does not carry the pivot into a wall", "[camera][t
 
     vec3f eye{};
     for (uint32 frame = 0; frame < 240; ++frame) {
-        s.rig.update(s.hero, 0.0F, 0.0F, 0.0F, 0.0F, true, tick_seconds);
+        s.rig.update(s.hero, 0.0F, 0.0F, 0.0F, true, tick_seconds);
         eye = s.eye.get_position();
     }
 
