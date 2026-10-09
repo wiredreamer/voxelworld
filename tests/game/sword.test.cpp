@@ -637,3 +637,30 @@ TEST_CASE("the dead fall the way they were told to", "[game][blow]") {
     f.tick();
     REQUIRE(f.body_state() == "death");
 }
+
+TEST_CASE("the player can wear another body of the same rig and keep moving", "[game][body]") {
+    fencer f;
+    f.assets.load_prefab("p_skeleton", asset::asset_ref{"prefabs/p_skeleton.vox"});
+
+    constexpr std::size_t head_part = 1;
+    const auto head =
+        f.world.get<ecs::hierarchy_component>(f.state().get_pose()).get_children()[head_part];
+    const auto worn = [&] { return f.world.get<ecs::model_component>(head).get_model(); };
+    const auto human = worn();
+
+    REQUIRE_FALSE(f.players().wear(f.player, "p_nobody"));
+    REQUIRE(worn() == human);
+
+    REQUIRE(f.players().wear(f.player, "p_skeleton"));
+    const auto skull = worn();
+    REQUIRE(skull != human);
+    REQUIRE(skull == f.assets.get_model("p_skeleton", "head"));
+
+    f.click();
+    f.tick();
+    REQUIRE(f.state().get_swing_count() == 1);
+    REQUIRE(f.action_state() == "attack_1");
+
+    REQUIRE(f.players().wear(f.player, "p_humanoid"));
+    REQUIRE(worn() == human);
+}

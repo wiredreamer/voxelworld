@@ -73,6 +73,7 @@ add_executable(asset_tests
     asset/asset_ref.test.cpp
     asset/model_library.test.cpp
     asset/serial.test.cpp
+    asset/skeleton.test.cpp
 )
 
 target_link_libraries(asset_tests PRIVATE

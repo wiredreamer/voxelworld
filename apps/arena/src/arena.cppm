@@ -72,6 +72,7 @@ private:
     std::vector<std::unique_ptr<dummy_enemy>> enemies_;
 
     ecs::perlin_terrain_generator::params generator_params_;
+    bool skeleton_worn_ = false;
     bool show_colliders_ = true;
     bool mouse_captured_ = false;
 };

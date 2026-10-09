@@ -490,7 +490,7 @@ auto render_debug_hud(const gfx::engine& engine, ecs::entity player, bool show_c
     ImGui::TextDisabled(
         "F1 cursor  F2 colliders and step probe (%s)  F3 impulse  ESC exit", show_colliders ? "on" : "off"
     );
-    ImGui::TextDisabled("F4 hit  F5 break the guard  F6 death  F7 revive");
+    ImGui::TextDisabled("F4 hit  F5 break the guard  F6 death  F7 revive  F8 skeleton");
     ImGui::TextDisabled("1 sword and shield  2 bow");
     ImGui::TextDisabled("LMB strike, hold to charge; with the bow draw");
     ImGui::TextDisabled("RMB guard or aim  Q whirl  E pommel");

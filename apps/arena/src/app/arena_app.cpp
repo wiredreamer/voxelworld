@@ -204,6 +204,7 @@ auto arena_app::render(
 
 auto arena_app::load_assets() -> void {
     assets_.load_prefab("p_humanoid", asset::asset_ref{"prefabs/p_humanoid.vox"});
+    assets_.load_prefab("p_skeleton", asset::asset_ref{"prefabs/p_skeleton.vox"});
     assets_.load_prefab("p_sword", asset::asset_ref{"prefabs/p_sword.vox"});
     assets_.load_prefab("p_shield", asset::asset_ref{"prefabs/p_shield.vox"});
     assets_.load_prefab("p_bow", asset::asset_ref{"prefabs/p_bow.vox"});
@@ -257,6 +258,14 @@ auto arena_app::handle_key_press(
             break;
         case plat::keyboard::keys::F2:
             show_colliders_ = !show_colliders_;
+            break;
+        case plat::keyboard::keys::F8:
+            if (is_player_placed_()) {
+                skeleton_worn_ = !skeleton_worn_;
+                static_cast<void>(get_engine().get_world().system<game::player_system>().wear(
+                    player_, skeleton_worn_ ? "p_skeleton" : "p_humanoid"
+                ));
+            }
             break;
         default:
             break;

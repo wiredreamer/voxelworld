@@ -492,6 +492,7 @@ public:
     [[nodiscard]] auto spawn() -> ecs::entity;
 
     auto equip(ecs::entity player, loadout wanted) -> void;
+    auto wear(ecs::entity player, std::string_view body_prefab) -> bool;
 
     auto take_hit_on_shield(ecs::entity player) -> bool;
     auto take_hit(ecs::entity player) -> bool;

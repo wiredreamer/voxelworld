@@ -225,6 +225,32 @@ auto player_system::spawn() -> ecs::entity {
     return root;
 }
 
+// см. docs/ENGINE.md#существа-на-одном-риге
+auto player_system::wear(
+    ecs::entity player, std::string_view worn_prefab
+) -> bool {
+    const auto* state = world_->try_get<player_component>(player);
+    if (state == nullptr || assets_->get_prefab(worn_prefab) == nullptr) {
+        return false;
+    }
+
+    const std::array<std::pair<ecs::entity, std::string_view>, 6> parts{
+        std::pair{state->body_, std::string_view{"body"}},
+        std::pair{state->head_, std::string_view{"head"}},
+        std::pair{state->hand_right_, std::string_view{"hand_right"}},
+        std::pair{state->hand_left_, std::string_view{"hand_left"}},
+        std::pair{state->foot_right_, std::string_view{"foot_right"}},
+        std::pair{state->foot_left_, std::string_view{"foot_left"}},
+    };
+    auto& models = world_->system<ecs::model_system>();
+    for (const auto& [part, name] : parts) {
+        if (auto model = assets_->get_model(worn_prefab, name); part.is_valid() && model) {
+            models.modify(part).set_model(std::move(model));
+        }
+    }
+    return true;
+}
+
 auto player_system::create_body_part_(
     ecs::entity parent, std::string_view part_name
 ) const -> ecs::entity {
